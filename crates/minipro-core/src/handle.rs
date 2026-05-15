@@ -15,7 +15,7 @@ use crate::{
         t56::T56Protocol,
         t76::T76Protocol,
         tl866a::Tl866aProtocol,
-        tl866iiplus::{Tl866iiPlusProtocol, get_system_info},
+        tl866iiplus::{MIN_FIRMWARE, Tl866iiPlusProtocol, get_system_info},
     },
     usb::{UsbDevice, open_programmer},
 };
@@ -51,6 +51,22 @@ impl MiniproHandle {
             serial_number:    sys_info.serial_number,
             hardware_version: sys_info.hardware_version,
         };
+
+        // Firmware version check for TL866II+ family
+        match info.model {
+            ProgrammerModel::Tl866iiPlus
+            | ProgrammerModel::T48
+            | ProgrammerModel::T56
+            | ProgrammerModel::T76 => {
+                if info.firmware < MIN_FIRMWARE {
+                    return Err(MiniproError::FirmwareTooOld {
+                        got:  info.firmware,
+                        need: MIN_FIRMWARE,
+                    });
+                }
+            }
+            _ => {}
+        }
 
         let protocol: Box<dyn Protocol> = match info.model {
             ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs =>

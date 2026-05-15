@@ -17,7 +17,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{ArgAction, Parser};
 use indicatif::{ProgressBar, ProgressStyle};
 use minipro_core::{
@@ -25,6 +25,7 @@ use minipro_core::{
     DatabasePaths,
     find_device,
     list_devices,
+    error::MiniproError,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, read_chip, verify_chip, write_chip,
     },
@@ -97,6 +98,38 @@ struct Cli {
     /// Verbose output
     #[arg(short = 'v', long = "verbose", action = ArgAction::SetTrue)]
     verbose: bool,
+
+    /// Skip erase before write
+    #[arg(long = "no-erase", action = ArgAction::SetTrue)]
+    no_erase: bool,
+
+    /// Skip verify after write
+    #[arg(long = "no-verify", action = ArgAction::SetTrue)]
+    no_verify: bool,
+
+    /// Disable write protection before operation
+    #[arg(long = "protect-off", action = ArgAction::SetTrue)]
+    protect_off: bool,
+
+    /// Enable write protection after operation
+    #[arg(long = "protect-on", action = ArgAction::SetTrue)]
+    protect_on: bool,
+
+    /// File format override: auto|bin|ihex|srec|jedec
+    #[arg(long = "format", default_value = "auto", value_name = "FORMAT")]
+    format: String,
+
+    /// Skip chip ID verification
+    #[arg(long = "skip-id", action = ArgAction::SetTrue)]
+    skip_id: bool,
+
+    /// Warn but continue on chip ID mismatch
+    #[arg(long = "continue-id", action = ArgAction::SetTrue)]
+    continue_id: bool,
+
+    /// Test logic IC
+    #[arg(long = "logic-test", action = ArgAction::SetTrue)]
+    logic_test: bool,
 }
 
 fn main() -> ExitCode {
@@ -171,6 +204,33 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
         return Ok(());
     }
 
+    // ── Logic IC test ─────────────────────────────────────────────────────────
+    if cli.logic_test {
+        eprint!("Testing logic IC... ");
+        handle.protocol.logic_ic_test(&handle.usb)?;
+        eprintln!("PASS.");
+        return Ok(());
+    }
+
+    // ── Chip ID verification (before write/read ops) ───────────────────────────
+    if !cli.skip_id && (cli.write.is_some() || cli.read.is_some()) {
+        match check_chip_id(handle) {
+            Ok(()) => {}
+            Err(MiniproError::ChipIdMismatch { expected, actual }) if cli.continue_id => {
+                eprintln!(
+                    "WARNING: chip ID mismatch — expected {:#010x}, got {:#010x} — continuing",
+                    expected, actual
+                );
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    // ── Protect off ───────────────────────────────────────────────────────────
+    if cli.protect_off {
+        handle.protocol.protect_off(&handle.usb)?;
+    }
+
     // ── Erase ─────────────────────────────────────────────────────────────────
     if cli.erase {
         eprint!("Erasing... ");
@@ -187,30 +247,60 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
 
     // ── Write ─────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.write {
-        eprintln!("Writing {:?}...", path);
-        check_chip_id(handle)?;
+        // Auto-erase before write (unless suppressed)
+        if !cli.no_erase {
+            eprint!("Erasing... ");
+            erase_chip(handle)?;
+            eprintln!("done.");
+        }
+
+        let pb = ProgressBar::new(100);
+        pb.set_style(
+            ProgressStyle::with_template("Writing [{bar:40}] {percent}%")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
         write_chip(handle, path, cli.page)?;
+        pb.finish_and_clear();
+        eprintln!("Written {:?}", path);
+
         if !cli.no_ovc_check {
             check_ovc(handle)?;
         }
-        eprintln!("Write complete.");
+
+        // Auto-verify after write (unless suppressed)
+        if !cli.no_verify {
+            eprint!("Verifying... ");
+            verify_chip(handle, path, cli.page)?;
+            eprintln!("OK.");
+        }
     }
 
     // ── Read ──────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.read {
-        eprintln!("Reading to {:?}...", path);
+        let pb = ProgressBar::new(100);
+        pb.set_style(
+            ProgressStyle::with_template("Reading  [{bar:40}] {percent}%")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
         read_chip(handle, path, cli.page)?;
+        pb.finish_and_clear();
+        eprintln!("Saved {:?}", path);
+
         if !cli.no_ovc_check {
             check_ovc(handle)?;
         }
-        eprintln!("Read complete.");
     }
 
     // ── Verify ────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.verify {
-        eprintln!("Verifying {:?}...", path);
+        eprint!("Verifying {:?}... ", path);
         verify_chip(handle, path, cli.page)?;
-        eprintln!("Verification successful.");
+        eprintln!("OK.");
+    }
+
+    // ── Protect on ────────────────────────────────────────────────────────────
+    if cli.protect_on {
+        handle.protocol.protect_on(&handle.usb)?;
     }
 
     Ok(())

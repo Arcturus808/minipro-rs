@@ -239,3 +239,114 @@ pub fn check_ovc(handle: &mut MiniproHandle) -> Result<bool> {
     }
     Ok(false)
 }
+
+// ── Fuse sub-type constants ──────────────────────────────────────────────────
+/// MCU user-data fuses (TL866A cmd 0x10/0x11).
+pub const MP_FUSE_USER: u8 = 0x00;
+/// MCU configuration fuses (e.g. AVR lfuse/hfuse/efuse, PIC config words).
+pub const MP_FUSE_CFG:  u8 = 0x01;
+/// MCU lock bits.
+pub const MP_FUSE_LOCK: u8 = 0x02;
+
+/// Named fuse value.
+#[derive(Debug, Clone)]
+pub struct FuseValue {
+    pub name:  String,
+    pub value: u8,
+}
+
+/// Read all fuse bytes from the chip and map them to named fields.
+///
+/// Returns a `Vec<FuseValue>` with one entry per fuse field defined in the
+/// device's `ChipConfig`.  Fields that don't have a corresponding read result
+/// byte default to `0xff`.
+pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
+    use crate::device::ChipConfig;
+
+    let device = handle.device()?.clone();
+    let config = match device.config.as_ref() {
+        Some(ChipConfig::Mcu(fc)) => fc.clone(),
+        _ => return Err(MiniproError::UnsupportedOperation),
+    };
+
+    let fuse_count = config.fuses.len() as u8;
+    let lock_count = config.locks.len() as u8;
+
+    // Read CFG fuses
+    let cfg_bytes = handle.protocol.read_fuses(
+        &handle.usb, MP_FUSE_CFG, fuse_count as usize, fuse_count,
+    ).unwrap_or_default();
+
+    // Read LOCK bits (optional — not all devices have them)
+    let lock_bytes = if lock_count > 0 {
+        handle.protocol.read_fuses(
+            &handle.usb, MP_FUSE_LOCK, lock_count as usize, lock_count,
+        ).unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let mut result = Vec::with_capacity(config.fuses.len() + config.locks.len());
+
+    for (i, field) in config.fuses.iter().enumerate() {
+        result.push(FuseValue {
+            name:  field.name.clone(),
+            value: cfg_bytes.get(i).copied().unwrap_or(0xff),
+        });
+    }
+    for (i, field) in config.locks.iter().enumerate() {
+        result.push(FuseValue {
+            name:  field.name.clone(),
+            value: lock_bytes.get(i).copied().unwrap_or(0xff),
+        });
+    }
+    Ok(result)
+}
+
+/// Write fuse values to the chip.
+///
+/// `fuses` should contain values in the same order as returned by `read_fuses`.
+/// Values are split back into CFG fuses and LOCK bits based on the device config.
+pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()> {
+    use crate::device::ChipConfig;
+
+    let device = handle.device()?.clone();
+    let config = match device.config.as_ref() {
+        Some(ChipConfig::Mcu(fc)) => fc.clone(),
+        _ => return Err(MiniproError::UnsupportedOperation),
+    };
+
+    let fuse_count = config.fuses.len();
+    let lock_count = config.locks.len();
+
+    let cfg_data: Vec<u8> = fuses.iter()
+        .take(fuse_count)
+        .map(|f| f.value)
+        .collect();
+
+    let lock_data: Vec<u8> = fuses.iter()
+        .skip(fuse_count)
+        .take(lock_count)
+        .map(|f| f.value)
+        .collect();
+
+    if !cfg_data.is_empty() {
+        handle.protocol.write_fuses(
+            &handle.usb,
+            MP_FUSE_CFG,
+            fuse_count,
+            fuse_count as u8,
+            &cfg_data,
+        )?;
+    }
+    if !lock_data.is_empty() {
+        handle.protocol.write_fuses(
+            &handle.usb,
+            MP_FUSE_LOCK,
+            lock_count,
+            lock_count as u8,
+            &lock_data,
+        )?;
+    }
+    Ok(())
+}

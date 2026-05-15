@@ -206,6 +206,12 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
     let mut in_locks = false;
     let mut in_acw   = false;
 
+    // Pending state: we see <fuse name="x"> then wait for the Text event
+    // with the CSV content "mask,default" before closing </fuse>.
+    let mut pending_fuse_name: Option<String> = None;
+    let mut pending_lock_name: Option<String> = None;
+    let mut pending_acw_bit = false;
+
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
@@ -247,27 +253,41 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
                         in_acw = true;
                     }
                     b"fuse" if in_fuses => {
-                        if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                            if let Some(field) = parse_fuse_field(e, b"fuse") {
-                                fc.fuses.push(field);
-                            }
-                        }
+                        // Record the name; the CSV content arrives in the Text event
+                        pending_fuse_name = get_attr_str(e, b"name");
                     }
                     b"lock" if in_locks => {
-                        if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                            if let Some(field) = parse_fuse_field(e, b"lock") {
-                                fc.locks.push(field);
-                            }
-                        }
+                        pending_lock_name = get_attr_str(e, b"name");
                     }
                     b"fuse" if in_acw => {
-                        if let Some((_, ConfigBuilder::Pld(ref mut gc))) = current_config {
-                            if let Some(v) = get_csv_u16_first(e, b"fuse") {
+                        pending_acw_bit = true;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                // Parse fuse/lock CSV text content: "mask_hex,default_hex"
+                let cow = e.unescape().unwrap_or_default();
+                let text = cow.trim();
+                if !text.is_empty() {
+                    if let Some(name) = pending_fuse_name.take() {
+                        let (mask, default) = parse_csv_mask_default(text);
+                        if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
+                            fc.fuses.push(FuseField { name, mask, default });
+                        }
+                    } else if let Some(name) = pending_lock_name.take() {
+                        let (mask, default) = parse_csv_mask_default(text);
+                        if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
+                            fc.locks.push(FuseField { name, mask, default });
+                        }
+                    } else if pending_acw_bit {
+                        pending_acw_bit = false;
+                        if let Some(v) = parse_u16_hex(text) {
+                            if let Some((_, ConfigBuilder::Pld(ref mut gc))) = current_config {
                                 gc.acw_bits.push(v);
                             }
                         }
                     }
-                    _ => {}
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -281,6 +301,24 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
                     b"fuses"    => in_fuses = false,
                     b"locks"    => in_locks = false,
                     b"acw_bits" => in_acw   = false,
+                    // If the element had no text (empty), push defaults
+                    b"fuse" if in_fuses => {
+                        if let Some(name) = pending_fuse_name.take() {
+                            if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
+                                fc.fuses.push(FuseField { name, mask: 0xff, default: 0xff });
+                            }
+                        }
+                    }
+                    b"lock" if in_locks => {
+                        if let Some(name) = pending_lock_name.take() {
+                            if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
+                                fc.locks.push(FuseField { name, mask: 0xff, default: 0xff });
+                            }
+                        }
+                    }
+                    b"fuse" if in_acw => {
+                        pending_acw_bit = false;
+                    }
                     _ => {}
                 }
             }
@@ -333,27 +371,21 @@ fn build_gal_config(e: &BytesStart) -> GalConfig {
     }
 }
 
-fn parse_fuse_field(e: &BytesStart, tag_name: &[u8]) -> Option<FuseField> {
-    let name = get_attr_str(e, b"name")?;
-    // The element is like: <fuse name="lfuse" mask="0xff,0x62"/>
-    // We need to get the inline content... but with quick-xml streaming we
-    // get the opening tag here. The C code gets CSV from element text.
-    // For the fuse mask/default, they are stored as "mask,default" in child text.
-    // Actually looking at the C code more carefully:
-    //   get_csv(tag, taglen, "fuse", value, 2)
-    // This gets the element text content between the opening and closing tag.
-    // In quick-xml streaming, we'd need to read the next Text event.
-    // As a simplification, let's try to get them from attributes first.
-    // The actual encoding is in XML element *content*, not attributes.
-    // We'll handle this in the caller by reading text content separately.
-    let _ = tag_name;
-    Some(FuseField { name, mask: 0, default: 0 })
+/// Parse "mask_hex,default_hex" CSV text (element text content of <fuse> / <lock>).
+fn parse_csv_mask_default(text: &str) -> (u16, u16) {
+    let mut parts = text.splitn(2, ',');
+    let mask    = parse_u16_hex(parts.next().unwrap_or("").trim()).unwrap_or(0);
+    let default = parse_u16_hex(parts.next().unwrap_or("").trim()).unwrap_or(0);
+    (mask, default)
 }
 
-fn get_csv_u16_first(e: &BytesStart, _tag_name: &[u8]) -> Option<u16> {
-    // Will be populated from text content in next event - placeholder
-    let _ = e;
-    None
+/// Parse a hex (0xNN) or decimal u16 from a string.
+fn parse_u16_hex(s: &str) -> Option<u16> {
+    let s = s.trim();
+    let stripped = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    u16::from_str_radix(stripped, 16)
+        .or_else(|_| s.parse::<u16>())
+        .ok()
 }
 
 // ── Pass 2: find and build the <ic> entry ────────────────────────────────────

@@ -19,3 +19,4 @@ pub use device::{
 };
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
+pub use operations::{FuseValue, read_fuses, write_fuses};
