@@ -1,33 +1,227 @@
 # minipro-rs
 
+A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
+> **Status:** Planning / pre-implementation
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Goals
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- Full feature parity with the C `minipro` 0.7.x
+- Cross-platform (Linux, macOS, Windows) without requiring a separately installed `libusb`
+- Idiomatic Rust: strong types, `Result`-based error handling, no unsafe except at the USB boundary
+- Library (`libminipro-rs`) + binary (`minipro`) split so third-party GUIs can embed the core
 
-## Add your files
+---
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Architecture Plan
+
+### Crate layout
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/arcturus8081/minipro-rs.git
-git branch -M main
-git push -uf origin main
+minipro-rs/
+├── Cargo.toml            # workspace root
+├── crates/
+│   ├── minipro-core/     # library: USB, protocol, database, file formats
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── error.rs
+│   │   │   ├── device.rs       # Device / chip descriptor types
+│   │   │   ├── database.rs     # XML chip database (infoic.xml / logicic.xml)
+│   │   │   ├── handle.rs       # MiniproHandle — open/close, dispatch
+│   │   │   ├── usb.rs          # nusb abstraction layer
+│   │   │   ├── protocol/
+│   │   │   │   ├── mod.rs      # Protocol trait
+│   │   │   │   ├── tl866a.rs
+│   │   │   │   ├── tl866iiplus.rs
+│   │   │   │   ├── t48.rs
+│   │   │   │   ├── t56.rs      # FPGA bitstream upload
+│   │   │   │   └── t76.rs
+│   │   │   ├── format/
+│   │   │   │   ├── mod.rs      # FileFormat enum, auto-detect
+│   │   │   │   ├── ihex.rs     # Intel HEX read/write
+│   │   │   │   ├── srec.rs     # Motorola S-Record read/write
+│   │   │   │   └── jedec.rs    # JEDEC fuse-map read/write
+│   │   │   └── operations.rs   # High-level read/write/erase/verify/blank-check
+│   │   └── Cargo.toml
+│   └── minipro-cli/      # binary: clap CLI front-end
+│       ├── src/
+│       │   └── main.rs
+│       └── Cargo.toml
+├── data/
+│   ├── infoic.xml        # 13 000+ device definitions (vendored from upstream)
+│   └── logicic.xml       # Logic IC test vectors
+└── tests/
+    └── integration/
 ```
 
-## Integrate with your tools
+---
 
-* [Set up project integrations](https://gitlab.com/arcturus8081/minipro-rs/-/settings/integrations)
+### Key design decisions
 
-## Collaborate with your team
+#### USB layer — `nusb`
+Use [`nusb`](https://crates.io/crates/nusb) (pure Rust, no libusb dependency) instead of `rusb`.  
+This enables a single binary on Windows without requiring DLL distribution.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
+USB VID/PID targets:
+| Model        | VID    | PID    |
+|--------------|--------|--------|
+| TL866CS/A    | 0x04D8 | 0xE11C |
+| TL866II+     | 0x04D8 | 0xE11C |
+| T48          | 0x04D8 | 0xE11C |
+| T56          | 0xA466 | 0x0A53 |
+| T76          | (TBD)  |        |
+
+#### Protocol abstraction — `trait Protocol`
+Replace the C function-pointer dispatch table in `minipro_handle_t` with a Rust trait:
+
+```rust
+pub trait Protocol: Send + Sync {
+    fn begin_transaction(&self, handle: &UsbHandle, device: &Device) -> Result<()>;
+    fn end_transaction(&self, handle: &UsbHandle) -> Result<()>;
+    fn read_block(&self, handle: &UsbHandle, ds: &mut DataSet) -> Result<()>;
+    fn write_block(&self, handle: &UsbHandle, ds: &DataSet) -> Result<()>;
+    fn get_chip_id(&self, handle: &UsbHandle) -> Result<(IdType, u32)>;
+    fn read_fuses(&self, handle: &UsbHandle, fuse_type: FuseType, count: usize) -> Result<Vec<u8>>;
+    fn write_fuses(&self, handle: &UsbHandle, fuse_type: FuseType, data: &[u8]) -> Result<()>;
+    fn erase(&self, handle: &UsbHandle, num_fuses: u8, is_pld: bool) -> Result<()>;
+    fn protect_off(&self, handle: &UsbHandle) -> Result<()>;
+    fn protect_on(&self, handle: &UsbHandle) -> Result<()>;
+    fn get_ovc_status(&self, handle: &UsbHandle) -> Result<OvcStatus>;
+    fn hardware_check(&self, handle: &UsbHandle) -> Result<()>;
+    fn firmware_update(&self, handle: &UsbHandle, firmware: &[u8]) -> Result<()>;
+    fn logic_ic_test(&self, handle: &UsbHandle) -> Result<()>;
+    // ... etc.
+}
+```
+
+`MiniproHandle` holds a `Box<dyn Protocol>` selected at open time.
+
+#### Device database — `database.rs`
+Parse `infoic.xml` and `logicic.xml` at startup with [`quick-xml`](https://crates.io/crates/quick-xml).  
+Store as `HashMap<String, Arc<Device>>` for O(1) name lookup.
+
+Strong-typed enums replace C `#define` constants:
+```rust
+pub enum ChipType { Memory, Mcu, Pld, Sram, Logic, Nand, Emmc, Vga }
+pub enum DataOrg  { Bytes, Words, Bits }
+pub enum FuseType { User, Config, Lock }
+pub enum Endianness { Little, Big }
+```
+
+The full `Device` struct mirrors `device_t` but uses `Option<T>` for optional fields and avoids raw pointers.
+
+#### Error handling — `thiserror`
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum MiniproError {
+    #[error("USB error: {0}")]          Usb(#[from] nusb::Error),
+    #[error("Device not found: {0}")]   DeviceNotFound(String),
+    #[error("Chip ID mismatch (expected {expected:#010x}, got {actual:#010x})")]
+                                        ChipIdMismatch { expected: u32, actual: u32 },
+    #[error("Overcurrent detected at address {address:#010x}")]
+                                        Overcurrent { address: u32 },
+    #[error("Verify failed at address {address:#010x}: expected {expected:#04x}, got {actual:#04x}")]
+                                        VerifyFailed { address: u32, expected: u8, actual: u8 },
+    #[error("XML parse error: {0}")]    Xml(#[from] quick_xml::Error),
+    #[error("IO error: {0}")]           Io(#[from] std::io::Error),
+}
+```
+
+#### CLI — `clap` derive
+```
+minipro-rs [OPTIONS] -p <DEVICE>
+
+Options:
+  -r, --read <FILE>           Read chip to file
+  -w, --write <FILE>          Write file to chip
+  -e, --erase                 Erase chip
+  -b, --blank-check           Blank-check chip
+  -v, --verify <FILE>         Verify chip against file
+  -I, --id-check-only         Read and display chip ID, then exit
+      --no-erase              Skip erase before write
+      --no-verify             Skip verify after write
+      --protect-off           Disable write-protect before operation
+      --protect-on            Enable write-protect after operation
+      --format <FORMAT>       File format: auto|bin|ihex|srec [default: auto]
+      --page <PAGE>           Memory page: code|data|config|user|calibration
+      --icsp                  Use ICSP (in-circuit) programming
+      --spi-clock <HZ>        Override SPI clock for 25C devices
+      --i2c-addr <ADDR>       I2C slave address for 24C devices
+      --skip-id               Skip chip-ID verification
+      --continue-id           Continue even if chip-ID mismatch
+      --logic-test            Test logic IC
+  -l, --list                  List supported devices
+  -V, --version               Print version and programmer info
+  -v, --verbose               Verbose output
+  -h, --help                  Print help
+```
+
+---
+
+### Dependency plan
+
+| Crate | Purpose |
+|-------|---------|
+| `nusb` | Cross-platform USB (pure Rust) |
+| `clap` (derive) | CLI argument parsing |
+| `quick-xml` | XML chip database parsing |
+| `thiserror` | Structured error types |
+| `anyhow` | CLI error propagation |
+| `ihex` | Intel HEX read/write |
+| `log` + `env_logger` | Logging / verbose output |
+| `indicatif` | Progress bars for read/write |
+| `crc` | CRC-32 for verify operations |
+
+---
+
+### Implementation phases
+
+#### Phase 1 — Foundation
+- [ ] Cargo workspace scaffold
+- [ ] `error.rs` — full error type hierarchy
+- [ ] `device.rs` — all device/chip structs and enums
+- [ ] `database.rs` — parse `infoic.xml` and `logicic.xml`
+- [ ] `usb.rs` — open device, send/receive bulk transfers
+- [ ] `handle.rs` — `MiniproHandle::open()`, model detection, firmware version
+
+#### Phase 2 — TL866II+ protocol (primary target)
+- [ ] `protocol/tl866iiplus.rs` — all protocol commands
+- [ ] `operations.rs` — read, write, erase, verify, blank-check
+- [ ] `format/ihex.rs`, `format/srec.rs`, `format/jedec.rs`
+- [ ] Basic CLI wired up end-to-end
+
+#### Phase 3 — Remaining protocols
+- [ ] `protocol/tl866a.rs` (TL866CS / TL866A)
+- [ ] `protocol/t48.rs`
+- [ ] `protocol/t56.rs` (FPGA bitstream upload)
+- [ ] `protocol/t76.rs`
+
+#### Phase 4 — Advanced features
+- [ ] Logic IC testing (`logicic.xml` vectors)
+- [ ] Fuse / configuration-bit read/write
+- [ ] JEDEC fuse-map support
+- [ ] Chip ID verify + autodetect
+- [ ] Overcurrent protection handling
+- [ ] Firmware update
+- [ ] Bitbang / ZIF pin control
+
+#### Phase 5 — Quality
+- [ ] Integration tests (recorded USB traces for replay)
+- [ ] `cargo doc` public API documentation
+- [ ] Packaging: `.deb`, `.rpm`, Windows `.msi` via GitHub/GitLab CI
+- [ ] Bash / Zsh / Fish shell completions via `clap_complete`
+
+---
+
+## Reference
+
+- Upstream C project: <https://gitlab.com/DavidGriffith/minipro>
+- USB protocol documentation: `tl866iiplus.md` in upstream repo
+- `nusb` crate: <https://crates.io/crates/nusb>
+- `quick-xml` crate: <https://crates.io/crates/quick-xml>
+
 * [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
 * [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
 * [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)

@@ -1,0 +1,15 @@
+[package]
+name    = "minipro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nusb        = "0.1"
+quick-xml   = "0.37"
+thiserror   = "2"
+log         = "0.4"
+crc         = "3"
+pollster    = "0.3"
+flate2      = "1"
+base64      = "0.22"
