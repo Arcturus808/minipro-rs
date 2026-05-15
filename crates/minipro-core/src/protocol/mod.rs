@@ -12,11 +12,17 @@ use crate::{
 /// Data buffer + addressing info for a single block read/write.
 #[derive(Debug)]
 pub struct DataSet {
-    pub data:        Vec<u8>,
-    pub address:     u32,
-    pub block_count: u32,
+    pub data:         Vec<u8>,
+    pub address:      u32,
+    /// Current block count (size / 64, used per-block).
+    pub block_count:  u32,
     /// Memory page type (MP_CODE / MP_DATA / MP_USER).
-    pub page_type:   u8,
+    pub page_type:    u8,
+    /// True on the very first block in the sequence (T76 uses this to send
+    /// the DMA-initialisation header before streaming via the payload EP).
+    pub init:         bool,
+    /// Total number of blocks in the whole read/write operation (T76 only).
+    pub total_blocks: u32,
 }
 
 /// JEDEC fuse-map row transfer.
@@ -66,13 +72,14 @@ pub trait Protocol: Send + Sync {
 
     /// Read fuse / lock bytes.
     fn read_fuses(
-        &self, usb: &UsbDevice, fuse_type: u8, length: usize, items_count: u8,
+        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
+        items_count: u8,
     ) -> Result<Vec<u8>>;
 
     /// Write fuse / lock bytes.
     fn write_fuses(
-        &self, usb: &UsbDevice, fuse_type: u8, length: usize, items_count: u8,
-        data: &[u8],
+        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
+        items_count: u8, data: &[u8],
     ) -> Result<()>;
 
     /// Read RC calibration byte.

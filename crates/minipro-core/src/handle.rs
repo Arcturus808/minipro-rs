@@ -12,8 +12,8 @@ use crate::{
     protocol::{
         Protocol,
         t48::T48Protocol,
-        t56::T56Protocol,
-        t76::T76Protocol,
+        t56::{T56Protocol, MIN_FIRMWARE_T56},
+        t76::{T76Protocol, MIN_FIRMWARE_T76},
         tl866a::Tl866aProtocol,
         tl866iiplus::{MIN_FIRMWARE, Tl866iiPlusProtocol, get_system_info},
     },
@@ -52,20 +52,18 @@ impl MiniproHandle {
             hardware_version: sys_info.hardware_version,
         };
 
-        // Firmware version check for TL866II+ family
-        match info.model {
-            ProgrammerModel::Tl866iiPlus
-            | ProgrammerModel::T48
-            | ProgrammerModel::T56
-            | ProgrammerModel::T76 => {
-                if info.firmware < MIN_FIRMWARE {
-                    return Err(MiniproError::FirmwareTooOld {
-                        got:  info.firmware,
-                        need: MIN_FIRMWARE,
-                    });
-                }
-            }
-            _ => {}
+        // Firmware version check — each model has a different minimum.
+        let min_fw = match info.model {
+            ProgrammerModel::T56 => MIN_FIRMWARE_T56,
+            ProgrammerModel::T76 => MIN_FIRMWARE_T76,
+            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 => MIN_FIRMWARE,
+            _ => 0,
+        };
+        if min_fw > 0 && info.firmware < min_fw {
+            return Err(MiniproError::FirmwareTooOld {
+                got:  info.firmware,
+                need: min_fw,
+            });
         }
 
         let protocol: Box<dyn Protocol> = match info.model {

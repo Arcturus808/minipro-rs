@@ -2,7 +2,7 @@
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
-> **Status:** Planning / pre-implementation
+> **Status:** Phase 3 complete — all protocols implemented, `cargo check` clean
 
 ---
 
@@ -179,24 +179,24 @@ Options:
 ### Implementation phases
 
 #### Phase 1 — Foundation
-- [ ] Cargo workspace scaffold
-- [ ] `error.rs` — full error type hierarchy
-- [ ] `device.rs` — all device/chip structs and enums
-- [ ] `database.rs` — parse `infoic.xml` and `logicic.xml`
-- [ ] `usb.rs` — open device, send/receive bulk transfers
-- [ ] `handle.rs` — `MiniproHandle::open()`, model detection, firmware version
+- [x] Cargo workspace scaffold
+- [x] `error.rs` — full error type hierarchy
+- [x] `device.rs` — all device/chip structs and enums
+- [x] `database.rs` — parse `infoic.xml` and `logicic.xml`
+- [x] `usb.rs` — open device, send/receive bulk transfers
+- [x] `handle.rs` — `MiniproHandle::open()`, model detection, firmware version
 
 #### Phase 2 — TL866II+ protocol (primary target)
-- [ ] `protocol/tl866iiplus.rs` — all protocol commands
-- [ ] `operations.rs` — read, write, erase, verify, blank-check
-- [ ] `format/ihex.rs`, `format/srec.rs`, `format/jedec.rs`
-- [ ] Basic CLI wired up end-to-end
+- [x] `protocol/tl866iiplus.rs` — all protocol commands
+- [x] `operations.rs` — read, write, erase, verify, blank-check
+- [x] `format/ihex.rs`, `format/srec.rs`, `format/jedec.rs`
+- [x] Basic CLI wired up end-to-end
 
 #### Phase 3 — Remaining protocols
-- [ ] `protocol/tl866a.rs` (TL866CS / TL866A)
-- [ ] `protocol/t48.rs`
-- [ ] `protocol/t56.rs` (FPGA bitstream upload)
-- [ ] `protocol/t76.rs`
+- [x] `protocol/tl866a.rs` (TL866CS / TL866A)
+- [x] `protocol/t48.rs`
+- [x] `protocol/t56.rs` (FPGA bitstream upload)
+- [x] `protocol/t76.rs` (chunked bitstream, DMA streaming code memory)
 
 #### Phase 4 — Advanced features
 - [ ] Logic IC testing (`logicic.xml` vectors)

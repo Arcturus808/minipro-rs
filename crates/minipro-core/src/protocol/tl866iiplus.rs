@@ -228,7 +228,8 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn read_fuses(
-        &self, usb: &UsbDevice, fuse_type: u8, length: usize, items_count: u8,
+        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, length: usize,
+        items_count: u8,
     ) -> Result<Vec<u8>> {
         let cmd_byte = match fuse_type {
             0x00 => CMD_READ_USER,  // MP_FUSE_USER
@@ -245,8 +246,8 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn write_fuses(
-        &self, usb: &UsbDevice, fuse_type: u8, length: usize, items_count: u8,
-        data: &[u8],
+        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, length: usize,
+        items_count: u8, data: &[u8],
     ) -> Result<()> {
         let cmd_byte = match fuse_type {
             0x00 => CMD_WRITE_USER,

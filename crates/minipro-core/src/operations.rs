@@ -71,15 +71,18 @@ pub fn read_chip(
     };
 
     let mut buf = vec![device.blank_value as u8; size];
+    let total_blocks = if read_size > 0 { (size + read_size - 1) / read_size } else { 1 } as u32;
     let mut offset = 0usize;
 
     while offset < size {
         let block = (read_size).min(size - offset);
         let mut ds = DataSet {
-            data:        vec![0u8; block],
-            address:     offset as u32,
-            block_count: (block / 64) as u32,
-            page_type:   page,
+            data:         vec![0u8; block],
+            address:      offset as u32,
+            block_count:  (block / 64) as u32,
+            page_type:    page,
+            init:         offset == 0,
+            total_blocks,
         };
         handle.protocol.read_block(&handle.usb, &mut ds)?;
         buf[offset..offset + block].copy_from_slice(&ds.data);
@@ -110,14 +113,17 @@ pub fn write_chip(
         size
     };
 
+    let total_blocks = if write_size > 0 { (size + write_size - 1) / write_size } else { 1 } as u32;
     let mut offset = 0usize;
     while offset < size {
         let block = write_size.min(size - offset);
         let ds = DataSet {
-            data:        buf[offset..offset + block].to_vec(),
-            address:     offset as u32,
-            block_count: (block / 64) as u32,
-            page_type:   page,
+            data:         buf[offset..offset + block].to_vec(),
+            address:      offset as u32,
+            block_count:  (block / 64) as u32,
+            page_type:    page,
+            init:         offset == 0,
+            total_blocks,
         };
         handle.protocol.write_block(&handle.usb, &ds)?;
         offset += block;
@@ -145,14 +151,17 @@ pub fn verify_chip(
         size
     };
 
+    let total_blocks = if read_size > 0 { (size + read_size - 1) / read_size } else { 1 } as u32;
     let mut offset = 0usize;
     while offset < size {
         let block = read_size.min(size - offset);
         let mut ds = DataSet {
-            data:        vec![0u8; block],
-            address:     offset as u32,
-            block_count: (block / 64) as u32,
-            page_type:   page,
+            data:         vec![0u8; block],
+            address:      offset as u32,
+            block_count:  (block / 64) as u32,
+            page_type:    page,
+            init:         offset == 0,
+            total_blocks,
         };
         handle.protocol.read_block(&handle.usb, &mut ds)?;
         for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
@@ -181,14 +190,17 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
         size
     };
 
+    let total_blocks = if read_size > 0 { (size + read_size - 1) / read_size } else { 1 } as u32;
     let mut offset = 0usize;
     while offset < size {
         let block = read_size.min(size - offset);
         let mut ds = DataSet {
-            data:        vec![0u8; block],
-            address:     offset as u32,
-            block_count: (block / 64) as u32,
-            page_type:   0x00,
+            data:         vec![0u8; block],
+            address:      offset as u32,
+            block_count:  (block / 64) as u32,
+            page_type:    0x00,
+            init:         offset == 0,
+            total_blocks,
         };
         handle.protocol.read_block(&handle.usb, &mut ds)?;
         for (i, &b) in ds.data.iter().enumerate() {
@@ -272,15 +284,16 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
     let fuse_count = config.fuses.len() as u8;
     let lock_count = config.locks.len() as u8;
 
+    let device_ref = &device;
     // Read CFG fuses
     let cfg_bytes = handle.protocol.read_fuses(
-        &handle.usb, MP_FUSE_CFG, fuse_count as usize, fuse_count,
+        &handle.usb, device_ref, MP_FUSE_CFG, fuse_count as usize, fuse_count,
     ).unwrap_or_default();
 
     // Read LOCK bits (optional — not all devices have them)
     let lock_bytes = if lock_count > 0 {
         handle.protocol.read_fuses(
-            &handle.usb, MP_FUSE_LOCK, lock_count as usize, lock_count,
+            &handle.usb, device_ref, MP_FUSE_LOCK, lock_count as usize, lock_count,
         ).unwrap_or_default()
     } else {
         vec![]
@@ -330,9 +343,12 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
         .map(|f| f.value)
         .collect();
 
+    let device_ref = &device;
+
     if !cfg_data.is_empty() {
         handle.protocol.write_fuses(
             &handle.usb,
+            device_ref,
             MP_FUSE_CFG,
             fuse_count,
             fuse_count as u8,
@@ -342,6 +358,7 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
     if !lock_data.is_empty() {
         handle.protocol.write_fuses(
             &handle.usb,
+            device_ref,
             MP_FUSE_LOCK,
             lock_count,
             lock_count as u8,

@@ -108,6 +108,14 @@ impl UsbDevice {
         Ok(())
     }
 
+    /// Send an arbitrary-length packet to the command endpoint (EP 0x01).
+    ///
+    /// Unlike [`msg_send`], this does **not** pad or truncate the buffer.
+    /// Used for T56/T76 FPGA bitstream upload where packets are larger than 64 B.
+    pub fn msg_send_large(&self, buf: &[u8]) -> Result<()> {
+        self.bulk_out_raw(CMD_EP_OUT, buf.to_vec())
+    }
+
     /// Receive a response packet (64 bytes by default; pass a larger size for
     /// commands that return more).
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
