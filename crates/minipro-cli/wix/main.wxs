@@ -1,49 +1,69 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!--
-  WiX v4/v7 source for the minipro Windows MSI installer.
-  Build with: dotnet build main.wixproj -p:ProductVersion=X.Y.Z
+  WiX v3 source for the minipro Windows MSI installer.
+  Build with: candle.exe -dProductVersion=X.Y.Z -arch x64 main.wxs
+              light.exe  -out minipro.msi main.wixobj
   Source paths are relative to this file's directory (crates/minipro-cli/wix/).
 -->
-<Wix xmlns='http://wixtoolset.org/schemas/v4/wxs'>
-  <Package
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <Product
+    Id='*'
     Name='minipro'
-    Manufacturer='minipro-rs contributors'
-    Version='$(var.ProductVersion)'
     UpgradeCode='5C6D2F1A-3B4E-4F2A-8C9D-1A2B3C4D5E6F'
-    Scope='perMachine'>
+    Manufacturer='minipro-rs contributors'
+    Language='1033'
+    Codepage='1252'
+    Version='$(var.ProductVersion)'>
+
+    <Package
+      Id='*'
+      Keywords='Installer'
+      Description='minipro - XGecu chip programmer utility'
+      Manufacturer='minipro-rs contributors'
+      InstallerVersion='450'
+      Languages='1033'
+      Compressed='yes'
+      InstallScope='perMachine'
+      SummaryCodepage='1252'/>
 
     <MajorUpgrade
+      Schedule='afterInstallInitialize'
       DowngradeErrorMessage='A newer version of minipro is already installed. Setup will now exit.'/>
 
-    <MediaTemplate EmbedCab='yes'/>
+    <Media Id='1' Cabinet='minipro.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
+    <Property Id='DiskPrompt' Value='minipro Installation'/>
 
-    <StandardDirectory Id='ProgramFiles64Folder'>
-      <Directory Id='APPLICATIONFOLDER' Name='minipro'>
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFiles64Folder' Name='PFiles'>
+        <Directory Id='APPLICATIONFOLDER' Name='minipro'>
 
-        <Component Id='License' Guid='*'>
-          <File Id='LicenseFile' Name='LICENSE'
-            Source='../../../LICENSE'
-            KeyPath='yes'/>
-        </Component>
-
-        <Directory Id='BinDir' Name='bin'>
-          <Component Id='Binary' Guid='*'>
-            <File Id='minipro.exe' Name='minipro.exe'
-              Source='../../../target/x86_64-pc-windows-gnu/release/minipro.exe'
+          <Component Id='License' Guid='*'>
+            <File Id='LicenseFile' Name='LICENSE'
+              Source='../../../LICENSE'
               KeyPath='yes'/>
-            <Environment
-              Id='PATH' Name='PATH' Value='[BinDir]'
-              Permanent='no' Part='last' Action='set' System='yes'/>
           </Component>
-        </Directory>
 
+          <Directory Id='BinDir' Name='bin'>
+            <Component Id='Binary' Guid='*'>
+              <File Id='minipro.exe' Name='minipro.exe'
+                Source='../../../target/x86_64-pc-windows-gnu/release/minipro.exe'
+                KeyPath='yes'/>
+              <Environment
+                Id='PATH' Name='PATH' Value='[BinDir]'
+                Permanent='no' Part='last' Action='set' System='yes'/>
+            </Component>
+          </Directory>
+
+        </Directory>
       </Directory>
-    </StandardDirectory>
+    </Directory>
 
     <Feature Id='DefaultFeature' Title='minipro' Level='1'>
       <ComponentRef Id='License'/>
       <ComponentRef Id='Binary'/>
     </Feature>
 
-  </Package>
+    <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
+
+  </Product>
 </Wix>

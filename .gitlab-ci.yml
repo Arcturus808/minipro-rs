@@ -200,12 +200,16 @@ msi:
     - build:windows-x86_64
   image: ubuntu:22.04
   before_script:
-    - apt-get update -q && apt-get install -qy dotnet-sdk-8.0
+    - apt-get update -q && apt-get install -qy mono-complete curl unzip
+    - curl -fsSL https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -o /tmp/wix.zip
+    - unzip -q /tmp/wix.zip -d /opt/wix3
   script:
     - |
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-      dotnet build crates/minipro-cli/wix/main.wixproj -p:ProductVersion="${VERSION}"
-      find crates/minipro-cli/wix/bin -name 'main.msi' -exec cp {} "minipro_${VERSION}_x86_64.msi" \;
+      cd crates/minipro-cli/wix
+      mono /opt/wix3/candle.exe -dProductVersion="${VERSION}" -arch x64 main.wxs
+      mono /opt/wix3/light.exe -out "../../../minipro_${VERSION}_x86_64.msi" main.wixobj
+      cd ../../..
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
     paths:
