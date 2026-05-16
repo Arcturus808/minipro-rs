@@ -198,9 +198,9 @@ msi:
   stage: package
   needs:
     - build:windows-x86_64
-  image: mono:latest
+  image: ubuntu:22.04
   before_script:
-    - apt-get update -q && apt-get install -qy unzip curl
+    - apt-get update -q && apt-get install -qy mono-complete unzip curl
     - curl -fsSL https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -o /tmp/wix.zip
     - unzip -q /tmp/wix.zip -d /opt/wix3
   script:
