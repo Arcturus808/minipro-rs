@@ -149,7 +149,6 @@ deb:
       printf 'Package: minipro\nVersion: %s\nArchitecture: amd64\nMaintainer: minipro-rs contributors\nDescription: Open-source programmer for XGecu TL866xx/T48/T56/T76\n Rust reimplementation of the minipro chip programmer utility.\nDepends: libc6\n' \
         "${VERSION}" > "${PKGDIR}/DEBIAN/control"
       dpkg-deb --build "${PKGDIR}"
-      mv "${PKGDIR}.deb" "minipro_${VERSION}_amd64.deb"
   artifacts:
     name: "minipro-deb-${CI_COMMIT_SHORT_SHA}"
     paths:
@@ -188,7 +187,7 @@ rpm:
         '%{_bindir}/minipro' \
         > ~/rpmbuild/SPECS/minipro.spec
       rpmbuild -bb ~/rpmbuild/SPECS/minipro.spec
-      find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} .
+      find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} . \;
   artifacts:
     name: "minipro-rpm-${CI_COMMIT_SHORT_SHA}"
     paths:
