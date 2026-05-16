@@ -161,7 +161,7 @@ rpm:
   image: fedora:latest
   script:
     - |
-      dnf install -qy rpm-build curl gcc
+      dnf install -qy rpm-build curl gcc python3
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93
       source "${CARGO_HOME:-$HOME/.cargo}/env"
       cargo build --release --locked --bin minipro
@@ -201,15 +201,17 @@ msi:
     - build:windows-x86_64
   image: rust:1.93
   before_script:
-    - apt-get update -q && apt-get install -qy mingw-w64 msitools libglib2.0-dev
-    - cargo install cargo-wix --locked
-    - rustup target add x86_64-pc-windows-gnu
+    - apt-get update -q && apt-get install -qy msitools libglib2.0-dev
   script:
-    - cargo wix -p minipro --target x86_64-pc-windows-gnu --no-build
+    - |
+      VERSION=$(grep -m1 '^version' crates/minipro-cli/Cargo.toml | cut -d'"' -f2)
+      wixl -D ProductVersion="${VERSION}" \
+           -o "minipro_${VERSION}_x86_64.msi" \
+           crates/minipro-cli/wix/main.wxs
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
     paths:
-      - "target/wix/*.msi"
+      - "*.msi"
     expire_in: 1 week
 
 # ── Release (tag-triggered) ───────────────────────────────────────────────────
