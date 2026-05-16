@@ -1,4 +1,34 @@
 //! `minipro-core` — core library for the minipro-rs chip programmer.
+//!
+//! # Architecture
+//!
+//! ```text
+//! MiniproHandle
+//!   ├── UsbDevice          (nusb abstraction — src/usb.rs)
+//!   ├── Box<dyn Protocol>  (model-specific commands — src/protocol/)
+//!   └── Arc<Device>        (chip descriptor from XML database — src/database.rs)
+//! ```
+//!
+//! # Quick start (library users)
+//!
+//! ```no_run
+//! use minipro_core::{MiniproHandle, DatabasePaths, find_device};
+//! use minipro_core::operations::read_chip;
+//! use std::sync::Arc;
+//!
+//! let db = DatabasePaths::default();
+//! let device = Arc::new(find_device(&db, "AT28C256", Default::default())?);
+//! let mut handle = MiniproHandle::open()?;
+//! handle.begin_transaction(device)?;
+//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0)?;
+//! handle.end_transaction()?;
+//! # Ok::<(), minipro_core::error::MiniproError>(())
+//! ```
+//!
+//! # Tauri integration
+//!
+//! Wrap USB calls in `tokio::task::spawn_blocking` to avoid blocking Tauri's
+//! async executor.  See the project README for a worked example.
 
 pub mod database;
 pub mod device;

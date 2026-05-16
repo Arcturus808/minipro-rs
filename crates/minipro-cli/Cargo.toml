@@ -3,14 +3,20 @@ name    = "minipro"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+build   = "build.rs"
 
 [[bin]]
 name = "minipro"
 path = "src/main.rs"
 
 [dependencies]
-minipro-core = { path = "../minipro-core" }
-clap         = { version = "4", features = ["derive"] }
-anyhow       = "1"
-env_logger   = "0.11"
-indicatif    = "0.17"
+minipro-core  = { path = "../minipro-core" }
+clap          = { version = "4", features = ["derive"] }
+clap_complete = "4"
+anyhow        = "1"
+env_logger    = "0.11"
+indicatif     = "0.17"
+
+[build-dependencies]
+clap          = { version = "4", features = ["derive"] }
+clap_complete = "4"

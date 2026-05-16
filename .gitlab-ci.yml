@@ -1,0 +1,259 @@
+# .gitlab-ci.yml
+#
+# Pipeline stages:
+#   check  — fast lint / format gate (no cross-compilation)
+#   test   — unit + integration tests on Linux
+#   build  — release binaries for Linux x86_64, Windows x86_64, macOS arm64
+#   package — .deb, .rpm, Windows .msi, shell completion archives
+#
+# Artifacts from `package` are attached to each pipeline run and to any
+# tag/release.  Semantic versioning: tag the repo as `v0.2.0` to publish a
+# release artifact set.
+
+default:
+  image: rust:latest
+
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  # Cache key includes Cargo.lock so the cache is busted on dependency changes.
+  CACHE_KEY: "cargo-${CI_COMMIT_REF_SLUG}-${CI_JOB_NAME}"
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+
+.cargo_cache: &cargo_cache
+  cache:
+    key: "${CACHE_KEY}"
+    paths:
+      - .cargo/registry/
+      - .cargo/git/
+      - target/
+
+# ── Stage definitions ─────────────────────────────────────────────────────────
+
+stages:
+  - check
+  - test
+  - build
+  - package
+
+# ── Check ─────────────────────────────────────────────────────────────────────
+
+fmt:
+  stage: check
+  <<: *cargo_cache
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+
+clippy:
+  stage: check
+  <<: *cargo_cache
+  script:
+    - rustup component add clippy
+    - cargo clippy --all-targets --all-features -- -D warnings
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+
+test:linux:
+  stage: test
+  <<: *cargo_cache
+  script:
+    - cargo test --all --locked
+  artifacts:
+    reports:
+      junit: target/nextest/default/*.xml
+    expire_in: 1 week
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+
+.build_common: &build_common
+  stage: build
+  <<: *cargo_cache
+  script:
+    - cargo build --release --locked --bin minipro
+  artifacts:
+    expire_in: 1 week
+
+build:linux-x86_64:
+  <<: *build_common
+  artifacts:
+    name: "minipro-linux-x86_64-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - target/release/minipro
+
+build:windows-x86_64:
+  <<: *build_common
+  before_script:
+    - rustup target add x86_64-pc-windows-gnu
+    - apt-get update -q && apt-get install -qy mingw-w64
+  script:
+    - cargo build --release --locked --bin minipro --target x86_64-pc-windows-gnu
+  artifacts:
+    name: "minipro-windows-x86_64-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - target/x86_64-pc-windows-gnu/release/minipro.exe
+
+build:macos-arm64:
+  <<: *build_common
+  tags:
+    - macos-arm64     # requires a macOS GitLab runner
+  script:
+    - cargo build --release --locked --bin minipro
+  artifacts:
+    name: "minipro-macos-arm64-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - target/release/minipro
+
+# ── Package ───────────────────────────────────────────────────────────────────
+
+.package_needs: &package_needs
+  stage: package
+  needs:
+    - build:linux-x86_64
+
+# Shell completion archive (all shells) ----------------------------------------
+completions:
+  <<: *package_needs
+  <<: *cargo_cache
+  script:
+    - mkdir -p dist/completions
+    - target/release/minipro --generate-completions bash        > dist/completions/minipro.bash
+    - target/release/minipro --generate-completions zsh         > dist/completions/_minipro
+    - target/release/minipro --generate-completions fish        > dist/completions/minipro.fish
+    - target/release/minipro --generate-completions powershell  > dist/completions/_minipro.ps1
+    - tar -czf "minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz" -C dist completions
+  artifacts:
+    name: "minipro-completions-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - "minipro-completions-*.tar.gz"
+    expire_in: 1 week
+
+# Debian package ---------------------------------------------------------------
+deb:
+  <<: *package_needs
+  script:
+    - apt-get update -q && apt-get install -qy dpkg-dev
+    - |
+      VERSION=$(cargo metadata --no-deps --format-version 1 \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
+    - PKGDIR="minipro_${VERSION}_amd64"
+    - mkdir -p "${PKGDIR}/DEBIAN"
+    - mkdir -p "${PKGDIR}/usr/bin"
+    - mkdir -p "${PKGDIR}/usr/share/bash-completion/completions"
+    - mkdir -p "${PKGDIR}/usr/share/zsh/site-functions"
+    - mkdir -p "${PKGDIR}/usr/share/fish/vendor_completions.d"
+    - mkdir -p "${PKGDIR}/usr/share/man/man1"
+    - cp target/release/minipro                                         "${PKGDIR}/usr/bin/minipro"
+    - target/release/minipro --generate-completions bash  > "${PKGDIR}/usr/share/bash-completion/completions/minipro"
+    - target/release/minipro --generate-completions zsh   > "${PKGDIR}/usr/share/zsh/site-functions/_minipro"
+    - target/release/minipro --generate-completions fish  > "${PKGDIR}/usr/share/fish/vendor_completions.d/minipro.fish"
+    - |
+      cat > "${PKGDIR}/DEBIAN/control" <<EOF
+      Package: minipro
+      Version: ${VERSION}
+      Architecture: amd64
+      Maintainer: minipro-rs contributors
+      Description: Open-source programmer for XGecu TL866xx/T48/T56/T76
+       Rust reimplementation of the minipro chip programmer utility.
+       Native Windows/Linux/macOS support; no libusb dependency.
+      Depends: libc6
+      EOF
+    - dpkg-deb --build "${PKGDIR}"
+    - mv "${PKGDIR}.deb" "minipro_${VERSION}_amd64.deb"
+  artifacts:
+    name: "minipro-deb-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - "minipro_*.deb"
+    expire_in: 1 week
+
+# RPM package ------------------------------------------------------------------
+rpm:
+  <<: *package_needs
+  image: fedora:latest
+  before_script:
+    - dnf install -qy rpm-build curl
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+    - source "$HOME/.cargo/env"
+  script:
+    - cargo build --release --locked --bin minipro
+    - |
+      VERSION=$(cargo metadata --no-deps --format-version 1 \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
+    - mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+    - cp target/release/minipro ~/rpmbuild/BUILD/
+    - |
+      cat > ~/rpmbuild/SPECS/minipro.spec <<EOF
+      Name:           minipro
+      Version:        ${VERSION}
+      Release:        1%{?dist}
+      Summary:        Open-source programmer for XGecu TL866xx/T48/T56/T76
+      License:        GPL-3.0-or-later
+      BuildArch:      x86_64
+
+      %description
+      Rust reimplementation of the minipro chip programmer utility.
+
+      %install
+      install -Dm755 %{_builddir}/minipro %{buildroot}%{_bindir}/minipro
+
+      %files
+      %{_bindir}/minipro
+      EOF
+    - rpmbuild -bb ~/rpmbuild/SPECS/minipro.spec
+    - find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} . \;
+  artifacts:
+    name: "minipro-rpm-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - "*.rpm"
+    expire_in: 1 week
+
+# Windows MSI ------------------------------------------------------------------
+msi:
+  stage: package
+  needs:
+    - build:windows-x86_64
+  image: rust:latest
+  before_script:
+    - apt-get update -q && apt-get install -qy mingw-w64 msitools libglib2.0-dev
+    - cargo install cargo-wix --locked
+    - rustup target add x86_64-pc-windows-gnu
+  script:
+    - cargo wix --target x86_64-pc-windows-gnu --nocapture
+  artifacts:
+    name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - "target/wix/*.msi"
+    expire_in: 1 week
+
+# ── Release (tag-triggered) ───────────────────────────────────────────────────
+
+release:
+  stage: package
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+  needs:
+    - completions
+    - deb
+    - rpm
+    - msi
+  script:
+    - echo "Creating release for ${CI_COMMIT_TAG}"
+  release:
+    name: "minipro-rs ${CI_COMMIT_TAG}"
+    description: "See CHANGELOG.md for details."
+    tag_name: "${CI_COMMIT_TAG}"
+    assets:
+      links:
+        - name: "Linux x86_64 binary"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/target/release/minipro?job=build:linux-x86_64"
+        - name: "Windows x86_64 binary"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/target/x86_64-pc-windows-gnu/release/minipro.exe?job=build:windows-x86_64"
+        - name: "Debian package"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=deb"
+        - name: "RPM package"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=rpm"
+        - name: "Windows MSI"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=msi"
+        - name: "Shell completions"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=completions"

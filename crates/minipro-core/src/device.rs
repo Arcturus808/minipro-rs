@@ -1,3 +1,9 @@
+//! Device and chip descriptor types.
+//!
+//! This module contains all the strongly-typed structs and enums that describe a
+//! programmable chip and the programmer hardware.  They correspond to the C
+//! `device_t`, `package_t` and related structs in the upstream minipro source.
+
 /// Programmer model identifiers (matches the C MP_* defines).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

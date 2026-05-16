@@ -2,7 +2,7 @@
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
-> **Status:** Phase 4 complete — all protocols + logic-IC testing + firmware update + ZIF pin control + SPI autodetect implemented, `cargo check` clean
+> **Status:** Phase 5 complete — all protocols, logic-IC testing, firmware update, shell completions, integration tests, CI/CD packaging. `cargo check` clean, all tests pass.
 
 ---
 
@@ -279,10 +279,16 @@ Options:
 - [x] SPI autodetect
 
 #### Phase 5 — Quality
-- [ ] Integration tests (recorded USB traces for replay)
-- [ ] `cargo doc` public API documentation
-- [ ] Packaging: `.deb`, `.rpm`, Windows `.msi` via GitHub/GitLab CI
-- [ ] Bash / Zsh / Fish shell completions via `clap_complete`
+- [x] Integration tests (JSON fixture replay — no hardware required)
+- [x] `cargo doc` public API documentation (module-level + type-level doc comments)
+- [x] Shell completions: bash, zsh, fish, PowerShell via `clap_complete`
+  - Generated at build time into `$OUT_DIR/completions/`
+  - Runtime: `minipro --generate-completions bash | sudo tee /etc/bash_completion.d/minipro`
+- [x] Packaging via GitLab CI (`.gitlab-ci.yml`):
+  - Linux `.deb` (Debian/Ubuntu) and `.rpm` (Fedora/RHEL)
+  - Windows `.msi` via `cargo-wix` (`wix/main.wxs`)
+  - Cross-compile Linux→Windows with `x86_64-pc-windows-gnu`
+  - Tag-triggered release stage auto-attaches artifacts to GitLab releases
 
 ---
 

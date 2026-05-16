@@ -20,13 +20,23 @@ use crate::{
     usb::{UsbDevice, open_programmer},
 };
 
+/// Top-level programmer session.
+///
+/// Obtained via [`MiniproHandle::open`].  Holds the USB connection, detected
+/// programmer info, the active chip descriptor, and the model-specific
+/// [`Protocol`] implementation.
 pub struct MiniproHandle {
+    /// Raw USB device handle.
     pub usb:      UsbDevice,
+    /// Detected programmer hardware info (model, firmware version, serial).
     pub info:     ProgrammerInfo,
+    /// Active chip descriptor, set by [`MiniproHandle::begin_transaction`].
     pub device:   Option<Arc<Device>>,
+    /// Model-specific protocol implementation.
     pub protocol: Box<dyn Protocol>,
+    /// Database paths for XML chip database resolution.
     pub db_paths: Option<DatabasePaths>,
-    /// Whether ICSP mode is active.
+    /// Whether ICSP (in-circuit serial programming) mode is active.
     pub icsp:     bool,
 }
 

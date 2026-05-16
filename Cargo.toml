@@ -9,3 +9,7 @@ license      = "GPL-3.0-or-later"
 authors      = []
 repository   = "https://gitlab.com/arcturus8081/minipro-rs"
 
+[workspace.dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+

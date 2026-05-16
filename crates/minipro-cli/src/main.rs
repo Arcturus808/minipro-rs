@@ -10,6 +10,7 @@
 //!   minipro -p DEVICE -D                 # read chip ID
 //!   minipro -l [filter]                  # list devices
 //!   minipro -I                           # show programmer info
+//!   minipro --generate-completions bash  # print bash completions to stdout
 
 use std::{
     path::PathBuf,
@@ -18,7 +19,8 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, CommandFactory, Parser};
+use clap_complete::{generate, shells};
 use indicatif::{ProgressBar, ProgressStyle};
 use minipro_core::{
     MiniproHandle,
@@ -32,110 +34,8 @@ use minipro_core::{
     },
 };
 
-#[derive(Debug, Parser)]
-#[command(
-    name    = "minipro",
-    version,
-    about   = "Open-source programmer for XGecu TL866xx/T48/T56/T76 chip programmers",
-    long_about = None,
-)]
-struct Cli {
-    /// Target device name (e.g. AT28C256, PIC16F628A, W25Q128)
-    #[arg(short = 'p', long = "part", value_name = "DEVICE")]
-    part: Option<String>,
-
-    /// Read device memory to file
-    #[arg(short = 'r', long = "read", value_name = "FILE")]
-    read: Option<PathBuf>,
-
-    /// Write file to device memory
-    #[arg(short = 'w', long = "write", value_name = "FILE")]
-    write: Option<PathBuf>,
-
-    /// Verify file against device memory
-    #[arg(short = 'm', long = "verify", value_name = "FILE")]
-    verify: Option<PathBuf>,
-
-    /// Erase device
-    #[arg(short = 'e', long = "erase", action = ArgAction::SetTrue)]
-    erase: bool,
-
-    /// Blank-check device
-    #[arg(short = 'b', long = "blank-check", action = ArgAction::SetTrue)]
-    blank_check: bool,
-
-    /// Read chip ID
-    #[arg(short = 'D', long = "device-id", action = ArgAction::SetTrue)]
-    device_id: bool,
-
-    /// List supported devices (optional filter)
-    #[arg(short = 'l', long = "list", value_name = "FILTER")]
-    list: Option<Option<String>>,
-
-    /// Show programmer info and exit
-    #[arg(short = 'I', long = "info", action = ArgAction::SetTrue)]
-    info: bool,
-
-    /// Skip over-current check
-    #[arg(long = "no-ovc-check", action = ArgAction::SetTrue)]
-    no_ovc_check: bool,
-
-    /// Enable ICSP mode
-    #[arg(long = "icsp", action = ArgAction::SetTrue)]
-    icsp: bool,
-
-    /// Override path to infoic.xml
-    #[arg(long = "infoic-path", value_name = "PATH")]
-    infoic_path: Option<PathBuf>,
-
-    /// Override path to logicic.xml
-    #[arg(long = "logicic-path", value_name = "PATH")]
-    logicic_path: Option<PathBuf>,
-
-    /// Memory page: 0 = code (default), 1 = data
-    #[arg(long = "page", default_value = "0", value_name = "N")]
-    page: u8,
-
-    /// Verbose output
-    #[arg(short = 'v', long = "verbose", action = ArgAction::SetTrue)]
-    verbose: bool,
-
-    /// Skip erase before write
-    #[arg(long = "no-erase", action = ArgAction::SetTrue)]
-    no_erase: bool,
-
-    /// Skip verify after write
-    #[arg(long = "no-verify", action = ArgAction::SetTrue)]
-    no_verify: bool,
-
-    /// Disable write protection before operation
-    #[arg(long = "protect-off", action = ArgAction::SetTrue)]
-    protect_off: bool,
-
-    /// Enable write protection after operation
-    #[arg(long = "protect-on", action = ArgAction::SetTrue)]
-    protect_on: bool,
-
-    /// File format override: auto|bin|ihex|srec|jedec
-    #[arg(long = "format", default_value = "auto", value_name = "FORMAT")]
-    format: String,
-
-    /// Skip chip ID verification
-    #[arg(long = "skip-id", action = ArgAction::SetTrue)]
-    skip_id: bool,
-
-    /// Warn but continue on chip ID mismatch
-    #[arg(long = "continue-id", action = ArgAction::SetTrue)]
-    continue_id: bool,
-
-    /// Test logic IC
-    #[arg(long = "logic-test", action = ArgAction::SetTrue)]
-    logic_test: bool,
-
-    /// Update programmer firmware from binary file
-    #[arg(long = "firmware-update", value_name = "FILE")]
-    firmware_update: Option<PathBuf>,
-}
+// Cli struct is shared with build.rs for shell completion generation.
+include!("cli.rs");
 
 fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
@@ -151,6 +51,22 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+
+    // ── Shell completions ─────────────────────────────────────────────────────
+    if let Some(ref shell_name) = cli.generate_completions {
+        let mut cmd = Cli::command();
+        let mut stdout = std::io::stdout();
+        match shell_name.to_ascii_lowercase().as_str() {
+            "bash"       => generate(shells::Bash,        &mut cmd, "minipro", &mut stdout),
+            "zsh"        => generate(shells::Zsh,         &mut cmd, "minipro", &mut stdout),
+            "fish"       => generate(shells::Fish,        &mut cmd, "minipro", &mut stdout),
+            "powershell" => generate(shells::PowerShell,  &mut cmd, "minipro", &mut stdout),
+            other => anyhow::bail!(
+                "unknown shell '{other}'; supported: bash, zsh, fish, powershell"
+            ),
+        }
+        return Ok(());
+    }
 
     // ── List devices ─────────────────────────────────────────────────────────
     if let Some(list_arg) = cli.list {
