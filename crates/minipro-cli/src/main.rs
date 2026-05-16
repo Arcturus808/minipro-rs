@@ -27,7 +27,8 @@ use minipro_core::{
     list_devices,
     error::MiniproError,
     operations::{
-        blank_check, check_chip_id, check_ovc, erase_chip, read_chip, verify_chip, write_chip,
+        blank_check, check_chip_id, check_ovc, erase_chip, firmware_update,
+        logic_ic_test, read_chip, verify_chip, write_chip,
     },
 };
 
@@ -130,6 +131,10 @@ struct Cli {
     /// Test logic IC
     #[arg(long = "logic-test", action = ArgAction::SetTrue)]
     logic_test: bool,
+
+    /// Update programmer firmware from binary file
+    #[arg(long = "firmware-update", value_name = "FILE")]
+    firmware_update: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -173,6 +178,15 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // ── Firmware update (no device / begin_transaction needed) ────────────────
+    if let Some(ref fw_path) = cli.firmware_update {
+        let fw_data = std::fs::read(fw_path)
+            .with_context(|| format!("cannot read firmware file {:?}", fw_path))?;
+        eprintln!("Updating firmware from {:?} ({} bytes)...", fw_path, fw_data.len());
+        firmware_update(&mut handle, &fw_data)?;
+        return Ok(());
+    }
+
     // ── Device required from here on ─────────────────────────────────────────
     let part = cli.part.as_deref().context("no device specified (-p DEVICE)")?;
 
@@ -207,7 +221,7 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
     // ── Logic IC test ─────────────────────────────────────────────────────────
     if cli.logic_test {
         eprint!("Testing logic IC... ");
-        handle.protocol.logic_ic_test(&handle.usb)?;
+        logic_ic_test(handle)?;
         eprintln!("PASS.");
         return Ok(());
     }

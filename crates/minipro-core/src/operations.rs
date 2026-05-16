@@ -367,3 +367,31 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
     }
     Ok(())
 }
+
+// ── Phase 4 operations ───────────────────────────────────────────────────────
+
+/// Test a logic IC against its built-in test vectors.
+///
+/// The device must have been opened with `begin_transaction` against a logic IC
+/// entry from `logicic.xml`.  Returns an error if the IC fails any vector.
+pub fn logic_ic_test(handle: &mut MiniproHandle) -> Result<()> {
+    let device = handle.device()?.clone();
+    handle.protocol.logic_ic_test(&handle.usb, &device)
+}
+
+/// Flash new firmware from a binary image file.
+///
+/// Supported formats:
+///  - TL866II+/T48: `UpdateII.dat`
+///  - T76: `updateT76.dat`
+pub fn firmware_update(handle: &mut MiniproHandle, firmware_data: &[u8]) -> Result<()> {
+    handle.protocol.firmware_update(&handle.usb, firmware_data)
+}
+
+/// Auto-detect an SPI flash chip by reading its JEDEC ID.
+///
+/// `id_type` selects the package: 0 = 8-pin SOP/DIP, 1 = 16-pin.
+/// Returns the 3-byte JEDEC manufacturer+device ID packed into a u32.
+pub fn spi_autodetect(handle: &mut MiniproHandle, id_type: u8) -> Result<u32> {
+    handle.protocol.spi_autodetect(&handle.usb, id_type)
+}

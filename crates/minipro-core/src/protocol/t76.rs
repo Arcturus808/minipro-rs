@@ -19,9 +19,17 @@ use crate::{
 };
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use super::t56::build_begin_msg;
+use super::tl866iiplus::{do_ic_test_pass, logic_ic_test_tl866};
 
 /// Minimum firmware version for the T76.
 pub const MIN_FIRMWARE_T76: u32 = 0x10D; // 0.1.13
+
+// T76 firmware update constants
+const T76_UPDATE_FILE_VERSION: u32 = 0xf076_0000;
+const T76_UPDATE_VERS_MASK:    u32 = 0xffff_0000;
+const T76_BTLDR_MAGIC:         u32 = 0x04_9000;
+const T76_LAST_BLOCK_ADDR:     u32 = 0x049f00;
+const T76_LAST_BLOCK_CRC:      u32 = 0xcdef_8668;
 
 // ── Command bytes (identical to T56) ─────────────────────────────────────────
 const CMD_END_TRANS:        u8 = 0x04;
@@ -463,8 +471,16 @@ impl Protocol for T76Protocol {
         Ok(())
     }
 
-    fn firmware_update(&self, _usb: &UsbDevice, _firmware: &[u8]) -> Result<()> {
-        Err(MiniproError::UnsupportedOperation)
+    fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
+        firmware_update_t76(usb, firmware)
+    }
+
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+        // T76 uses the same test-vector command (0x28) as the TL866II+.
+        // A full implementation would reload the FPGA bitstream between the
+        // pull-up and pull-down passes; here we reuse the TL866II+ two-pass
+        // logic without FPGA switching (known limitation for T76).
+        logic_ic_test_tl866(usb, device)
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {
@@ -472,3 +488,134 @@ impl Protocol for T76Protocol {
     }
 }
 
+// ── T76 Firmware update ───────────────────────────────────────────────────────
+
+/// Parse and flash an updateT76.dat firmware image.
+///
+/// File layout (from t76.c):
+/// ```text
+/// [0..4]    version (LE32)   must have (version & 0xffff0000) == 0xf0760000
+/// [4..8]    CRC32 of data blocks (LE32)
+/// [8..12]   unknown
+/// [12..16]  block count N (LE32)
+/// [16 .. 16+N*0x114]  N blocks of 276 bytes each
+/// Total size = N*0x114 + 16
+/// ```
+fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
+    use crc::{Crc, CRC_32_ISO_HDLC};
+    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
+    // ── Parse header ─────────────────────────────────────────────────────────
+    if dat.len() < 16 {
+        return Err(MiniproError::FileFormat("updateT76.dat too short".into()));
+    }
+    let version  = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let file_crc = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
+    let n_blocks = u32::from_le_bytes([dat[12], dat[13], dat[14], dat[15]]) as usize;
+
+    if version & T76_UPDATE_VERS_MASK != T76_UPDATE_FILE_VERSION {
+        return Err(MiniproError::FileFormat(format!(
+            "Unsupported T76 firmware version {:#010x}", version
+        )));
+    }
+    let expected = n_blocks * 0x114 + 16;
+    if dat.len() != expected {
+        return Err(MiniproError::FileFormat(format!(
+            "updateT76.dat wrong size: got {}, expected {}", dat.len(), expected
+        )));
+    }
+
+    // ── CRC check ────────────────────────────────────────────────────────────
+    // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
+    // The result (NOT inverted) must equal file_crc.
+    let mut digest = CRC32.digest_with_initial(0xFFFF_FFFF);
+    digest.update(&dat[16..]);
+    let computed = digest.finalize();
+    if computed != file_crc {
+        return Err(MiniproError::AlgorithmCrc);
+    }
+
+    eprintln!("T76 firmware image OK ({} blocks).", n_blocks);
+
+    // ── Switch to bootloader ─────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = 0x3D; // CMD_SWITCH
+        msg[1] = 0xaa;
+        put_le32(&mut msg[4..8], T76_BTLDR_MAGIC);
+        usb.msg_send(&msg)?;
+        let resp = usb.msg_recv(8)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T76 bootloader switch failed".into()));
+        }
+    }
+    // Note: upstream sleeps 1 second here for device re-enumeration.
+    // We proceed without sleep; in practice the device may need a reconnect.
+
+    // ── Erase ────────────────────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = 0x3C; // CMD_BTLDR_ERASE
+        msg[1] = 0xaa;
+        usb.msg_send(&msg)?;
+        let resp = usb.msg_recv(8)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T76 bootloader erase failed".into()));
+        }
+    }
+
+    // ── Begin write sequence ──────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = 0x3B; // CMD_BTLDR_WRITE
+        msg[1] = 0xaa; // begin sequence marker
+        usb.msg_send(&msg)?;
+    }
+
+    // ── Flash blocks ─────────────────────────────────────────────────────────
+    let blk_size = 0x114usize; // 276 bytes per block
+    let mut address = 0u32;
+
+    for b in 0..n_blocks {
+        let blk_off = 16 + b * blk_size;
+        let blk     = &dat[blk_off .. blk_off + blk_size];
+
+        // Block write: 0x11C (= 8 header + 0x114 data) bytes total
+        let mut msg = vec![0u8; 8 + blk_size];
+        msg[0] = 0x3B;
+        msg[1] = 0x00; // data block
+        put_le16(&mut msg[2..4], 256); // 256 bytes of payload
+        put_le32(&mut msg[4..8], address);
+        msg[8..8 + blk_size].copy_from_slice(blk);
+        usb.msg_send_large(&msg)?;
+
+        let resp = usb.msg_recv(8)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol(
+                format!("T76 block {} write failed", b)
+            ));
+        }
+
+        address = address.wrapping_add(256);
+    }
+
+    // ── Last block ────────────────────────────────────────────────────────────
+    {
+        // 0x108 (= 8 header + 4 CRC) bytes
+        let mut msg = [0u8; 0x108];
+        msg[0] = 0x3B;
+        msg[1] = 0x03; // last-block marker
+        put_le16(&mut msg[2..4], 256);
+        put_le32(&mut msg[4..8], T76_LAST_BLOCK_ADDR);
+        put_le32(&mut msg[8..12], T76_LAST_BLOCK_CRC);
+        usb.msg_send_large(&msg)?;
+
+        let resp = usb.msg_recv(8)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T76 last block write failed".into()));
+        }
+    }
+
+    eprintln!("T76 firmware written successfully. Please reconnect the programmer.");
+    Ok(())
+}

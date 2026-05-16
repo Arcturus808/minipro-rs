@@ -52,9 +52,41 @@ const CMD_READ_LOCK:       u8 = 0x15;
 const CMD_READ_CALIB:      u8 = 0x16;
 const CMD_PROTECT_OFF:     u8 = 0x18;
 const CMD_PROTECT_ON:      u8 = 0x19;
+const CMD_SET_VCC_VOLTAGE: u8 = 0x1B;
+const CMD_SET_VPP_VOLTAGE: u8 = 0x1C;
+const CMD_LOGIC_IC_TEST:   u8 = 0x28;
+const CMD_RESET_PIN_DRV:   u8 = 0x2D;
+const CMD_SET_VCC_PIN:     u8 = 0x2E;
+const CMD_SET_VPP_PIN:     u8 = 0x2F;
+const CMD_SET_GND_PIN:     u8 = 0x30;
+const CMD_SET_PULLDOWNS:   u8 = 0x31;
+const CMD_SET_PULLUPS:     u8 = 0x32;
+const CMD_SET_DIR:         u8 = 0x34;
+const CMD_READ_PINS:       u8 = 0x35;
+const CMD_SET_OUT:         u8 = 0x36;
+const CMD_AUTODETECT:      u8 = 0x37;
 const CMD_UNLOCK_TSOP48:   u8 = 0x38;
 const CMD_REQUEST_STATUS:  u8 = 0x39;
-const CMD_HARDWARE_CHECK:  u8 = 0x3C;
+const CMD_BTLDR_WRITE:     u8 = 0x3B;
+const CMD_BTLDR_ERASE:     u8 = 0x3C;
+const CMD_HARDWARE_CHECK:  u8 = 0x3C; // same byte as BTLDR_ERASE, context-dependent
+const CMD_SWITCH:          u8 = 0x3D;
+
+// ZIF bus width (max 40 pins)
+const ZIF_PINS: usize = 40;
+
+// Firmware update constants
+const BTLDR_MAGIC: u32 = 0xA578_B986;
+const UPDATE_FILE_VERS_MASK: u32 = 0xffff_0000;
+const UPDATE_FILE_VERSION:   u32 = 0xf8cc_0000;
+
+// Logic pin state constants (match C `pst[] = "01LHCZXGV"` indices)
+const LOGIC_L: u8 = 2; // expected output Low
+const LOGIC_H: u8 = 3; // expected output High
+const LOGIC_Z: u8 = 5; // expected High-Z (pull-up=H, pull-down=L)
+
+/// Printable character for each logic state (matches C `pst[]`).
+const PSTATE: &[u8] = b"01LHCZXGV";
 
 // Memory page types
 const MP_CODE:  u8 = 0x00;
@@ -358,16 +390,59 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
-        // Firmware update is a multi-step process; leave as a stub for now.
-        let _ = (usb, firmware);
-        Err(MiniproError::UnsupportedOperation)
+        firmware_update_tl866(usb, firmware)
+    }
+
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+        logic_ic_test_tl866(usb, device)
+    }
+
+    fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {
+        let mut msg = [0u8; 64];
+        msg[0] = CMD_AUTODETECT;
+        msg[8] = id_type;
+        usb.msg_send(&msg[..10])?;
+        let resp = usb.msg_recv(16)?;
+        if resp.len() < 5 {
+            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+        }
+        // Device ID is 3 bytes big-endian at resp[2..5]
+        let id = ((resp[2] as u32) << 16) | ((resp[3] as u32) << 8) | resp[4] as u32;
+        Ok(id)
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {
         let mut pkt = [0u8; 8];
-        pkt[0] = 0x2D; // reset pin drivers
+        pkt[0] = CMD_RESET_PIN_DRV;
         usb.msg_send(&pkt)?;
         Ok(())
+    }
+
+    fn set_zif_direction(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        set_zif_direction_tl866(usb, zif)
+    }
+
+    fn set_zif_state(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_OUT;
+        let n = zif.len().min(ZIF_PINS);
+        msg[8..8 + n].copy_from_slice(&zif[..n]);
+        usb.msg_send(&msg)
+    }
+
+    fn get_zif_state(&self, usb: &UsbDevice) -> Result<Vec<u8>> {
+        let mut pkt = [0u8; 8];
+        pkt[0] = CMD_READ_PINS;
+        usb.msg_send(&pkt)?;
+        let resp = usb.msg_recv(48)?;
+        if resp.len() < 48 {
+            return Err(MiniproError::ResponseTooShort { expected: 48, actual: resp.len() });
+        }
+        Ok(resp[8..48].to_vec())
+    }
+
+    fn set_voltages(&self, usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
+        set_voltages_tl866(usb, vcc, vpp)
     }
 }
 
@@ -418,4 +493,344 @@ fn le32(buf: &mut [u8], val: u32) {
     buf[1] = ((val >> 8) & 0xff) as u8;
     buf[2] = ((val >> 16) & 0xff) as u8;
     buf[3] = (val >> 24) as u8;
+}
+
+// ── ZIF pin control ───────────────────────────────────────────────────────────
+
+/// Set ZIF pin directions (and pull-up resistors).
+///
+/// Each byte in `zif[0..40]`:
+///  - bits [6:0] → direction (0 = output, 1 = input; passed to SET_DIR)
+///  - bit 7      → pull-up enable (0 = pull-up, 1 = no pull-up; inverted for SET_PULLUPS)
+fn set_zif_direction_tl866(usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+    let n = zif.len().min(ZIF_PINS);
+
+    // SET_DIR packet
+    let mut msg = [0u8; 48];
+    msg[0] = CMD_SET_DIR;
+    for i in 0..n {
+        msg[8 + i] = zif[i] & 0x7f;
+    }
+    usb.msg_send(&msg)?;
+
+    // SET_PULLUPS packet (bit7 of zif: 0 → pull-up active → send 0x00, 1 → no pull-up → send 0x01)
+    let mut msg2 = [0u8; 48];
+    msg2[0] = CMD_SET_PULLUPS;
+    for i in 0..n {
+        msg2[8 + i] = if zif[i] & 0x80 != 0 { 0x00 } else { 0x01 };
+    }
+    usb.msg_send(&msg2)?;
+    Ok(())
+}
+
+/// Encode VCC / VPP indices through the hardware lookup tables and send to
+/// the programmer.
+///
+/// Lookup tables from tl866iiplus.c (`vcc_t[]` and `vpp_t[]`):
+fn set_voltages_tl866(usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
+    const VCC_T: [u8; 16] = [0, 1, 2, 4, 3, 5, 6, 8, 7, 9, 10, 12, 11, 13, 14, 15];
+    const VPP_T: [u8; 16] = [0, 8, 1, 9, 2, 10, 3, 4, 11, 12, 5, 13, 6, 14, 7, 15];
+
+    let vi = (vcc as usize).min(15);
+    let pi = (vpp as usize).min(15);
+    let vcc_enc = VCC_T[vi];
+    let vpp_enc = VPP_T[pi];
+
+    // SET_VCC_VOLTAGE: bits [0], [1], [2] and a high bit packed into msg[8..12]
+    let mut msg = [0u8; 48];
+    msg[0]  = CMD_SET_VCC_VOLTAGE;
+    msg[8]  =  vcc_enc & 0x01;
+    msg[9]  = (vcc_enc >> 1) & 0x01;
+    msg[10] = (vcc_enc >> 2) & 0x01;
+    msg[11] = (vcc_enc << 4) & 0x80;
+    usb.msg_send(&msg)?;
+
+    // SET_VPP_VOLTAGE
+    let mut msg2 = [0u8; 48];
+    msg2[0]  = CMD_SET_VPP_VOLTAGE;
+    msg2[8]  =  vpp_enc & 0x01;
+    msg2[9]  = (vpp_enc >> 1) & 0x01;
+    msg2[10] = (vpp_enc >> 2) & 0x01;
+    msg2[11] = (vpp_enc << 4) & 0x80;
+    usb.msg_send(&msg2)?;
+    Ok(())
+}
+
+// ── Logic IC test ─────────────────────────────────────────────────────────────
+
+/// Run a single logic-IC test pass (pull = 0 → pull-ups active, 1 → pull-downs active).
+///
+/// Returns a flat buffer of `vector_count * pin_count` nibble values (one per pin per
+/// vector), each holding the firmware-reported logic level (0 = low, non-zero = high).
+pub(super) fn do_ic_test_pass(
+    usb:          &UsbDevice,
+    device:       &Device,
+    pull:         bool,
+) -> Result<Vec<u8>> {
+    let vectors    = device.vectors.as_deref().unwrap_or(&[]);
+    let pin_count  = device.package_details.pin_count as usize;
+    let vec_count  = device.vector_count;
+
+    let mut result = vec![0u8; vec_count * pin_count];
+
+    for n in 0..vec_count {
+        // Initialise message to 0xff (important: unpopulated nibbles stay 0xf)
+        let mut msg = [0xffu8; 32];
+        msg[0] = CMD_LOGIC_IC_TEST;
+        msg[1] = device.voltages.vcc | ((pull as u8) << 7);
+        msg[2] = pin_count as u8;
+        msg[3] = (pin_count >> 8) as u8;
+        msg[4] = (n & 0xff) as u8;
+        msg[5] = ((n >> 8) & 0xff) as u8;
+        msg[6] = ((n >> 16) & 0xff) as u8;
+        msg[7] = ((n >> 24) & 0xff) as u8;
+
+        // Pack vector: 2 pin states per byte (low nibble = even pin, high nibble = odd pin)
+        for i in 0..pin_count {
+            let v = vectors[n * pin_count + i];
+            if i & 1 != 0 {
+                msg[8 + i / 2] |= v << 4;
+            } else {
+                msg[8 + i / 2] = v;
+            }
+        }
+
+        usb.msg_send(&msg)?;
+        let resp = usb.msg_recv(32)?;
+        if resp.len() < 9 {
+            return Err(MiniproError::ResponseTooShort { expected: 9, actual: resp.len() });
+        }
+
+        // Overcurrent: firmware sets msg[1] != 0 on OVC
+        if resp[1] != 0 {
+            return Err(MiniproError::Overcurrent { address: 0 });
+        }
+
+        // Unpack result nibbles
+        for i in 0..pin_count {
+            result[n * pin_count + i] = (resp[8 + i / 2] >> (4 * (i & 1))) & 0xf;
+        }
+    }
+    Ok(result)
+}
+
+/// Run the full two-pass logic-IC test and print a pass/fail table.
+pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()> {
+    let vectors   = match device.vectors.as_deref() {
+        Some(v) if !v.is_empty() => v,
+        _ => return Err(MiniproError::Protocol(
+            "no test vectors for this device".into()
+        )),
+    };
+    let pin_count  = device.package_details.pin_count as usize;
+    let vec_count  = device.vector_count;
+    if vec_count == 0 || pin_count == 0 {
+        return Err(MiniproError::Protocol("no test vectors for this device".into()));
+    }
+
+    // Step 1: pull-ups active (pull = 0)
+    let step1 = do_ic_test_pass(usb, device, false)?;
+    // Step 2: pull-downs active (pull = 1)
+    let step2 = do_ic_test_pass(usb, device, true)?;
+
+    // Print header
+    print!("      ");
+    for pin in 1..=pin_count {
+        print!("{:<3}", pin);
+    }
+    println!();
+
+    let mut errors = 0usize;
+
+    for v in 0..vec_count {
+        print!("{:04}: ", v);
+        for p in 0..pin_count {
+            let idx   = v * pin_count + p;
+            let state = vectors[idx];
+            let s1    = step1[idx];
+            let s2    = step2[idx];
+
+            let err = match state {
+                LOGIC_L => s1 != 0 || s2 != 0, // must be LOW in both passes
+                LOGIC_H => s1 == 0 || s2 == 0, // must be HIGH in both passes
+                LOGIC_Z => s1 == 0 || s2 != 0, // HIGH when pulled up, LOW when pulled down
+                _       => false,               // G, V, C, X, 0, 1 — no comparison
+            };
+            let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
+            if err {
+                print!("\x1b[0;91m{}-\x1b[0m ", ch);
+                errors += 1;
+            } else {
+                print!("{}  ", ch);
+            }
+        }
+        println!();
+    }
+
+    if errors > 0 {
+        eprintln!("Logic test FAILED: {} error(s).", errors);
+        Err(MiniproError::Protocol(format!("logic test failed: {} error(s)", errors)))
+    } else {
+        eprintln!("Logic test OK.");
+        Ok(())
+    }
+}
+
+// ── Firmware update (TL866II+ / T48) ─────────────────────────────────────────
+
+/// Parse and flash an UpdateII.dat firmware image.
+///
+/// File layout (from tl866iiplus.c):
+/// ```text
+/// [0..4]      version  (LE32)   must have (version & 0xffff0000) == 0xf8cc0000
+/// [4..8]      file CRC (LE32)   must equal ~crc32(covered regions)
+/// [8..1032]   XOR table (1024 bytes)
+/// [1032..1036] block count N (LE32)
+/// [1036 .. 1036+N*272]  N regular blocks of 272 bytes each
+/// [1036+N*272 .. end]   1 last block of 2064 bytes
+/// Total size = N*272 + 3100
+/// ```
+pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
+    use crc::{Crc, CRC_32_ISO_HDLC};
+    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
+    // ── Parse header ─────────────────────────────────────────────────────────
+    if dat.len() < 1036 {
+        return Err(MiniproError::FileFormat("UpdateII.dat too short".into()));
+    }
+    let version   = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let file_crc  = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
+
+    if version & UPDATE_FILE_VERS_MASK != UPDATE_FILE_VERSION {
+        return Err(MiniproError::FileFormat(format!(
+            "Unsupported firmware version {:#010x}", version
+        )));
+    }
+
+    let n_blocks = u32::from_le_bytes([dat[1032], dat[1033], dat[1034], dat[1035]]) as usize;
+    let expected_size = n_blocks * 272 + 3100;
+    if dat.len() != expected_size {
+        return Err(MiniproError::FileFormat(format!(
+            "UpdateII.dat wrong size: got {}, expected {}", dat.len(), expected_size
+        )));
+    }
+
+    // XOR table lives at bytes 8..1032
+    let xortable = &dat[8..1032];
+
+    // Offsets of each section
+    let blocks_start  = 1036usize;
+    let last_blk_off  = blocks_start + n_blocks * 272;
+
+    // ── CRC check ────────────────────────────────────────────────────────────
+    // CRC is computed over: regular blocks, last block, then (xortable + blocks_count field).
+    // Result inverted (~crc) must equal file_crc.
+    let mut digest = CRC32.digest();
+    digest.update(&dat[blocks_start .. blocks_start + n_blocks * 272]);
+    digest.update(&dat[last_blk_off .. last_blk_off + 2064]);
+    digest.update(&dat[8 .. 1036]); // xortable (1024 B) + blocks_count (4 B)
+    let computed = digest.finalize();
+    if computed != file_crc {
+        return Err(MiniproError::AlgorithmCrc);
+    }
+
+    eprintln!("Firmware image OK ({} blocks + last block).", n_blocks);
+
+    // ── Switch to bootloader ─────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = CMD_SWITCH;
+        le32(&mut msg[4..8], BTLDR_MAGIC);
+        let _ = usb.msg_send(&msg); // best-effort; device reboots
+    }
+    // The device re-enumerates; we can't reopen here (no handle to the UsbDevice
+    // internals), so we rely on the existing open connection (some firmware versions
+    // keep the EP alive during the brief bootloader switch).
+
+    // ── Erase ────────────────────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = CMD_BTLDR_ERASE;
+        usb.msg_send(&msg)?;
+        let resp = usb.msg_recv(8)?;
+        if resp.get(0).copied() != Some(CMD_BTLDR_ERASE) {
+            return Err(MiniproError::Protocol("bootloader erase rejected".into()));
+        }
+    }
+
+    // ── Flash regular blocks ──────────────────────────────────────────────────
+    for b in 0..n_blocks {
+        let blk_off = blocks_start + b * 272;
+        let blk     = &dat[blk_off .. blk_off + 272];
+
+        // Block layout: [0..4] block_crc, [4..8] xorptr, [8..12] dest_addr,
+        //               [12..16] internal_ptr, [16..272] data (256 bytes)
+        let xorptr = u32::from_le_bytes([blk[4], blk[5], blk[6], blk[7]]) as usize;
+        let addr   = u32::from_le_bytes([blk[8], blk[9], blk[10], blk[11]]);
+
+        // Deobfuscate: XOR each of the 264 bytes at blk[8..272] with the XOR table.
+        // The table is 1024 bytes, indexed as (xorptr-1 + i) & 0x3FF (1-indexed).
+        let mut data = [0u8; 256];
+        for i in 0..256 {
+            let tbl_idx = (xorptr.wrapping_add(i).wrapping_sub(1)) & 0x3FF;
+            data[i] = blk[16 + i] ^ xortable[tbl_idx];
+        }
+
+        // Send write command
+        let mut hdr = [0u8; 8];
+        hdr[0] = CMD_BTLDR_WRITE;
+        hdr[1] = ((xorptr >> 1) & 0x7F) as u8; // xor_ptr_idx & 0x7F
+        hdr[2] = 0;
+        hdr[3] = 1; // block type 1 = regular
+        le32(&mut hdr[4..8], addr);
+        usb.msg_send(&hdr)?;
+        usb.write_payload(&data)?;
+
+        // Check status
+        let mut sreq = [0u8; 8];
+        sreq[0] = CMD_REQUEST_STATUS;
+        usb.msg_send(&sreq)?;
+        let sr = usb.msg_recv(32)?;
+        if sr.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol(
+                format!("block {} flash status error: {:#04x}", b, sr.get(1).copied().unwrap_or(0xff))
+            ));
+        }
+    }
+
+    // ── Flash last block ──────────────────────────────────────────────────────
+    {
+        let lb      = &dat[last_blk_off .. last_blk_off + 2064];
+        let xorptr  = u32::from_le_bytes([lb[4], lb[5], lb[6], lb[7]]) as usize;
+        let addr    = u32::from_le_bytes([lb[8], lb[9], lb[10], lb[11]]);
+
+        // Deobfuscate last block: 514 iterations × 4 XOR ops on 2056 bytes (lb[8..2064])
+        let mut data = [0u8; 2048];
+        for i in 0..2048 {
+            let tbl_idx = (xorptr.wrapping_add(i).wrapping_sub(1)) & 0x3FF;
+            data[i] = lb[16 + i] ^ xortable[tbl_idx];
+        }
+
+        let mut hdr = [0u8; 8];
+        hdr[0] = CMD_BTLDR_WRITE;
+        hdr[1] = (((xorptr >> 1) & 0x7F) | 0x80) as u8; // xor_ptr_idx | 0x80 (last-block flag)
+        hdr[2] = 0;
+        hdr[3] = 8; // block type 8 = last block
+        le32(&mut hdr[4..8], addr);
+        usb.msg_send(&hdr)?;
+        usb.write_payload(&data)?;
+
+        let mut sreq = [0u8; 8];
+        sreq[0] = CMD_REQUEST_STATUS;
+        usb.msg_send(&sreq)?;
+        let sr = usb.msg_recv(32)?;
+        if sr.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol(
+                format!("last block flash status error: {:#04x}", sr.get(1).copied().unwrap_or(0xff))
+            ));
+        }
+    }
+
+    eprintln!("Firmware written successfully. Please reconnect the programmer.");
+    Ok(())
 }

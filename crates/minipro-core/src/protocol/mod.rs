@@ -5,7 +5,7 @@
 
 use crate::{
     device::{Device, FuseType},
-    error::Result,
+    error::{MiniproError, Result},
     usb::UsbDevice,
 };
 
@@ -125,9 +125,9 @@ pub trait Protocol: Send + Sync {
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()>;
 
     /// Test a logic IC against its test vectors.
-    fn logic_ic_test(&self, usb: &UsbDevice) -> Result<()> {
-        let _ = usb;
-        Err(crate::error::MiniproError::UnsupportedOperation)
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+        let _ = (usb, device);
+        Err(MiniproError::UnsupportedOperation)
     }
 
     /// Reset ZIF socket pin state.

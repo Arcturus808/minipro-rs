@@ -147,6 +147,91 @@ fn read_file(path: &Path) -> Result<String> {
     Ok(s)
 }
 
+/// Map a single-char token from a logicic.xml vector to its numeric state.
+///
+/// Encoding (matches C `pst[]` string "01LHCZXGV"):
+/// '0'→0, '1'→1, 'L'→2, 'H'→3, 'C'→4, 'Z'→5, 'X'→6, 'G'→7, 'V'→8
+fn char_to_logic_state(tok: &str) -> u8 {
+    match tok {
+        "0"             => 0,
+        "1"             => 1,
+        "L" | "l"       => 2,
+        "H" | "h"       => 3,
+        "C" | "c"       => 4,
+        "Z" | "z"       => 5,
+        "X" | "x"       => 6,
+        "G" | "g"       => 7,
+        "V" | "v"       => 8,
+        _               => 6, // treat unknown as don't-care
+    }
+}
+
+/// Parse `<vector id="N">…</vector>` children for the first `<ic>` element
+/// whose name attribute contains `name` (case-insensitive).
+///
+/// Returns `(flat_bytes, vector_count)` where flat_bytes is laid out as
+/// `flat[v * pin_count + p]` = state of pin `p` in vector `v`.
+fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<Vec<u8>>, usize)> {
+    let pc = pin_count as usize;
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut in_target_ic = false;
+    let mut in_vector    = false;
+    let mut cur_id       = 0u32;
+    let mut ordered: Vec<(u32, Vec<u8>)> = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) if e.name().as_ref() == b"ic" => {
+                if !in_target_ic {
+                    if let Some(raw) = get_attr_str(e, b"name") {
+                        if raw.split(',').any(|s| s.trim().eq_ignore_ascii_case(name)) {
+                            in_target_ic = true;
+                        }
+                    }
+                }
+            }
+            Ok(Event::Start(ref ve))
+                if in_target_ic && ve.name().as_ref() == b"vector" =>
+            {
+                cur_id     = get_attr_u32(ve, b"id").unwrap_or(cur_id + 1);
+                in_vector  = true;
+            }
+            Ok(Event::Text(ref te)) if in_vector => {
+                let cow = te.unescape().unwrap_or_default();
+                let mut pins: Vec<u8> = cow
+                    .split_ascii_whitespace()
+                    .take(pc)
+                    .map(char_to_logic_state)
+                    .collect();
+                pins.resize(pc, 6); // pad missing pins with X (don't-care)
+                ordered.push((cur_id, pins));
+            }
+            Ok(Event::End(ref ee)) => {
+                match ee.name().as_ref() {
+                    b"vector" => in_vector = false,
+                    b"ic" if in_target_ic => {
+                        in_target_ic = false;
+                        break; // found and fully parsed the target IC
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    ordered.sort_by_key(|(id, _)| *id);
+    let vector_count = ordered.len();
+    let flat: Vec<u8> = ordered.into_iter().flat_map(|(_, pins)| pins).collect();
+    Ok((if flat.is_empty() { None } else { Some(flat) }, vector_count))
+}
+
 /// Search `path` for a device with the given name. Returns `None` if not found.
 fn search_file(
     path:     &Path,
@@ -158,7 +243,17 @@ fn search_file(
     // Pass 1: collect all <config> entries
     let configs = parse_configs(&xml)?;
     // Pass 2: find the <ic> entry
-    parse_ic(&xml, name, model, is_logic, &configs)
+    let mut device = parse_ic(&xml, name, model, is_logic, &configs)?;
+    // Pass 3 (logic ICs only): parse <vector> child elements for test vectors
+    if is_logic {
+        if let Some(ref mut dev) = device {
+            let pin_count = dev.package_details.pin_count;
+            let (vectors, count) = parse_logic_vectors(&xml, name, pin_count)?;
+            dev.vectors      = vectors;
+            dev.vector_count = count;
+        }
+    }
+    Ok(device)
 }
 
 fn collect_names(path: &Path, filter: Option<&str>, out: &mut Vec<String>) -> Result<()> {
