@@ -201,7 +201,7 @@ msi:
   image: ubuntu:22.04
   before_script:
     - apt-get update -q && apt-get install -qy dotnet-sdk-8.0
-    - dotnet tool install --global wix
+    - dotnet tool install --global wix --version '[4.0.0,5.0.0)'
   script:
     - |
       export PATH="$HOME/.dotnet/tools:$PATH"
