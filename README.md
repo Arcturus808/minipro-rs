@@ -2,16 +2,86 @@
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
-> **Status:** Phase 3 complete — all protocols implemented, `cargo check` clean
+> **Status:** Phase 4 complete — all protocols + logic-IC testing + firmware update + ZIF pin control + SPI autodetect implemented, `cargo check` clean
 
 ---
 
 ## Goals
 
 - Full feature parity with the C `minipro` 0.7.x
+- **Native Windows 11 support** — no Cygwin, no MSYS2, no WSL, no `libusb` DLL; builds and runs with only `rustup` + `cargo`
 - Cross-platform (Linux, macOS, Windows) without requiring a separately installed `libusb`
 - Idiomatic Rust: strong types, `Result`-based error handling, no unsafe except at the USB boundary
-- Library (`libminipro-rs`) + binary (`minipro`) split so third-party GUIs can embed the core
+- Library (`minipro-core`) + binary (`minipro-cli`) split so third-party GUIs (including [Tauri](#gui-front-ends-with-tauri)) can embed the core
+
+---
+
+## Windows support
+
+### For end users
+
+The distributed binary is a **single self-contained `.exe`** with no installation required beyond placing it on `PATH`.  No Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`.
+
+**One-time USB driver step** — Windows associates USB devices with a driver that persists across reboots.  The programmer's interface must be associated with Microsoft's built-in **WinUSB** driver before first use:
+
+1. Download and run [Zadig](https://zadig.akeo.ie/) (free, no install needed).
+2. Select the XGecu programmer from the device list.
+3. Choose **WinUSB** and click **Install Driver**.
+
+This is a one-time step per machine.  It is the same requirement the original C `minipro` has on Windows — this project does not add any new hurdle; it only removes the `libusb` runtime layer that sat on top.
+
+### For developers
+
+| What you need | What you do NOT need |
+|---|---|
+| [rustup](https://rustup.rs/) (Rust toolchain) | Cygwin / MSYS2 / WSL |
+| `cargo build --release` | C compiler (gcc / clang / MSVC) |
+| Zadig (one-time, per machine) | `libusb`, `pkg-config`, or any C library |
+
+The USB layer uses [`nusb`](https://crates.io/crates/nusb) — a pure-Rust library that calls the Windows WinUSB API directly through Rust's `windows-sys` bindings.  There is no C FFI, no `.dll` to bundle, and no system-level package manager step.
+
+```powershell
+# Clone and build on Windows — this is all that is required
+git clone https://gitlab.com/your-fork/minipro-rs
+cd minipro-rs
+cargo build --release
+# Binary is at target\release\minipro.exe
+```
+
+---
+
+## GUI front-ends with Tauri
+
+[Tauri](https://tauri.app/) is a well-suited choice for building a native GUI front-end for this project.  Because `minipro-core` is a plain Rust library crate, a Tauri app can depend on it directly:
+
+```toml
+# In your Tauri app's src-tauri/Cargo.toml
+[dependencies]
+minipro-core = { path = "../minipro-rs/crates/minipro-core" }
+```
+
+Then expose operations as Tauri commands:
+
+```rust
+#[tauri::command]
+async fn read_chip(device: String, output: String) -> Result<(), String> {
+    // Tauri commands run on a thread pool, so blocking USB I/O is safe here.
+    tokio::task::spawn_blocking(move || {
+        let mut handle = minipro_core::MiniproHandle::open()
+            .map_err(|e| e.to_string())?;
+        // ... begin_transaction, read_chip, etc.
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+```
+
+**Integration notes:**
+- `minipro-core` uses `pollster` for blocking USB calls.  Wrap them in `tokio::task::spawn_blocking` (as above) so they don't block Tauri's async executor.
+- The WinUSB driver requirement is identical on Windows — no extra setup for a Tauri deployment.
+- The same `minipro-core` crate works on Linux and macOS, so the Tauri app is automatically cross-platform.
+- A Tauri app ships as a native installer (`.msi` on Windows, `.dmg` on macOS, `.deb`/`.AppImage` on Linux) and still requires no `libusb` or Cygwin.
 
 ---
 
@@ -199,13 +269,14 @@ Options:
 - [x] `protocol/t76.rs` (chunked bitstream, DMA streaming code memory)
 
 #### Phase 4 — Advanced features
-- [ ] Logic IC testing (`logicic.xml` vectors)
-- [ ] Fuse / configuration-bit read/write
-- [ ] JEDEC fuse-map support
-- [ ] Chip ID verify + autodetect
-- [ ] Overcurrent protection handling
-- [ ] Firmware update
-- [ ] Bitbang / ZIF pin control
+- [x] Logic IC testing (`logicic.xml` vectors)
+- [x] Fuse / configuration-bit read/write
+- [x] JEDEC fuse-map support
+- [x] Chip ID verify + autodetect
+- [x] Overcurrent protection handling
+- [x] Firmware update (TL866II+/T48 `UpdateII.dat`, T76 `updateT76.dat`)
+- [x] Bitbang / ZIF pin control
+- [x] SPI autodetect
 
 #### Phase 5 — Quality
 - [ ] Integration tests (recorded USB traces for replay)
@@ -219,35 +290,10 @@ Options:
 
 - Upstream C project: <https://gitlab.com/DavidGriffith/minipro>
 - USB protocol documentation: `tl866iiplus.md` in upstream repo
-- `nusb` crate: <https://crates.io/crates/nusb>
-- `quick-xml` crate: <https://crates.io/crates/quick-xml>
-
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
+- [`nusb`](https://crates.io/crates/nusb) — pure-Rust cross-platform USB (replaces libusb)
+- [`quick-xml`](https://crates.io/crates/quick-xml) — fast XML chip database parsing
+- [Zadig](https://zadig.akeo.ie/) — one-time WinUSB driver association tool for Windows
+- [Tauri](https://tauri.app/) — recommended framework for GUI front-ends
 
 ## Description
 Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
