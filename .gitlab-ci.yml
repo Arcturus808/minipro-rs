@@ -161,7 +161,7 @@ rpm:
   image: fedora:latest
   script:
     - |
-      dnf install -qy rpm-build curl
+      dnf install -qy rpm-build curl gcc
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93
       source "${CARGO_HOME:-$HOME/.cargo}/env"
       cargo build --release --locked --bin minipro
