@@ -21,8 +21,7 @@ use quick_xml::{
 use crate::{
     device::ProgrammerModel,
     device::{
-        ChipConfig, Device, DeviceFlags, FuseConfig, FuseField, GalConfig,
-        PackageDetails, Voltages,
+        ChipConfig, Device, DeviceFlags, FuseConfig, FuseField, GalConfig, PackageDetails, Voltages,
     },
     error::{MiniproError, Result},
 };
@@ -560,10 +559,9 @@ fn parse_ic(
 
                     if let Some(matched) = matched_name {
                         // Filter by programmer model using pin_map flags
-                        if !is_logic
-                            && !device_matches_model(e, model) {
-                                continue;
-                            }
+                        if !is_logic && !device_matches_model(e, model) {
+                            continue;
+                        }
 
                         if let Some(dev) = build_device(e, matched, model, is_logic, configs)? {
                             result = Some(dev);
@@ -760,7 +758,10 @@ fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
         _ => 0x00,
     };
 
-    let package = PackageDetails { pin_count, ..Default::default() };
+    let package = PackageDetails {
+        pin_count,
+        ..Default::default()
+    };
 
     let mut device = Device {
         name: name.to_string(),
@@ -776,7 +777,10 @@ fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
         pages_per_block: 0,
         chip_id: 0,
         chip_id_bytes_count: 0,
-        voltages: crate::device::Voltages { vcc, ..Default::default() },
+        voltages: crate::device::Voltages {
+            vcc,
+            ..Default::default()
+        },
         pulse_delay: 0,
         flags: crate::device::DeviceFlags::default(),
         chip_info: 0,

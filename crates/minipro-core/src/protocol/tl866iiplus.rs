@@ -56,10 +56,14 @@ const CMD_SET_VCC_VOLTAGE: u8 = 0x1B;
 const CMD_SET_VPP_VOLTAGE: u8 = 0x1C;
 const CMD_LOGIC_IC_TEST: u8 = 0x28;
 const CMD_RESET_PIN_DRV: u8 = 0x2D;
-#[allow(dead_code)] const CMD_SET_VCC_PIN: u8 = 0x2E;
-#[allow(dead_code)] const CMD_SET_VPP_PIN: u8 = 0x2F;
-#[allow(dead_code)] const CMD_SET_GND_PIN: u8 = 0x30;
-#[allow(dead_code)] const CMD_SET_PULLDOWNS: u8 = 0x31;
+#[allow(dead_code)]
+const CMD_SET_VCC_PIN: u8 = 0x2E;
+#[allow(dead_code)]
+const CMD_SET_VPP_PIN: u8 = 0x2F;
+#[allow(dead_code)]
+const CMD_SET_GND_PIN: u8 = 0x30;
+#[allow(dead_code)]
+const CMD_SET_PULLDOWNS: u8 = 0x31;
 const CMD_SET_PULLUPS: u8 = 0x32;
 const CMD_SET_DIR: u8 = 0x34;
 const CMD_READ_PINS: u8 = 0x35;

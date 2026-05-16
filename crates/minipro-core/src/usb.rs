@@ -34,8 +34,10 @@ const TL866II_PID: u16 = 0x0a53;
 const T76_VID: u16 = 0xa466;
 const T76_PID: u16 = 0x1a86;
 
-#[allow(dead_code)] const USB_TIMEOUT_MS: u32 = 5_000;
-#[allow(dead_code)] const USB_READ_TIMEOUT_MS: u32 = 360_000;
+#[allow(dead_code)]
+const USB_TIMEOUT_MS: u32 = 5_000;
+#[allow(dead_code)]
+const USB_READ_TIMEOUT_MS: u32 = 360_000;
 
 const CMD_EP_OUT: u8 = 0x01;
 const CMD_EP_IN: u8 = 0x81;
