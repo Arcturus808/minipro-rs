@@ -108,6 +108,18 @@ struct Cli {
     #[arg(long = "firmware-update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,
 
+    /// Read fuse/configuration bits and print them to stdout (or write to FILE)
+    #[arg(long = "read-fuses", value_name = "FILE")]
+    read_fuses: Option<Option<PathBuf>>,
+
+    /// Write fuse/configuration bits from a key=value text file
+    #[arg(long = "write-fuses", value_name = "FILE")]
+    write_fuses: Option<PathBuf>,
+
+    /// Auto-detect SPI flash chip JEDEC ID (0 = 8-pin, 1 = 16-pin) [default: 0]
+    #[arg(long = "spi-autodetect", value_name = "TYPE")]
+    spi_autodetect: Option<Option<u8>>,
+
     /// Generate shell completions and print to stdout (bash|zsh|fish|powershell)
     #[arg(long = "generate-completions", value_name = "SHELL", hide = true)]
     generate_completions: Option<String>,

@@ -10,14 +10,14 @@ use crate::{
     device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
     error::{MiniproError, Result},
     protocol::{
-        Protocol,
         t48::T48Protocol,
         t56::{T56Protocol, MIN_FIRMWARE_T56},
         t76::{T76Protocol, MIN_FIRMWARE_T76},
         tl866a::Tl866aProtocol,
-        tl866iiplus::{MIN_FIRMWARE, Tl866iiPlusProtocol, get_system_info},
+        tl866iiplus::{get_system_info, Tl866iiPlusProtocol, MIN_FIRMWARE},
+        Protocol,
     },
-    usb::{UsbDevice, open_programmer},
+    usb::{open_programmer, UsbDevice},
 };
 
 /// Top-level programmer session.
@@ -27,17 +27,17 @@ use crate::{
 /// [`Protocol`] implementation.
 pub struct MiniproHandle {
     /// Raw USB device handle.
-    pub usb:      UsbDevice,
+    pub usb: UsbDevice,
     /// Detected programmer hardware info (model, firmware version, serial).
-    pub info:     ProgrammerInfo,
+    pub info: ProgrammerInfo,
     /// Active chip descriptor, set by [`MiniproHandle::begin_transaction`].
-    pub device:   Option<Arc<Device>>,
+    pub device: Option<Arc<Device>>,
     /// Model-specific protocol implementation.
     pub protocol: Box<dyn Protocol>,
     /// Database paths for XML chip database resolution.
     pub db_paths: Option<DatabasePaths>,
     /// Whether ICSP (in-circuit serial programming) mode is active.
-    pub icsp:     bool,
+    pub icsp: bool,
 }
 
 impl MiniproHandle {
@@ -53,12 +53,12 @@ impl MiniproHandle {
         }
 
         let info = ProgrammerInfo {
-            model:            sys_info.model,
-            status:           sys_info.status,
-            firmware:         sys_info.firmware,
-            firmware_str:     sys_info.firmware_str,
-            device_code:      sys_info.device_code,
-            serial_number:    sys_info.serial_number,
+            model: sys_info.model,
+            status: sys_info.status,
+            firmware: sys_info.firmware,
+            firmware_str: sys_info.firmware_str,
+            device_code: sys_info.device_code,
+            serial_number: sys_info.serial_number,
             hardware_version: sys_info.hardware_version,
         };
 
@@ -71,22 +71,17 @@ impl MiniproHandle {
         };
         if min_fw > 0 && info.firmware < min_fw {
             return Err(MiniproError::FirmwareTooOld {
-                got:  info.firmware,
+                got: info.firmware,
                 need: min_fw,
             });
         }
 
         let protocol: Box<dyn Protocol> = match info.model {
-            ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs =>
-                Box::new(Tl866aProtocol::new()),
-            ProgrammerModel::T48 =>
-                Box::new(T48Protocol::new()),
-            ProgrammerModel::T56 =>
-                Box::new(T56Protocol::new()),
-            ProgrammerModel::T76 =>
-                Box::new(T76Protocol::new()),
-            _ =>
-                Box::new(Tl866iiPlusProtocol::new()),
+            ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Box::new(Tl866aProtocol::new()),
+            ProgrammerModel::T48 => Box::new(T48Protocol::new()),
+            ProgrammerModel::T56 => Box::new(T56Protocol::new()),
+            ProgrammerModel::T76 => Box::new(T76Protocol::new()),
+            _ => Box::new(Tl866iiPlusProtocol::new()),
         };
 
         Ok(Self {

@@ -11,9 +11,9 @@ use std::{
 
 use crate::error::{MiniproError, Result};
 
-const RECORD_DATA:    u8 = 0x00;
-const RECORD_EOF:     u8 = 0x01;
-const RECORD_EXTSEG:  u8 = 0x02;
+const RECORD_DATA: u8 = 0x00;
+const RECORD_EOF: u8 = 0x01;
+const RECORD_EXTSEG: u8 = 0x02;
 const RECORD_EXTALIN: u8 = 0x04;
 
 /// Read an Intel HEX file and return a flat byte buffer of `target_size` bytes,
@@ -73,7 +73,7 @@ pub fn write(path: &Path, data: &[u8]) -> Result<()> {
 
     while addr < data.len() as u32 {
         // Emit extended linear address record every 64 KiB
-        if addr % 0x10000 == 0 {
+        if addr.is_multiple_of(0x10000) {
             let upper = (addr >> 16) as u16;
             write_record(&mut f, RECORD_EXTALIN, 0, &upper.to_be_bytes())?;
         }
@@ -92,7 +92,8 @@ fn write_record(f: &mut std::fs::File, rtype: u8, addr: u16, data: &[u8]) -> Res
     let ah = (addr >> 8) as u8;
     let al = (addr & 0xff) as u8;
 
-    sum = sum.wrapping_add(len)
+    sum = sum
+        .wrapping_add(len)
         .wrapping_add(ah)
         .wrapping_add(al)
         .wrapping_add(rtype);
@@ -111,7 +112,7 @@ fn write_record(f: &mut std::fs::File, rtype: u8, addr: u16, data: &[u8]) -> Res
 
 fn decode_hex_line(line: &str) -> Result<Vec<u8>> {
     let hex = &line[1..]; // skip ':'
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(MiniproError::FileFormat("odd-length HEX record".into()));
     }
     let bytes: std::result::Result<Vec<u8>, _> = (0..hex.len())

@@ -17,8 +17,8 @@
 //! | 0x05     | OUT       | T76 write payload (single EP)   |
 //! | 0x82     | IN        | T76 read payload                |
 
-use nusb::{DeviceInfo, Interface};
 use nusb::transfer::RequestBuffer;
+use nusb::{DeviceInfo, Interface};
 
 use crate::{
     device::ProgrammerModel,
@@ -27,22 +27,22 @@ use crate::{
 
 // ── USB VID/PID constants ────────────────────────────────────────────────────
 
-const TL866_VID:    u16 = 0x04d8;
-const TL866_PID:    u16 = 0xe11c;
-const TL866II_VID:  u16 = 0xa466;
-const TL866II_PID:  u16 = 0x0a53;
-const T76_VID:      u16 = 0xa466;
-const T76_PID:      u16 = 0x1a86;
+const TL866_VID: u16 = 0x04d8;
+const TL866_PID: u16 = 0xe11c;
+const TL866II_VID: u16 = 0xa466;
+const TL866II_PID: u16 = 0x0a53;
+const T76_VID: u16 = 0xa466;
+const T76_PID: u16 = 0x1a86;
 
-const USB_TIMEOUT_MS:      u32 = 5_000;
-const USB_READ_TIMEOUT_MS: u32 = 360_000;
+#[allow(dead_code)] const USB_TIMEOUT_MS: u32 = 5_000;
+#[allow(dead_code)] const USB_READ_TIMEOUT_MS: u32 = 360_000;
 
 const CMD_EP_OUT: u8 = 0x01;
-const CMD_EP_IN:  u8 = 0x81;
+const CMD_EP_IN: u8 = 0x81;
 const DATA_EP2_OUT: u8 = 0x02;
 const DATA_EP3_OUT: u8 = 0x03;
-const DATA_EP2_IN:  u8 = 0x82;
-const DATA_EP3_IN:  u8 = 0x83;
+const DATA_EP2_IN: u8 = 0x82;
+const DATA_EP3_IN: u8 = 0x83;
 const T76_DATA_EP_OUT: u8 = 0x05;
 
 // ── Device open ──────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ const T76_DATA_EP_OUT: u8 = 0x05;
 fn classify(info: &DeviceInfo) -> Option<ProgrammerModel> {
     let (vid, pid) = (info.vendor_id(), info.product_id());
     match (vid, pid) {
-        (T76_VID, T76_PID)     => Some(ProgrammerModel::T76),
+        (T76_VID, T76_PID) => Some(ProgrammerModel::T76),
         (TL866II_VID, TL866II_PID) => {
             // T56 and T48 share the same VID/PID as TL866II+; the model is
             // determined after opening by reading the system-info response.
@@ -64,9 +64,9 @@ fn classify(info: &DeviceInfo) -> Option<ProgrammerModel> {
 
 /// A claimed USB interface ready for transfers.
 pub struct UsbDevice {
-    interface:  Interface,
+    interface: Interface,
     /// The USB PID, used to select T76-specific payload endpoints.
-    pid:        u16,
+    pid: u16,
 }
 
 /// Open the first connected programmer.
@@ -85,7 +85,7 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
         1 => {
             let (info, model) = found.remove(0);
             let pid = info.product_id();
-            let device    = info.open().map_err(MiniproError::Usb)?;
+            let device = info.open().map_err(MiniproError::Usb)?;
             let interface = device.claim_interface(0).map_err(MiniproError::Usb)?;
             Ok((UsbDevice { interface, pid }, model))
         }
@@ -104,7 +104,9 @@ impl UsbDevice {
         data[..len].copy_from_slice(&buf[..len]);
 
         let completion = pollster::block_on(self.interface.bulk_out(CMD_EP_OUT, data));
-        completion.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        completion
+            .status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())
     }
 
@@ -119,8 +121,11 @@ impl UsbDevice {
     /// Receive a response packet (64 bytes by default; pass a larger size for
     /// commands that return more).
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
-        let completion = pollster::block_on(self.interface.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
-        completion.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        let completion =
+            pollster::block_on(self.interface.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
+        completion
+            .status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(completion.data)
     }
 
@@ -161,30 +166,47 @@ impl UsbDevice {
     pub fn read_payload_limit(&self, length: usize, limit: usize) -> Result<Vec<u8>> {
         // T76 uses EP 0x82 only for reads
         if self.pid == T76_PID {
-            let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(length)));
-            c.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+            let c = pollster::block_on(
+                self.interface
+                    .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
+            );
+            c.status
+                .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
         }
 
         // Small reads: single EP2 transfer
         if length < 64 {
             let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
-            c.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+            c.status
+                .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data[..length].to_vec());
         }
 
         if length == 64 || length < limit || limit == 0 {
-            let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(length)));
-            c.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+            let c = pollster::block_on(
+                self.interface
+                    .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
+            );
+            c.status
+                .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
         }
 
         // Large reads: parallel EP2 + EP3, then de-interleave
         let half = length / 2;
-        let c2 = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(half)));
-        c2.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
-        let c3 = pollster::block_on(self.interface.bulk_in(DATA_EP3_IN, RequestBuffer::new(half)));
-        c3.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        let c2 = pollster::block_on(
+            self.interface
+                .bulk_in(DATA_EP2_IN, RequestBuffer::new(half)),
+        );
+        c2.status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        let c3 = pollster::block_on(
+            self.interface
+                .bulk_in(DATA_EP3_IN, RequestBuffer::new(half)),
+        );
+        c3.status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
 
         // De-interleave 64-byte blocks: even blocks from EP2, odd from EP3
         Ok(deinterleave(&c2.data, &c3.data, length))
@@ -192,7 +214,8 @@ impl UsbDevice {
 
     fn bulk_out_raw(&self, ep: u8, data: Vec<u8>) -> Result<()> {
         let c = pollster::block_on(self.interface.bulk_out(ep, data));
-        c.status.map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        c.status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())
     }
 }

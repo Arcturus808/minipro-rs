@@ -21,7 +21,11 @@ pub enum MiniproError {
     Overcurrent { address: u32 },
 
     #[error("Verify failed at {address:#010x}: expected {expected:#04x}, got {actual:#04x}")]
-    VerifyFailed { address: u32, expected: u8, actual: u8 },
+    VerifyFailed {
+        address: u32,
+        expected: u8,
+        actual: u8,
+    },
 
     #[error("Chip is not blank at {address:#010x}")]
     NotBlank { address: u32 },

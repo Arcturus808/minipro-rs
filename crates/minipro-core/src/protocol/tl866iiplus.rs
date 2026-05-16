@@ -26,51 +26,51 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Hardware check               |
 
+use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
 
 // Command bytes
-const CMD_GET_INFO:        u8 = 0x00;
-const CMD_BEGIN_TRANS:     u8 = 0x03;
-const CMD_END_TRANS:       u8 = 0x04;
-const CMD_READ_CHIP_ID:    u8 = 0x05;
-const CMD_READ_USER:       u8 = 0x06;
-const CMD_WRITE_USER:      u8 = 0x07;
-const CMD_READ_FUSES:      u8 = 0x08;
-const CMD_WRITE_FUSES:     u8 = 0x09;
-const CMD_WRITE_CODE:      u8 = 0x0C;
-const CMD_READ_CODE:       u8 = 0x0D;
-const CMD_ERASE:           u8 = 0x0E;
-const CMD_READ_DATA:       u8 = 0x10;
-const CMD_WRITE_DATA:      u8 = 0x11;
-const CMD_WRITE_LOCK:      u8 = 0x14;
-const CMD_READ_LOCK:       u8 = 0x15;
-const CMD_READ_CALIB:      u8 = 0x16;
-const CMD_PROTECT_OFF:     u8 = 0x18;
-const CMD_PROTECT_ON:      u8 = 0x19;
+const CMD_GET_INFO: u8 = 0x00;
+const CMD_BEGIN_TRANS: u8 = 0x03;
+const CMD_END_TRANS: u8 = 0x04;
+const CMD_READ_CHIP_ID: u8 = 0x05;
+const CMD_READ_USER: u8 = 0x06;
+const CMD_WRITE_USER: u8 = 0x07;
+const CMD_READ_FUSES: u8 = 0x08;
+const CMD_WRITE_FUSES: u8 = 0x09;
+const CMD_WRITE_CODE: u8 = 0x0C;
+const CMD_READ_CODE: u8 = 0x0D;
+const CMD_ERASE: u8 = 0x0E;
+const CMD_READ_DATA: u8 = 0x10;
+const CMD_WRITE_DATA: u8 = 0x11;
+const CMD_WRITE_LOCK: u8 = 0x14;
+const CMD_READ_LOCK: u8 = 0x15;
+const CMD_READ_CALIB: u8 = 0x16;
+const CMD_PROTECT_OFF: u8 = 0x18;
+const CMD_PROTECT_ON: u8 = 0x19;
 const CMD_SET_VCC_VOLTAGE: u8 = 0x1B;
 const CMD_SET_VPP_VOLTAGE: u8 = 0x1C;
-const CMD_LOGIC_IC_TEST:   u8 = 0x28;
-const CMD_RESET_PIN_DRV:   u8 = 0x2D;
-const CMD_SET_VCC_PIN:     u8 = 0x2E;
-const CMD_SET_VPP_PIN:     u8 = 0x2F;
-const CMD_SET_GND_PIN:     u8 = 0x30;
-const CMD_SET_PULLDOWNS:   u8 = 0x31;
-const CMD_SET_PULLUPS:     u8 = 0x32;
-const CMD_SET_DIR:         u8 = 0x34;
-const CMD_READ_PINS:       u8 = 0x35;
-const CMD_SET_OUT:         u8 = 0x36;
-const CMD_AUTODETECT:      u8 = 0x37;
-const CMD_UNLOCK_TSOP48:   u8 = 0x38;
-const CMD_REQUEST_STATUS:  u8 = 0x39;
-const CMD_BTLDR_WRITE:     u8 = 0x3B;
-const CMD_BTLDR_ERASE:     u8 = 0x3C;
-const CMD_HARDWARE_CHECK:  u8 = 0x3C; // same byte as BTLDR_ERASE, context-dependent
-const CMD_SWITCH:          u8 = 0x3D;
+const CMD_LOGIC_IC_TEST: u8 = 0x28;
+const CMD_RESET_PIN_DRV: u8 = 0x2D;
+#[allow(dead_code)] const CMD_SET_VCC_PIN: u8 = 0x2E;
+#[allow(dead_code)] const CMD_SET_VPP_PIN: u8 = 0x2F;
+#[allow(dead_code)] const CMD_SET_GND_PIN: u8 = 0x30;
+#[allow(dead_code)] const CMD_SET_PULLDOWNS: u8 = 0x31;
+const CMD_SET_PULLUPS: u8 = 0x32;
+const CMD_SET_DIR: u8 = 0x34;
+const CMD_READ_PINS: u8 = 0x35;
+const CMD_SET_OUT: u8 = 0x36;
+const CMD_AUTODETECT: u8 = 0x37;
+const CMD_UNLOCK_TSOP48: u8 = 0x38;
+const CMD_REQUEST_STATUS: u8 = 0x39;
+const CMD_BTLDR_WRITE: u8 = 0x3B;
+const CMD_BTLDR_ERASE: u8 = 0x3C;
+const CMD_HARDWARE_CHECK: u8 = 0x3C; // same byte as BTLDR_ERASE, context-dependent
+const CMD_SWITCH: u8 = 0x3D;
 
 // ZIF bus width (max 40 pins)
 const ZIF_PINS: usize = 40;
@@ -78,7 +78,7 @@ const ZIF_PINS: usize = 40;
 // Firmware update constants
 const BTLDR_MAGIC: u32 = 0xA578_B986;
 const UPDATE_FILE_VERS_MASK: u32 = 0xffff_0000;
-const UPDATE_FILE_VERSION:   u32 = 0xf8cc_0000;
+const UPDATE_FILE_VERSION: u32 = 0xf8cc_0000;
 
 // Logic pin state constants (match C `pst[] = "01LHCZXGV"` indices)
 const LOGIC_L: u8 = 2; // expected output Low
@@ -89,9 +89,9 @@ const LOGIC_Z: u8 = 5; // expected High-Z (pull-up=H, pull-down=L)
 const PSTATE: &[u8] = b"01LHCZXGV";
 
 // Memory page types
-const MP_CODE:  u8 = 0x00;
-const MP_DATA:  u8 = 0x01;
-const MP_USER:  u8 = 0x02;
+const MP_CODE: u8 = 0x00;
+const MP_DATA: u8 = 0x01;
+const MP_USER: u8 = 0x02;
 
 // Minimum firmware version expected
 pub const MIN_FIRMWARE: u32 = 0x255; // 4.2.85
@@ -99,11 +99,15 @@ pub const MIN_FIRMWARE: u32 = 0x255; // 4.2.85
 pub struct Tl866iiPlusProtocol;
 
 impl Tl866iiPlusProtocol {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for Tl866iiPlusProtocol {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── System info ──────────────────────────────────────────────────────────────
@@ -129,7 +133,10 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
     let resp = usb.msg_recv(64)?;
 
     if resp.len() < 41 {
-        return Err(MiniproError::ResponseTooShort { expected: 41, actual: resp.len() });
+        return Err(MiniproError::ResponseTooShort {
+            expected: 41,
+            actual: resp.len(),
+        });
     }
 
     let status = match resp[1] {
@@ -173,12 +180,12 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
 }
 
 pub struct SystemInfo {
-    pub model:            crate::device::ProgrammerModel,
-    pub status:           crate::device::ProgrammerStatus,
-    pub firmware:         u32,
-    pub firmware_str:     String,
-    pub device_code:      String,
-    pub serial_number:    String,
+    pub model: crate::device::ProgrammerModel,
+    pub status: crate::device::ProgrammerStatus,
+    pub firmware: u32,
+    pub firmware_str: String,
+    pub device_code: String,
+    pub serial_number: String,
     pub hardware_version: u8,
 }
 
@@ -207,10 +214,10 @@ impl Protocol for Tl866iiPlusProtocol {
         pkt[1] = device.protocol_id;
         pkt[2] = (device.variant & 0xff) as u8;
         pkt[3] = 0; // icsp flag set by caller if needed
-        // opts1: vpp | vcc encoded
+                    // opts1: vpp | vcc encoded
         let opts1: u16 = ((device.voltages.vcc as u16) << 4) | device.voltages.vpp as u16;
         le16(&mut pkt[5..7], opts1);
-        le16(&mut pkt[8..10],  (device.data_memory_size & 0xffff) as u16);
+        le16(&mut pkt[8..10], (device.data_memory_size & 0xffff) as u16);
         le16(&mut pkt[14..16], (device.data_memory2_size & 0xffff) as u16);
         le32(&mut pkt[16..20], device.code_memory_size);
         le32(&mut pkt[40..44], device.package_details.raw);
@@ -239,9 +246,10 @@ impl Protocol for Tl866iiPlusProtocol {
         let resp = usb.msg_recv(64)?;
         // Status byte 1 should be 0 on success
         if resp.len() > 1 && resp[1] != 0 {
-            return Err(MiniproError::Protocol(
-                format!("write_block status error: {:#04x}", resp[1])
-            ));
+            return Err(MiniproError::Protocol(format!(
+                "write_block status error: {:#04x}",
+                resp[1]
+            )));
         }
         Ok(())
     }
@@ -252,7 +260,10 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)?;
         let resp = usb.msg_recv(64)?;
         if resp.len() < 6 {
-            return Err(MiniproError::ResponseTooShort { expected: 6, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 6,
+                actual: resp.len(),
+            });
         }
         let id_type = resp[1];
         let chip_id = u32::from_le_bytes([resp[2], resp[3], resp[4], resp[5]]);
@@ -260,14 +271,18 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn read_fuses(
-        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, length: usize,
+        &self,
+        usb: &UsbDevice,
+        _device: &Device,
+        fuse_type: u8,
+        length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
         let cmd_byte = match fuse_type {
             0x00 => CMD_READ_USER,  // MP_FUSE_USER
             0x01 => CMD_READ_FUSES, // MP_FUSE_CFG
             0x02 => CMD_READ_LOCK,  // MP_FUSE_LOCK
-            _    => CMD_READ_FUSES,
+            _ => CMD_READ_FUSES,
         };
         let mut pkt = [0u8; 8];
         pkt[0] = cmd_byte;
@@ -278,14 +293,19 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn write_fuses(
-        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, length: usize,
-        items_count: u8, data: &[u8],
+        &self,
+        usb: &UsbDevice,
+        _device: &Device,
+        fuse_type: u8,
+        length: usize,
+        items_count: u8,
+        data: &[u8],
     ) -> Result<()> {
         let cmd_byte = match fuse_type {
             0x00 => CMD_WRITE_USER,
             0x01 => CMD_WRITE_FUSES,
             0x02 => CMD_WRITE_LOCK,
-            _    => CMD_WRITE_FUSES,
+            _ => CMD_WRITE_FUSES,
         };
         let mut pkt = vec![0u8; 64];
         pkt[0] = cmd_byte;
@@ -361,14 +381,17 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)?;
         let resp = usb.msg_recv(64)?;
         if resp.len() < 8 {
-            return Err(MiniproError::ResponseTooShort { expected: 8, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 8,
+                actual: resp.len(),
+            });
         }
         let ovc_flag = resp[1];
         let status = OvcStatus {
-            error:   resp[0],
+            error: resp[0],
             address: u32::from_le_bytes([resp[2], resp[3], resp[4], resp[5]]),
-            c1:      resp[6] as u32,
-            c2:      resp[7] as u32,
+            c1: resp[6] as u32,
+            c2: resp[7] as u32,
         };
         Ok((status, ovc_flag))
     }
@@ -404,7 +427,10 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&msg[..10])?;
         let resp = usb.msg_recv(16)?;
         if resp.len() < 5 {
-            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 5,
+                actual: resp.len(),
+            });
         }
         // Device ID is 3 bytes big-endian at resp[2..5]
         let id = ((resp[2] as u32) << 16) | ((resp[3] as u32) << 8) | resp[4] as u32;
@@ -436,7 +462,10 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)?;
         let resp = usb.msg_recv(48)?;
         if resp.len() < 48 {
-            return Err(MiniproError::ResponseTooShort { expected: 48, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 48,
+                actual: resp.len(),
+            });
         }
         Ok(resp[8..48].to_vec())
     }
@@ -454,7 +483,7 @@ fn read_cmd(ds: &DataSet) -> [u8; 8] {
         MP_CODE => CMD_READ_CODE,
         MP_DATA => CMD_READ_DATA,
         MP_USER => CMD_READ_USER,
-        _       => CMD_READ_CODE,
+        _ => CMD_READ_CODE,
     };
     let len = ds.data.len() as u16;
     let mut pkt = [0u8; 8];
@@ -470,7 +499,7 @@ fn write_cmd(ds: &DataSet) -> [u8; 8] {
         MP_CODE => CMD_WRITE_CODE,
         MP_DATA => CMD_WRITE_DATA,
         MP_USER => CMD_WRITE_USER,
-        _       => CMD_WRITE_CODE,
+        _ => CMD_WRITE_CODE,
     };
     let len = ds.data.len() as u16;
     let mut pkt = [0u8; 8];
@@ -538,18 +567,18 @@ fn set_voltages_tl866(usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
 
     // SET_VCC_VOLTAGE: bits [0], [1], [2] and a high bit packed into msg[8..12]
     let mut msg = [0u8; 48];
-    msg[0]  = CMD_SET_VCC_VOLTAGE;
-    msg[8]  =  vcc_enc & 0x01;
-    msg[9]  = (vcc_enc >> 1) & 0x01;
+    msg[0] = CMD_SET_VCC_VOLTAGE;
+    msg[8] = vcc_enc & 0x01;
+    msg[9] = (vcc_enc >> 1) & 0x01;
     msg[10] = (vcc_enc >> 2) & 0x01;
     msg[11] = (vcc_enc << 4) & 0x80;
     usb.msg_send(&msg)?;
 
     // SET_VPP_VOLTAGE
     let mut msg2 = [0u8; 48];
-    msg2[0]  = CMD_SET_VPP_VOLTAGE;
-    msg2[8]  =  vpp_enc & 0x01;
-    msg2[9]  = (vpp_enc >> 1) & 0x01;
+    msg2[0] = CMD_SET_VPP_VOLTAGE;
+    msg2[8] = vpp_enc & 0x01;
+    msg2[9] = (vpp_enc >> 1) & 0x01;
     msg2[10] = (vpp_enc >> 2) & 0x01;
     msg2[11] = (vpp_enc << 4) & 0x80;
     usb.msg_send(&msg2)?;
@@ -562,14 +591,10 @@ fn set_voltages_tl866(usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
 ///
 /// Returns a flat buffer of `vector_count * pin_count` nibble values (one per pin per
 /// vector), each holding the firmware-reported logic level (0 = low, non-zero = high).
-pub(super) fn do_ic_test_pass(
-    usb:          &UsbDevice,
-    device:       &Device,
-    pull:         bool,
-) -> Result<Vec<u8>> {
-    let vectors    = device.vectors.as_deref().unwrap_or(&[]);
-    let pin_count  = device.package_details.pin_count as usize;
-    let vec_count  = device.vector_count;
+pub(super) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> Result<Vec<u8>> {
+    let vectors = device.vectors.as_deref().unwrap_or(&[]);
+    let pin_count = device.package_details.pin_count as usize;
+    let vec_count = device.vector_count;
 
     let mut result = vec![0u8; vec_count * pin_count];
 
@@ -598,7 +623,10 @@ pub(super) fn do_ic_test_pass(
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
         if resp.len() < 9 {
-            return Err(MiniproError::ResponseTooShort { expected: 9, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 9,
+                actual: resp.len(),
+            });
         }
 
         // Overcurrent: firmware sets msg[1] != 0 on OVC
@@ -616,16 +644,20 @@ pub(super) fn do_ic_test_pass(
 
 /// Run the full two-pass logic-IC test and print a pass/fail table.
 pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()> {
-    let vectors   = match device.vectors.as_deref() {
+    let vectors = match device.vectors.as_deref() {
         Some(v) if !v.is_empty() => v,
-        _ => return Err(MiniproError::Protocol(
-            "no test vectors for this device".into()
-        )),
+        _ => {
+            return Err(MiniproError::Protocol(
+                "no test vectors for this device".into(),
+            ))
+        }
     };
-    let pin_count  = device.package_details.pin_count as usize;
-    let vec_count  = device.vector_count;
+    let pin_count = device.package_details.pin_count as usize;
+    let vec_count = device.vector_count;
     if vec_count == 0 || pin_count == 0 {
-        return Err(MiniproError::Protocol("no test vectors for this device".into()));
+        return Err(MiniproError::Protocol(
+            "no test vectors for this device".into(),
+        ));
     }
 
     // Step 1: pull-ups active (pull = 0)
@@ -645,16 +677,16 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()
     for v in 0..vec_count {
         print!("{:04}: ", v);
         for p in 0..pin_count {
-            let idx   = v * pin_count + p;
+            let idx = v * pin_count + p;
             let state = vectors[idx];
-            let s1    = step1[idx];
-            let s2    = step2[idx];
+            let s1 = step1[idx];
+            let s2 = step2[idx];
 
             let err = match state {
                 LOGIC_L => s1 != 0 || s2 != 0, // must be LOW in both passes
                 LOGIC_H => s1 == 0 || s2 == 0, // must be HIGH in both passes
                 LOGIC_Z => s1 == 0 || s2 != 0, // HIGH when pulled up, LOW when pulled down
-                _       => false,               // G, V, C, X, 0, 1 — no comparison
+                _ => false,                    // G, V, C, X, 0, 1 — no comparison
             };
             let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
             if err {
@@ -669,7 +701,10 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()
 
     if errors > 0 {
         eprintln!("Logic test FAILED: {} error(s).", errors);
-        Err(MiniproError::Protocol(format!("logic test failed: {} error(s)", errors)))
+        Err(MiniproError::Protocol(format!(
+            "logic test failed: {} error(s)",
+            errors
+        )))
     } else {
         eprintln!("Logic test OK.");
         Ok(())
@@ -698,12 +733,13 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     if dat.len() < 1036 {
         return Err(MiniproError::FileFormat("UpdateII.dat too short".into()));
     }
-    let version   = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
-    let file_crc  = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
+    let version = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let file_crc = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
 
     if version & UPDATE_FILE_VERS_MASK != UPDATE_FILE_VERSION {
         return Err(MiniproError::FileFormat(format!(
-            "Unsupported firmware version {:#010x}", version
+            "Unsupported firmware version {:#010x}",
+            version
         )));
     }
 
@@ -711,7 +747,9 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     let expected_size = n_blocks * 272 + 3100;
     if dat.len() != expected_size {
         return Err(MiniproError::FileFormat(format!(
-            "UpdateII.dat wrong size: got {}, expected {}", dat.len(), expected_size
+            "UpdateII.dat wrong size: got {}, expected {}",
+            dat.len(),
+            expected_size
         )));
     }
 
@@ -719,16 +757,16 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     let xortable = &dat[8..1032];
 
     // Offsets of each section
-    let blocks_start  = 1036usize;
-    let last_blk_off  = blocks_start + n_blocks * 272;
+    let blocks_start = 1036usize;
+    let last_blk_off = blocks_start + n_blocks * 272;
 
     // ── CRC check ────────────────────────────────────────────────────────────
     // CRC is computed over: regular blocks, last block, then (xortable + blocks_count field).
     // Result inverted (~crc) must equal file_crc.
     let mut digest = CRC32.digest();
-    digest.update(&dat[blocks_start .. blocks_start + n_blocks * 272]);
-    digest.update(&dat[last_blk_off .. last_blk_off + 2064]);
-    digest.update(&dat[8 .. 1036]); // xortable (1024 B) + blocks_count (4 B)
+    digest.update(&dat[blocks_start..blocks_start + n_blocks * 272]);
+    digest.update(&dat[last_blk_off..last_blk_off + 2064]);
+    digest.update(&dat[8..1036]); // xortable (1024 B) + blocks_count (4 B)
     let computed = digest.finalize();
     if computed != file_crc {
         return Err(MiniproError::AlgorithmCrc);
@@ -753,7 +791,7 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         msg[0] = CMD_BTLDR_ERASE;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(8)?;
-        if resp.get(0).copied() != Some(CMD_BTLDR_ERASE) {
+        if resp.first().copied() != Some(CMD_BTLDR_ERASE) {
             return Err(MiniproError::Protocol("bootloader erase rejected".into()));
         }
     }
@@ -761,12 +799,12 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     // ── Flash regular blocks ──────────────────────────────────────────────────
     for b in 0..n_blocks {
         let blk_off = blocks_start + b * 272;
-        let blk     = &dat[blk_off .. blk_off + 272];
+        let blk = &dat[blk_off..blk_off + 272];
 
         // Block layout: [0..4] block_crc, [4..8] xorptr, [8..12] dest_addr,
         //               [12..16] internal_ptr, [16..272] data (256 bytes)
         let xorptr = u32::from_le_bytes([blk[4], blk[5], blk[6], blk[7]]) as usize;
-        let addr   = u32::from_le_bytes([blk[8], blk[9], blk[10], blk[11]]);
+        let addr = u32::from_le_bytes([blk[8], blk[9], blk[10], blk[11]]);
 
         // Deobfuscate: XOR each of the 264 bytes at blk[8..272] with the XOR table.
         // The table is 1024 bytes, indexed as (xorptr-1 + i) & 0x3FF (1-indexed).
@@ -792,17 +830,19 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         usb.msg_send(&sreq)?;
         let sr = usb.msg_recv(32)?;
         if sr.get(1).copied().unwrap_or(1) != 0 {
-            return Err(MiniproError::Protocol(
-                format!("block {} flash status error: {:#04x}", b, sr.get(1).copied().unwrap_or(0xff))
-            ));
+            return Err(MiniproError::Protocol(format!(
+                "block {} flash status error: {:#04x}",
+                b,
+                sr.get(1).copied().unwrap_or(0xff)
+            )));
         }
     }
 
     // ── Flash last block ──────────────────────────────────────────────────────
     {
-        let lb      = &dat[last_blk_off .. last_blk_off + 2064];
-        let xorptr  = u32::from_le_bytes([lb[4], lb[5], lb[6], lb[7]]) as usize;
-        let addr    = u32::from_le_bytes([lb[8], lb[9], lb[10], lb[11]]);
+        let lb = &dat[last_blk_off..last_blk_off + 2064];
+        let xorptr = u32::from_le_bytes([lb[4], lb[5], lb[6], lb[7]]) as usize;
+        let addr = u32::from_le_bytes([lb[8], lb[9], lb[10], lb[11]]);
 
         // Deobfuscate last block: 514 iterations × 4 XOR ops on 2056 bytes (lb[8..2064])
         let mut data = [0u8; 2048];
@@ -825,9 +865,10 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         usb.msg_send(&sreq)?;
         let sr = usb.msg_recv(32)?;
         if sr.get(1).copied().unwrap_or(1) != 0 {
-            return Err(MiniproError::Protocol(
-                format!("last block flash status error: {:#04x}", sr.get(1).copied().unwrap_or(0xff))
-            ));
+            return Err(MiniproError::Protocol(format!(
+                "last block flash status error: {:#04x}",
+                sr.get(1).copied().unwrap_or(0xff)
+            )));
         }
     }
 

@@ -33,9 +33,9 @@ pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>>
 
         let (addr_len, data_start) = match rec_type {
             "1" => (2usize, 3usize),
-            "2" => (3,      4),
-            "3" => (4,      5),
-            _   => continue,
+            "2" => (3, 4),
+            "3" => (4, 5),
+            _ => continue,
         };
 
         if bytes.len() < addr_len + 1 {
@@ -98,7 +98,7 @@ fn write_s3(f: &mut std::fs::File, addr: u32, data: &[u8]) -> Result<()> {
 }
 
 fn decode_hex_bytes(hex: &str) -> Result<Vec<u8>> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(MiniproError::FileFormat("odd-length SREC record".into()));
     }
     let bytes: std::result::Result<Vec<u8>, _> = (0..hex.len())

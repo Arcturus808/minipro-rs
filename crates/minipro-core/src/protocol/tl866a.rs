@@ -28,39 +28,39 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
+use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
 
 /// Minimum firmware version for TL866A/CS.
 pub const MIN_FIRMWARE_A: u32 = 0x0256; // 3.2.86
 
 // Command bytes
 const CMD_START_TRANSACTION: u8 = 0x03;
-const CMD_END_TRANSACTION:   u8 = 0x04;
-const CMD_GET_CHIP_ID:       u8 = 0x05;
-const CMD_READ_USER:         u8 = 0x10;
-const CMD_WRITE_USER:        u8 = 0x11;
-const CMD_READ_CFG:          u8 = 0x12;
-const CMD_WRITE_CFG:         u8 = 0x13;
-const CMD_WRITE_USER_DATA:   u8 = 0x14;
-const CMD_READ_USER_DATA:    u8 = 0x15;
-const CMD_WRITE_CODE:        u8 = 0x20;
-const CMD_READ_CODE:         u8 = 0x21;
-const CMD_ERASE:             u8 = 0x22;
-const CMD_READ_DATA:         u8 = 0x30;
-const CMD_WRITE_DATA:        u8 = 0x31;
-const CMD_WRITE_LOCK:        u8 = 0x40;
-const CMD_READ_LOCK:         u8 = 0x41;
-const CMD_READ_CALIBRATION:  u8 = 0x42;
-const CMD_PROTECT_OFF:       u8 = 0x44;
-const CMD_PROTECT_ON:        u8 = 0x45;
-const CMD_AUTODETECT:        u8 = 0xFC;
-const CMD_UNLOCK_TSOP48:     u8 = 0xFD;
-const CMD_GET_STATUS:        u8 = 0xFE;
+const CMD_END_TRANSACTION: u8 = 0x04;
+const CMD_GET_CHIP_ID: u8 = 0x05;
+const CMD_READ_USER: u8 = 0x10;
+const CMD_WRITE_USER: u8 = 0x11;
+const CMD_READ_CFG: u8 = 0x12;
+const CMD_WRITE_CFG: u8 = 0x13;
+const CMD_WRITE_USER_DATA: u8 = 0x14;
+const CMD_READ_USER_DATA: u8 = 0x15;
+const CMD_WRITE_CODE: u8 = 0x20;
+const CMD_READ_CODE: u8 = 0x21;
+const CMD_ERASE: u8 = 0x22;
+const CMD_READ_DATA: u8 = 0x30;
+const CMD_WRITE_DATA: u8 = 0x31;
+const CMD_WRITE_LOCK: u8 = 0x40;
+const CMD_READ_LOCK: u8 = 0x41;
+const CMD_READ_CALIBRATION: u8 = 0x42;
+const CMD_PROTECT_OFF: u8 = 0x44;
+const CMD_PROTECT_ON: u8 = 0x45;
+const CMD_AUTODETECT: u8 = 0xFC;
+const CMD_UNLOCK_TSOP48: u8 = 0xFD;
+const CMD_GET_STATUS: u8 = 0xFE;
 const CMD_RESET_PIN_DRIVERS: u8 = 0xD0;
 
 // Memory page types
@@ -69,17 +69,21 @@ const MP_USER: u8 = 0x02;
 
 // Fuse sub-types
 const MP_FUSE_USER: u8 = 0x00;
-const MP_FUSE_CFG:  u8 = 0x01;
+const MP_FUSE_CFG: u8 = 0x01;
 const MP_FUSE_LOCK: u8 = 0x02;
 
 pub struct Tl866aProtocol;
 
 impl Tl866aProtocol {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for Tl866aProtocol {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Store a little-endian integer of `len` bytes starting at `buf`.
@@ -121,7 +125,7 @@ impl Protocol for Tl866aProtocol {
         let cmd = match ds.page_type {
             MP_DATA => CMD_READ_DATA,
             MP_USER => CMD_READ_USER_DATA,
-            _       => CMD_READ_CODE,
+            _ => CMD_READ_CODE,
         };
         let mut msg = [0u8; 18];
         msg[0] = cmd;
@@ -140,7 +144,7 @@ impl Protocol for Tl866aProtocol {
         let cmd = match ds.page_type {
             MP_DATA => CMD_WRITE_DATA,
             MP_USER => CMD_WRITE_USER_DATA,
-            _       => CMD_WRITE_CODE,
+            _ => CMD_WRITE_CODE,
         };
         // Payload: [cmd, 0, size(2), addr(3), data...]
         let mut payload = vec![0u8; ds.data.len() + 7];
@@ -158,7 +162,10 @@ impl Protocol for Tl866aProtocol {
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
         if resp.len() < 5 {
-            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 5,
+                actual: resp.len(),
+            });
         }
         let id_type = resp[0];
         let id = u32::from_be_bytes([0, resp[2], resp[3], resp[4]]);
@@ -172,20 +179,27 @@ impl Protocol for Tl866aProtocol {
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(16)?;
         if resp.len() < 5 {
-            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 5,
+                actual: resp.len(),
+            });
         }
         Ok(u32::from_be_bytes([0, resp[2], resp[3], resp[4]]))
     }
 
     fn read_fuses(
-        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, _length: usize,
+        &self,
+        usb: &UsbDevice,
+        _device: &Device,
+        fuse_type: u8,
+        _length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
         let cmd = match fuse_type {
             MP_FUSE_USER => CMD_READ_USER,
-            MP_FUSE_CFG  => CMD_READ_CFG,
+            MP_FUSE_CFG => CMD_READ_CFG,
             MP_FUSE_LOCK => CMD_READ_LOCK,
-            other        => return Err(MiniproError::Protocol(format!("unknown fuse type {other}"))),
+            other => return Err(MiniproError::Protocol(format!("unknown fuse type {other}"))),
         };
         let mut msg = [0u8; 18];
         msg[0] = cmd;
@@ -196,14 +210,19 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn write_fuses(
-        &self, usb: &UsbDevice, _device: &Device, fuse_type: u8, _length: usize,
-        items_count: u8, data: &[u8],
+        &self,
+        usb: &UsbDevice,
+        _device: &Device,
+        fuse_type: u8,
+        _length: usize,
+        items_count: u8,
+        data: &[u8],
     ) -> Result<()> {
         let cmd = match fuse_type {
             MP_FUSE_USER => CMD_WRITE_USER,
-            MP_FUSE_CFG  => CMD_WRITE_CFG,
+            MP_FUSE_CFG => CMD_WRITE_CFG,
             MP_FUSE_LOCK => CMD_WRITE_LOCK,
-            other        => return Err(MiniproError::Protocol(format!("unknown fuse type {other}"))),
+            other => return Err(MiniproError::Protocol(format!("unknown fuse type {other}"))),
         };
         let mut msg = [0u8; 64];
         msg[0] = cmd;
@@ -272,13 +291,16 @@ impl Protocol for Tl866aProtocol {
         usb.msg_send(&[CMD_GET_STATUS, 0, 0, 0, 0])?;
         let resp = usb.msg_recv(64)?;
         if resp.len() < 10 {
-            return Err(MiniproError::ResponseTooShort { expected: 10, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 10,
+                actual: resp.len(),
+            });
         }
         let status = OvcStatus {
-            error:   resp[0],
+            error: resp[0],
             address: u32::from_le_bytes([resp[6], resp[7], resp[8], 0]),
-            c1:      u32::from_le_bytes([resp[2], resp[3], 0, 0]),
-            c2:      u32::from_le_bytes([resp[4], resp[5], 0, 0]),
+            c1: u32::from_le_bytes([resp[2], resp[3], 0, 0]),
+            c2: u32::from_le_bytes([resp[4], resp[5], 0, 0]),
         };
         Ok((status, resp[9]))
     }
@@ -296,7 +318,7 @@ impl Protocol for Tl866aProtocol {
             let byte = (seed.wrapping_shr((i * 4) as u32)) as u8;
             msg[7 + i] = byte;
             // CRC16-CCITT update
-            crc = (crc >> 8) | (crc << 8);
+            crc = crc.rotate_left(8);
             crc ^= byte as u16;
             crc ^= (crc & 0xff) >> 4;
             crc ^= crc << 12;
@@ -305,7 +327,7 @@ impl Protocol for Tl866aProtocol {
         // Swap two bytes then embed CRC
         msg[15] = msg[9];
         msg[16] = msg[11];
-        msg[9]  = crc as u8;
+        msg[9] = crc as u8;
         msg[11] = (crc >> 8) as u8;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(64)?;

@@ -9,46 +9,46 @@
 //! addition of T56-specific commands 0x26 (write bitstream), 0x2A (write
 //! bitstream 2, logic chips), 0x39 (request OVC status), etc.
 
+use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
 
 /// Minimum firmware version for the T56.
 pub const MIN_FIRMWARE_T56: u32 = 0x149; // 1.73
 
 // ── Command bytes ─────────────────────────────────────────────────────────────
-const CMD_BEGIN_TRANS:      u8 = 0x03;
-const CMD_END_TRANS:        u8 = 0x04;
-const CMD_READ_ID:          u8 = 0x05;
-const CMD_READ_USER:        u8 = 0x06;
-const CMD_WRITE_USER:       u8 = 0x07;
-const CMD_READ_CFG:         u8 = 0x08;
-const CMD_WRITE_CFG:        u8 = 0x09;
-const CMD_WRITE_USER_DATA:  u8 = 0x0A;
-const CMD_READ_USER_DATA:   u8 = 0x0B;
-const CMD_WRITE_CODE:       u8 = 0x0C;
-const CMD_READ_CODE:        u8 = 0x0D;
-const CMD_ERASE:            u8 = 0x0E;
-const CMD_READ_DATA:        u8 = 0x10;
-const CMD_WRITE_DATA:       u8 = 0x11;
-const CMD_WRITE_LOCK:       u8 = 0x14;
-const CMD_READ_LOCK:        u8 = 0x15;
+const CMD_BEGIN_TRANS: u8 = 0x03;
+const CMD_END_TRANS: u8 = 0x04;
+const CMD_READ_ID: u8 = 0x05;
+const CMD_READ_USER: u8 = 0x06;
+const CMD_WRITE_USER: u8 = 0x07;
+const CMD_READ_CFG: u8 = 0x08;
+const CMD_WRITE_CFG: u8 = 0x09;
+const CMD_WRITE_USER_DATA: u8 = 0x0A;
+const CMD_READ_USER_DATA: u8 = 0x0B;
+const CMD_WRITE_CODE: u8 = 0x0C;
+const CMD_READ_CODE: u8 = 0x0D;
+const CMD_ERASE: u8 = 0x0E;
+const CMD_READ_DATA: u8 = 0x10;
+const CMD_WRITE_DATA: u8 = 0x11;
+const CMD_WRITE_LOCK: u8 = 0x14;
+const CMD_READ_LOCK: u8 = 0x15;
 const CMD_READ_CALIBRATION: u8 = 0x16;
-const CMD_PROTECT_OFF:      u8 = 0x18;
-const CMD_PROTECT_ON:       u8 = 0x19;
-const CMD_READ_JEDEC:       u8 = 0x1D;
-const CMD_WRITE_JEDEC:      u8 = 0x1E;
-const CMD_WRITE_BITSTREAM:  u8 = 0x26;
+const CMD_PROTECT_OFF: u8 = 0x18;
+const CMD_PROTECT_ON: u8 = 0x19;
+const CMD_READ_JEDEC: u8 = 0x1D;
+const CMD_WRITE_JEDEC: u8 = 0x1E;
+const CMD_WRITE_BITSTREAM: u8 = 0x26;
 #[allow(dead_code)]
 const CMD_WRITE_BITSTREAM2: u8 = 0x2A; // logic-chip round 2 (Phase 4)
 #[allow(dead_code)]
-const CMD_AUTODETECT:       u8 = 0x37;
-const CMD_UNLOCK_TSOP48:    u8 = 0x38;
-const CMD_REQUEST_STATUS:   u8 = 0x39;
-const CMD_HARDWARE_CHECK:   u8 = 0x3C;
+const CMD_AUTODETECT: u8 = 0x37;
+const CMD_UNLOCK_TSOP48: u8 = 0x38;
+const CMD_REQUEST_STATUS: u8 = 0x39;
+const CMD_HARDWARE_CHECK: u8 = 0x3C;
 
 // Memory page types (must match operations.rs constants)
 const MP_CODE: u8 = 0x00;
@@ -56,11 +56,11 @@ const MP_DATA: u8 = 0x01;
 const MP_USER: u8 = 0x02;
 
 // Fuse type sub-command mapping
-const T56_READ_USER:  u8 = CMD_READ_USER;
+const T56_READ_USER: u8 = CMD_READ_USER;
 const T56_WRITE_USER: u8 = CMD_WRITE_USER;
-const T56_READ_CFG:   u8 = CMD_READ_CFG;
-const T56_WRITE_CFG:  u8 = CMD_WRITE_CFG;
-const T56_READ_LOCK:  u8 = CMD_READ_LOCK;
+const T56_READ_CFG: u8 = CMD_READ_CFG;
+const T56_WRITE_CFG: u8 = CMD_WRITE_CFG;
+const T56_READ_LOCK: u8 = CMD_READ_LOCK;
 const T56_WRITE_LOCK: u8 = CMD_WRITE_LOCK;
 
 // OVC status response layout
@@ -70,11 +70,15 @@ const OVC_FLAG_IDX: usize = 12;
 pub struct T56Protocol;
 
 impl T56Protocol {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for T56Protocol {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Byte-packing helpers ──────────────────────────────────────────────────────
@@ -124,11 +128,11 @@ pub(super) fn build_begin_msg(device: &Device, icsp: bool) -> [u8; 64] {
     msg[2] = device.variant as u8;
     msg[3] = icsp as u8;
 
-    put_le16(&mut msg[4..6],   v & 0xffff);
-    msg[6]  = device.chip_info as u8;
-    msg[7]  = device.pin_map as u8;
+    put_le16(&mut msg[4..6], v & 0xffff);
+    msg[6] = device.chip_info as u8;
+    msg[7] = device.pin_map as u8;
 
-    put_le16(&mut msg[8..10],  device.data_memory_size);
+    put_le16(&mut msg[8..10], device.data_memory_size);
     put_le16(&mut msg[10..12], device.page_size);
     put_le16(&mut msg[12..14], device.pulse_delay);
     put_le16(&mut msg[14..16], device.data_memory2_size);
@@ -190,9 +194,12 @@ impl Protocol for T56Protocol {
             MP_CODE => CMD_READ_CODE,
             MP_DATA => CMD_READ_DATA,
             MP_USER => CMD_READ_USER_DATA,
-            _       => return Err(MiniproError::Protocol(
-                format!("T56 read_block: unknown page_type {}", ds.page_type)
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T56 read_block: unknown page_type {}",
+                    ds.page_type
+                )))
+            }
         };
 
         let mut msg = [0u8; 8];
@@ -215,9 +222,12 @@ impl Protocol for T56Protocol {
             MP_CODE => CMD_WRITE_CODE,
             MP_DATA => CMD_WRITE_DATA,
             MP_USER => CMD_WRITE_USER_DATA,
-            _       => return Err(MiniproError::Protocol(
-                format!("T56 write_block: unknown page_type {}", ds.page_type)
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T56 write_block: unknown page_type {}",
+                    ds.page_type
+                )))
+            }
         };
 
         let mut msg = [0u8; 8];
@@ -234,7 +244,10 @@ impl Protocol for T56Protocol {
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
         if resp.len() < 5 {
-            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 5,
+                actual: resp.len(),
+            });
         }
         let id_type = resp[0];
         let chip_id = if id_type == 3 || id_type == 4 {
@@ -246,16 +259,22 @@ impl Protocol for T56Protocol {
     }
 
     fn read_fuses(
-        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        fuse_type: u8,
+        length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
         let cmd = match fuse_type {
             0x00 => T56_READ_USER,
             0x01 => T56_READ_CFG,
             0x02 => T56_READ_LOCK,
-            _    => return Err(MiniproError::Protocol(
-                format!("T56 read_fuses: unknown type {fuse_type}")
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T56 read_fuses: unknown type {fuse_type}"
+                )))
+            }
         };
         let mut msg = [0u8; 8];
         msg[0] = cmd;
@@ -271,16 +290,23 @@ impl Protocol for T56Protocol {
     }
 
     fn write_fuses(
-        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
-        items_count: u8, data: &[u8],
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        fuse_type: u8,
+        length: usize,
+        items_count: u8,
+        data: &[u8],
     ) -> Result<()> {
         let cmd = match fuse_type {
             0x00 => T56_WRITE_USER,
             0x01 => T56_WRITE_CFG,
             0x02 => T56_WRITE_LOCK,
-            _    => return Err(MiniproError::Protocol(
-                format!("T56 write_fuses: unknown type {fuse_type}")
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T56 write_fuses: unknown type {fuse_type}"
+                )))
+            }
         };
         let mut msg = vec![0u8; 64];
         msg[0] = cmd;
@@ -322,7 +348,7 @@ impl Protocol for T56Protocol {
         msg[5] = js.flags;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
-        let byte_len = ((bits as usize) + 7) / 8;
+        let byte_len = (bits as usize).div_ceil(8);
         js.data.resize(byte_len, 0);
         let n = byte_len.min(resp.len());
         js.data[..n].copy_from_slice(&resp[..n]);
@@ -331,7 +357,7 @@ impl Protocol for T56Protocol {
 
     fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
-        let byte_len = ((bits as usize) + 7) / 8;
+        let byte_len = (bits as usize).div_ceil(8);
         let mut msg = [0u8; 64];
         msg[0] = CMD_WRITE_JEDEC;
         msg[2] = bits;
@@ -366,10 +392,10 @@ impl Protocol for T56Protocol {
             });
         }
         let status = OvcStatus {
-            error:   resp[0],
+            error: resp[0],
             address: u32::from_le_bytes([resp[8], resp[9], resp[10], resp[11]]),
-            c1:      u16::from_le_bytes([resp[2], resp[3]]) as u32,
-            c2:      u16::from_le_bytes([resp[4], resp[5]]) as u32,
+            c1: u16::from_le_bytes([resp[2], resp[3]]) as u32,
+            c2: u16::from_le_bytes([resp[4], resp[5]]) as u32,
         };
         let ovc = resp[OVC_FLAG_IDX];
         Ok((status, ovc))
@@ -399,4 +425,3 @@ impl Protocol for T56Protocol {
         self.end_transaction(usb)
     }
 }
-

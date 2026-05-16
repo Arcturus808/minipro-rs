@@ -14,7 +14,7 @@
 // without needing a real programmer or fixture files.
 
 mod framework;
-use framework::{Fixture, MockUsb, TraceEntry, hex_encode};
+use framework::{hex_encode, Fixture, MockUsb, TraceEntry};
 
 // ── Fixture round-trip ────────────────────────────────────────────────────────
 
@@ -22,17 +22,25 @@ use framework::{Fixture, MockUsb, TraceEntry, hex_encode};
 #[test]
 fn fixture_round_trip() {
     let entries = vec![
-        TraceEntry { dir: "out".into(), data: "0300000000000000".into() },
-        TraceEntry { dir: "in".into(),  data: "0300000000000000".into() },
+        TraceEntry {
+            dir: "out".into(),
+            data: "0300000000000000".into(),
+        },
+        TraceEntry {
+            dir: "in".into(),
+            data: "0300000000000000".into(),
+        },
     ];
-    let fixture = Fixture { entries: entries.clone() };
+    let fixture = Fixture {
+        entries: entries.clone(),
+    };
 
     let json = serde_json::to_string(&fixture.entries).unwrap();
     let back: Vec<TraceEntry> = serde_json::from_str(&json).unwrap();
     assert_eq!(back.len(), 2);
-    assert_eq!(back[0].dir,  "out");
+    assert_eq!(back[0].dir, "out");
     assert_eq!(back[0].data, "0300000000000000");
-    assert_eq!(back[1].dir,  "in");
+    assert_eq!(back[1].dir, "in");
 }
 
 // ── MockUsb ───────────────────────────────────────────────────────────────────
@@ -42,8 +50,14 @@ fn fixture_round_trip() {
 fn mock_usb_send_matches() {
     let fixture = Fixture {
         entries: vec![
-            TraceEntry { dir: "out".into(), data: "deadbeef".into() },
-            TraceEntry { dir: "in".into(),  data: "cafebabe".into() },
+            TraceEntry {
+                dir: "out".into(),
+                data: "deadbeef".into(),
+            },
+            TraceEntry {
+                dir: "in".into(),
+                data: "cafebabe".into(),
+            },
         ],
     };
     let mock = MockUsb::new(fixture);
@@ -58,9 +72,10 @@ fn mock_usb_send_matches() {
 #[should_panic(expected = "outgoing packet mismatch")]
 fn mock_usb_send_mismatch_panics() {
     let fixture = Fixture {
-        entries: vec![
-            TraceEntry { dir: "out".into(), data: "01020304".into() },
-        ],
+        entries: vec![TraceEntry {
+            dir: "out".into(),
+            data: "01020304".into(),
+        }],
     };
     let mock = MockUsb::new(fixture);
     mock.expect_send(&[0xff, 0xff, 0xff, 0xff]); // wrong bytes → panic

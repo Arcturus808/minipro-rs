@@ -12,55 +12,55 @@
 //! a 16-byte header prepended to each transfer; data and user memory use
 //! slightly different layouts.
 
+use super::t56::build_begin_msg;
+use super::tl866iiplus::logic_ic_test_tl866;
+use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
-use super::t56::build_begin_msg;
-use super::tl866iiplus::{do_ic_test_pass, logic_ic_test_tl866};
 
 /// Minimum firmware version for the T76.
 pub const MIN_FIRMWARE_T76: u32 = 0x10D; // 0.1.13
 
 // T76 firmware update constants
 const T76_UPDATE_FILE_VERSION: u32 = 0xf076_0000;
-const T76_UPDATE_VERS_MASK:    u32 = 0xffff_0000;
-const T76_BTLDR_MAGIC:         u32 = 0x04_9000;
-const T76_LAST_BLOCK_ADDR:     u32 = 0x049f00;
-const T76_LAST_BLOCK_CRC:      u32 = 0xcdef_8668;
+const T76_UPDATE_VERS_MASK: u32 = 0xffff_0000;
+const T76_BTLDR_MAGIC: u32 = 0x04_9000;
+const T76_LAST_BLOCK_ADDR: u32 = 0x049f00;
+const T76_LAST_BLOCK_CRC: u32 = 0xcdef_8668;
 
 // ── Command bytes (identical to T56) ─────────────────────────────────────────
-const CMD_END_TRANS:        u8 = 0x04;
-const CMD_READ_ID:          u8 = 0x05;
-const CMD_READ_USER:        u8 = 0x06;
-const CMD_WRITE_USER:       u8 = 0x07;
-const CMD_READ_CFG:         u8 = 0x08;
-const CMD_WRITE_CFG:        u8 = 0x09;
-const CMD_WRITE_USER_DATA:  u8 = 0x0A;
-const CMD_READ_USER_DATA:   u8 = 0x0B;
-const CMD_WRITE_CODE:       u8 = 0x0C;
-const CMD_READ_CODE:        u8 = 0x0D;
-const CMD_ERASE:            u8 = 0x0E;
-const CMD_READ_DATA:        u8 = 0x10;
-const CMD_WRITE_DATA:       u8 = 0x11;
-const CMD_WRITE_LOCK:       u8 = 0x14;
-const CMD_READ_LOCK:        u8 = 0x15;
+const CMD_END_TRANS: u8 = 0x04;
+const CMD_READ_ID: u8 = 0x05;
+const CMD_READ_USER: u8 = 0x06;
+const CMD_WRITE_USER: u8 = 0x07;
+const CMD_READ_CFG: u8 = 0x08;
+const CMD_WRITE_CFG: u8 = 0x09;
+const CMD_WRITE_USER_DATA: u8 = 0x0A;
+const CMD_READ_USER_DATA: u8 = 0x0B;
+const CMD_WRITE_CODE: u8 = 0x0C;
+const CMD_READ_CODE: u8 = 0x0D;
+const CMD_ERASE: u8 = 0x0E;
+const CMD_READ_DATA: u8 = 0x10;
+const CMD_WRITE_DATA: u8 = 0x11;
+const CMD_WRITE_LOCK: u8 = 0x14;
+const CMD_READ_LOCK: u8 = 0x15;
 const CMD_READ_CALIBRATION: u8 = 0x16;
-const CMD_PROTECT_OFF:      u8 = 0x18;
-const CMD_PROTECT_ON:       u8 = 0x19;
-const CMD_READ_JEDEC:       u8 = 0x1D;
-const CMD_WRITE_JEDEC:      u8 = 0x1E;
-const CMD_WRITE_BITSTREAM:  u8 = 0x26;
-const CMD_UNLOCK_TSOP48:    u8 = 0x38;
-const CMD_REQUEST_STATUS:   u8 = 0x39;
-const CMD_HARDWARE_CHECK:   u8 = 0x3C;
+const CMD_PROTECT_OFF: u8 = 0x18;
+const CMD_PROTECT_ON: u8 = 0x19;
+const CMD_READ_JEDEC: u8 = 0x1D;
+const CMD_WRITE_JEDEC: u8 = 0x1E;
+const CMD_WRITE_BITSTREAM: u8 = 0x26;
+const CMD_UNLOCK_TSOP48: u8 = 0x38;
+const CMD_REQUEST_STATUS: u8 = 0x39;
+const CMD_HARDWARE_CHECK: u8 = 0x3C;
 
 // T76 bitstream sub-commands
-const T76_BEGIN_BS:  u8 = 0x00;
-const T76_BS_BLOCK:  u8 = 0x01;
-const T76_END_BS:    u8 = 0x02;
+const T76_BEGIN_BS: u8 = 0x00;
+const T76_BS_BLOCK: u8 = 0x01;
+const T76_END_BS: u8 = 0x02;
 const T76_RESET_FPGA: u8 = 0xaf;
 const T76_FPGA_MAGIC: u32 = 0xaa55_ddee;
 
@@ -73,11 +73,11 @@ const MP_DATA: u8 = 0x01;
 const MP_USER: u8 = 0x02;
 
 // Fuse type sub-command mapping
-const T76_READ_USER:  u8 = CMD_READ_USER;
+const T76_READ_USER: u8 = CMD_READ_USER;
 const T76_WRITE_USER: u8 = CMD_WRITE_USER;
-const T76_READ_CFG:   u8 = CMD_READ_CFG;
-const T76_WRITE_CFG:  u8 = CMD_WRITE_CFG;
-const T76_READ_LOCK:  u8 = CMD_READ_LOCK;
+const T76_READ_CFG: u8 = CMD_READ_CFG;
+const T76_WRITE_CFG: u8 = CMD_WRITE_CFG;
+const T76_READ_LOCK: u8 = CMD_READ_LOCK;
 const T76_WRITE_LOCK: u8 = CMD_WRITE_LOCK;
 
 // OVC status response
@@ -87,11 +87,15 @@ const OVC_FLAG_IDX: usize = 12;
 pub struct T76Protocol;
 
 impl T76Protocol {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for T76Protocol {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Byte-packing helpers ──────────────────────────────────────────────────────
@@ -132,15 +136,15 @@ fn upload_bitstream_t76(usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
     let ack = usb.msg_recv(8)?;
     if ack.get(1).copied().unwrap_or(1) != 0 {
         return Err(MiniproError::Protocol(
-            "T76 bitstream BEGIN rejected by firmware".into()
+            "T76 bitstream BEGIN rejected by firmware".into(),
         ));
     }
 
     // ── Phase 2: BLOCK × N ────────────────────────────────────────────────────
     let mut offset = 0usize;
     while offset < bitstream.len() {
-        let block_end   = (offset + payload_size).min(bitstream.len());
-        let block_size  = block_end - offset;
+        let block_end = (offset + payload_size).min(bitstream.len());
+        let block_size = block_end - offset;
 
         let mut pkt = vec![0u8; BS_PACKET_SIZE];
         pkt[0] = CMD_WRITE_BITSTREAM;
@@ -161,7 +165,7 @@ fn upload_bitstream_t76(usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
     let ack = usb.msg_recv(8)?;
     if ack.get(1).copied().unwrap_or(1) != 0 {
         return Err(MiniproError::Protocol(
-            "T76 bitstream END rejected by firmware".into()
+            "T76 bitstream END rejected by firmware".into(),
         ));
     }
 
@@ -263,9 +267,10 @@ impl Protocol for T76Protocol {
             return Ok(());
         }
 
-        Err(MiniproError::Protocol(
-            format!("T76 read_block: unknown page_type {}", ds.page_type)
-        ))
+        Err(MiniproError::Protocol(format!(
+            "T76 read_block: unknown page_type {}",
+            ds.page_type
+        )))
     }
 
     fn write_block(&self, usb: &UsbDevice, ds: &DataSet) -> Result<()> {
@@ -303,9 +308,10 @@ impl Protocol for T76Protocol {
             return usb.msg_send(&full);
         }
 
-        Err(MiniproError::Protocol(
-            format!("T76 write_block: unknown page_type {}", ds.page_type)
-        ))
+        Err(MiniproError::Protocol(format!(
+            "T76 write_block: unknown page_type {}",
+            ds.page_type
+        )))
     }
 
     fn get_chip_id(&self, usb: &UsbDevice) -> Result<(u8, u32)> {
@@ -314,7 +320,10 @@ impl Protocol for T76Protocol {
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
         if resp.len() < 5 {
-            return Err(MiniproError::ResponseTooShort { expected: 5, actual: resp.len() });
+            return Err(MiniproError::ResponseTooShort {
+                expected: 5,
+                actual: resp.len(),
+            });
         }
         let id_type = resp[0];
         let chip_id = if id_type == 3 || id_type == 4 {
@@ -326,16 +335,22 @@ impl Protocol for T76Protocol {
     }
 
     fn read_fuses(
-        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        fuse_type: u8,
+        length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
         let cmd = match fuse_type {
             0x00 => T76_READ_USER,
             0x01 => T76_READ_CFG,
             0x02 => T76_READ_LOCK,
-            _    => return Err(MiniproError::Protocol(
-                format!("T76 read_fuses: unknown type {fuse_type}")
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T76 read_fuses: unknown type {fuse_type}"
+                )))
+            }
         };
         let mut msg = [0u8; 8];
         msg[0] = cmd;
@@ -350,16 +365,23 @@ impl Protocol for T76Protocol {
     }
 
     fn write_fuses(
-        &self, usb: &UsbDevice, device: &Device, fuse_type: u8, length: usize,
-        items_count: u8, data: &[u8],
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        fuse_type: u8,
+        length: usize,
+        items_count: u8,
+        data: &[u8],
     ) -> Result<()> {
         let cmd = match fuse_type {
             0x00 => T76_WRITE_USER,
             0x01 => T76_WRITE_CFG,
             0x02 => T76_WRITE_LOCK,
-            _    => return Err(MiniproError::Protocol(
-                format!("T76 write_fuses: unknown type {fuse_type}")
-            )),
+            _ => {
+                return Err(MiniproError::Protocol(format!(
+                    "T76 write_fuses: unknown type {fuse_type}"
+                )))
+            }
         };
         let mut msg = vec![0u8; 64];
         msg[0] = cmd;
@@ -401,7 +423,7 @@ impl Protocol for T76Protocol {
         msg[5] = js.flags;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
-        let byte_len = ((bits as usize) + 7) / 8;
+        let byte_len = (bits as usize).div_ceil(8);
         js.data.resize(byte_len, 0);
         let n = byte_len.min(resp.len());
         js.data[..n].copy_from_slice(&resp[..n]);
@@ -410,7 +432,7 @@ impl Protocol for T76Protocol {
 
     fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
-        let byte_len = ((bits as usize) + 7) / 8;
+        let byte_len = (bits as usize).div_ceil(8);
         let mut msg = [0u8; 64];
         msg[0] = CMD_WRITE_JEDEC;
         msg[1] = js.set_type;
@@ -446,10 +468,10 @@ impl Protocol for T76Protocol {
             });
         }
         let status = OvcStatus {
-            error:   resp[0],
+            error: resp[0],
             address: u32::from_le_bytes([resp[8], resp[9], resp[10], resp[11]]),
-            c1:      u16::from_le_bytes([resp[2], resp[3]]) as u32,
-            c2:      u16::from_le_bytes([resp[4], resp[5]]) as u32,
+            c1: u16::from_le_bytes([resp[2], resp[3]]) as u32,
+            c2: u16::from_le_bytes([resp[4], resp[5]]) as u32,
         };
         let ovc = resp[OVC_FLAG_IDX];
         Ok((status, ovc))
@@ -509,19 +531,22 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     if dat.len() < 16 {
         return Err(MiniproError::FileFormat("updateT76.dat too short".into()));
     }
-    let version  = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let version = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
     let file_crc = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
     let n_blocks = u32::from_le_bytes([dat[12], dat[13], dat[14], dat[15]]) as usize;
 
     if version & T76_UPDATE_VERS_MASK != T76_UPDATE_FILE_VERSION {
         return Err(MiniproError::FileFormat(format!(
-            "Unsupported T76 firmware version {:#010x}", version
+            "Unsupported T76 firmware version {:#010x}",
+            version
         )));
     }
     let expected = n_blocks * 0x114 + 16;
     if dat.len() != expected {
         return Err(MiniproError::FileFormat(format!(
-            "updateT76.dat wrong size: got {}, expected {}", dat.len(), expected
+            "updateT76.dat wrong size: got {}, expected {}",
+            dat.len(),
+            expected
         )));
     }
 
@@ -546,7 +571,9 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(8)?;
         if resp.get(1).copied().unwrap_or(1) != 0 {
-            return Err(MiniproError::Protocol("T76 bootloader switch failed".into()));
+            return Err(MiniproError::Protocol(
+                "T76 bootloader switch failed".into(),
+            ));
         }
     }
     // Note: upstream sleeps 1 second here for device re-enumeration.
@@ -578,7 +605,7 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
 
     for b in 0..n_blocks {
         let blk_off = 16 + b * blk_size;
-        let blk     = &dat[blk_off .. blk_off + blk_size];
+        let blk = &dat[blk_off..blk_off + blk_size];
 
         // Block write: 0x11C (= 8 header + 0x114 data) bytes total
         let mut msg = vec![0u8; 8 + blk_size];
@@ -591,9 +618,10 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
 
         let resp = usb.msg_recv(8)?;
         if resp.get(1).copied().unwrap_or(1) != 0 {
-            return Err(MiniproError::Protocol(
-                format!("T76 block {} write failed", b)
-            ));
+            return Err(MiniproError::Protocol(format!(
+                "T76 block {} write failed",
+                b
+            )));
         }
 
         address = address.wrapping_add(256);

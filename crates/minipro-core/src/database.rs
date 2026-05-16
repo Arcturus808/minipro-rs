@@ -14,34 +14,34 @@ use std::{
 };
 
 use quick_xml::{
-    Reader,
     events::{BytesStart, Event},
+    Reader,
 };
 
 use crate::{
+    device::ProgrammerModel,
     device::{
-        ChipConfig, ChipType, Device, DeviceFlags, FuseConfig, FuseField,
-        GalConfig, PackageDetails, Voltages,
+        ChipConfig, Device, DeviceFlags, FuseConfig, FuseField, GalConfig,
+        PackageDetails, Voltages,
     },
     error::{MiniproError, Result},
-    device::ProgrammerModel,
 };
 
 // ── Database type tags (from database.c) ────────────────────────────────────
 
-const INFOIC_FILENAME:    &str = "infoic.xml";
-const LOGICIC_FILENAME:   &str = "logicic.xml";
+const INFOIC_FILENAME: &str = "infoic.xml";
+const LOGICIC_FILENAME: &str = "logicic.xml";
 
-const DB_ATTR_INFOIC:     &str = "INFOIC";
-const DB_ATTR_INFOIC2:    &str = "INFOIC2PLUS";
-const DB_ATTR_INFOICT76:  &str = "INFOICT76";
-const DB_ATTR_LOGIC:      &str = "LOGIC";
+const DB_ATTR_INFOIC: &str = "INFOIC";
+const DB_ATTR_INFOIC2: &str = "INFOIC2PLUS";
+const DB_ATTR_INFOICT76: &str = "INFOICT76";
+const DB_ATTR_LOGIC: &str = "LOGIC";
 
 // Programmer-flags in the pin_map field
-const T56_FLAG:     u32 = 0x1000_0000;
+const T56_FLAG: u32 = 0x1000_0000;
 const TL866II_FLAG: u32 = 0x2000_0000;
-const T48_FLAG:     u32 = 0x4000_0000;
-const DEVICE_MASK:  u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
+const T48_FLAG: u32 = 0x4000_0000;
+const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -55,17 +55,17 @@ const DEVICE_MASK:  u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///     - Unix: `{SHARE_INSTDIR}/` (compile-time or `/usr/share/minipro/`)
 ///     - Windows: `%PROGRAMDATA%\minipro\`
 pub struct DatabasePaths {
-    pub infoic:  PathBuf,
+    pub infoic: PathBuf,
     pub logicic: PathBuf,
 }
 
 impl DatabasePaths {
     /// Resolve database file paths, accepting optional CLI overrides.
     pub fn resolve(
-        infoic_override:  Option<&Path>,
+        infoic_override: Option<&Path>,
         logicic_override: Option<&Path>,
     ) -> Result<Self> {
-        let infoic  = resolve_one(INFOIC_FILENAME,  infoic_override)?;
+        let infoic = resolve_one(INFOIC_FILENAME, infoic_override)?;
         let logicic = resolve_one(LOGICIC_FILENAME, logicic_override)?;
         Ok(Self { infoic, logicic })
     }
@@ -134,7 +134,7 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
 pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<String>> {
     let mut names = Vec::new();
     collect_names(&paths.logicic, filter, &mut names)?;
-    collect_names(&paths.infoic,  filter, &mut names)?;
+    collect_names(&paths.infoic, filter, &mut names)?;
     Ok(names)
 }
 
@@ -153,16 +153,16 @@ fn read_file(path: &Path) -> Result<String> {
 /// '0'→0, '1'→1, 'L'→2, 'H'→3, 'C'→4, 'Z'→5, 'X'→6, 'G'→7, 'V'→8
 fn char_to_logic_state(tok: &str) -> u8 {
     match tok {
-        "0"             => 0,
-        "1"             => 1,
-        "L" | "l"       => 2,
-        "H" | "h"       => 3,
-        "C" | "c"       => 4,
-        "Z" | "z"       => 5,
-        "X" | "x"       => 6,
-        "G" | "g"       => 7,
-        "V" | "v"       => 8,
-        _               => 6, // treat unknown as don't-care
+        "0" => 0,
+        "1" => 1,
+        "L" | "l" => 2,
+        "H" | "h" => 3,
+        "C" | "c" => 4,
+        "Z" | "z" => 5,
+        "X" | "x" => 6,
+        "G" | "g" => 7,
+        "V" | "v" => 8,
+        _ => 6, // treat unknown as don't-care
     }
 }
 
@@ -178,8 +178,8 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
     let mut buf = Vec::new();
 
     let mut in_target_ic = false;
-    let mut in_vector    = false;
-    let mut cur_id       = 0u32;
+    let mut in_vector = false;
+    let mut cur_id = 0u32;
     let mut ordered: Vec<(u32, Vec<u8>)> = Vec::new();
 
     loop {
@@ -193,11 +193,9 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
                     }
                 }
             }
-            Ok(Event::Start(ref ve))
-                if in_target_ic && ve.name().as_ref() == b"vector" =>
-            {
-                cur_id     = get_attr_u32(ve, b"id").unwrap_or(cur_id + 1);
-                in_vector  = true;
+            Ok(Event::Start(ref ve)) if in_target_ic && ve.name().as_ref() == b"vector" => {
+                cur_id = get_attr_u32(ve, b"id").unwrap_or(cur_id + 1);
+                in_vector = true;
             }
             Ok(Event::Text(ref te)) if in_vector => {
                 let cow = te.unescape().unwrap_or_default();
@@ -213,7 +211,6 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
                 match ee.name().as_ref() {
                     b"vector" => in_vector = false,
                     b"ic" if in_target_ic => {
-                        in_target_ic = false;
                         break; // found and fully parsed the target IC
                     }
                     _ => {}
@@ -229,14 +226,17 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
     ordered.sort_by_key(|(id, _)| *id);
     let vector_count = ordered.len();
     let flat: Vec<u8> = ordered.into_iter().flat_map(|(_, pins)| pins).collect();
-    Ok((if flat.is_empty() { None } else { Some(flat) }, vector_count))
+    Ok((
+        if flat.is_empty() { None } else { Some(flat) },
+        vector_count,
+    ))
 }
 
 /// Search `path` for a device with the given name. Returns `None` if not found.
 fn search_file(
-    path:     &Path,
-    name:     &str,
-    model:    ProgrammerModel,
+    path: &Path,
+    name: &str,
+    model: ProgrammerModel,
     is_logic: bool,
 ) -> Result<Option<Device>> {
     let xml = read_file(path)?;
@@ -249,7 +249,7 @@ fn search_file(
         if let Some(ref mut dev) = device {
             let pin_count = dev.package_details.pin_count;
             let (vectors, count) = parse_logic_vectors(&xml, name, pin_count)?;
-            dev.vectors      = vectors;
+            dev.vectors = vectors;
             dev.vector_count = count;
         }
     }
@@ -264,13 +264,11 @@ fn collect_names(path: &Path, filter: Option<&str>, out: &mut Vec<String>) -> Re
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e))
-                if e.name().as_ref() == b"ic" =>
-            {
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) if e.name().as_ref() == b"ic" => {
                 if let Some(raw_name) = get_attr_str(e, b"name") {
                     for part in raw_name.split(',') {
                         let part = part.trim();
-                        if filter.map_or(true, |f| {
+                        if filter.is_none_or(|f| {
                             part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
                         }) {
                             out.push(part.to_string());
@@ -299,7 +297,7 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
     let mut current_config: Option<(String, ConfigBuilder)> = None;
     let mut in_fuses = false;
     let mut in_locks = false;
-    let mut in_acw   = false;
+    let mut in_acw = false;
 
     // Pending state: we see <fuse name="x"> then wait for the Text event
     // with the CSV content "mask,default" before closing </fuse>.
@@ -368,12 +366,20 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
                     if let Some(name) = pending_fuse_name.take() {
                         let (mask, default) = parse_csv_mask_default(text);
                         if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                            fc.fuses.push(FuseField { name, mask, default });
+                            fc.fuses.push(FuseField {
+                                name,
+                                mask,
+                                default,
+                            });
                         }
                     } else if let Some(name) = pending_lock_name.take() {
                         let (mask, default) = parse_csv_mask_default(text);
                         if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                            fc.locks.push(FuseField { name, mask, default });
+                            fc.locks.push(FuseField {
+                                name,
+                                mask,
+                                default,
+                            });
                         }
                     } else if pending_acw_bit {
                         pending_acw_bit = false;
@@ -393,21 +399,29 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
                             configs.insert(name, builder.finish());
                         }
                     }
-                    b"fuses"    => in_fuses = false,
-                    b"locks"    => in_locks = false,
-                    b"acw_bits" => in_acw   = false,
+                    b"fuses" => in_fuses = false,
+                    b"locks" => in_locks = false,
+                    b"acw_bits" => in_acw = false,
                     // If the element had no text (empty), push defaults
                     b"fuse" if in_fuses => {
                         if let Some(name) = pending_fuse_name.take() {
                             if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                                fc.fuses.push(FuseField { name, mask: 0xff, default: 0xff });
+                                fc.fuses.push(FuseField {
+                                    name,
+                                    mask: 0xff,
+                                    default: 0xff,
+                                });
                             }
                         }
                     }
                     b"lock" if in_locks => {
                         if let Some(name) = pending_lock_name.take() {
                             if let Some((_, ConfigBuilder::Mcu(ref mut fc))) = current_config {
-                                fc.locks.push(FuseField { name, mask: 0xff, default: 0xff });
+                                fc.locks.push(FuseField {
+                                    name,
+                                    mask: 0xff,
+                                    default: 0xff,
+                                });
                             }
                         }
                     }
@@ -443,33 +457,33 @@ impl ConfigBuilder {
 fn build_fuse_config(e: &BytesStart) -> FuseConfig {
     FuseConfig {
         num_calibytes: get_attr_u32(e, b"num_calibytes").unwrap_or(0),
-        num_uids:      get_attr_u32(e, b"num_uids").unwrap_or(0),
-        config_addr:   get_attr_u32(e, b"config_addr").unwrap_or(0),
-        osccal_save:   get_attr_u32(e, b"osccal_save").unwrap_or(0),
-        eep_addr:      get_attr_u32(e, b"eep_addr").unwrap_or(0),
-        bg_mask:       get_attr_u32(e, b"bg_mask").unwrap_or(0),
-        rev_bits:      0,
-        fuses:         Vec::new(),
-        locks:         Vec::new(),
+        num_uids: get_attr_u32(e, b"num_uids").unwrap_or(0),
+        config_addr: get_attr_u32(e, b"config_addr").unwrap_or(0),
+        osccal_save: get_attr_u32(e, b"osccal_save").unwrap_or(0),
+        eep_addr: get_attr_u32(e, b"eep_addr").unwrap_or(0),
+        bg_mask: get_attr_u32(e, b"bg_mask").unwrap_or(0),
+        rev_bits: 0,
+        fuses: Vec::new(),
+        locks: Vec::new(),
     }
 }
 
 fn build_gal_config(e: &BytesStart) -> GalConfig {
     GalConfig {
-        fuses_size:    get_attr_u32(e, b"fuses_size").unwrap_or(0),
-        row_width:     get_attr_u32(e, b"row_width").unwrap_or(0),
-        ues_address:   get_attr_u32(e, b"ues_addr").unwrap_or(0),
-        ues_size:      get_attr_u32(e, b"ues_size").unwrap_or(0),
+        fuses_size: get_attr_u32(e, b"fuses_size").unwrap_or(0),
+        row_width: get_attr_u32(e, b"row_width").unwrap_or(0),
+        ues_address: get_attr_u32(e, b"ues_addr").unwrap_or(0),
+        ues_size: get_attr_u32(e, b"ues_size").unwrap_or(0),
         powerdown_row: get_attr_u32(e, b"pwrdown_row").unwrap_or(0),
-        acw_address:   get_attr_u32(e, b"acw_addr").unwrap_or(0),
-        acw_bits:      Vec::new(),
+        acw_address: get_attr_u32(e, b"acw_addr").unwrap_or(0),
+        acw_bits: Vec::new(),
     }
 }
 
 /// Parse "mask_hex,default_hex" CSV text (element text content of <fuse> / <lock>).
 fn parse_csv_mask_default(text: &str) -> (u16, u16) {
     let mut parts = text.splitn(2, ',');
-    let mask    = parse_u16_hex(parts.next().unwrap_or("").trim()).unwrap_or(0);
+    let mask = parse_u16_hex(parts.next().unwrap_or("").trim()).unwrap_or(0);
     let default = parse_u16_hex(parts.next().unwrap_or("").trim()).unwrap_or(0);
     (mask, default)
 }
@@ -477,7 +491,10 @@ fn parse_csv_mask_default(text: &str) -> (u16, u16) {
 /// Parse a hex (0xNN) or decimal u16 from a string.
 fn parse_u16_hex(s: &str) -> Option<u16> {
     let s = s.trim();
-    let stripped = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let stripped = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     u16::from_str_radix(stripped, 16)
         .or_else(|_| s.parse::<u16>())
         .ok()
@@ -486,11 +503,11 @@ fn parse_u16_hex(s: &str) -> Option<u16> {
 // ── Pass 2: find and build the <ic> entry ────────────────────────────────────
 
 fn parse_ic(
-    xml:       &str,
-    search:    &str,
-    model:     ProgrammerModel,
-    is_logic:  bool,
-    configs:   &HashMap<String, ChipConfig>,
+    xml: &str,
+    search: &str,
+    model: ProgrammerModel,
+    is_logic: bool,
+    configs: &HashMap<String, ChipConfig>,
 ) -> Result<Option<Device>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -504,7 +521,7 @@ fn parse_ic(
     };
 
     let mut in_correct_db = is_logic; // logic.xml has only one db type
-    let mut skip_section  = false;
+    let mut skip_section = false;
     let mut result: Option<Device> = None;
 
     loop {
@@ -532,7 +549,7 @@ fn parse_ic(
                 if tag.as_ref() == b"ic" {
                     let raw_name = match get_attr_str(e, b"name") {
                         Some(n) => n,
-                        None    => continue,
+                        None => continue,
                     };
 
                     // Check if any comma-separated name matches (case-insensitive)
@@ -543,15 +560,12 @@ fn parse_ic(
 
                     if let Some(matched) = matched_name {
                         // Filter by programmer model using pin_map flags
-                        if !is_logic {
-                            if !device_matches_model(e, model) {
+                        if !is_logic
+                            && !device_matches_model(e, model) {
                                 continue;
                             }
-                        }
 
-                        if let Some(dev) =
-                            build_device(e, matched, model, is_logic, configs)?
-                        {
+                        if let Some(dev) = build_device(e, matched, model, is_logic, configs)? {
                             result = Some(dev);
                             break;
                         }
@@ -577,7 +591,7 @@ fn device_matches_model(e: &BytesStart, model: ProgrammerModel) -> bool {
     // For INFOIC2PLUS databases, the pin_map field has device-support flags.
     let pin_map = match get_attr_u32(e, b"pin_map") {
         Some(v) => v,
-        None    => return true, // if absent, assume compatible
+        None => return true, // if absent, assume compatible
     };
 
     let device_flags = pin_map & DEVICE_MASK;
@@ -589,45 +603,45 @@ fn device_matches_model(e: &BytesStart, model: ProgrammerModel) -> bool {
 
     match model {
         ProgrammerModel::Tl866iiPlus => (device_flags & TL866II_FLAG) != 0,
-        ProgrammerModel::T48         => (device_flags & T48_FLAG) != 0,
-        ProgrammerModel::T56         => (device_flags & T56_FLAG) != 0,
+        ProgrammerModel::T48 => (device_flags & T48_FLAG) != 0,
+        ProgrammerModel::T56 => (device_flags & T56_FLAG) != 0,
         _ => true,
     }
 }
 
 fn build_device(
-    e:         &BytesStart,
-    name:      &str,
-    model:     ProgrammerModel,
-    is_logic:  bool,
-    configs:   &HashMap<String, ChipConfig>,
+    e: &BytesStart,
+    name: &str,
+    model: ProgrammerModel,
+    is_logic: bool,
+    configs: &HashMap<String, ChipConfig>,
 ) -> Result<Option<Device>> {
     if is_logic {
         return build_logic_device(e, name);
     }
 
-    let chip_type         = get_attr_u32(e, b"type").unwrap_or(0);
-    let protocol_id_raw   = get_attr_u32(e, b"protocol_id").unwrap_or(0);
-    let variant           = get_attr_u32(e, b"variant").unwrap_or(0);
-    let read_buffer_size  = get_attr_u32(e, b"read_buffer_size").unwrap_or(0) as u16;
+    let chip_type = get_attr_u32(e, b"type").unwrap_or(0);
+    let protocol_id_raw = get_attr_u32(e, b"protocol_id").unwrap_or(0);
+    let variant = get_attr_u32(e, b"variant").unwrap_or(0);
+    let read_buffer_size = get_attr_u32(e, b"read_buffer_size").unwrap_or(0) as u16;
     let write_buffer_size = get_attr_u32(e, b"write_buffer_size").unwrap_or(0) as u16;
-    let code_memory_size  = get_attr_u32(e, b"code_memory_size").unwrap_or(0);
-    let data_memory_size  = get_attr_u32(e, b"data_memory_size").unwrap_or(0);
+    let code_memory_size = get_attr_u32(e, b"code_memory_size").unwrap_or(0);
+    let data_memory_size = get_attr_u32(e, b"data_memory_size").unwrap_or(0);
     let data_memory2_size = get_attr_u32(e, b"data_memory2_size").unwrap_or(0);
-    let page_size         = get_attr_u32(e, b"page_size").unwrap_or(0);
-    let pages_per_block   = get_attr_u32(e, b"pages_per_block").unwrap_or(0);
-    let chip_id           = get_attr_u32(e, b"chip_id").unwrap_or(0);
-    let voltages_raw      = get_attr_u32(e, b"voltages").unwrap_or(0);
-    let pulse_delay       = get_attr_u32(e, b"pulse_delay").unwrap_or(0);
-    let flags_raw         = get_attr_u32(e, b"flags").unwrap_or(0);
-    let chip_info         = get_attr_u32(e, b"chip_info").unwrap_or(0);
-    let pin_map_raw       = get_attr_u32(e, b"pin_map").unwrap_or(0);
-    let package_raw       = get_attr_u32(e, b"package_details").unwrap_or(0);
-    let blank_value       = get_attr_u32(e, b"blank_value").unwrap_or(0xff) as u16;
+    let page_size = get_attr_u32(e, b"page_size").unwrap_or(0);
+    let pages_per_block = get_attr_u32(e, b"pages_per_block").unwrap_or(0);
+    let chip_id = get_attr_u32(e, b"chip_id").unwrap_or(0);
+    let voltages_raw = get_attr_u32(e, b"voltages").unwrap_or(0);
+    let pulse_delay = get_attr_u32(e, b"pulse_delay").unwrap_or(0);
+    let flags_raw = get_attr_u32(e, b"flags").unwrap_or(0);
+    let chip_info = get_attr_u32(e, b"chip_info").unwrap_or(0);
+    let pin_map_raw = get_attr_u32(e, b"pin_map").unwrap_or(0);
+    let package_raw = get_attr_u32(e, b"package_details").unwrap_or(0);
+    let blank_value = get_attr_u32(e, b"blank_value").unwrap_or(0xff) as u16;
 
-    let voltages    = Voltages::from_raw(voltages_raw);
-    let mut flags   = DeviceFlags::from_raw(flags_raw, chip_info, voltages_raw);
-    let package     = PackageDetails::from_raw(package_raw);
+    let voltages = Voltages::from_raw(voltages_raw);
+    let mut flags = DeviceFlags::from_raw(flags_raw, chip_info, voltages_raw);
+    let package = PackageDetails::from_raw(package_raw);
 
     let protocol_id = protocol_id_raw as u8;
     if protocol_id_raw & 0x8000_0000 != 0 {
@@ -637,12 +651,15 @@ fn build_device(
     // Apply can_adjust_clock / can_adjust_address per programmer model
     const IC2_ALG_SPI25F_1: u8 = 0x03;
     const IC2_ALG_SPI25F_2: u8 = 0x0f;
-    const IC2_ALG_AT45D:    u8 = 0x04;
-    const IC2_ALG_IIC24C:   u8 = 0x01;
+    const IC2_ALG_AT45D: u8 = 0x04;
+    const IC2_ALG_IIC24C: u8 = 0x01;
 
     match model {
         ProgrammerModel::T48 | ProgrammerModel::T56 | ProgrammerModel::T76 => {
-            if matches!(protocol_id, IC2_ALG_SPI25F_1 | IC2_ALG_SPI25F_2 | IC2_ALG_AT45D) {
+            if matches!(
+                protocol_id,
+                IC2_ALG_SPI25F_1 | IC2_ALG_SPI25F_2 | IC2_ALG_AT45D
+            ) {
                 flags.can_adjust_clock = true;
             }
             if model == ProgrammerModel::T76 && protocol_id == IC2_ALG_IIC24C {
@@ -654,8 +671,8 @@ fn build_device(
 
     // Programmer-specific flags from pin_map field
     let tl866_only = (pin_map_raw & TL866II_FLAG) != 0;
-    let t48_only   = (pin_map_raw & T48_FLAG) != 0;
-    let t56_only   = (pin_map_raw & T56_FLAG) != 0;
+    let t48_only = (pin_map_raw & T48_FLAG) != 0;
+    let t56_only = (pin_map_raw & T56_FLAG) != 0;
 
     let chip_id_bytes_count = id_bytes_count(chip_id);
 
@@ -674,11 +691,12 @@ fn build_device(
     };
 
     // SPI clock / I2C address defaults
-    const DEFAULT_T48_SPI_CLOCK:   u8 = 0x01;
-    const DEFAULT_T56_SPI_CLOCK:   u8 = 0x01;
+    const DEFAULT_T48_SPI_CLOCK: u8 = 0x01;
+    const DEFAULT_T56_SPI_CLOCK: u8 = 0x01;
     const DEFAULT_T76_SPI_CLOCK_1: u8 = 0x02;
+    #[allow(dead_code)]
     const DEFAULT_T76_SPI_CLOCK_2: u8 = 0x01;
-    const DEFAULT_24C_ADDRESS:     u8 = 0xA0;
+    const DEFAULT_24C_ADDRESS: u8 = 0xA0;
 
     let spi_clock = match model {
         ProgrammerModel::T48 => DEFAULT_T48_SPI_CLOCK,
@@ -686,7 +704,11 @@ fn build_device(
         ProgrammerModel::T76 => DEFAULT_T76_SPI_CLOCK_1,
         _ => 0,
     };
-    let i2c_address = if model == ProgrammerModel::T76 { DEFAULT_24C_ADDRESS } else { 0 };
+    let i2c_address = if model == ProgrammerModel::T76 {
+        DEFAULT_24C_ADDRESS
+    } else {
+        0
+    };
 
     Ok(Some(Device {
         name: name.to_string(),
@@ -725,7 +747,7 @@ fn build_device(
 fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
     let voltage_str = match get_attr_str(e, b"voltage") {
         Some(v) => v,
-        None    => return Ok(None),
+        None => return Ok(None),
     };
     let pin_count = get_attr_u32(e, b"pins").unwrap_or(0) as u8;
 
@@ -734,12 +756,11 @@ fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
         "1.8" => 0x03,
         "2.5" => 0x02,
         "3.3" => 0x01,
-        "5"   => 0x00,
-        _     => 0x00,
+        "5" => 0x00,
+        _ => 0x00,
     };
 
-    let mut package = PackageDetails::default();
-    package.pin_count = pin_count;
+    let package = PackageDetails { pin_count, ..Default::default() };
 
     let mut device = Device {
         name: name.to_string(),
@@ -755,11 +776,7 @@ fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
         pages_per_block: 0,
         chip_id: 0,
         chip_id_bytes_count: 0,
-        voltages: {
-            let mut v = crate::device::Voltages::default();
-            v.vcc = vcc;
-            v
-        },
+        voltages: crate::device::Voltages { vcc, ..Default::default() },
         pulse_delay: 0,
         flags: crate::device::DeviceFlags::default(),
         chip_info: 0,
@@ -820,10 +837,10 @@ fn compare_mask_for(chip_info: u32) -> (u16, u8) {
     const PIC18F: u32 = 0x82;
     const PIC18J: u32 = 0x85;
     match chip_info {
-        PIC_12  => (0x0fff, 0),
-        PIC_14  => (0x3fff, 5),
-        PIC18F  => (0xffff, 4),
-        PIC18J  => (0xffff, 5),
-        _       => (0x00ff, 0),
+        PIC_12 => (0x0fff, 0),
+        PIC_14 => (0x3fff, 5),
+        PIC18F => (0xffff, 4),
+        PIC18J => (0xffff, 5),
+        _ => (0x00ff, 0),
     }
 }

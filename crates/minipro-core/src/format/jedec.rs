@@ -9,14 +9,15 @@ use std::{
     path::Path,
 };
 
-use crate::error::{MiniproError, Result};
+use crate::error::Result;
 
 /// Parse a JEDEC file and return a flat bit buffer as `Vec<u8>` where each
 /// byte is 0 or 1.  Pads to `fuse_count` bits if necessary.
 pub fn read(path: &Path, fuse_count: usize) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
-    let content: String = reader.lines()
+    let content: String = reader
+        .lines()
         .collect::<std::result::Result<Vec<_>, _>>()?
         .join("\n");
 

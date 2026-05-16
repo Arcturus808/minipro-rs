@@ -32,7 +32,7 @@
 
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -44,7 +44,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceEntry {
     /// `"in"` (device→host) or `"out"` (host→device).
-    pub dir:  String,
+    pub dir: String,
     /// Hex-encoded byte payload (no spaces, no `0x` prefix).
     pub data: String,
 }
@@ -57,6 +57,7 @@ pub struct Fixture {
 
 impl Fixture {
     /// Load a fixture from a JSON file under `tests/fixtures/`.
+    #[allow(dead_code)]
     pub fn load(name: &str) -> Self {
         let path = fixture_path(name);
         let json = fs::read_to_string(&path)
@@ -67,24 +68,27 @@ impl Fixture {
     }
 
     /// Save a fixture (used by the recording helper, not by tests).
+    #[allow(dead_code)]
     pub fn save(&self, name: &str) {
         let path = fixture_path(name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("cannot create fixture directory");
         }
-        let json = serde_json::to_string_pretty(&self.entries)
-            .expect("cannot serialize fixture");
+        let json = serde_json::to_string_pretty(&self.entries).expect("cannot serialize fixture");
         fs::write(&path, json).unwrap_or_else(|e| panic!("cannot write fixture: {}", e));
     }
 }
 
+#[allow(dead_code)]
 fn fixture_path(name: &str) -> PathBuf {
     // CARGO_MANIFEST_DIR points at the crate being tested (minipro-core).
     // Fixtures live two levels up in the workspace tests/fixtures/ directory.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest
-        .parent().unwrap()   // crates/
-        .parent().unwrap()   // workspace root
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap() // workspace root
         .join("tests")
         .join("fixtures")
         .join(name)
@@ -104,14 +108,14 @@ fn fixture_path(name: &str) -> PathBuf {
 #[derive(Debug)]
 pub struct MockUsb {
     entries: Vec<TraceEntry>,
-    cursor:  Mutex<usize>,
+    cursor: Mutex<usize>,
 }
 
 impl MockUsb {
     pub fn new(fixture: Fixture) -> Arc<Self> {
         Arc::new(MockUsb {
             entries: fixture.entries,
-            cursor:  Mutex::new(0),
+            cursor: Mutex::new(0),
         })
     }
 
@@ -131,7 +135,8 @@ impl MockUsb {
         );
         let expected = hex_decode(&entry.data);
         assert_eq!(
-            data, expected.as_slice(),
+            data,
+            expected.as_slice(),
             "MockUsb: outgoing packet mismatch at cursor {}\n  got      {}\n  expected {}",
             *cur,
             hex_encode(data),
@@ -179,10 +184,12 @@ pub fn hex_encode(data: &[u8]) -> String {
 }
 
 pub fn hex_decode(s: &str) -> Vec<u8> {
-    assert!(s.len() % 2 == 0, "odd-length hex string: {s}");
+    assert!(s.len().is_multiple_of(2), "odd-length hex string: {s}");
     (0..s.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16)
-            .unwrap_or_else(|_| panic!("invalid hex byte at {i}: {}", &s[i..i + 2])))
+        .map(|i| {
+            u8::from_str_radix(&s[i..i + 2], 16)
+                .unwrap_or_else(|_| panic!("invalid hex byte at {i}: {}", &s[i..i + 2]))
+        })
         .collect()
 }
