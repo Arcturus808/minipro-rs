@@ -163,7 +163,7 @@ rpm:
     - |
       dnf install -qy rpm-build curl
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93
-      source "$HOME/.cargo/env"
+      source "${CARGO_HOME:-$HOME/.cargo}/env"
       cargo build --release --locked --bin minipro
       VERSION=$(cargo metadata --no-deps --format-version 1 \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
@@ -205,7 +205,7 @@ msi:
     - cargo install cargo-wix --locked
     - rustup target add x86_64-pc-windows-gnu
   script:
-    - cargo wix -p minipro-cli --target x86_64-pc-windows-gnu --no-build
+    - cargo wix -p minipro --target x86_64-pc-windows-gnu --no-build
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
     paths:
