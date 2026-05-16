@@ -168,8 +168,6 @@ rpm:
       VERSION=$(cargo metadata --no-deps --format-version 1 \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
       mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-      mkdir -p ~/rpmbuild/BUILD/minipro-${VERSION}-build
-      cp target/release/minipro ~/rpmbuild/BUILD/minipro-${VERSION}-build/
       printf '%s\n' \
         'Name:           minipro' \
         "Version:        ${VERSION}" \
@@ -182,7 +180,7 @@ rpm:
         'Rust reimplementation of the minipro chip programmer utility.' \
         '' \
         '%install' \
-        'install -Dm755 %{_builddir}/minipro %{buildroot}%{_bindir}/minipro' \
+        "install -Dm755 ${PWD}/target/release/minipro %{buildroot}%{_bindir}/minipro" \
         '' \
         '%files' \
         '%{_bindir}/minipro' \
@@ -202,14 +200,17 @@ msi:
     - build:windows-x86_64
   image: ubuntu:22.04
   before_script:
-    - apt-get update -q && apt-get install -qy msitools libglib2.0-dev
+    - apt-get update -q && apt-get install -qy dotnet-sdk-8.0
+    - dotnet tool install --global wix
   script:
     - |
+      export PATH="$HOME/.dotnet/tools:$PATH"
       VERSION=$(grep -m1 '^version' crates/minipro-cli/Cargo.toml | cut -d'"' -f2)
-      wixl -D ProductVersion="${VERSION}" \
-           -a x64 \
-           -o "minipro_${VERSION}_x86_64.msi" \
-           crates/minipro-cli/wix/main.wxs
+      wix build \
+        -d ProductVersion="${VERSION}" \
+        -arch x64 \
+        -out "minipro_${VERSION}_x86_64.msi" \
+        crates/minipro-cli/wix/main.wxs
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
     paths:

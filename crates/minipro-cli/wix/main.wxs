@@ -1,10 +1,57 @@
-<?xml version='1.0' encoding='windows-1252'?>
+<?xml version='1.0' encoding='utf-8'?>
 <!--
-  WiX Toolset v3 source for the minipro Windows MSI installer.
-  Build with: wixl -D ProductVersion=X.Y.Z -a x64 -o minipro.msi main.wxs
-  Paths are relative to this file's directory (crates/minipro-cli/wix/).
+  WiX v4 source for the minipro Windows MSI installer.
+  Build with: wix build -d ProductVersion=X.Y.Z -arch x64 -out minipro.msi main.wxs
+  Source paths are relative to this file's directory (crates/minipro-cli/wix/).
 -->
-<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+<Wix xmlns='http://wixtoolset.org/schemas/v4/wxs'>
+  <Package
+    Name='minipro'
+    Manufacturer='minipro-rs contributors'
+    Version='$(var.ProductVersion)'
+    UpgradeCode='5C6D2F1A-3B4E-4F2A-8C9D-1A2B3C4D5E6F'
+    Scope='perMachine'>
+
+    <MajorUpgrade
+      DowngradeErrorMessage='A newer version of minipro is already installed. Setup will now exit.'/>
+
+    <MediaTemplate EmbedCab='yes'/>
+
+    <StandardDirectory Id='ProgramFiles64Folder'>
+      <Directory Id='APPLICATIONFOLDER' Name='minipro'>
+
+        <Component Id='License' Guid='*'>
+          <File Id='LicenseFile' Name='LICENSE'
+            Source='../../../LICENSE'
+            KeyPath='yes'/>
+        </Component>
+
+        <Directory Id='BinDir' Name='bin'>
+          <Component Id='Binary' Guid='*'>
+            <File Id='minipro.exe' Name='minipro.exe'
+              Source='../../../target/x86_64-pc-windows-gnu/release/minipro.exe'
+              KeyPath='yes'/>
+            <Environment
+              Id='PATH'
+              Name='PATH'
+              Value='[BinDir]'
+              Permanent='no'
+              Part='last'
+              Action='set'
+              System='yes'/>
+          </Component>
+        </Directory>
+
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id='DefaultFeature' Title='minipro' Level='1'>
+      <ComponentRef Id='License'/>
+      <ComponentRef Id='Binary'/>
+    </Feature>
+
+  </Package>
+</Wix>
   <Product
     Id='*'
     Name='minipro'
