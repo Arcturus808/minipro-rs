@@ -113,8 +113,7 @@ build:macos-arm64:
 
 # Shell completion archive (all shells) ----------------------------------------
 completions:
-  <<: *package_needs
-  <<: *cargo_cache
+  <<: [*package_needs, *cargo_cache]
   script:
     - mkdir -p dist/completions
     - target/release/minipro --generate-completions bash        > dist/completions/minipro.bash
