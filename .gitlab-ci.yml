@@ -11,7 +11,7 @@
 # release artifact set.
 
 default:
-  image: rust:latest
+  image: rust:1.93
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
@@ -211,7 +211,7 @@ msi:
   stage: package
   needs:
     - build:windows-x86_64
-  image: rust:latest
+  image: rust:1.93
   before_script:
     - apt-get update -q && apt-get install -qy mingw-w64 msitools libglib2.0-dev
     - cargo install cargo-wix --locked
