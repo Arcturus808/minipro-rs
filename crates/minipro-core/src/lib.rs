@@ -13,14 +13,14 @@
 //!
 //! ```no_run
 //! use minipro_core::{MiniproHandle, DatabasePaths, find_device};
+//! use minipro_core::device::ProgrammerModel;
 //! use minipro_core::operations::read_chip;
-//! use std::sync::Arc;
 //!
-//! let db = DatabasePaths::default();
-//! let device = Arc::new(find_device(&db, "AT28C256", Default::default())?);
+//! let db = DatabasePaths::resolve(None, None)?;
+//! let device = std::sync::Arc::new(find_device(&db, "AT28C256", ProgrammerModel::Tl866iiPlus)?);
 //! let mut handle = MiniproHandle::open()?;
 //! handle.begin_transaction(device)?;
-//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0)?;
+//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0, "auto")?;
 //! handle.end_transaction()?;
 //! # Ok::<(), minipro_core::error::MiniproError>(())
 //! ```
