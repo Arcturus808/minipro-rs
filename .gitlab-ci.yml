@@ -168,7 +168,8 @@ rpm:
       VERSION=$(cargo metadata --no-deps --format-version 1 \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['version'])")
       mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-      cp target/release/minipro ~/rpmbuild/BUILD/
+      mkdir -p ~/rpmbuild/BUILD/minipro-${VERSION}-build
+      cp target/release/minipro ~/rpmbuild/BUILD/minipro-${VERSION}-build/
       printf '%s\n' \
         'Name:           minipro' \
         "Version:        ${VERSION}" \
@@ -199,13 +200,14 @@ msi:
   stage: package
   needs:
     - build:windows-x86_64
-  image: rust:1.93
+  image: ubuntu:22.04
   before_script:
     - apt-get update -q && apt-get install -qy msitools libglib2.0-dev
   script:
     - |
       VERSION=$(grep -m1 '^version' crates/minipro-cli/Cargo.toml | cut -d'"' -f2)
       wixl -D ProductVersion="${VERSION}" \
+           -a x64 \
            -o "minipro_${VERSION}_x86_64.msi" \
            crates/minipro-cli/wix/main.wxs
   artifacts:
