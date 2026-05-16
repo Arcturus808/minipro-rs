@@ -205,7 +205,7 @@ msi:
   script:
     - |
       export PATH="$HOME/.dotnet/tools:$PATH"
-      VERSION=$(grep -m1 '^version' crates/minipro-cli/Cargo.toml | cut -d'"' -f2)
+      VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
       wix build \
         -d ProductVersion="${VERSION}" \
         -arch x64 \
