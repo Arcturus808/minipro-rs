@@ -2,7 +2,7 @@
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
-> **Status:** Phase 5 complete — all protocols, logic-IC testing, firmware update, shell completions, integration tests, CI/CD packaging. `cargo check` clean, all tests pass.
+> **Status:** CI/CD pipeline fully operational — clippy, fmt, tests, Linux/Windows release builds, and all package jobs (`.deb`, `.rpm`, `.msi`, shell completions) passing on every commit. macOS builds are community-supported (see [macOS support](#macos-support)).
 
 ---
 
