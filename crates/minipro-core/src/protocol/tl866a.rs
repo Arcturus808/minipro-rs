@@ -101,9 +101,7 @@ impl Default for Tl866aProtocol {
 /// u8[8]   device_code
 /// u8[24]  serial_number
 /// ```
-pub fn get_system_info(
-    usb: &UsbDevice,
-) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
+pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
     use crate::device::{ProgrammerModel, ProgrammerStatus};
 
     let mut cmd = [0u8; 64];
