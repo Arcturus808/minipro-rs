@@ -2,29 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
 
 ## [Unreleased]
 
-## [0.1.0] - 2025-01-01
+---
+
+## [0.1.0] - 2026-05-16
 
 ### Added
-- Initial Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro)
-- Pure-Rust USB layer via `nusb` — no libusb, no Cygwin, single static binary on all platforms
-- Support for XGecu TL866A, TL866CS, TL866II+, T48, T56, and T76 programmers
-- Read, write, verify, erase, and blank-check operations for EEPROM/Flash/PIC/AVR devices
-- File format support: Intel HEX (`.hex`), Motorola SREC (`.srec`/`.mot`), JEP-106 JEDEC (`.jed`), raw binary (`.bin`)
-- `--format` flag for explicit format selection (default: auto-detect from extension)
-- Fuse/configuration-bit operations: `--read-fuses`, `--write-fuses`
-- SPI flash JEDEC ID autodetection: `--spi-autodetect`
-- Logic IC test via external `logicic.xml` database: `--logic-test`
-- Firmware update support for TL866II+, T48, and T76: `--firmware-update`
-- ZIF socket pin-level control (voltages, pull-downs, OVC check)
-- ICSP (in-circuit serial programming) mode: `--icsp`
-- Shell completion generation for Bash, Zsh, Fish, and PowerShell: `--generate-completions`
-- Windows MSI installer via `cargo-wix`
-- Linux `.deb` and `.rpm` packages via `cargo-deb` / `cargo-generate-rpm`
-- GitLab CI/CD pipeline with check, test, build, package, and release stages
-- Integration test framework with `MockUsb` fixture replay (no hardware required)
-- `cargo doc` API documentation for all public types
+
+- **Core library (`minipro-core`)** — USB device access via [`nusb`](https://crates.io/crates/nusb) (pure Rust, no `libusb` dependency, no C FFI)
+- **Protocol support** for XGecu TL866A/CS, TL866II+, T48, T56 (with FPGA bitstream upload), and T76
+- **Chip database** — XML-driven device definitions parsed from vendored `infoic.xml` and `logicic.xml`
+- **File format support** — Intel HEX, Motorola S-Record, and JEDEC fuse-map read/write with auto-detection
+- **Operations** — read, write, erase, verify, blank-check, fuse read/write, logic-IC test, and firmware update
+- **CLI binary (`minipro-cli`)** — `clap`-based interface targeting feature parity with upstream C `minipro` 0.7.x
+- **Shell completions** for Bash, Zsh, Fish, and PowerShell via `clap_complete`
+- **Integration test framework** with `MockUsb` fixture replay (no physical hardware required)
+- **CI/CD pipeline** (GitLab CI) with the following stages:
+  - `check` — `cargo clippy` and `cargo fmt --check`
+  - `test` — `cargo test` on Linux
+  - `build` — release binaries for Linux x86_64 and Windows x86_64 (cross-compiled via `x86_64-pc-windows-gnu`)
+  - `package` — `.deb`, `.rpm`, `.msi` (Windows installer via `wixl`), and shell completion archive
+  - `release` — tag-triggered GitLab release with links to all build artifacts
+
+### Notes
+
+- Windows binaries are fully self-contained — no Cygwin, MSYS2, WSL, Visual C++ Redistributable, or `libusb.dll` required. A one-time [Zadig](https://zadig.akeo.ie/) WinUSB driver association is needed per machine.
+- macOS binaries are not produced in CI (no macOS runner available on the free tier). Mac users should build from source with `cargo build --release`. Community contributions for macOS testing are welcome.
+- This is an initial release. Not all of the 13,000+ devices in the chip database have been validated against physical hardware.
+
+[0.1.0]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.0
