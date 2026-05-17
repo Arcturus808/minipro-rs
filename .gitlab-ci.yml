@@ -200,7 +200,7 @@ msi:
     - build:windows-x86_64
   image: ubuntu:22.04
   before_script:
-    - apt-get update -q && apt-get install -qy mono-complete curl unzip
+    - DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -qy mono-complete curl unzip
     - curl -fsSL https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -o /tmp/wix.zip
     - unzip -q /tmp/wix.zip -d /opt/wix3
   script:
