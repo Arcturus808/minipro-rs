@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-05-17
+
+### Fixed
+
+- **TL866A/CS "Response too short" error** — `MiniproHandle::open()` always used the TL866II+
+  system-info parser, which expects a 41-byte response. The TL866A/CS returns 40 bytes with a
+  different layout (`hardware_version` at byte 6, `device_type` at byte 7). A model-specific
+  parser is now selected based on the USB VID/PID detected at open time.
+
+---
+
 ## [0.1.0] - 2026-05-16
 
 ### Added
