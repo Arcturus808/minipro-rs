@@ -50,6 +50,24 @@ cargo build --release
 
 ---
 
+## macOS support
+
+macOS binaries are **not built in CI** — GitLab's free tier does not include macOS runners, and the maintainer does not have access to Apple hardware.
+
+**Mac users:** build from source with:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git clone https://gitlab.com/arcturus8081/minipro-rs
+cd minipro-rs
+cargo build --release
+# Binary is at target/release/minipro
+```
+
+Community contributors with Mac hardware are warmly welcomed — especially for testing USB device access, which requires physical hardware. If you run into a macOS-specific bug, please open an issue.
+
+---
+
 ## GUI front-ends with Tauri
 
 [Tauri](https://tauri.app/) is a well-suited choice for building a native GUI front-end for this project.  Because `minipro-core` is a plain Rust library crate, a Tauri app can depend on it directly:

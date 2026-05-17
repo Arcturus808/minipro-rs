@@ -3,7 +3,7 @@
 # Pipeline stages:
 #   check  — fast lint / format gate (no cross-compilation)
 #   test   — unit + integration tests on Linux
-#   build  — release binaries for Linux x86_64, Windows x86_64, macOS arm64
+#   build  — release binaries for Linux x86_64, Windows x86_64
 #   package — .deb, .rpm, Windows .msi, shell completion archives
 #
 # Artifacts from `package` are attached to each pipeline run and to any
@@ -92,18 +92,6 @@ build:windows-x86_64:
     name: "minipro-windows-x86_64-${CI_COMMIT_SHORT_SHA}"
     paths:
       - target/x86_64-pc-windows-gnu/release/minipro.exe
-
-build:macos-arm64:
-  <<: *build_common
-  allow_failure: true   # requires a self-hosted macOS runner; skipped on shared runners
-  tags:
-    - macos-arm64
-  script:
-    - cargo build --release --locked --bin minipro
-  artifacts:
-    name: "minipro-macos-arm64-${CI_COMMIT_SHORT_SHA}"
-    paths:
-      - target/release/minipro
 
 # ── Package ───────────────────────────────────────────────────────────────────
 
