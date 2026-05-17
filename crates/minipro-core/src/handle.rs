@@ -13,7 +13,7 @@ use crate::{
         t48::T48Protocol,
         t56::{T56Protocol, MIN_FIRMWARE_T56},
         t76::{T76Protocol, MIN_FIRMWARE_T76},
-        tl866a::Tl866aProtocol,
+        tl866a::{self, Tl866aProtocol},
         tl866iiplus::{get_system_info, Tl866iiPlusProtocol, MIN_FIRMWARE},
         Protocol,
     },
@@ -43,10 +43,15 @@ pub struct MiniproHandle {
 impl MiniproHandle {
     /// Open the first connected programmer and read firmware info.
     pub fn open() -> Result<Self> {
-        let (usb, _initial_model) = open_programmer()?;
+        let (usb, initial_model) = open_programmer()?;
 
-        // Query the firmware for the authoritative model/version
-        let sys_info = get_system_info(&usb)?;
+        // Query the firmware for the authoritative model/version.
+        // TL866A/CS uses a 40-byte response layout; all others use 41 bytes.
+        let sys_info = if initial_model == ProgrammerModel::Tl866a {
+            tl866a::get_system_info(&usb)?
+        } else {
+            get_system_info(&usb)?
+        };
 
         if sys_info.status == ProgrammerStatus::Bootloader {
             return Err(MiniproError::BootloaderMode);

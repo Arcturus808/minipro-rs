@@ -39,6 +39,7 @@ use crate::{
 pub const MIN_FIRMWARE_A: u32 = 0x0256; // 3.2.86
 
 // Command bytes
+const CMD_GET_INFO: u8 = 0x00;
 const CMD_START_TRANSACTION: u8 = 0x03;
 const CMD_END_TRANSACTION: u8 = 0x04;
 const CMD_GET_CHIP_ID: u8 = 0x05;
@@ -84,6 +85,72 @@ impl Default for Tl866aProtocol {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Query firmware version and device info from a TL866A/CS.
+///
+/// Response layout (40 bytes, from tl866a.h):
+/// ```text
+/// u8      echo (0x00)
+/// u8      device_status      (1 = normal, 2 = bootloader)
+/// u16     report_size        (LE)
+/// u8      firmware_minor
+/// u8      firmware_major
+/// u8      hardware_version
+/// u8      device_type        (1 = TL866A, 2 = TL866CS)
+/// u8[8]   device_code
+/// u8[24]  serial_number
+/// ```
+pub fn get_system_info(
+    usb: &UsbDevice,
+) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
+    use crate::device::{ProgrammerModel, ProgrammerStatus};
+
+    let mut cmd = [0u8; 64];
+    cmd[0] = CMD_GET_INFO;
+    usb.msg_send(&cmd)?;
+    let resp = usb.msg_recv(64)?;
+
+    if resp.len() < 40 {
+        return Err(MiniproError::ResponseTooShort {
+            expected: 40,
+            actual: resp.len(),
+        });
+    }
+
+    let status = match resp[1] {
+        2 => ProgrammerStatus::Bootloader,
+        _ => ProgrammerStatus::Normal,
+    };
+
+    let fw_minor = resp[4];
+    let fw_major = resp[5];
+    let firmware = ((fw_major as u32) << 8) | fw_minor as u32;
+    let hardware_version = resp[6];
+    let device_type = resp[7];
+
+    let model = match device_type {
+        2 => ProgrammerModel::Tl866cs,
+        _ => ProgrammerModel::Tl866a,
+    };
+
+    let device_code = String::from_utf8_lossy(&resp[8..16])
+        .trim_end_matches('\0')
+        .to_string();
+    let serial_number = String::from_utf8_lossy(&resp[16..40])
+        .trim_end_matches('\0')
+        .to_string();
+    let firmware_str = format!("{:02}.{}.{}", fw_major / 10, fw_major % 10, fw_minor);
+
+    Ok(crate::protocol::tl866iiplus::SystemInfo {
+        model,
+        status,
+        firmware,
+        firmware_str,
+        device_code,
+        serial_number,
+        hardware_version,
+    })
 }
 
 /// Store a little-endian integer of `len` bytes starting at `buf`.
