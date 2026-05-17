@@ -198,9 +198,9 @@ msi:
   stage: package
   needs:
     - build:windows-x86_64
-  image: ubuntu:22.04
+  image: fedora:latest
   before_script:
-    - DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -qy msitools
+    - dnf install -qy msitools
   script:
     - |
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
