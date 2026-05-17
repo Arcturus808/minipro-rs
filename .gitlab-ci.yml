@@ -208,7 +208,7 @@ msi:
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
       cd crates/minipro-cli/wix
       mono /opt/wix3/candle.exe -dProductVersion="${VERSION}" -arch x64 main.wxs
-      mono /opt/wix3/light.exe -out "../../../minipro_${VERSION}_x86_64.msi" main.wixobj
+          mono /opt/wix3/light.exe -sval -out "../../../minipro_${VERSION}_x86_64.msi" main.wixobj
       cd ../../..
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
