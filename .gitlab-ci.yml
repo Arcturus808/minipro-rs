@@ -200,16 +200,13 @@ msi:
     - build:windows-x86_64
   image: ubuntu:22.04
   before_script:
-    - DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -qy mono-complete curl unzip
-    - curl -fsSL https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -o /tmp/wix.zip
-    - unzip -q /tmp/wix.zip -d /opt/wix3
+    - DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -qy msitools
   script:
     - |
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-      cd crates/minipro-cli/wix
-      mono /opt/wix3/candle.exe -dProductVersion="${VERSION}" -arch x64 main.wxs
-          mono /opt/wix3/light.exe -sval -out "../../../minipro_${VERSION}_x86_64.msi" main.wixobj
-      cd ../../..
+      wixl -D ProductVersion="${VERSION}" -a x64 \
+        -o "minipro_${VERSION}_x86_64.msi" \
+        crates/minipro-cli/wix/main.wxs
   artifacts:
     name: "minipro-msi-${CI_COMMIT_SHORT_SHA}"
     paths:
