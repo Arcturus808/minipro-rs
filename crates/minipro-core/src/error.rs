@@ -11,7 +11,7 @@ pub enum MiniproError {
     #[error("Multiple programmers connected; please connect only one")]
     MultipleProgrammersFound,
 
-    #[error("Device '{0}' not found in the chip database")]
+    #[error("{0}")]
     DeviceNotFound(String),
 
     #[error("Chip ID mismatch: expected {expected:#010x}, got {actual:#010x}")]

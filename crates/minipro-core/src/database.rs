@@ -136,15 +136,32 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
     if let Some(dev) = search_file(&paths.logicic, name, model, true)? {
         return Ok(dev);
     }
-    search_file(&paths.infoic, name, model, false)?
-        .ok_or_else(|| MiniproError::DeviceNotFound(name.to_string()))
+    if let Some(dev) = search_file(&paths.infoic, name, model, false)? {
+        return Ok(dev);
+    }
+    // Device not found for this model. Check if it exists for a different model
+    // to give a more actionable error message.
+    if device_name_exists(&paths.infoic, name)? {
+        return Err(MiniproError::DeviceNotFound(format!(
+            "'{}' is not supported by {:?}; use a TL866II+, T48, T56, or T76",
+            name, model
+        )));
+    }
+    Err(MiniproError::DeviceNotFound(format!(
+        "Device '{}' not found in the chip database",
+        name
+    )))
 }
 
 /// List all device names matching an optional filter string.
+///
+/// Results are deduplicated — devices that appear in multiple database
+/// sections (e.g. both INFOIC2PLUS and INFOICT76) are listed only once.
 pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<String>> {
     let mut names = Vec::new();
-    collect_names(&paths.logicic, filter, &mut names)?;
-    collect_names(&paths.infoic, filter, &mut names)?;
+    let mut seen = std::collections::HashSet::new();
+    collect_names(&paths.logicic, filter, &mut names, &mut seen)?;
+    collect_names(&paths.infoic, filter, &mut names, &mut seen)?;
     Ok(names)
 }
 
@@ -266,7 +283,12 @@ fn search_file(
     Ok(device)
 }
 
-fn collect_names(path: &Path, filter: Option<&str>, out: &mut Vec<String>) -> Result<()> {
+fn collect_names(
+    path: &Path,
+    filter: Option<&str>,
+    out: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Result<()> {
     let xml = read_file(path)?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
@@ -280,7 +302,8 @@ fn collect_names(path: &Path, filter: Option<&str>, out: &mut Vec<String>) -> Re
                         let part = part.trim();
                         if filter.is_none_or(|f| {
                             part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
-                        }) {
+                        }) && seen.insert(part.to_ascii_lowercase())
+                        {
                             out.push(part.to_string());
                         }
                     }
@@ -293,6 +316,34 @@ fn collect_names(path: &Path, filter: Option<&str>, out: &mut Vec<String>) -> Re
         buf.clear();
     }
     Ok(())
+}
+
+/// Return true if `name` appears in `path` under any database section.
+fn device_name_exists(path: &Path, name: &str) -> Result<bool> {
+    let xml = read_file(path)?;
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) if e.name().as_ref() == b"ic" => {
+                if let Some(raw_name) = get_attr_str(e, b"name") {
+                    if raw_name
+                        .split(',')
+                        .any(|s| s.trim().eq_ignore_ascii_case(name))
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(false)
 }
 
 // ── Pass 1: collect <config> entries ─────────────────────────────────────────
