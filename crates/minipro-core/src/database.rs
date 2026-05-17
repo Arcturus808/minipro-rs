@@ -81,7 +81,18 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
         return Ok(cwd);
     }
 
-    // 2. MINIPRO_HOME env var
+    // 2. Directory containing the running executable (useful on Windows when
+    //    users drop the XML files alongside minipro.exe)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(filename);
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+    }
+
+    // 3. MINIPRO_HOME env var
     if let Ok(home) = std::env::var("MINIPRO_HOME") {
         let p = PathBuf::from(home).join(filename);
         if p.exists() {
@@ -89,7 +100,7 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
         }
     }
 
-    // 3. Platform data directory
+    // 4. Platform data directory
     #[cfg(target_os = "windows")]
     {
         if let Ok(appdata) = std::env::var("PROGRAMDATA") {

@@ -53,6 +53,14 @@
             </Component>
           </Directory>
 
+          <Component Id='Database' Guid='*'>
+            <File Id='infoic.xml' Name='infoic.xml'
+              Source='../../../data/infoic.xml'
+              KeyPath='yes'/>
+            <File Id='logicic.xml' Name='logicic.xml'
+              Source='../../../data/logicic.xml'/>
+          </Component>
+
         </Directory>
       </Directory>
     </Directory>
@@ -60,6 +68,7 @@
     <Feature Id='DefaultFeature' Title='minipro' Level='1'>
       <ComponentRef Id='License'/>
       <ComponentRef Id='Binary'/>
+      <ComponentRef Id='Database'/>
     </Feature>
 
   </Product>
