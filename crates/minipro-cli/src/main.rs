@@ -902,7 +902,7 @@ Test a 74xx04 hex inverter and save the result table to a file.
 List all devices whose name contains "AT89".
 .TP
 .B minipro \-I
-Show programmer model, hardware version, firmware version, and serial number.
+Show programmer model, device code, serial number, firmware version, and hardware version.
 
 .SH CAVEATS
 The TL866A and TL866CS programmers appear to have a firmware bug such that
