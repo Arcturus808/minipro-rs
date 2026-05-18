@@ -83,7 +83,10 @@ impl MiniproHandle {
             });
         }
 
-        info!("Programmer: {:?} firmware {}", info.model, info.firmware_str);
+        info!(
+            "Programmer: {:?} firmware {}",
+            info.model, info.firmware_str
+        );
 
         let protocol: Box<dyn Protocol> = match info.model {
             ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Box::new(Tl866aProtocol::new()),
@@ -106,7 +109,8 @@ impl MiniproHandle {
     /// Set the active chip device and send `begin_transaction` to the hardware.
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
         info!("Device: {}", device.name);
-        self.protocol.begin_transaction(&self.usb, &device, self.icsp)?;
+        self.protocol
+            .begin_transaction(&self.usb, &device, self.icsp)?;
         self.device = Some(device);
         Ok(())
     }

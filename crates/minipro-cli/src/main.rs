@@ -46,7 +46,8 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
 
     let default_level = if cli.verbose { "info" } else { "warn" };
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(default_level)).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(default_level))
+        .init();
 
     // ── Shell completions ─────────────────────────────────────────────────────
     if let Some(ref shell_name) = cli.generate_completions {

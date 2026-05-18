@@ -28,13 +28,13 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
-use log::trace;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
+use log::trace;
 
 /// Minimum firmware version for TL866A/CS.
 pub const MIN_FIRMWARE_A: u32 = 0x0256; // 3.2.86
@@ -200,7 +200,12 @@ impl Protocol for Tl866aProtocol {
         put_le(&mut msg[2..], ds.data.len() as u32, 2);
         // [4..6] address (24-bit LE)
         put_le(&mut msg[4..], ds.address, 3);
-        trace!("read_block: cmd=0x{:02x} addr={:#x} len={}", cmd, ds.address, ds.data.len());
+        trace!(
+            "read_block: cmd=0x{:02x} addr={:#x} len={}",
+            cmd,
+            ds.address,
+            ds.data.len()
+        );
         usb.msg_send(&msg)?;
         // TL866A sends all payload data on EP 0x81 (command IN endpoint) in
         // 64-byte USB packets.  We must NOT use read_payload_limit here —

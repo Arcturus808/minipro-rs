@@ -130,7 +130,11 @@ impl UsbDevice {
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
-        trace!("msg_recv: got {} bytes: {:02x?}", completion.data.len(), &completion.data[..completion.data.len().min(16)]);
+        trace!(
+            "msg_recv: got {} bytes: {:02x?}",
+            completion.data.len(),
+            &completion.data[..completion.data.len().min(16)]
+        );
         Ok(completion.data)
     }
 
@@ -177,7 +181,11 @@ impl UsbDevice {
                 self.interface
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
-            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
+            trace!(
+                "  <- EP 0x82 complete: {} bytes, status={:?}",
+                c.data.len(),
+                c.status
+            );
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
@@ -187,7 +195,11 @@ impl UsbDevice {
         if length < 64 {
             trace!("  -> small path: bulk_in(EP 0x82, 64)");
             let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
-            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
+            trace!(
+                "  <- EP 0x82 complete: {} bytes, status={:?}",
+                c.data.len(),
+                c.status
+            );
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data[..length].to_vec());
@@ -199,7 +211,11 @@ impl UsbDevice {
                 self.interface
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
-            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
+            trace!(
+                "  <- EP 0x82 complete: {} bytes, status={:?}",
+                c.data.len(),
+                c.status
+            );
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
@@ -212,7 +228,11 @@ impl UsbDevice {
             self.interface
                 .bulk_in(DATA_EP2_IN, RequestBuffer::new(half)),
         );
-        trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c2.data.len(), c2.status);
+        trace!(
+            "  <- EP 0x82 complete: {} bytes, status={:?}",
+            c2.data.len(),
+            c2.status
+        );
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         trace!("  -> dual-EP path: bulk_in(EP 0x83, {half})");
@@ -220,7 +240,11 @@ impl UsbDevice {
             self.interface
                 .bulk_in(DATA_EP3_IN, RequestBuffer::new(half)),
         );
-        trace!("  <- EP 0x83 complete: {} bytes, status={:?}", c3.data.len(), c3.status);
+        trace!(
+            "  <- EP 0x83 complete: {} bytes, status={:?}",
+            c3.data.len(),
+            c3.status
+        );
         c3.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
 
