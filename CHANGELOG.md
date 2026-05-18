@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.5] - 2026-05-17
+
 ### Added
 
 - **Progress callbacks for read/write/verify** — `read_chip`, `write_chip`, and `verify_chip` now
@@ -101,3 +105,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.2]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.2
 [0.1.3]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.3
 [0.1.4]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.4
+[0.1.5]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.5
