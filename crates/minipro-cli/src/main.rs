@@ -111,6 +111,15 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // ── Presence check ────────────────────────────────────────────────────────
+    if cli.presence_check {
+        println!(
+            "Found {} firmware {}",
+            handle.info.model, handle.info.firmware_str
+        );
+        return Ok(());
+    }
+
     // ── Firmware update (no device / begin_transaction needed) ────────────────
     if let Some(ref fw_path) = cli.firmware_update {
         let fw_data = std::fs::read(fw_path)

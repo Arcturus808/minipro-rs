@@ -48,6 +48,10 @@ struct Cli {
     #[arg(short = 'I', long = "info", action = ArgAction::SetTrue)]
     info: bool,
 
+    /// Check if a programmer is connected and print model + firmware version
+    #[arg(short = 'k', long = "presence-check", action = ArgAction::SetTrue)]
+    presence_check: bool,
+
     /// Skip over-current check
     #[arg(long = "no-ovc-check", action = ArgAction::SetTrue)]
     no_ovc_check: bool,
