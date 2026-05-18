@@ -223,7 +223,7 @@ pub enum MiniproError {
 
 #### CLI — `clap` derive
 
-See `minipro --help` or the [manual page](minipro.1.html) for the current authoritative option list.
+See `minipro --help` or the [manual page](https://minipro-rs-2992c1.gitlab.io/minipro.1.html) for the current authoritative option list.
 The implementation lives in `crates/minipro-cli/src/cli.rs`.
 
 ---
@@ -329,13 +329,13 @@ Both packages place `infoic.xml` and `logicic.xml` in `/usr/share/minipro/` auto
 cargo install --path crates/minipro-cli
 ```
 
-The database files must be available alongside the binary or in one of the search paths described in the [manual page](minipro.1.html).
+The database files must be available alongside the binary or in one of the search paths described in the [manual page](https://minipro-rs-2992c1.gitlab.io/minipro.1.html).
 
 ---
 
 ## Usage
 
-See `minipro --help` or the [manual page](minipro.1.html) for the full option reference.
+See `minipro --help` or the [manual page](https://minipro-rs-2992c1.gitlab.io/minipro.1.html) for the full option reference.
 
 ```sh
 # Read an ATmega48 to a file
