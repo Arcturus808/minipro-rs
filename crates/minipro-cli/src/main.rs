@@ -883,8 +883,8 @@ Read a 16 MiB SPI NOR flash chip.
 .B minipro \-p 7404 \-\-logic\-test
 Check whether a 74(LS/HC/...)04 hex NOT gate chip works correctly.
 .TP
-.B minipro \-p ATMEGA48 \-r flash.bin \-\-fuses
-Read code memory and select the fuse/configuration page.
+.B minipro \-p ATMEGA48 \-r fuses.bin \-\-fuses
+Read the fuse/configuration bytes of an ATmega48 into a file.
 .TP
 .B minipro \-p ATMEGA48 \-r uid.bin \-\-uid
 Read the user/UID byte region of an ATmega48.
