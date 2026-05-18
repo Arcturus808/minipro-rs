@@ -220,33 +220,9 @@ pub enum MiniproError {
 ```
 
 #### CLI — `clap` derive
-```
-minipro-rs [OPTIONS] -p <DEVICE>
 
-Options:
-  -r, --read <FILE>           Read chip to file
-  -w, --write <FILE>          Write file to chip
-  -e, --erase                 Erase chip
-  -b, --blank-check           Blank-check chip
-  -v, --verify <FILE>         Verify chip against file
-  -I, --id-check-only         Read and display chip ID, then exit
-      --no-erase              Skip erase before write
-      --no-verify             Skip verify after write
-      --protect-off           Disable write-protect before operation
-      --protect-on            Enable write-protect after operation
-      --format <FORMAT>       File format: auto|bin|ihex|srec [default: auto]
-      --page <PAGE>           Memory page: code|data|config|user|calibration
-      --icsp                  Use ICSP (in-circuit) programming
-      --spi-clock <HZ>        Override SPI clock for 25C devices
-      --i2c-addr <ADDR>       I2C slave address for 24C devices
-      --skip-id               Skip chip-ID verification
-      --continue-id           Continue even if chip-ID mismatch
-      --logic-test            Test logic IC
-  -l, --list                  List supported devices
-  -V, --version               Print version and programmer info
-  -v, --verbose               Verbose output
-  -h, --help                  Print help
-```
+See `minipro --help` or the [manual page](minipro.1.html) for the current authoritative option list.
+The implementation lives in `crates/minipro-cli/src/cli.rs`.
 
 ---
 
@@ -303,7 +279,11 @@ Options:
 - [x] `cargo doc` public API documentation (module-level + type-level doc comments)
 - [x] Shell completions: bash, zsh, fish, PowerShell via `clap_complete`
   - Generated at build time into `$OUT_DIR/completions/`
-  - Runtime: `minipro --generate-completions bash | sudo tee /etc/bash_completion.d/minipro`
+  - Install at runtime:
+    - **bash** (Linux/macOS): `minipro --generate-completions bash | sudo tee /etc/bash_completion.d/minipro`
+    - **zsh**: `minipro --generate-completions zsh > ~/.zfunc/_minipro`
+    - **fish**: `minipro --generate-completions fish > ~/.config/fish/completions/minipro.fish`
+    - **PowerShell** (Windows): `minipro --generate-completions powershell >> $PROFILE`
 - [x] Packaging via GitLab CI (`.gitlab-ci.yml`):
   - Linux `.deb` (Debian/Ubuntu) and `.rpm` (Fedora/RHEL)
   - Windows `.msi` via `cargo-wix` (`wix/main.wxs`)
@@ -321,39 +301,75 @@ Options:
 - [Zadig](https://zadig.akeo.ie/) — one-time WinUSB driver association tool for Windows
 - [Tauri](https://tauri.app/) — recommended framework for GUI front-ends
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+Pre-built binaries are attached to each [GitLab release](https://gitlab.com/arcturus8081/minipro-rs/-/releases).
+
+### Windows
+
+Download `minipro-<version>-x86_64-windows.zip` (or the `.msi` installer), extract, and place `minipro.exe` on your `PATH`.  See [Windows support](#windows-support) above for the one-time Zadig/WinUSB driver step.
+
+### Linux
+
+```sh
+# Debian / Ubuntu
+sudo dpkg -i minipro_<version>_amd64.deb
+
+# RPM-based (Fedora / RHEL)
+sudo rpm -i minipro-<version>.x86_64.rpm
+```
+
+Both packages place `infoic.xml` and `logicic.xml` in `/usr/share/minipro/` automatically.
+
+### Build from source
+
+```sh
+cargo install --path crates/minipro-cli
+```
+
+The database files must be available alongside the binary or in one of the search paths described in the [manual page](minipro.1.html).
+
+---
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+See `minipro --help` or the [manual page](minipro.1.html) for the full option reference.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```sh
+# Read an ATmega48 to a file
+minipro -p ATMEGA48 -r atmega48.bin
+
+# Write a file to an ATmega48
+minipro -p ATMEGA48 -w atmega48.bin
+
+# List all devices matching a name substring
+minipro -l W25Q
+
+# Show connected programmer info
+minipro -I
+
+# Test a logic IC
+minipro -p 7404 --logic-test
+```
+
+---
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Bug reports, hardware test results, and pull requests are welcome.  Please open an issue before writing large changes.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```sh
+cargo test          # runs all tests (no hardware required)
+cargo clippy -- -D warnings
+cargo fmt --check
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+---
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+GNU General Public License version 3 or later — <https://www.gnu.org/licenses/gpl-3.0.en.html>.
+
+## Authors and acknowledgment
+
+`minipro` was created by Valentin Dudouyt in 2014; ongoing development of the original C project is coordinated by David Griffith.  `minipro-rs` is a Rust reimplementation by the minipro-rs contributors.
