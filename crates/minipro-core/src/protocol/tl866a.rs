@@ -28,6 +28,7 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
+use log::trace;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
@@ -198,10 +199,21 @@ impl Protocol for Tl866aProtocol {
         put_le(&mut msg[2..], ds.data.len() as u32, 2);
         // [4..6] address (24-bit LE)
         put_le(&mut msg[4..], ds.address, 3);
+        trace!("read_block: cmd=0x{:02x} addr={:#x} len={}", cmd, ds.address, ds.data.len());
         usb.msg_send(&msg)?;
-        let resp = usb.read_payload_limit(ds.data.len(), ds.data.len())?;
-        let n = resp.len().min(ds.data.len());
-        ds.data[..n].copy_from_slice(&resp[..n]);
+        // TL866A sends all payload data on EP 0x81 (command IN endpoint) in
+        // 64-byte USB packets.  We must NOT use read_payload_limit here —
+        // that reads from EP 0x82 which does not carry data on TL866A and
+        // would hang indefinitely.
+        let mut buf = Vec::with_capacity(ds.data.len());
+        while buf.len() < ds.data.len() {
+            let chunk = usb.msg_recv(64)?;
+            let take = chunk.len().min(ds.data.len() - buf.len());
+            buf.extend_from_slice(&chunk[..take]);
+        }
+        trace!("read_block: received {} bytes", buf.len());
+        let len = ds.data.len();
+        ds.data.copy_from_slice(&buf[..len]);
         Ok(())
     }
 

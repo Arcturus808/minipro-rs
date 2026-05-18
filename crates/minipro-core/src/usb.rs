@@ -17,6 +17,7 @@
 //! | 0x05     | OUT       | T76 write payload (single EP)   |
 //! | 0x82     | IN        | T76 read payload                |
 
+use log::trace;
 use nusb::transfer::RequestBuffer;
 use nusb::{DeviceInfo, Interface};
 
@@ -104,7 +105,7 @@ impl UsbDevice {
         let mut data = vec![0u8; 64];
         let len = buf.len().min(64);
         data[..len].copy_from_slice(&buf[..len]);
-
+        trace!("msg_send: cmd=0x{:02x} buf={:02x?}", data[0], &data[..len]);
         let completion = pollster::block_on(self.interface.bulk_out(CMD_EP_OUT, data));
         completion
             .status
@@ -123,11 +124,13 @@ impl UsbDevice {
     /// Receive a response packet (64 bytes by default; pass a larger size for
     /// commands that return more).
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
+        trace!("msg_recv: waiting for {size} bytes on EP 0x81");
         let completion =
             pollster::block_on(self.interface.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        trace!("msg_recv: got {} bytes: {:02x?}", completion.data.len(), &completion.data[..completion.data.len().min(16)]);
         Ok(completion.data)
     }
 
@@ -166,12 +169,15 @@ impl UsbDevice {
     }
 
     pub fn read_payload_limit(&self, length: usize, limit: usize) -> Result<Vec<u8>> {
+        trace!("read_payload_limit: length={length} limit={limit}");
         // T76 uses EP 0x82 only for reads
         if self.pid == T76_PID {
+            trace!("  -> T76 path: bulk_in(EP 0x82, {length})");
             let c = pollster::block_on(
                 self.interface
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
+            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
@@ -179,34 +185,42 @@ impl UsbDevice {
 
         // Small reads: single EP2 transfer
         if length < 64 {
+            trace!("  -> small path: bulk_in(EP 0x82, 64)");
             let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
+            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data[..length].to_vec());
         }
 
         if length == 64 || length <= limit || limit == 0 {
+            trace!("  -> single-EP2 path: bulk_in(EP 0x82, {length})");
             let c = pollster::block_on(
                 self.interface
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
+            trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c.data.len(), c.status);
             c.status
                 .map_err(|e| MiniproError::Protocol(e.to_string()))?;
             return Ok(c.data);
         }
 
-        // Large reads: parallel EP2 + EP3, then de-interleave
+        // Large reads: interleaved EP2 + EP3, then de-interleave
         let half = length / 2;
+        trace!("  -> dual-EP path: bulk_in(EP 0x82, {half})");
         let c2 = pollster::block_on(
             self.interface
                 .bulk_in(DATA_EP2_IN, RequestBuffer::new(half)),
         );
+        trace!("  <- EP 0x82 complete: {} bytes, status={:?}", c2.data.len(), c2.status);
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        trace!("  -> dual-EP path: bulk_in(EP 0x83, {half})");
         let c3 = pollster::block_on(
             self.interface
                 .bulk_in(DATA_EP3_IN, RequestBuffer::new(half)),
         );
+        trace!("  <- EP 0x83 complete: {} bytes, status={:?}", c3.data.len(), c3.status);
         c3.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
 

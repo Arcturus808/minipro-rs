@@ -26,6 +26,7 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Hardware check               |
 
+use log::trace;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use crate::{
     device::Device,
@@ -235,13 +236,17 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn read_block(&self, usb: &UsbDevice, ds: &mut DataSet) -> Result<()> {
-        // 8-byte read command: [cmd, protocol, length_lo, length_hi, addr x4]
+        // 8-byte read command: [cmd, block_count, length_lo, length_hi, addr x4]
         let cmd = read_cmd(ds);
+        trace!("read_block: page={} addr={:#x} len={} block_count={} cmd={:02x?}",
+            ds.page_type, ds.address, ds.data.len(), ds.block_count, &cmd);
         usb.msg_send(&cmd)?;
+        trace!("read_block: cmd sent, awaiting {} bytes on EP 0x82", ds.data.len());
         // Use single-EP2 read: pass length as both `length` and `limit` so
         // read_payload_limit takes the `length <= limit` branch (EP2 only).
         // The dual-EP interleaved path is for MCU flash writes, not SPI reads.
         ds.data = usb.read_payload_limit(ds.data.len(), ds.data.len())?;
+        trace!("read_block: got {} bytes", ds.data.len());
         Ok(())
     }
 
