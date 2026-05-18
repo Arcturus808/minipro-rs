@@ -330,7 +330,8 @@ fn generate_man_page() -> Result<()> {
     man.render_options_section(&mut out)?;
 
     // Extended sections adapted from the upstream DavidGriffith/minipro man page.
-    out.write_all(br#"
+    out.write_all(
+        br#"
 .SH NOTES ON FILE FORMATS
 If the
 .B \-\-format
@@ -475,7 +476,8 @@ It is distributed under the GNU General Public License version 3 or
 .nf
 .B https://www.gnu.org/licenses/gpl\-3.0.en.html
 .fi
-"#)?;
+"#,
+    )?;
 
     Ok(())
 }
