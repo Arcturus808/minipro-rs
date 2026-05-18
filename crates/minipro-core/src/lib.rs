@@ -16,7 +16,7 @@
 //! use minipro_core::device::ProgrammerModel;
 //! use minipro_core::operations::read_chip;
 //!
-//! let db = DatabasePaths::resolve(None, None)?;
+//! let db = DatabasePaths::resolve(None, None, None)?;
 //! let device = std::sync::Arc::new(find_device(&db, "AT28C256", ProgrammerModel::Tl866iiPlus)?);
 //! let mut handle = MiniproHandle::open()?;
 //! handle.begin_transaction(device)?;
