@@ -230,12 +230,13 @@ impl Protocol for Tl866aProtocol {
             _ => CMD_WRITE_CODE,
         };
         // Payload: [cmd, 0, size(2), addr(3), data...]
+        // Must use msg_send_large — the full payload is larger than 64 bytes.
         let mut payload = vec![0u8; ds.data.len() + 7];
         payload[0] = cmd;
         put_le(&mut payload[2..], ds.data.len() as u32, 2);
         put_le(&mut payload[4..], ds.address, 3);
         payload[7..].copy_from_slice(&ds.data);
-        usb.msg_send(&payload)?;
+        usb.msg_send_large(&payload)?;
         Ok(())
     }
 
