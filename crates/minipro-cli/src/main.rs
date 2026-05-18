@@ -898,10 +898,17 @@ Read a SPI NOR flash with a lower SPI clock divisor.
 .B minipro \-p 7404 \-\-logic\-test \-\-logicic\-out results.txt
 Test a 74xx04 hex inverter and save the result table to a file.
 .TP
+.B minipro \-p ATMEGA48 \-r dump.bin \-I
+Read an ATmega48 using ICSP without supplying VCC \(em the target board
+provides its own power.
+.TP
+.B minipro \-\-info
+Show programmer model, device code, serial number, firmware version, and hardware version.
+.TP
 .B minipro \-l AT89
 List all devices whose name contains "AT89".
 .TP
-.B minipro \-I
+.B minipro \-\-info
 Show programmer model, device code, serial number, firmware version, and hardware version.
 
 .SH CAVEATS
