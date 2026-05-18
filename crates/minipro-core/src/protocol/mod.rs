@@ -49,7 +49,7 @@ pub struct OvcStatus {
 /// Unimplemented optional features should return `Err(MiniproError::UnsupportedOperation)`.
 pub trait Protocol: Send + Sync {
     /// Send the begin-transaction command (sets up chip parameters).
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device) -> Result<()>;
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()>;
 
     /// Send the end-transaction command.
     fn end_transaction(&self, usb: &UsbDevice) -> Result<()>;

@@ -189,7 +189,7 @@ pub fn reset_fpga(usb: &UsbDevice) -> Result<()> {
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T76Protocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         // 1. Upload FPGA algorithm bitstream.
         if let Some(ref algo) = device.algorithm {
             if !algo.bitstream.is_empty() {
@@ -200,7 +200,7 @@ impl Protocol for T76Protocol {
 
         // 2. Send begin_transaction (custom bit-bang deferred to Phase 4).
         if !device.flags.custom_protocol {
-            let mut msg = build_begin_msg(device, false);
+            let mut msg = build_begin_msg(device, icsp);
 
             // T76 extras: I2C address and algorithm number
             if device.flags.can_adjust_address {

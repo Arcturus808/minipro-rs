@@ -5,6 +5,8 @@
 
 use std::path::Path;
 
+use log::info;
+
 use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
@@ -70,6 +72,7 @@ pub fn read_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str
         size
     };
 
+    info!("Reading {} bytes...", size);
     let mut buf = vec![device.blank_value as u8; size];
     let total_blocks = if read_size > 0 {
         size.div_ceil(read_size)
@@ -109,6 +112,7 @@ pub fn write_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &st
     };
 
     let buf = read_file(path, format, size, device.blank_value as u8)?;
+    info!("Writing {} bytes...", size);
 
     let write_size = if device.write_buffer_size > 0 {
         device.write_buffer_size as usize
@@ -150,6 +154,7 @@ pub fn verify_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &s
         _ => device.code_memory_size as usize,
     };
     let expected = read_file(path, format, size, device.blank_value as u8)?;
+    info!("Verifying {} bytes...", size);
 
     let read_size = if device.read_buffer_size > 0 {
         device.read_buffer_size as usize
@@ -252,6 +257,9 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
         return Ok(());
     }
     let (_id_type, actual) = handle.protocol.get_chip_id(&handle.usb)?;
+    if actual == device.chip_id {
+        info!("Chip ID OK: {:#010x}", actual);
+    }
     if actual != device.chip_id {
         return Err(MiniproError::ChipIdMismatch {
             expected: device.chip_id,

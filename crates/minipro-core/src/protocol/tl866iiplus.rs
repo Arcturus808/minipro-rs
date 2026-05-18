@@ -197,7 +197,7 @@ pub struct SystemInfo {
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for Tl866iiPlusProtocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         // 64-byte begin_transaction packet (from tl866iiplus.md):
         // [0]  cmd = 0x03
         // [1]  protocol
@@ -218,7 +218,7 @@ impl Protocol for Tl866iiPlusProtocol {
         pkt[0] = CMD_BEGIN_TRANS;
         pkt[1] = device.protocol_id;
         pkt[2] = (device.variant & 0xff) as u8;
-        pkt[3] = 0; // icsp flag set by caller if needed
+        pkt[3] = icsp as u8;
                     // opts1: vpp | vcc encoded
         let opts1: u16 = ((device.voltages.vcc as u16) << 4) | device.voltages.vpp as u16;
         le16(&mut pkt[5..7], opts1);

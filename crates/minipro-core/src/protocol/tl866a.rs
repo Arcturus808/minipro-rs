@@ -160,7 +160,7 @@ fn put_le(buf: &mut [u8], val: u32, len: usize) {
 }
 
 impl Protocol for Tl866aProtocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         let mut msg = [0u8; 64];
         msg[0] = CMD_START_TRANSACTION;
         msg[1] = device.protocol_id;
@@ -175,7 +175,8 @@ impl Protocol for Tl866aProtocol {
         msg[8] = (device.voltages.vdd << 4) | device.voltages.vcc;
         // [9..10] pulse_delay       (16-bit LE)
         put_le(&mut msg[9..], device.pulse_delay, 2);
-        // [11]    icsp (set when entering ICSP mode — handled by caller)
+        // [11]    icsp
+        msg[11] = icsp as u8;
         // [12..14] code_memory_size (24-bit LE)
         put_le(&mut msg[12..], device.code_memory_size, 3);
         usb.msg_send(&msg[..48])?;

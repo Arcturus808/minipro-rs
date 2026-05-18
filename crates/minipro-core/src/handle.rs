@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use log::info;
+
 use crate::{
     database::DatabasePaths,
     device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
@@ -81,6 +83,8 @@ impl MiniproHandle {
             });
         }
 
+        info!("Programmer: {:?} firmware {}", info.model, info.firmware_str);
+
         let protocol: Box<dyn Protocol> = match info.model {
             ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Box::new(Tl866aProtocol::new()),
             ProgrammerModel::T48 => Box::new(T48Protocol::new()),
@@ -101,7 +105,8 @@ impl MiniproHandle {
 
     /// Set the active chip device and send `begin_transaction` to the hardware.
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
-        self.protocol.begin_transaction(&self.usb, &device)?;
+        info!("Device: {}", device.name);
+        self.protocol.begin_transaction(&self.usb, &device, self.icsp)?;
         self.device = Some(device);
         Ok(())
     }

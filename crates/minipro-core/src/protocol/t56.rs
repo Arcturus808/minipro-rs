@@ -164,7 +164,7 @@ pub(super) fn build_begin_msg(device: &Device, icsp: bool) -> [u8; 64] {
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T56Protocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         // 1. Upload FPGA algorithm bitstream if the device provides one.
         if let Some(ref algo) = device.algorithm {
             if !algo.bitstream.is_empty() {
@@ -176,7 +176,7 @@ impl Protocol for T56Protocol {
         // 2. Send the begin_transaction command (unless the device uses a
         //    custom bit-bang protocol, which is deferred to Phase 4).
         if !device.flags.custom_protocol {
-            let msg = build_begin_msg(device, false);
+            let msg = build_begin_msg(device, icsp);
             usb.msg_send(&msg)?;
         }
 
