@@ -540,12 +540,9 @@ pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
 /// `infoic_path` must point to `infoic.xml` so that the programmer-independent
 /// pin-map table (`<maps>`) can be located.  If the device has `pin_map == 0`
 /// (no contact-test data in the database) this returns `Ok(())` immediately.
-pub fn pin_contact_check(
-    handle: &mut MiniproHandle,
-    infoic_path: &std::path::Path,
-) -> Result<()> {
+pub fn pin_contact_check(handle: &mut MiniproHandle, infoic_path: &std::path::Path) -> Result<()> {
     let device = handle.device()?.clone();
-    let index = (device.pin_map & 0xFF) as u32;
+    let index = device.pin_map & 0xFF;
     let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
         Some(pm) => pm,
         None => {

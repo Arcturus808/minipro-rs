@@ -135,7 +135,12 @@ pub trait Protocol: Send + Sync {
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()>;
 
     /// Test a logic IC against its test vectors.
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
+    fn logic_ic_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        out: &mut dyn std::io::Write,
+    ) -> Result<()> {
         let _ = (usb, device, out);
         Err(MiniproError::UnsupportedOperation)
     }

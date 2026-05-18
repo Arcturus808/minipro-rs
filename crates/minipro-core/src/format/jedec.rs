@@ -73,7 +73,6 @@ pub fn write(path: &Path, fuses: &[u8], device_name: Option<&str>) -> Result<()>
 
 /// Like [`write`] but accepts any [`Write`] sink (e.g. stdout).
 pub fn write_to<W: Write>(mut f: W, fuses: &[u8], device_name: Option<&str>) -> Result<()> {
-
     // STX
     write!(f, "\x02")?;
     writeln!(f, "N Created by minipro-rs;")?;

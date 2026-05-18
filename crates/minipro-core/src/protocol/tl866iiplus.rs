@@ -445,7 +445,12 @@ impl Protocol for Tl866iiPlusProtocol {
         firmware_update_tl866(usb, firmware)
     }
 
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
+    fn logic_ic_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        out: &mut dyn std::io::Write,
+    ) -> Result<()> {
         logic_ic_test_tl866(usb, device, out)
     }
 
@@ -855,7 +860,7 @@ pub(super) fn pin_test_tl866(
     for &p_pin in &pin_map.mask {
         let p = p_pin as usize;
         let d_pin = if p > x_pin { p - pno } else { p };
-        if p >= 1 && p <= 40 && pins[p - 1] == 0 {
+        if (1..=40).contains(&p) && pins[p - 1] == 0 {
             eprintln!("Bad contact on pin: {}", d_pin);
             ok = false;
         }

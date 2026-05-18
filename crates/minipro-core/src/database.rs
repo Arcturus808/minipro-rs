@@ -71,7 +71,11 @@ impl DatabasePaths {
         let infoic = resolve_one(INFOIC_FILENAME, infoic_override)?;
         let logicic = resolve_one(LOGICIC_FILENAME, logicic_override)?;
         let algorithms = resolve_optional(ALGORITHMS_FILENAME, algorithms_override);
-        Ok(Self { infoic, logicic, algorithms })
+        Ok(Self {
+            infoic,
+            logicic,
+            algorithms,
+        })
     }
 }
 
@@ -433,9 +437,7 @@ fn collect_names_for_model(
                     // For INFOIC2PLUS models, check pin_map compatibility flags
                     if matches!(
                         model,
-                        ProgrammerModel::Tl866iiPlus
-                            | ProgrammerModel::T48
-                            | ProgrammerModel::T56
+                        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T56
                     ) && !device_matches_model(e, model)
                     {
                         continue;

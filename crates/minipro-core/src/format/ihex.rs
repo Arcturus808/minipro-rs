@@ -24,11 +24,7 @@ pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>>
 }
 
 /// Like [`read`] but accepts any [`BufRead`] source (e.g. stdin).
-pub fn read_from<R: BufRead>(
-    reader: R,
-    target_size: usize,
-    blank_value: u8,
-) -> Result<Vec<u8>> {
+pub fn read_from<R: BufRead>(reader: R, target_size: usize, blank_value: u8) -> Result<Vec<u8>> {
     let mut buf = vec![blank_value; target_size];
     let mut base_addr: u32 = 0;
 

@@ -76,12 +76,14 @@ fn run() -> Result<()> {
     // ── List devices ─────────────────────────────────────────────────────────
     if let Some(list_arg) = cli.list {
         let filter = list_arg.as_deref();
-        let db_paths =
-            DatabasePaths::resolve(cli.infoic_path.as_deref(), cli.logicic_path.as_deref(), cli.algorithms_path.as_deref())?;
+        let db_paths = DatabasePaths::resolve(
+            cli.infoic_path.as_deref(),
+            cli.logicic_path.as_deref(),
+            cli.algorithms_path.as_deref(),
+        )?;
         let names = if let Some(ref model_str) = cli.programmer {
-            let model: ProgrammerModel = model_str
-                .parse()
-                .map_err(|e: String| anyhow::anyhow!(e))?;
+            let model: ProgrammerModel =
+                model_str.parse().map_err(|e: String| anyhow::anyhow!(e))?;
             list_devices_for_model(&db_paths, filter, model)?
         } else {
             list_devices(&db_paths, filter)?
@@ -95,8 +97,11 @@ fn run() -> Result<()> {
 
     // ── Device info (no USB needed) ───────────────────────────────────────────
     if let Some(ref device_name) = cli.get_info {
-        let db_paths =
-            DatabasePaths::resolve(cli.infoic_path.as_deref(), cli.logicic_path.as_deref(), cli.algorithms_path.as_deref())?;
+        let db_paths = DatabasePaths::resolve(
+            cli.infoic_path.as_deref(),
+            cli.logicic_path.as_deref(),
+            cli.algorithms_path.as_deref(),
+        )?;
         let dev = find_device_any(&db_paths, device_name)
             .with_context(|| format!("unknown device '{device_name}'"))?;
         print_device_info(&dev);
@@ -165,7 +170,11 @@ fn run() -> Result<()> {
         .as_deref()
         .context("no device specified (-p DEVICE)")?;
 
-    let db_paths = DatabasePaths::resolve(cli.infoic_path.as_deref(), cli.logicic_path.as_deref(), cli.algorithms_path.as_deref())?;
+    let db_paths = DatabasePaths::resolve(
+        cli.infoic_path.as_deref(),
+        cli.logicic_path.as_deref(),
+        cli.algorithms_path.as_deref(),
+    )?;
     let mut device = find_device(&db_paths, part, handle.info.model)
         .with_context(|| format!("unknown device '{part}'"))?;
     apply_overrides(&mut device, &collect_overrides(&cli))?;
@@ -225,10 +234,14 @@ fn parse_page(s: &str) -> Result<PageType> {
 fn resolve_page(cli: &Cli) -> Result<PageType> {
     let shortcuts = [
         (cli.fuses, "config", "--fuses"),
-        (cli.uid,   "user",   "--uid"),
-        (cli.lock,  "config", "--lock"),
+        (cli.uid, "user", "--uid"),
+        (cli.lock, "config", "--lock"),
     ];
-    let active: Vec<&str> = shortcuts.iter().filter(|(f, _, _)| *f).map(|(_, _, n)| *n).collect();
+    let active: Vec<&str> = shortcuts
+        .iter()
+        .filter(|(f, _, _)| *f)
+        .map(|(_, _, n)| *n)
+        .collect();
     match active.len() {
         0 => parse_page(&cli.page),
         1 => parse_page(shortcuts.iter().find(|(f, _, _)| *f).unwrap().1),
@@ -236,7 +249,12 @@ fn resolve_page(cli: &Cli) -> Result<PageType> {
     }
 }
 
-fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str, db_paths: &DatabasePaths) -> Result<()> {
+fn do_operations(
+    cli: &Cli,
+    handle: &mut MiniproHandle,
+    _part: &str,
+    db_paths: &DatabasePaths,
+) -> Result<()> {
     let page = resolve_page(cli)?;
     let proto_page: u8 = page.as_protocol_page().unwrap_or(0x00);
 
@@ -258,8 +276,9 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str, db_paths: &
     if cli.logic_test {
         eprint!("Testing logic IC... ");
         if let Some(ref out_path) = cli.logicic_out {
-            let mut f = std::fs::File::create(out_path)
-                .with_context(|| format!("cannot create logicic output file '{}'", out_path.display()))?;
+            let mut f = std::fs::File::create(out_path).with_context(|| {
+                format!("cannot create logicic output file '{}'", out_path.display())
+            })?;
             logic_ic_test(handle, &mut f)?;
         } else {
             logic_ic_test(handle, &mut std::io::stdout())?;
@@ -328,8 +347,10 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str, db_paths: &
             };
             let pb = ProgressBar::new(0);
             pb.set_style(
-                ProgressStyle::with_template("Writing  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
-                    .unwrap_or_else(|_| ProgressStyle::default_bar()),
+                ProgressStyle::with_template(
+                    "Writing  [{bar:40}] {percent}%  {bytes}/{total_bytes}",
+                )
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
             );
             let stats = write_chip(
                 handle,
@@ -393,8 +414,10 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str, db_paths: &
         } else {
             let pb = ProgressBar::new(0);
             pb.set_style(
-                ProgressStyle::with_template("Reading  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
-                    .unwrap_or_else(|_| ProgressStyle::default_bar()),
+                ProgressStyle::with_template(
+                    "Reading  [{bar:40}] {percent}%  {bytes}/{total_bytes}",
+                )
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
             );
             let stats = read_chip(
                 handle,
@@ -490,9 +513,9 @@ fn fmt_bytes(n: u32) -> String {
     if n == 0 {
         return "0 bytes".to_string();
     }
-    if n % (1024 * 1024) == 0 {
+    if n.is_multiple_of(1024 * 1024) {
         format!("{} MB ({} bytes)", n / (1024 * 1024), n)
-    } else if n % 1024 == 0 {
+    } else if n.is_multiple_of(1024) {
         format!("{} KB ({} bytes)", n / 1024, n)
     } else {
         format!("{} bytes", n)
@@ -519,7 +542,11 @@ fn print_device_info(dev: &minipro_core::Device) {
             "Chip ID:      {:#010x} ({} byte{})",
             dev.chip_id,
             dev.chip_id_bytes_count,
-            if dev.chip_id_bytes_count == 1 { "" } else { "s" }
+            if dev.chip_id_bytes_count == 1 {
+                ""
+            } else {
+                "s"
+            }
         );
     }
     println!("Protocol ID:  {:#04x}", dev.protocol_id);
@@ -576,29 +603,42 @@ fn parse_fuse_file(text: &str) -> anyhow::Result<Vec<FuseValue>> {
 /// - `pulse=N` — write pulse delay in microseconds (0–65535)
 /// - `spi_clock=N` — SPI clock index (raw u8)
 /// - `address=N`   — I²C slave address (0–255)
+///
 /// Merge individual long-form override flags (--vpp, --vcc, etc.) with any
-/// -o KEY=VALUE entries into a single list for `apply_overrides`.
+/// `-o KEY=VALUE` entries into a single list for `apply_overrides`.
 fn collect_overrides(cli: &Cli) -> Vec<String> {
     let mut all = cli.overrides.clone();
-    if let Some(ref v) = cli.vpp     { all.push(format!("vpp={v}")); }
-    if let Some(ref v) = cli.vcc     { all.push(format!("vcc={v}")); }
-    if let Some(ref v) = cli.vdd     { all.push(format!("vdd={v}")); }
-    if let Some(ref v) = cli.pulse   { all.push(format!("pulse={v}")); }
-    if let Some(ref v) = cli.spi_clock { all.push(format!("spi_clock={v}")); }
-    if let Some(ref v) = cli.address { all.push(format!("address={v}")); }
+    if let Some(ref v) = cli.vpp {
+        all.push(format!("vpp={v}"));
+    }
+    if let Some(ref v) = cli.vcc {
+        all.push(format!("vcc={v}"));
+    }
+    if let Some(ref v) = cli.vdd {
+        all.push(format!("vdd={v}"));
+    }
+    if let Some(ref v) = cli.pulse {
+        all.push(format!("pulse={v}"));
+    }
+    if let Some(ref v) = cli.spi_clock {
+        all.push(format!("spi_clock={v}"));
+    }
+    if let Some(ref v) = cli.address {
+        all.push(format!("address={v}"));
+    }
     all
 }
 
 fn apply_overrides(device: &mut minipro_core::device::Device, overrides: &[String]) -> Result<()> {
     // VPP voltage table (index 0..15 → volts), from tl866iiplus.c
     static VPP_TABLE: &[&str] = &[
-        "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0",
-        "13.5", "14.0", "14.5", "15.5", "16.0", "16.5", "17.0", "18.0",
+        "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
+        "15.5", "16.0", "16.5", "17.0", "18.0",
     ];
     // VCC / VDD voltage table (index 0..15 → volts), from tl866iiplus.c
     static VCC_TABLE: &[&str] = &[
-        "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5",
-        "4.8", "5.0", "5.3", "5.5", "6.0", "6.3", "6.5", "7.0",
+        "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
+        "6.3", "6.5", "7.0",
     ];
 
     for raw in overrides {

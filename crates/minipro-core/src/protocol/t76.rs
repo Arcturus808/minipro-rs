@@ -507,7 +507,12 @@ impl Protocol for T76Protocol {
         firmware_update_t76(usb, firmware)
     }
 
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
+    fn logic_ic_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        out: &mut dyn std::io::Write,
+    ) -> Result<()> {
         // T76 uses the same test-vector command (0x28) as the TL866II+.
         // A full implementation would reload the FPGA bitstream between the
         // pull-up and pull-down passes; here we reuse the TL866II+ two-pass
