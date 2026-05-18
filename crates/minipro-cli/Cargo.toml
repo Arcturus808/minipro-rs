@@ -13,6 +13,7 @@ path = "src/main.rs"
 minipro-core  = { path = "../minipro-core" }
 clap          = { version = "4", features = ["derive"] }
 clap_complete = "4"
+clap_mangen   = "0.2"
 anyhow        = "1"
 env_logger    = "0.11"
 indicatif     = "0.17"
@@ -20,3 +21,4 @@ indicatif     = "0.17"
 [build-dependencies]
 clap          = { version = "4", features = ["derive"] }
 clap_complete = "4"
+clap_mangen   = "0.2"

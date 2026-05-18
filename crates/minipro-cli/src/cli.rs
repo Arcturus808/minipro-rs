@@ -123,4 +123,8 @@ struct Cli {
     /// Generate shell completions and print to stdout (bash|zsh|fish|powershell)
     #[arg(long = "generate-completions", value_name = "SHELL", hide = true)]
     generate_completions: Option<String>,
+
+    /// Print the man page in groff format to stdout
+    #[arg(long = "generate-man", hide = true)]
+    generate_man: bool,
 }
