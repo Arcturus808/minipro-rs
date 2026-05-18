@@ -13,7 +13,15 @@ use crate::error::{MiniproError, Result};
 /// padded with `blank_value`.
 pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
+    read_from(std::io::BufReader::new(file), target_size, blank_value)
+}
+
+/// Like [`read`] but accepts any [`BufRead`] source (e.g. stdin).
+pub fn read_from<R: BufRead>(
+    reader: R,
+    target_size: usize,
+    blank_value: u8,
+) -> Result<Vec<u8>> {
     let mut buf = vec![blank_value; target_size];
 
     for line in reader.lines() {
@@ -60,22 +68,27 @@ pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>>
 
 /// Write a flat buffer as a Motorola SREC file using S3/S7 records.
 pub fn write(path: &Path, data: &[u8]) -> Result<()> {
-    let mut f = std::fs::File::create(path)?;
-    writeln!(f, "S0030000FC")?;
+    let f = std::fs::File::create(path)?;
+    write_to(std::io::BufWriter::new(f), data)
+}
+
+/// Like [`write`] but accepts any [`Write`] sink (e.g. stdout).
+pub fn write_to<W: Write>(mut w: W, data: &[u8]) -> Result<()> {
+    writeln!(w, "S0030000FC")?;
 
     let mut addr: u32 = 0;
     while addr < data.len() as u32 {
         let chunk_size = ((data.len() as u32 - addr) as usize).min(16);
         let chunk = &data[addr as usize..addr as usize + chunk_size];
-        write_s3(&mut f, addr, chunk)?;
+        write_s3(&mut w, addr, chunk)?;
         addr += chunk_size as u32;
     }
     // S7 — end-of-file with entry address 0
-    writeln!(f, "S70500000000FA")?;
+    writeln!(w, "S70500000000FA")?;
     Ok(())
 }
 
-fn write_s3(f: &mut std::fs::File, addr: u32, data: &[u8]) -> Result<()> {
+fn write_s3(f: &mut dyn Write, addr: u32, data: &[u8]) -> Result<()> {
     // byte_count = 4 (addr) + data.len() + 1 (checksum)
     let byte_count = 5 + data.len();
     let mut sum: u8 = byte_count as u8;

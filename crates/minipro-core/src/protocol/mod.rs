@@ -4,6 +4,7 @@
 //! `Box<dyn Protocol>` selected at open time based on the firmware response.
 
 use crate::{
+    database::PinMap,
     device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -134,8 +135,20 @@ pub trait Protocol: Send + Sync {
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()>;
 
     /// Test a logic IC against its test vectors.
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
-        let _ = (usb, device);
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
+        let _ = (usb, device, out);
+        Err(MiniproError::UnsupportedOperation)
+    }
+
+    /// Perform a pin-contact check against the loaded device.
+    ///
+    /// Drives the GND-designated ZIF pins HIGH, applies pull-up/pull-down
+    /// resistors on the remaining pins in two passes, reads back the states,
+    /// and verifies that every pin in `pin_map.mask` makes contact.
+    ///
+    /// On success returns `Ok(())`.  Reports bad-pin details via `eprintln!`.
+    fn pin_test(&self, usb: &UsbDevice, device: &Device, pin_map: &PinMap) -> Result<()> {
+        let _ = (usb, device, pin_map);
         Err(MiniproError::UnsupportedOperation)
     }
 

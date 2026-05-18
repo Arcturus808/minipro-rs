@@ -3,7 +3,10 @@
 //! Implements read, write, verify, erase, blank-check and chip-id operations
 //! using `MiniproHandle` and the `Protocol` trait.
 
-use std::path::Path;
+use std::{
+    io::{BufWriter, Read, Write},
+    path::Path,
+};
 
 use log::info;
 
@@ -13,6 +16,18 @@ use crate::{
     handle::MiniproHandle,
     protocol::DataSet,
 };
+
+/// Controls how a file-size mismatch between the input file and the device
+/// memory is handled in [`write_chip`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizeMismatch {
+    /// Return an error (default).
+    Error,
+    /// Print a warning to stderr but continue, padding or truncating as needed.
+    Warn,
+    /// Silently pad or truncate without any message.
+    Ignore,
+}
 
 /// Statistics returned by [`read_chip`] and [`write_chip`].
 #[derive(Debug, Clone, Copy)]
@@ -37,11 +52,26 @@ fn effective_format<'a>(fmt: &'a str, path: &Path) -> &'a str {
     }
 }
 
-/// Read a buffer from a file.
+/// Read a buffer from a file, or from stdin when `path` is `"-"`.
 ///
 /// `format` is one of `"auto"` (detect from extension), `"bin"`, `"ihex"`,
-/// `"srec"`, or `"jedec"`.
+/// `"srec"`, or `"jedec"`.  When reading from stdin and format is `"auto"`,
+/// binary is assumed; pass an explicit format to decode text formats.
 pub fn read_file(path: &Path, format: &str, size: usize, blank_value: u8) -> Result<Vec<u8>> {
+    if path == Path::new("-") {
+        let stdin = std::io::stdin();
+        let mut reader = std::io::BufReader::new(stdin.lock());
+        return match effective_format(format, Path::new("stdin")) {
+            "ihex" => ihex::read_from(&mut reader, size, blank_value),
+            "srec" => srec::read_from(&mut reader, size, blank_value),
+            "jedec" => jedec::read_from(&mut reader, size),
+            _ => {
+                let mut buf = Vec::new();
+                reader.read_to_end(&mut buf)?;
+                Ok(buf)
+            }
+        };
+    }
     match effective_format(format, path) {
         "ihex" => ihex::read(path, size, blank_value),
         "srec" => srec::read(path, size, blank_value),
@@ -50,11 +80,25 @@ pub fn read_file(path: &Path, format: &str, size: usize, blank_value: u8) -> Res
     }
 }
 
-/// Write a buffer to a file.
+/// Write a buffer to a file, or to stdout when `path` is `"-"`.
 ///
 /// `format` is one of `"auto"` (detect from extension), `"bin"`, `"ihex"`,
-/// `"srec"`, or `"jedec"`.
+/// `"srec"`, or `"jedec"`.  When writing to stdout and format is `"auto"`,
+/// binary is assumed; pass an explicit format to encode text formats.
 pub fn write_file(path: &Path, format: &str, data: &[u8], device_name: Option<&str>) -> Result<()> {
+    if path == Path::new("-") {
+        let stdout = std::io::stdout();
+        let mut writer = BufWriter::new(stdout.lock());
+        return match effective_format(format, Path::new("stdout")) {
+            "ihex" => ihex::write_to(&mut writer, data),
+            "srec" => srec::write_to(&mut writer, data),
+            "jedec" => jedec::write_to(&mut writer, data, device_name),
+            _ => {
+                writer.write_all(data)?;
+                Ok(())
+            }
+        };
+    }
     match effective_format(format, path) {
         "ihex" => ihex::write(path, data),
         "srec" => srec::write(path, data),
@@ -134,6 +178,7 @@ pub fn write_chip(
     path: &Path,
     page: u8,
     format: &str,
+    size_mismatch: SizeMismatch,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
     let device = handle.device()?.clone();
@@ -143,7 +188,29 @@ pub fn write_chip(
         _ => device.code_memory_size as usize,
     };
 
-    let buf = read_file(path, format, size, device.blank_value as u8)?;
+    let mut buf = read_file(path, format, size, device.blank_value as u8)?;
+
+    // Size mismatch check (most relevant for raw binary files).
+    if buf.len() != size {
+        match size_mismatch {
+            SizeMismatch::Error => {
+                return Err(MiniproError::FileFormat(format!(
+                    "file size {} does not match device size {}",
+                    buf.len(),
+                    size
+                )));
+            }
+            SizeMismatch::Warn => eprintln!(
+                "Warning: file size {} does not match device size {}; padding/truncating",
+                buf.len(),
+                size
+            ),
+            SizeMismatch::Ignore => {}
+        }
+        // Pad with blank_value or truncate to fit the device.
+        buf.resize(size, device.blank_value as u8);
+    }
+
     info!("Writing {} bytes...", size);
 
     let write_size = if device.write_buffer_size > 0 {
@@ -460,11 +527,40 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
 
 /// Test a logic IC against its built-in test vectors.
 ///
+/// Run the programmer's built-in hardware self-test.
+///
+/// No chip needs to be inserted or a device selected.  Returns an error on
+/// test failure or if the programmer does not support the test (TL866A/CS).
+pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
+    handle.protocol.hardware_check(&handle.usb)
+}
+
+/// Perform a pin-contact test on the device currently loaded in the ZIF socket.
+///
+/// `infoic_path` must point to `infoic.xml` so that the programmer-independent
+/// pin-map table (`<maps>`) can be located.  If the device has `pin_map == 0`
+/// (no contact-test data in the database) this returns `Ok(())` immediately.
+pub fn pin_contact_check(
+    handle: &mut MiniproHandle,
+    infoic_path: &std::path::Path,
+) -> Result<()> {
+    let device = handle.device()?.clone();
+    let index = (device.pin_map & 0xFF) as u32;
+    let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
+        Some(pm) => pm,
+        None => {
+            eprintln!("Pin contact check not available for this device.");
+            return Ok(());
+        }
+    };
+    handle.protocol.pin_test(&handle.usb, &device, &pin_map)
+}
+
 /// The device must have been opened with `begin_transaction` against a logic IC
 /// entry from `logicic.xml`.  Returns an error if the IC fails any vector.
-pub fn logic_ic_test(handle: &mut MiniproHandle) -> Result<()> {
+pub fn logic_ic_test(handle: &mut MiniproHandle, out: &mut dyn std::io::Write) -> Result<()> {
     let device = handle.device()?.clone();
-    handle.protocol.logic_ic_test(&handle.usb, &device)
+    handle.protocol.logic_ic_test(&handle.usb, &device, out)
 }
 
 /// Flash new firmware from a binary image file.

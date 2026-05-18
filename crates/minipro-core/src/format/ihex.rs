@@ -20,7 +20,15 @@ const RECORD_EXTALIN: u8 = 0x04;
 /// padded with `blank_value`.
 pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
+    read_from(std::io::BufReader::new(file), target_size, blank_value)
+}
+
+/// Like [`read`] but accepts any [`BufRead`] source (e.g. stdin).
+pub fn read_from<R: BufRead>(
+    reader: R,
+    target_size: usize,
+    blank_value: u8,
+) -> Result<Vec<u8>> {
     let mut buf = vec![blank_value; target_size];
     let mut base_addr: u32 = 0;
 
@@ -68,25 +76,30 @@ pub fn read(path: &Path, target_size: usize, blank_value: u8) -> Result<Vec<u8>>
 
 /// Write a flat byte buffer as an Intel HEX file (I32HEX format).
 pub fn write(path: &Path, data: &[u8]) -> Result<()> {
-    let mut f = std::fs::File::create(path)?;
+    let f = std::fs::File::create(path)?;
+    write_to(std::io::BufWriter::new(f), data)
+}
+
+/// Like [`write`] but accepts any [`Write`] sink (e.g. stdout).
+pub fn write_to<W: Write>(mut w: W, data: &[u8]) -> Result<()> {
     let mut addr: u32 = 0;
 
     while addr < data.len() as u32 {
         // Emit extended linear address record every 64 KiB
         if addr.is_multiple_of(0x10000) {
             let upper = (addr >> 16) as u16;
-            write_record(&mut f, RECORD_EXTALIN, 0, &upper.to_be_bytes())?;
+            write_record(&mut w, RECORD_EXTALIN, 0, &upper.to_be_bytes())?;
         }
         let chunk_size = ((data.len() as u32 - addr) as usize).min(16);
         let chunk = &data[addr as usize..addr as usize + chunk_size];
-        write_record(&mut f, RECORD_DATA, addr as u16, chunk)?;
+        write_record(&mut w, RECORD_DATA, addr as u16, chunk)?;
         addr += chunk_size as u32;
     }
-    write_record(&mut f, RECORD_EOF, 0, &[])?;
+    write_record(&mut w, RECORD_EOF, 0, &[])?;
     Ok(())
 }
 
-fn write_record(f: &mut std::fs::File, rtype: u8, addr: u16, data: &[u8]) -> Result<()> {
+fn write_record(f: &mut dyn Write, rtype: u8, addr: u16, data: &[u8]) -> Result<()> {
     let mut sum: u8 = 0;
     let len = data.len() as u8;
     let ah = (addr >> 8) as u8;

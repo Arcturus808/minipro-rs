@@ -493,16 +493,26 @@ impl Protocol for T76Protocol {
         Ok(())
     }
 
+    fn pin_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        pin_map: &crate::database::PinMap,
+    ) -> Result<()> {
+        // T76 uses the same ZIF-socket pin-test hardware as the TL866II+.
+        super::tl866iiplus::pin_test_tl866(usb, device, pin_map)
+    }
+
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
         firmware_update_t76(usb, firmware)
     }
 
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
         // T76 uses the same test-vector command (0x28) as the TL866II+.
         // A full implementation would reload the FPGA bitstream between the
         // pull-up and pull-down passes; here we reuse the TL866II+ two-pass
         // logic without FPGA switching (known limitation for T76).
-        logic_ic_test_tl866(usb, device)
+        logic_ic_test_tl866(usb, device, out)
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {

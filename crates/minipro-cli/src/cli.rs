@@ -29,7 +29,7 @@ struct Cli {
     verify: Option<PathBuf>,
 
     /// Erase device
-    #[arg(short = 'e', long = "erase", action = ArgAction::SetTrue)]
+    #[arg(short = 'E', long = "erase", action = ArgAction::SetTrue)]
     erase: bool,
 
     /// Blank-check device
@@ -44,8 +44,17 @@ struct Cli {
     #[arg(short = 'l', long = "list", value_name = "FILTER")]
     list: Option<Option<String>>,
 
+    /// Restrict -l/--list to devices supported by this programmer model
+    /// (TL866A, TL866CS, TL866II, T48, T56, T76)
+    #[arg(short = 'q', long = "programmer", value_name = "MODEL")]
+    programmer: Option<String>,
+
+    /// Show device information from the database (no programmer needed)
+    #[arg(short = 'd', long = "get-info", value_name = "DEVICE")]
+    get_info: Option<String>,
+
     /// Show programmer info and exit
-    #[arg(short = 'I', long = "info", action = ArgAction::SetTrue)]
+    #[arg(long = "info", action = ArgAction::SetTrue)]
     info: bool,
 
     /// Check if a programmer is connected and print model + firmware version
@@ -56,9 +65,13 @@ struct Cli {
     #[arg(long = "no-ovc-check", action = ArgAction::SetTrue)]
     no_ovc_check: bool,
 
-    /// Enable ICSP (in-circuit serial programming) mode
-    #[arg(long = "icsp", action = ArgAction::SetTrue)]
+    /// Enable ICSP with VCC (in-circuit serial programming)
+    #[arg(short = 'i', long = "icsp", action = ArgAction::SetTrue)]
     icsp: bool,
+
+    /// Enable ICSP without VCC (in-circuit serial programming)
+    #[arg(short = 'I', long = "icsp-no-vcc", action = ArgAction::SetTrue)]
+    icsp_no_vcc: bool,
 
     /// Override path to infoic.xml chip database
     #[arg(long = "infoic-path", value_name = "PATH")]
@@ -68,48 +81,68 @@ struct Cli {
     #[arg(long = "logicic-path", value_name = "PATH")]
     logicic_path: Option<PathBuf>,
 
-    /// Memory page: 0 = code (default), 1 = data
-    #[arg(long = "page", default_value = "0", value_name = "N")]
-    page: u8,
+    /// Override path to algorithms.xml FPGA bitstream database (T56/T76)
+    #[arg(long = "algorithms", value_name = "PATH")]
+    algorithms_path: Option<PathBuf>,
+
+    /// Memory page: code (default), data, config, user, calibration, or 0-4
+    #[arg(short = 'c', long = "page", default_value = "code", value_name = "PAGE")]
+    page: String,
+
+    /// Select the fuses/config-bits page (equivalent to -c config)
+    #[arg(long = "fuses", action = ArgAction::SetTrue)]
+    fuses: bool,
+
+    /// Select the user-ID / user-row page (equivalent to -c user)
+    #[arg(long = "uid", action = ArgAction::SetTrue)]
+    uid: bool,
+
+    /// Select the lock-bits page (equivalent to -c config; lock bits are included in fuse output)
+    #[arg(long = "lock", action = ArgAction::SetTrue)]
+    lock: bool,
 
     /// Verbose output
-    #[arg(short = 'v', long = "verbose", action = ArgAction::SetTrue)]
+    #[arg(long = "verbose", action = ArgAction::SetTrue)]
     verbose: bool,
 
-    /// Skip erase before write
-    #[arg(long = "no-erase", action = ArgAction::SetTrue)]
+    /// Do NOT erase device before write (matches upstream -e / --skip_erase)
+    #[arg(short = 'e', long = "skip-erase", alias = "no-erase", action = ArgAction::SetTrue)]
     no_erase: bool,
 
-    /// Skip verify after write
-    #[arg(long = "no-verify", action = ArgAction::SetTrue)]
+    /// Do NOT verify after write (matches upstream -v / --skip_verify)
+    #[arg(short = 'v', long = "skip-verify", alias = "no-verify", action = ArgAction::SetTrue)]
     no_verify: bool,
 
     /// Disable write protection before operation
-    #[arg(long = "protect-off", action = ArgAction::SetTrue)]
+    #[arg(short = 'u', long = "protect-off", alias = "unprotect", action = ArgAction::SetTrue)]
     protect_off: bool,
 
     /// Enable write protection after operation
-    #[arg(long = "protect-on", action = ArgAction::SetTrue)]
+    #[arg(short = 'P', long = "protect-on", alias = "protect", action = ArgAction::SetTrue)]
     protect_on: bool,
 
     /// File format override: auto | bin | ihex | srec | jedec  [default: auto]
-    #[arg(long = "format", default_value = "auto", value_name = "FORMAT")]
+    #[arg(short = 'f', long = "format", default_value = "auto", value_name = "FORMAT")]
     format: String,
 
     /// Skip chip ID verification
-    #[arg(long = "skip-id", action = ArgAction::SetTrue)]
+    #[arg(short = 'x', long = "skip-id", alias = "skip_id", action = ArgAction::SetTrue)]
     skip_id: bool,
 
     /// Warn but continue on chip ID mismatch
-    #[arg(long = "continue-id", action = ArgAction::SetTrue)]
+    #[arg(short = 'y', long = "continue-id", alias = "no_id_error", action = ArgAction::SetTrue)]
     continue_id: bool,
 
     /// Test a logic IC against its built-in test vectors
-    #[arg(long = "logic-test", action = ArgAction::SetTrue)]
+    #[arg(short = 'T', long = "logic-test", alias = "logic_test", action = ArgAction::SetTrue)]
     logic_test: bool,
 
+    /// Write logic IC test vector results to FILE instead of stdout
+    #[arg(long = "logicic-out", alias = "logicic_out", value_name = "FILE")]
+    logicic_out: Option<PathBuf>,
+
     /// Update programmer firmware from binary file (UpdateII.dat / updateT76.dat)
-    #[arg(long = "firmware-update", value_name = "FILE")]
+    #[arg(short = 'F', long = "firmware-update", alias = "update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,
 
     /// Read fuse/configuration bits and print them to stdout (or write to FILE)
@@ -121,7 +154,7 @@ struct Cli {
     write_fuses: Option<PathBuf>,
 
     /// Auto-detect SPI flash chip JEDEC ID (0 = 8-pin, 1 = 16-pin) [default: 0]
-    #[arg(long = "spi-autodetect", value_name = "TYPE")]
+    #[arg(short = 'a', long = "spi-autodetect", alias = "auto_detect", value_name = "TYPE")]
     spi_autodetect: Option<Option<u8>>,
 
     /// Generate shell completions and print to stdout (bash|zsh|fish|powershell)
@@ -132,7 +165,53 @@ struct Cli {
     #[arg(long = "generate-man", hide = true)]
     generate_man: bool,
 
+    /// Run the programmer's built-in hardware self-test
+    #[arg(short = 't', long = "hardware-check", action = ArgAction::SetTrue)]
+    hardware_check: bool,
+
+    /// Test pin contact of the chip in the ZIF socket
+    #[arg(short = 'z', long = "pin-check", action = ArgAction::SetTrue)]
+    pin_check: bool,
+
+    /// Warn (but continue) if input file size doesn't match device size (binary only)
+    #[arg(short = 's', long = "size-error", action = ArgAction::SetTrue)]
+    size_warn: bool,
+
+    /// Silently ignore file size mismatch (binary only)
+    #[arg(short = 'S', long = "no-size-error", action = ArgAction::SetTrue)]
+    size_ignore: bool,
+
     /// List supported programmer models and exit
     #[arg(short = 'Q', long = "query-supported", action = ArgAction::SetTrue)]
     query_supported: bool,
+
+    /// Override a device parameter: KEY=VALUE.
+    /// Supported keys: vpp=<V>, vdd=<V>, vcc=<V>, pulse=<us>, spi_clock=<N>, address=<N>.
+    /// May be repeated for multiple overrides.
+    #[arg(short = 'o', long = "override", value_name = "KEY=VALUE", action = ArgAction::Append)]
+    overrides: Vec<String>,
+
+    /// Set the programming voltage (VPP). Equivalent to -o vpp=<V>.
+    #[arg(long = "vpp", value_name = "V")]
+    vpp: Option<String>,
+
+    /// Set the VCC verify voltage. Equivalent to -o vcc=<V>.
+    #[arg(long = "vcc", value_name = "V")]
+    vcc: Option<String>,
+
+    /// Set the VDD write voltage. Equivalent to -o vdd=<V>.
+    #[arg(long = "vdd", value_name = "V")]
+    vdd: Option<String>,
+
+    /// Set the programming pulse delay in microseconds. Equivalent to -o pulse=<us>.
+    #[arg(long = "pulse", value_name = "US")]
+    pulse: Option<String>,
+
+    /// Set the SPI clock frequency in MHz. Equivalent to -o spi_clock=<N>.
+    #[arg(long = "spi_clock", alias = "spi-clock", value_name = "N")]
+    spi_clock: Option<String>,
+
+    /// Set the I2C slave address (T76 only), e.g. 0xA0. Equivalent to -o address=<hex>.
+    #[arg(long = "address", value_name = "HEX")]
+    address: Option<String>,
 }

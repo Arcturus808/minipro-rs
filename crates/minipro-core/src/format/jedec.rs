@@ -15,7 +15,11 @@ use crate::error::Result;
 /// byte is 0 or 1.  Pads to `fuse_count` bits if necessary.
 pub fn read(path: &Path, fuse_count: usize) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
+    read_from(std::io::BufReader::new(file), fuse_count)
+}
+
+/// Like [`read`] but accepts any [`BufRead`] source (e.g. stdin).
+pub fn read_from<R: BufRead>(reader: R, fuse_count: usize) -> Result<Vec<u8>> {
     let content: String = reader
         .lines()
         .collect::<std::result::Result<Vec<_>, _>>()?
@@ -63,7 +67,12 @@ pub fn read(path: &Path, fuse_count: usize) -> Result<Vec<u8>> {
 /// Write a bit buffer as a JEDEC file.
 /// `device_name` is written to the `N` device name field if provided.
 pub fn write(path: &Path, fuses: &[u8], device_name: Option<&str>) -> Result<()> {
-    let mut f = std::fs::File::create(path)?;
+    let f = std::fs::File::create(path)?;
+    write_to(std::io::BufWriter::new(f), fuses, device_name)
+}
+
+/// Like [`write`] but accepts any [`Write`] sink (e.g. stdout).
+pub fn write_to<W: Write>(mut f: W, fuses: &[u8], device_name: Option<&str>) -> Result<()> {
 
     // STX
     write!(f, "\x02")?;

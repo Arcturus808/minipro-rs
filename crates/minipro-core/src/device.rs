@@ -44,6 +44,23 @@ impl TryFrom<u8> for ProgrammerModel {
     }
 }
 
+impl std::str::FromStr for ProgrammerModel {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, String> {
+        match s.to_ascii_uppercase().as_str() {
+            "TL866A" => Ok(Self::Tl866a),
+            "TL866CS" => Ok(Self::Tl866cs),
+            "TL866II" | "TL866II+" | "TL866IIPLUS" => Ok(Self::Tl866iiPlus),
+            "T56" => Ok(Self::T56),
+            "T48" => Ok(Self::T48),
+            "T76" => Ok(Self::T76),
+            other => Err(format!(
+                "unknown programmer model '{other}'; expected one of: TL866A, TL866CS, TL866II, T48, T56, T76"
+            )),
+        }
+    }
+}
+
 /// Programmer status returned in system-info response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgrammerStatus {

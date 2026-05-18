@@ -63,7 +63,6 @@ const CMD_SET_VCC_PIN: u8 = 0x2E;
 const CMD_SET_VPP_PIN: u8 = 0x2F;
 #[allow(dead_code)]
 const CMD_SET_GND_PIN: u8 = 0x30;
-#[allow(dead_code)]
 const CMD_SET_PULLDOWNS: u8 = 0x31;
 const CMD_SET_PULLUPS: u8 = 0x32;
 const CMD_SET_DIR: u8 = 0x34;
@@ -433,12 +432,21 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
+    fn pin_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        pin_map: &crate::database::PinMap,
+    ) -> Result<()> {
+        pin_test_tl866(usb, device, pin_map)
+    }
+
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
         firmware_update_tl866(usb, firmware)
     }
 
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<()> {
-        logic_ic_test_tl866(usb, device)
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device, out: &mut dyn std::io::Write) -> Result<()> {
+        logic_ic_test_tl866(usb, device, out)
     }
 
     fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {
@@ -664,7 +672,11 @@ pub(super) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> R
 }
 
 /// Run the full two-pass logic-IC test and print a pass/fail table.
-pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()> {
+pub(super) fn logic_ic_test_tl866(
+    usb: &UsbDevice,
+    device: &Device,
+    out: &mut dyn std::io::Write,
+) -> Result<()> {
     let vectors = match device.vectors.as_deref() {
         Some(v) if !v.is_empty() => v,
         _ => {
@@ -687,16 +699,16 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()
     let step2 = do_ic_test_pass(usb, device, true)?;
 
     // Print header
-    print!("      ");
+    write!(out, "      ").ok();
     for pin in 1..=pin_count {
-        print!("{:<3}", pin);
+        write!(out, "{:<3}", pin).ok();
     }
-    println!();
+    writeln!(out).ok();
 
     let mut errors = 0usize;
 
     for v in 0..vec_count {
-        print!("{:04}: ", v);
+        write!(out, "{:04}: ", v).ok();
         for p in 0..pin_count {
             let idx = v * pin_count + p;
             let state = vectors[idx];
@@ -711,13 +723,13 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()
             };
             let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
             if err {
-                print!("\x1b[0;91m{}-\x1b[0m ", ch);
+                write!(out, "\x1b[0;91m{}-\x1b[0m ", ch).ok();
                 errors += 1;
             } else {
-                print!("{}  ", ch);
+                write!(out, "{}  ", ch).ok();
             }
         }
-        println!();
+        writeln!(out).ok();
     }
 
     if errors > 0 {
@@ -741,11 +753,122 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<()
 /// [0..4]      version  (LE32)   must have (version & 0xffff0000) == 0xf8cc0000
 /// [4..8]      file CRC (LE32)   must equal ~crc32(covered regions)
 /// [8..1032]   XOR table (1024 bytes)
-/// [1032..1036] block count N (LE32)
-/// [1036 .. 1036+N*272]  N regular blocks of 272 bytes each
-/// [1036+N*272 .. end]   1 last block of 2064 bytes
-/// Total size = N*272 + 3100
-/// ```
+/// Pin-contact test shared by TL866II+ and T76.
+///
+/// Mirrors `tl866iiplus_pin_test` from the upstream C source.
+/// On success prints "Pin test passed." and returns `Ok(())`.
+/// Bad-contact pins are printed as they are found; the function returns
+/// `Err(MiniproError::PinContactFailed)` if any pin fails.
+pub(super) fn pin_test_tl866(
+    usb: &UsbDevice,
+    device: &Device,
+    pin_map: &crate::database::PinMap,
+) -> Result<()> {
+    let p_pins: usize = ZIF_PINS; // 40 ZIF positions
+    let d_pins = device.package_details.pin_count as usize;
+    let x_pin = d_pins / 2; // split: left / right halves
+    let pno = p_pins - d_pins; // pin offset for right-half mapping
+
+    let mut msg = [0u8; 48];
+    let mut pins = [0u8; 40];
+
+    // ── Step 1: SET_DIR – all INPUT, GND pins OUTPUT ──────────────────────
+    msg[0] = CMD_SET_DIR;
+    msg[8..48].fill(0x01);
+    for &gnd_pin in &pin_map.gnd_table {
+        let idx = gnd_pin as usize + 7;
+        if idx < 48 {
+            msg[idx] = 0x00;
+        }
+    }
+    usb.msg_send(&msg)?;
+
+    // ── Step 2: SET_OUT – all outputs HIGH ────────────────────────────────
+    msg[0] = CMD_SET_OUT;
+    msg[8..48].fill(0x01);
+    usb.msg_send(&msg)?;
+
+    // ── Step 3: PULLUPS – right side active (0x00), left inactive (0x01) ─
+    msg[0] = CMD_SET_PULLUPS;
+    // msg[8..28] already 0x01 (left = inactive)
+    msg[28..48].fill(0x00); // right = active
+    usb.msg_send(&msg)?;
+
+    // ── Step 4: PULLDOWNS – left side active (0x00), right inactive ───────
+    msg[0] = CMD_SET_PULLDOWNS;
+    msg[8..28].fill(0x00); // left = active
+    msg[28..48].fill(0x01); // right = inactive
+    usb.msg_send(&msg)?;
+
+    // ── Step 5: READ_PINS – left half (ZIF pins 1-20) ────────────────────
+    msg[0] = CMD_READ_PINS;
+    usb.msg_send(&msg[..8])?;
+    let resp = usb.msg_recv(48)?;
+    if resp.len() >= 28 {
+        pins[..20].copy_from_slice(&resp[8..28]);
+    }
+
+    // ── Step 6: PULLUPS – left side active, right inactive ────────────────
+    msg[0] = CMD_SET_PULLUPS;
+    msg[8..28].fill(0x00); // left = active
+    msg[28..48].fill(0x01); // right = inactive
+    usb.msg_send(&msg)?;
+
+    // ── Step 7: PULLDOWNS – right side active, left inactive ──────────────
+    msg[0] = CMD_SET_PULLDOWNS;
+    msg[8..28].fill(0x01); // left = inactive
+    msg[28..48].fill(0x00); // right = active
+    usb.msg_send(&msg)?;
+
+    // ── Step 8: READ_PINS – right half (ZIF pins 21-40) ──────────────────
+    msg[0] = CMD_READ_PINS;
+    usb.msg_send(&msg[..8])?;
+    let resp = usb.msg_recv(48)?;
+    if resp.len() >= 48 {
+        pins[20..40].copy_from_slice(&resp[28..48]);
+    }
+
+    // ── Steps 9-12: Reset ZIF state ───────────────────────────────────────
+    msg[0] = CMD_SET_OUT;
+    msg[8..48].fill(0x00);
+    usb.msg_send(&msg)?;
+
+    msg[0] = CMD_SET_DIR;
+    msg[8..48].fill(0x01);
+    usb.msg_send(&msg)?;
+
+    msg[0] = CMD_SET_PULLUPS;
+    msg[8..48].fill(0x01);
+    usb.msg_send(&msg)?;
+
+    msg[0] = CMD_SET_PULLDOWNS;
+    msg[8..48].fill(0x00);
+    usb.msg_send(&msg)?;
+
+    // ── Step 13: End ZIF transaction ──────────────────────────────────────
+    let mut end = [0u8; 8];
+    end[0] = CMD_END_TRANS;
+    usb.msg_send(&end)?;
+
+    // ── Step 14: Check contact for each masked pin ────────────────────────
+    let mut ok = true;
+    for &p_pin in &pin_map.mask {
+        let p = p_pin as usize;
+        let d_pin = if p > x_pin { p - pno } else { p };
+        if p >= 1 && p <= 40 && pins[p - 1] == 0 {
+            eprintln!("Bad contact on pin: {}", d_pin);
+            ok = false;
+        }
+    }
+
+    if ok {
+        eprintln!("Pin test passed.");
+        Ok(())
+    } else {
+        Err(MiniproError::PinContactFailed)
+    }
+}
+
 pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     use crc::{Crc, CRC_32_ISO_HDLC};
     const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);

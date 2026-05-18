@@ -30,6 +30,7 @@ use crate::{
 
 const INFOIC_FILENAME: &str = "infoic.xml";
 const LOGICIC_FILENAME: &str = "logicic.xml";
+const ALGORITHMS_FILENAME: &str = "algorithms.xml";
 
 const DB_ATTR_INFOIC: &str = "INFOIC";
 const DB_ATTR_INFOIC2: &str = "INFOIC2PLUS";
@@ -56,6 +57,8 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 pub struct DatabasePaths {
     pub infoic: PathBuf,
     pub logicic: PathBuf,
+    /// Path to algorithms.xml for T56/T76 FPGA bitstreams, if found or overridden.
+    pub algorithms: Option<PathBuf>,
 }
 
 impl DatabasePaths {
@@ -63,10 +66,12 @@ impl DatabasePaths {
     pub fn resolve(
         infoic_override: Option<&Path>,
         logicic_override: Option<&Path>,
+        algorithms_override: Option<&Path>,
     ) -> Result<Self> {
         let infoic = resolve_one(INFOIC_FILENAME, infoic_override)?;
         let logicic = resolve_one(LOGICIC_FILENAME, logicic_override)?;
-        Ok(Self { infoic, logicic })
+        let algorithms = resolve_optional(ALGORITHMS_FILENAME, algorithms_override);
+        Ok(Self { infoic, logicic, algorithms })
     }
 }
 
@@ -124,6 +129,12 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
     )))
 }
 
+/// Like `resolve_one` but returns `None` instead of an error when the file
+/// cannot be found.  Used for optional databases (e.g. `algorithms.xml`).
+fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<PathBuf> {
+    resolve_one(filename, override_path).ok()
+}
+
 // ── Database query ───────────────────────────────────────────────────────────
 
 /// Find a device by name for the given programmer model.
@@ -163,6 +174,63 @@ pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<S
     collect_names(&paths.logicic, filter, &mut names, &mut seen)?;
     collect_names(&paths.infoic, filter, &mut names, &mut seen)?;
     Ok(names)
+}
+
+/// List device names compatible with a specific programmer model.
+///
+/// Logic ICs (shared across all models) are always included.
+/// Memory/MCU devices are filtered to those supported by `model`.
+pub fn list_devices_for_model(
+    paths: &DatabasePaths,
+    filter: Option<&str>,
+    model: ProgrammerModel,
+) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    collect_names(&paths.logicic, filter, &mut names, &mut seen)?;
+    collect_names_for_model(&paths.infoic, filter, model, &mut names, &mut seen)?;
+    Ok(names)
+}
+
+/// Find a device by name, trying all programmer models.
+///
+/// Tries TL866II+, T48, T56, T76, TL866A, TL866CS in order and returns
+/// the first match.  Useful for displaying device info without knowing
+/// which programmer is connected.
+pub fn find_device_any(paths: &DatabasePaths, name: &str) -> Result<Device> {
+    use ProgrammerModel::*;
+    for model in [Tl866iiPlus, T48, T56, T76, Tl866a, Tl866cs] {
+        if let Ok(dev) = find_device(paths, name, model) {
+            return Ok(dev);
+        }
+    }
+    Err(MiniproError::DeviceNotFound(format!(
+        "Device '{}' not found in the chip database",
+        name
+    )))
+}
+
+/// Pin-contact test configuration for a chip, parsed from the `<maps>` section
+/// of `infoic.xml`.
+///
+/// Mirrors the C `pin_map_t` structure used by `tl866iiplus_pin_test`.
+pub struct PinMap {
+    /// ZIF socket pin numbers (1-based) to drive as outputs during the test.
+    pub gnd_table: Vec<u16>,
+    /// ZIF socket pin numbers (1-based) that must make electrical contact.
+    pub mask: Vec<u16>,
+}
+
+/// Look up the pin-contact test map for a chip from `infoic.xml`.
+///
+/// `index` is the lower byte of `device.pin_map` from the database.
+/// Returns `None` if `index == 0` or if no matching `<map>` entry is found.
+pub fn get_pin_map(infoic_path: &Path, index: u32) -> Result<Option<PinMap>> {
+    if index == 0 {
+        return Ok(None);
+    }
+    let xml = read_file(infoic_path)?;
+    parse_pin_map(&xml, index)
 }
 
 // ── File-level search ────────────────────────────────────────────────────────
@@ -318,6 +386,88 @@ fn collect_names(
     Ok(())
 }
 
+/// Like `collect_names`, but only includes devices compatible with `model`.
+fn collect_names_for_model(
+    path: &Path,
+    filter: Option<&str>,
+    model: ProgrammerModel,
+    out: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Result<()> {
+    let xml = read_file(path)?;
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let expected_db = match model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => DB_ATTR_INFOIC,
+        ProgrammerModel::T76 => DB_ATTR_INFOICT76,
+        _ => DB_ATTR_INFOIC2,
+    };
+
+    let mut in_correct_db = false;
+    let mut skip_section = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = e.name();
+
+                if tag.as_ref() == b"database" {
+                    if let Some(db_type) = get_attr_str(e, b"type") {
+                        in_correct_db = db_type.eq_ignore_ascii_case(expected_db);
+                    }
+                    continue;
+                }
+
+                if tag.as_ref() == b"configurations" {
+                    skip_section = true;
+                    continue;
+                }
+
+                if skip_section || !in_correct_db {
+                    continue;
+                }
+
+                if tag.as_ref() == b"ic" {
+                    // For INFOIC2PLUS models, check pin_map compatibility flags
+                    if matches!(
+                        model,
+                        ProgrammerModel::Tl866iiPlus
+                            | ProgrammerModel::T48
+                            | ProgrammerModel::T56
+                    ) && !device_matches_model(e, model)
+                    {
+                        continue;
+                    }
+
+                    if let Some(raw_name) = get_attr_str(e, b"name") {
+                        for part in raw_name.split(',') {
+                            let part = part.trim();
+                            if filter.is_none_or(|f| {
+                                part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
+                            }) && seen.insert(part.to_ascii_lowercase())
+                            {
+                                out.push(part.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"configurations" {
+                    skip_section = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(())
+}
+
 /// Return true if `name` appears in `path` under any database section.
 fn device_name_exists(path: &Path, name: &str) -> Result<bool> {
     let xml = read_file(path)?;
@@ -344,6 +494,105 @@ fn device_name_exists(path: &Path, name: &str) -> Result<bool> {
         buf.clear();
     }
     Ok(false)
+}
+
+// ── Pin-map parser ────────────────────────────────────────────────────────────
+
+/// Parse the `<maps>` section of infoic.xml and return the entry whose
+/// `index` attribute equals `target`.
+fn parse_pin_map(xml: &str, target: u32) -> Result<Option<PinMap>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut in_maps = false;
+    let mut in_target_map = false;
+    let mut gnd_count: Option<usize> = None;
+    let mut mask_count: Option<usize> = None;
+    let mut pending_gnd = false;
+    let mut pending_mask = false;
+    let mut gnd_table: Vec<u16> = Vec::new();
+    let mut mask: Vec<u16> = Vec::new();
+    let mut gnd_found = false;
+    let mut mask_found = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => match e.name().as_ref() {
+                b"maps" => in_maps = true,
+                b"map" if in_maps && !in_target_map => {
+                    if get_attr_u32(e, b"index") == Some(target) {
+                        in_target_map = true;
+                    }
+                }
+                b"gnd" if in_target_map => {
+                    gnd_count = get_attr_u32(e, b"count").map(|n| n as usize);
+                    pending_gnd = true;
+                }
+                b"mask" if in_target_map => {
+                    mask_count = get_attr_u32(e, b"count").map(|n| n as usize);
+                    pending_mask = true;
+                }
+                _ => {}
+            },
+            Ok(Event::Empty(ref e)) => match e.name().as_ref() {
+                b"gnd" if in_target_map => {
+                    gnd_count = get_attr_u32(e, b"count").map(|n| n as usize);
+                    gnd_found = true;
+                }
+                b"mask" if in_target_map => {
+                    mask_count = get_attr_u32(e, b"count").map(|n| n as usize);
+                    mask_found = true;
+                }
+                _ => {}
+            },
+            Ok(Event::Text(ref te)) => {
+                let cow = te.unescape().unwrap_or_default();
+                let text = cow.trim();
+                if pending_gnd {
+                    pending_gnd = false;
+                    gnd_table = parse_csv_u16(text);
+                    gnd_found = true;
+                } else if pending_mask {
+                    pending_mask = false;
+                    mask = parse_csv_u16(text);
+                    mask_found = true;
+                }
+            }
+            Ok(Event::End(ref ee)) => match ee.name().as_ref() {
+                b"maps" => {
+                    break; // no further maps needed
+                }
+                b"map" if in_target_map => break,
+                b"gnd" => pending_gnd = false,
+                b"mask" => pending_mask = false,
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if !gnd_found && !mask_found {
+        return Ok(None);
+    }
+
+    if let Some(n) = gnd_count {
+        gnd_table.truncate(n);
+    }
+    if let Some(n) = mask_count {
+        mask.truncate(n);
+    }
+
+    Ok(Some(PinMap { gnd_table, mask }))
+}
+
+fn parse_csv_u16(text: &str) -> Vec<u16> {
+    text.split(',')
+        .filter_map(|s| s.trim().parse::<u16>().ok())
+        .collect()
 }
 
 // ── Pass 1: collect <config> entries ─────────────────────────────────────────

@@ -11,10 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.5] - 2026-05-17
+## [0.1.5] - 2026-05-18
 
 ### Added
 
+- **`-o KEY=VALUE` voltage/timing override** — passes raw device-parameter overrides to the
+  programmer (e.g. `-o vpp=6.0 -o vcc=3.3`).  Multiple `-o` flags may be combined.
+- **Individual long-form override options** — convenience aliases for the most common `-o` keys:
+  - `--vpp V` — programming voltage
+  - `--vcc V` — logic supply voltage
+  - `--vdd V` — additional supply voltage
+  - `--pulse US` — programming pulse width (microseconds)
+  - `--spi_clock N` (also `--spi-clock`) — SPI clock divisor
+  - `--address HEX` — starting address (decimal or `0x`-prefixed hex)
+- **`--algorithms PATH`** — override the path to `algorithms.xml` (T56/T76 FPGA bitstream
+  descriptions).  Searched via the same four-location fallback chain as `infoic.xml`.
+- **`--logicic-out FILE`** — redirect logic IC test result table to a file instead of stdout.
+- **`--fuses` / `--uid` / `--lock`** — page-selector shortcuts equivalent to
+  `--page config` / `--page user` / `--page config` respectively; mirrors the upstream
+  `minipro` 0.7.x interface.
+- **Short flag aliases** — added the following short options present in upstream but previously
+  missing: `-T` (logic-test), `-x` (no-size-error), `-y` (no-size-warning), `-P` (no-pin-check),
+  `-u` (unsafe), `-f` (fill), `-F` (format), `-a` (start-address).
 - **Progress callbacks for read/write/verify** — `read_chip`, `write_chip`, and `verify_chip` now
   accept an `Option<&mut dyn FnMut(usize, usize)>` progress callback invoked after each block
   with `(bytes_done, total_bytes)`.  Pass `None` for the original behaviour.  The CLI wires this

@@ -344,14 +344,26 @@ minipro -p ATMEGA48 -r atmega48.bin
 # Write a file to an ATmega48
 minipro -p ATMEGA48 -w atmega48.bin
 
+# Read/write with an explicit voltage override
+minipro -p ATMEGA48 -r dump.bin --vpp 12.0 --vcc 5.0
+
+# Read fuses / configuration bits
+minipro -p ATMEGA48 -r fuses.bin --fuses
+
+# Read the UID / user byte region
+minipro -p ATMEGA48 -r uid.bin --uid
+
 # List all devices matching a name substring
 minipro -l W25Q
 
 # Show connected programmer info
 minipro -I
 
-# Test a logic IC
-minipro -p 7404 --logic-test
+# Test a logic IC; save the result table to a file
+minipro -p 7404 --logic-test --logicic-out results.txt
+
+# T56/T76: use a custom algorithms.xml location
+minipro -p W25Q128@SOIC8 -r flash.bin --algorithms /opt/xgecu/algorithms.xml
 ```
 
 ---

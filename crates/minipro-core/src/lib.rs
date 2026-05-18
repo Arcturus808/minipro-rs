@@ -41,7 +41,7 @@ pub mod usb;
 
 // Re-export the most commonly used types so callers can write
 // `use minipro_core::MiniproHandle` etc.
-pub use database::{find_device, list_devices, DatabasePaths};
+pub use database::{find_device, find_device_any, list_devices, list_devices_for_model, DatabasePaths};
 pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,
     FuseField, FuseType, GalConfig, PackageDetails, ProgrammerInfo, ProgrammerModel,
@@ -50,5 +50,6 @@ pub use device::{
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
 pub use operations::{
-    firmware_update, logic_ic_test, read_fuses, spi_autodetect, write_fuses, FuseValue, OpStats,
+    firmware_update, hardware_check, logic_ic_test, pin_contact_check, read_fuses, spi_autodetect,
+    write_fuses, FuseValue, OpStats, SizeMismatch,
 };
