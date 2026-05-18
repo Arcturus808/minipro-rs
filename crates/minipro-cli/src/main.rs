@@ -847,15 +847,15 @@ Firmware update files can be obtained from the manufacturer's website:
 .nf
 .B http://www.xgecu.com/en/
 .fi
-.TP
+.P
 For the TL866A/CS, use the "update.dat" file.
-.TP
+.P
 For the TL866II+, use the "updateII.dat" file.
-.TP
+.P
 For the T48, use the "UpdateT48.dat" file.
-.TP
+.P
 For the T56, use the "updateT56.dat" file.
-.TP
+.P
 For the T76, use the "updateT76.dat" file.
 
 .SH EXAMPLES
