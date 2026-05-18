@@ -185,7 +185,7 @@ impl UsbDevice {
             return Ok(c.data[..length].to_vec());
         }
 
-        if length == 64 || length < limit || limit == 0 {
+        if length == 64 || length <= limit || limit == 0 {
             let c = pollster::block_on(
                 self.interface
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),

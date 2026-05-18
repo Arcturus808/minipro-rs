@@ -238,7 +238,10 @@ impl Protocol for Tl866iiPlusProtocol {
         // 8-byte read command: [cmd, protocol, length_lo, length_hi, addr x4]
         let cmd = read_cmd(ds);
         usb.msg_send(&cmd)?;
-        ds.data = usb.read_payload(ds.data.len())?;
+        // Use single-EP2 read: pass length as both `length` and `limit` so
+        // read_payload_limit takes the `length <= limit` branch (EP2 only).
+        // The dual-EP interleaved path is for MCU flash writes, not SPI reads.
+        ds.data = usb.read_payload_limit(ds.data.len(), ds.data.len())?;
         Ok(())
     }
 
@@ -347,7 +350,7 @@ impl Protocol for Tl866iiPlusProtocol {
         pkt[2] = js.flags;
         pkt[3] = js.set_type;
         usb.msg_send(&pkt)?;
-        js.data = usb.read_payload(js.data.len())?;
+        js.data = usb.read_payload_limit(js.data.len(), js.data.len())?;
         Ok(())
     }
 

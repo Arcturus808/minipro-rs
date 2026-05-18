@@ -199,7 +199,7 @@ impl Protocol for Tl866aProtocol {
         // [4..6] address (24-bit LE)
         put_le(&mut msg[4..], ds.address, 3);
         usb.msg_send(&msg)?;
-        let resp = usb.read_payload(ds.data.len())?;
+        let resp = usb.read_payload_limit(ds.data.len(), ds.data.len())?;
         let n = resp.len().min(ds.data.len());
         ds.data[..n].copy_from_slice(&resp[..n]);
         Ok(())
