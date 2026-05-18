@@ -5,6 +5,7 @@
 #   test   — unit + integration tests on Linux
 #   build  — release binaries for Linux x86_64, Windows x86_64
 #   package — .deb, .rpm, Windows .msi, shell completion archives
+#   deploy  — GitLab Pages (HTML docs)
 #
 # Artifacts from `package` are attached to each pipeline run and to any
 # tag/release.  Semantic versioning: tag the repo as `v0.2.0` to publish a
@@ -35,6 +36,7 @@ stages:
   - test
   - build
   - package
+  - deploy
 
 # ── Check ─────────────────────────────────────────────────────────────────────
 
@@ -238,3 +240,35 @@ release:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=msi"
         - name: "Shell completions"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=completions"
+
+# ── GitLab Pages (HTML docs) ──────────────────────────────────────────────────
+
+pages:
+  stage: deploy
+  image: ubuntu:latest
+  needs:
+    - build:linux-x86_64
+  script:
+    - apt-get update -q && apt-get install -qy pandoc
+    - mkdir -p public
+    # Generate man page → HTML
+    - chmod +x target/release/minipro
+    - target/release/minipro --generate-man > minipro.1
+    - |
+      pandoc -s -f man -t html5 \
+        --metadata title="minipro(1) — manual page" \
+        -o public/minipro.1.html minipro.1
+    # Convert README → index
+    - |
+      pandoc -s -f gfm -t html5 \
+        --metadata title="minipro-rs" \
+        -o public/index.html README.md
+    # Inject a simple nav bar into both pages
+    - |
+      NAV='<nav style="font-family:sans-serif;padding:0.5em 1em;background:#f5f5f5;border-bottom:1px solid #ccc"><a href="index.html">Home<\/a> &nbsp;|&nbsp; <a href="minipro.1.html">Manual Page<\/a><\/nav>'
+      sed -i "s|<body>|<body>$NAV|" public/index.html public/minipro.1.html
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
