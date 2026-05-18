@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Progress callbacks for read/write/verify** — `read_chip`, `write_chip`, and `verify_chip` now
+  accept an `Option<&mut dyn FnMut(usize, usize)>` progress callback invoked after each block
+  with `(bytes_done, total_bytes)`.  Pass `None` for the original behaviour.  The CLI wires this
+  to `indicatif` progress bars; a Tauri front-end can wire it to `window.emit("progress", …)`
+  without any changes to `minipro-core`.
+
+---
+
+## [0.1.4] - 2026-05-17
+
+### Fixed
+
+- **TL866A write truncated to 64 bytes** — `write_block` was calling `msg_send` (which caps the
+  transfer at 64 bytes) instead of `msg_send_large`.  For a 256-byte page this left 199 bytes of
+  data unsent, causing the firmware to stall waiting for the remainder and hanging every subsequent
+  operation.  Fix: route the full payload (7-byte header + page data) through `msg_send_large`.
+
+---
+
+## [0.1.3] - 2026-05-17
+
+### Added
+
+- **`--icsp` flag** — wired through the `Protocol` trait (`begin_transaction` now takes
+  `icsp: bool`); TL866A sets byte 11, TL866II+/T48 sets byte 3 of the begin-transaction packet.
+- **`--verbose` / `-v` flag** — controls the default `env_logger` level (`info` with the flag,
+  `warn` without).  `MINIPRO_LOG` / `RUST_LOG` override as usual.
+- **`info!` logging** — programmer model + firmware version, device name, chip-ID result,
+  and byte counts for read/write/verify are logged at `INFO` level.
+
 ---
 
 ## [0.1.2] - 2026-05-21
@@ -61,3 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - This is an initial release. Not all of the 13,000+ devices in the chip database have been validated against physical hardware.
 
 [0.1.0]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.0
+[0.1.1]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.1
+[0.1.2]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.2
+[0.1.3]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.3
+[0.1.4]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.4

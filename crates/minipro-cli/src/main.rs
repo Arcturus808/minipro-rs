@@ -189,12 +189,21 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
             eprintln!("done.");
         }
 
-        let pb = ProgressBar::new(100);
+        let pb = ProgressBar::new(0);
         pb.set_style(
-            ProgressStyle::with_template("Writing [{bar:40}] {percent}%")
+            ProgressStyle::with_template("Writing  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
                 .unwrap_or_else(|_| ProgressStyle::default_bar()),
         );
-        write_chip(handle, path, cli.page, &cli.format)?;
+        write_chip(
+            handle,
+            path,
+            cli.page,
+            &cli.format,
+            Some(&mut |done, total| {
+                pb.set_length(total as u64);
+                pb.set_position(done as u64);
+            }),
+        )?;
         pb.finish_and_clear();
         eprintln!("Written {:?}", path);
 
@@ -204,20 +213,45 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
 
         // Auto-verify after write (unless suppressed)
         if !cli.no_verify {
-            eprint!("Verifying... ");
-            verify_chip(handle, path, cli.page, &cli.format)?;
-            eprintln!("OK.");
+            let pb = ProgressBar::new(0);
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "Verifying [{bar:40}] {percent}%  {bytes}/{total_bytes}",
+                )
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+            );
+            verify_chip(
+                handle,
+                path,
+                cli.page,
+                &cli.format,
+                Some(&mut |done, total| {
+                    pb.set_length(total as u64);
+                    pb.set_position(done as u64);
+                }),
+            )?;
+            pb.finish_and_clear();
+            eprintln!("Verified OK.");
         }
     }
 
     // ── Read ──────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.read {
-        let pb = ProgressBar::new(100);
+        let pb = ProgressBar::new(0);
         pb.set_style(
-            ProgressStyle::with_template("Reading  [{bar:40}] {percent}%")
+            ProgressStyle::with_template("Reading  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
                 .unwrap_or_else(|_| ProgressStyle::default_bar()),
         );
-        read_chip(handle, path, cli.page, &cli.format)?;
+        read_chip(
+            handle,
+            path,
+            cli.page,
+            &cli.format,
+            Some(&mut |done, total| {
+                pb.set_length(total as u64);
+                pb.set_position(done as u64);
+            }),
+        )?;
         pb.finish_and_clear();
         eprintln!("Saved {:?}", path);
 
@@ -228,9 +262,23 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
 
     // ── Verify ────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.verify {
-        eprint!("Verifying {:?}... ", path);
-        verify_chip(handle, path, cli.page, &cli.format)?;
-        eprintln!("OK.");
+        let pb = ProgressBar::new(0);
+        pb.set_style(
+            ProgressStyle::with_template("Verifying [{bar:40}] {percent}%  {bytes}/{total_bytes}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
+        verify_chip(
+            handle,
+            path,
+            cli.page,
+            &cli.format,
+            Some(&mut |done, total| {
+                pb.set_length(total as u64);
+                pb.set_position(done as u64);
+            }),
+        )?;
+        pb.finish_and_clear();
+        eprintln!("Verified OK.");
     }
 
     // ── Read fuses ────────────────────────────────────────────────────────────

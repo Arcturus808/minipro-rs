@@ -58,7 +58,16 @@ pub fn write_file(path: &Path, format: &str, data: &[u8], device_name: Option<&s
 ///
 /// `format` controls the output file format: `"auto"` (default, detect from
 /// extension), `"bin"`, `"ihex"`, `"srec"`, or `"jedec"`.
-pub fn read_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str) -> Result<()> {
+///
+/// `progress` is an optional callback invoked after each block with
+/// `(bytes_done, total_bytes)`. Pass `None` to disable.
+pub fn read_chip(
+    handle: &mut MiniproHandle,
+    path: &Path,
+    page: u8,
+    format: &str,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -94,6 +103,9 @@ pub fn read_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str
         handle.protocol.read_block(&handle.usb, &mut ds)?;
         buf[offset..offset + block].copy_from_slice(&ds.data);
         offset += block;
+        if let Some(ref mut f) = progress {
+            f(offset, size);
+        }
     }
 
     write_file(path, format, &buf, Some(&device.name))
@@ -103,7 +115,16 @@ pub fn read_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str
 ///
 /// `format` controls how the input file is parsed: `"auto"` (default, detect
 /// from extension), `"bin"`, `"ihex"`, `"srec"`, or `"jedec"`.
-pub fn write_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str) -> Result<()> {
+///
+/// `progress` is an optional callback invoked after each block with
+/// `(bytes_done, total_bytes)`. Pass `None` to disable.
+pub fn write_chip(
+    handle: &mut MiniproHandle,
+    path: &Path,
+    page: u8,
+    format: &str,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -138,6 +159,9 @@ pub fn write_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &st
         };
         handle.protocol.write_block(&handle.usb, &ds)?;
         offset += block;
+        if let Some(ref mut f) = progress {
+            f(offset, size);
+        }
     }
     Ok(())
 }
@@ -146,7 +170,16 @@ pub fn write_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &st
 ///
 /// `format` controls how the reference file is parsed: `"auto"` (default),
 /// `"bin"`, `"ihex"`, `"srec"`, or `"jedec"`.
-pub fn verify_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &str) -> Result<()> {
+///
+/// `progress` is an optional callback invoked after each block with
+/// `(bytes_done, total_bytes)`. Pass `None` to disable.
+pub fn verify_chip(
+    handle: &mut MiniproHandle,
+    path: &Path,
+    page: u8,
+    format: &str,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -189,6 +222,9 @@ pub fn verify_chip(handle: &mut MiniproHandle, path: &Path, page: u8, format: &s
             }
         }
         offset += block;
+        if let Some(ref mut f) = progress {
+            f(offset, size);
+        }
     }
     Ok(())
 }
