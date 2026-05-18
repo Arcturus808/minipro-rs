@@ -50,5 +50,5 @@ pub use device::{
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
 pub use operations::{
-    firmware_update, logic_ic_test, read_fuses, spi_autodetect, write_fuses, FuseValue,
+    firmware_update, logic_ic_test, read_fuses, spi_autodetect, write_fuses, FuseValue, OpStats,
 };

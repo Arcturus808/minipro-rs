@@ -14,6 +14,15 @@ use crate::{
     protocol::DataSet,
 };
 
+/// Statistics returned by [`read_chip`] and [`write_chip`].
+#[derive(Debug, Clone, Copy)]
+pub struct OpStats {
+    /// Number of bytes transferred.
+    pub bytes: usize,
+    /// CRC-32 (ISO-HDLC / PKZIP) of the data buffer.
+    pub crc32: u32,
+}
+
 /// Resolve the effective file format: use `fmt` unless it is `"auto"`, in
 /// which case infer from the file extension.
 fn effective_format<'a>(fmt: &'a str, path: &Path) -> &'a str {
@@ -67,7 +76,7 @@ pub fn read_chip(
     page: u8,
     format: &str,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
-) -> Result<()> {
+) -> Result<OpStats> {
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -108,7 +117,9 @@ pub fn read_chip(
         }
     }
 
-    write_file(path, format, &buf, Some(&device.name))
+    write_file(path, format, &buf, Some(&device.name))?;
+    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
+    Ok(OpStats { bytes: size, crc32 })
 }
 
 /// Write `path` to chip memory.
@@ -124,7 +135,7 @@ pub fn write_chip(
     page: u8,
     format: &str,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
-) -> Result<()> {
+) -> Result<OpStats> {
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -163,7 +174,8 @@ pub fn write_chip(
             f(offset, size);
         }
     }
-    Ok(())
+    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
+    Ok(OpStats { bytes: size, crc32 })
 }
 
 /// Verify chip memory against `path`.

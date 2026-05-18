@@ -194,7 +194,7 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
             ProgressStyle::with_template("Writing  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
                 .unwrap_or_else(|_| ProgressStyle::default_bar()),
         );
-        write_chip(
+        let stats = write_chip(
             handle,
             path,
             cli.page,
@@ -205,7 +205,10 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
             }),
         )?;
         pb.finish_and_clear();
-        eprintln!("Written {:?}", path);
+        eprintln!(
+            "Written {:?}  ({} bytes, CRC-32: {:#010x})",
+            path, stats.bytes, stats.crc32
+        );
 
         if !cli.no_ovc_check {
             check_ovc(handle)?;
@@ -242,7 +245,7 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
             ProgressStyle::with_template("Reading  [{bar:40}] {percent}%  {bytes}/{total_bytes}")
                 .unwrap_or_else(|_| ProgressStyle::default_bar()),
         );
-        read_chip(
+        let stats = read_chip(
             handle,
             path,
             cli.page,
@@ -253,7 +256,10 @@ fn do_operations(cli: &Cli, handle: &mut MiniproHandle, _part: &str) -> Result<(
             }),
         )?;
         pb.finish_and_clear();
-        eprintln!("Saved {:?}", path);
+        eprintln!(
+            "Saved {:?}  ({} bytes, CRC-32: {:#010x})",
+            path, stats.bytes, stats.crc32
+        );
 
         if !cli.no_ovc_check {
             check_ovc(handle)?;
