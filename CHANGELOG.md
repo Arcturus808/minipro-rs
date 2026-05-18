@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `(bytes_done, total_bytes)`.  Pass `None` for the original behaviour.  The CLI wires this
   to `indicatif` progress bars; a Tauri front-end can wire it to `window.emit("progress", …)`
   without any changes to `minipro-core`.
+- **`OpStats` return value** — `read_chip` and `write_chip` now return `Result<OpStats>` instead
+  of `Result<()>`.  `OpStats` carries `bytes: usize` and `crc32: u32` (CRC-32/ISO-HDLC of the
+  data buffer).  The CLI prints these after each operation, e.g.
+  `Saved "dump.bin"  (262144 bytes, CRC-32: 0xc56d40d3)`.
 
 ---
 

@@ -100,6 +100,7 @@ async fn read_chip(device: String, output: String) -> Result<(), String> {
 **Integration notes:**
 - `minipro-core` uses `pollster` for blocking USB calls.  Wrap them in `tokio::task::spawn_blocking` (as above) so they don't block Tauri's async executor.
 - `read_chip`, `write_chip`, and `verify_chip` accept an `Option<&mut dyn FnMut(usize, usize)>` progress callback invoked with `(bytes_done, total_bytes)` after each block.  Wire it to `window.emit("progress", …)` to drive a front-end progress bar — `minipro-core` has no terminal UI dependency.
+- `read_chip` and `write_chip` return `Result<OpStats>` with `bytes` and `crc32` fields.  Use these to update a status label without parsing CLI output.
 - The WinUSB driver requirement is identical on Windows — no extra setup for a Tauri deployment.
 - The same `minipro-core` crate works on Linux and macOS, so the Tauri app is automatically cross-platform.
 - A Tauri app ships as a native installer (`.msi` on Windows, `.dmg` on macOS, `.deb`/`.AppImage` on Linux) and still requires no `libusb` or Cygwin.
@@ -239,7 +240,7 @@ The implementation lives in `crates/minipro-cli/src/cli.rs`.
 | `ihex` | Intel HEX read/write |
 | `log` + `env_logger` | Logging / verbose output |
 | `indicatif` | Progress bars for read/write/verify |
-| `crc` | CRC-32 for verify operations |
+| `crc` | CRC-32/ISO-HDLC checksum for `OpStats` (read/write summary) |
 
 ---
 
