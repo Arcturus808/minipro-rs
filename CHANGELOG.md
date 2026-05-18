@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-05-21
+
+### Fixed
+
+- **`-r` hangs indefinitely on Windows** — `read_payload_limit()` incorrectly routed any read
+  larger than 64 bytes through the dual-EP2+EP3 interleaved path.  For SPI flash chips the
+  programmer sends all data on EP2 only, so the code blocked forever waiting for EP3 data that
+  never arrived.  Fix: change the single-EP condition from `length < limit` to `length <= limit`,
+  and have `read_block()` / `read_jedec_row()` pass the actual read length as both arguments —
+  matching the behaviour of the C reference implementation.
+
+---
+
 ## [0.1.1] - 2026-05-17
 
 ### Fixed
