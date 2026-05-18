@@ -251,16 +251,30 @@ pages:
   script:
     - apt-get update -q && apt-get install -qy pandoc
     - mkdir -p public
+    # Write a minimal stylesheet (system-ui picks native OS font)
+    - |
+      cat > style.css << 'EOF'
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+             max-width: 900px; margin: 0 auto; padding: 1em 2em; line-height: 1.6; color: #222; }
+      code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+                  font-size: 0.9em; }
+      pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 4px; overflow-x: auto; }
+      a { color: #0066cc; }
+      h1, h2, h3 { border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+      EOF
+    - cp style.css public/style.css
     # Generate man page → HTML
     - chmod +x target/release/minipro
     - target/release/minipro --generate-man > minipro.1
     - |
       pandoc -s -f man -t html5 \
+        --css style.css \
         --metadata title="minipro(1) — manual page" \
         -o public/minipro.1.html minipro.1
     # Convert README → index
     - |
       pandoc -s -f gfm -t html5 \
+        --css style.css \
         --metadata title="minipro-rs" \
         -o public/index.html README.md
     # Inject a simple nav bar into both pages
