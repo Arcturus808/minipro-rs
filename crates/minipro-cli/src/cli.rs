@@ -127,4 +127,8 @@ struct Cli {
     /// Print the man page in groff format to stdout
     #[arg(long = "generate-man", hide = true)]
     generate_man: bool,
+
+    /// List supported programmer models and exit
+    #[arg(short = 'Q', long = "query-supported", action = ArgAction::SetTrue)]
+    query_supported: bool,
 }

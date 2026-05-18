@@ -20,6 +20,7 @@ use clap_complete::{generate, shells};
 use clap_mangen::Man;
 use indicatif::{ProgressBar, ProgressStyle};
 use minipro_core::{
+    device::ProgrammerModel,
     error::MiniproError,
     find_device, list_devices,
     operations::{
@@ -81,6 +82,22 @@ fn run() -> Result<()> {
             println!("{name}");
         }
         println!("{} devices found.", names.len());
+        return Ok(());
+    }
+
+    // ── Query supported programmer models ─────────────────────────────────────
+    if cli.query_supported {
+        println!("Supported programmers:");
+        for model in [
+            ProgrammerModel::Tl866cs,
+            ProgrammerModel::Tl866a,
+            ProgrammerModel::Tl866iiPlus,
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ] {
+            println!("  {model}");
+        }
         return Ok(());
     }
 
