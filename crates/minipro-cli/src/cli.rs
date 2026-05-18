@@ -36,7 +36,9 @@ struct Cli {
     #[arg(short = 'b', long = "blank-check", action = ArgAction::SetTrue)]
     blank_check: bool,
 
-    /// Read chip ID
+    /// Read chip ID from the inserted device.
+    /// Requires -p to select the device so the programmer knows how to
+    /// configure the socket before issuing the ID read sequence.
     #[arg(short = 'D', long = "device-id", action = ArgAction::SetTrue)]
     device_id: bool,
 

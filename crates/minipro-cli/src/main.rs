@@ -860,6 +860,13 @@ For the T76, use the "updateT76.dat" file.
 
 .SH EXAMPLES
 .TP
+.B minipro \-p ATMEGA48 \-D
+Read the chip ID from the device inserted in the ZIF socket.
+The
+.B \-p
+option is required because the programmer must configure socket voltages and
+pin mapping before it can issue the ID read sequence.
+.TP
 .B minipro \-p ATMEGA48 \-r atmega48.bin
 Read the contents of an ATmega48 into a file.
 .TP
