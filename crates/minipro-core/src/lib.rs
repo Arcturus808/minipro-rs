@@ -20,7 +20,7 @@
 //! let device = std::sync::Arc::new(find_device(&db, "AT28C256", ProgrammerModel::Tl866iiPlus)?);
 //! let mut handle = MiniproHandle::open()?;
 //! handle.begin_transaction(device)?;
-//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0, "auto")?;
+//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0, "auto", None)?;
 //! handle.end_transaction()?;
 //! # Ok::<(), minipro_core::error::MiniproError>(())
 //! ```
