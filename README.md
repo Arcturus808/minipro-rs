@@ -309,7 +309,10 @@ Pre-built binaries are attached to each [GitLab release](https://gitlab.com/arct
 
 ### Windows
 
-Download `minipro-<version>-x86_64-windows.zip` (or the `.msi` installer), extract, and place `minipro.exe` on your `PATH`.  See [Windows support](#windows-support) above for the one-time Zadig/WinUSB driver step.
+Download `minipro-<version>-x86_64-windows.zip` (or the `.msi` installer) from the [releases page](https://gitlab.com/arcturus8081/minipro-rs/-/releases).
+
+- **`.msi` installer** — installs `minipro.exe`, `infoic.xml`, and `logicic.xml` automatically.  Run the installer, then follow the one-time [Zadig/WinUSB driver step](#windows-support).
+- **`.zip` archive** — extract all three files (`minipro.exe`, `infoic.xml`, `logicic.xml`) into the same folder and place that folder on your `PATH`.  The binary searches its own directory for the database files at startup.
 
 ### Linux
 
@@ -329,7 +332,12 @@ Both packages place `infoic.xml` and `logicic.xml` in `/usr/share/minipro/` auto
 cargo install --path crates/minipro-cli
 ```
 
-The database files must be available alongside the binary or in one of the search paths described in the [manual page](https://minipro-rs-2992c1.gitlab.io/minipro.1.html).
+The database files (`infoic.xml` and `logicic.xml`) are **not embedded in the binary** — they must be present at runtime.  After building, copy them from the `data/` directory to one of the search locations:
+
+- Alongside the binary (e.g. `~/.cargo/bin/` on Linux/macOS, or `target\release\` for local testing)
+- Any directory pointed to by the `MINIPRO_HOME` environment variable
+- `/usr/share/minipro/` (Linux/macOS system install)
+- `%PROGRAMDATA%\minipro\` (Windows system install)
 
 ---
 
