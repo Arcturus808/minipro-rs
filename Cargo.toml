@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/minipro-core", "crates/minipro-cli"]
+exclude = ["gui/src-tauri"]
 resolver = "2"
 
 [workspace.package]

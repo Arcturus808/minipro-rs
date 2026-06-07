@@ -1,0 +1,31 @@
+[package]
+name = "minipro-gui"
+version = "0.1.0"
+description = "GUI front-end for minipro-rs chip programmer"
+authors = ["minipro-rs contributors"]
+license = "GPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "minipro_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+
+# Core chip programmer library (path dependency — same repo)
+minipro-core = { path = "../../crates/minipro-core" }
+
+# Async runtime for blocking USB ops
+tokio = { version = "1", features = ["rt-multi-thread"] }

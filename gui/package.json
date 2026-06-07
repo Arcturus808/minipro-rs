@@ -1,0 +1,30 @@
+{
+  "name": "minipro-gui",
+  "version": "0.1.0",
+  "description": "GUI front-end for minipro-rs chip programmer",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-fs": "^2.2.0",
+    "@tauri-apps/plugin-log": "^2.3.0",
+    "@tauri-apps/plugin-store": "^2.2.0"
+  },
+  "devDependencies": {
+    "@skeletonlabs/skeleton": "^3.0.0",
+    "@skeletonlabs/skeleton-svelte": "^1.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "tailwindcss": "^4.0.0",
+    "svelte": "^5.56.2",
+    "typescript": "^6.0.3",
+    "vite": "^6.4.3"
+  }
+}
