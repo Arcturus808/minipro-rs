@@ -393,9 +393,14 @@ fn do_operations(
                 }),
             )?;
             pb.finish_and_clear();
+            let src_label = if path.to_str() == Some("-") {
+                "stdin".to_string()
+            } else {
+                format!("{:?}", path)
+            };
             eprintln!(
-                "Written {:?}  ({} bytes, CRC-32: {:#010x})",
-                path, stats.bytes, stats.crc32
+                "Written {}  ({} bytes, CRC-32: {:#010x})",
+                src_label, stats.bytes, stats.crc32
             );
 
             if !cli.no_ovc_check {
@@ -467,9 +472,14 @@ fn do_operations(
                 }),
             )?;
             pb.finish_and_clear();
+            let dst_label = if path.to_str() == Some("-") {
+                "stdout".to_string()
+            } else {
+                format!("{:?}", path)
+            };
             eprintln!(
-                "Saved {:?}  ({} bytes, CRC-32: {:#010x})",
-                path, stats.bytes, stats.crc32
+                "Saved {}  ({} bytes, CRC-32: {:#010x})",
+                dst_label, stats.bytes, stats.crc32
             );
 
             if !cli.no_ovc_check {

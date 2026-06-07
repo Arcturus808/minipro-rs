@@ -16,15 +16,15 @@ struct Cli {
     #[arg(short = 'p', long = "part", value_name = "DEVICE")]
     part: Option<String>,
 
-    /// Read device memory to file
+    /// Read device memory to FILE ("-" writes to stdout)
     #[arg(short = 'r', long = "read", value_name = "FILE")]
     read: Option<PathBuf>,
 
-    /// Write file to device memory
+    /// Write FILE to device memory ("-" reads from stdin)
     #[arg(short = 'w', long = "write", value_name = "FILE")]
     write: Option<PathBuf>,
 
-    /// Verify file against device memory
+    /// Verify device memory against FILE ("-" reads from stdin)
     #[arg(short = 'm', long = "verify", value_name = "FILE")]
     verify: Option<PathBuf>,
 
@@ -42,8 +42,9 @@ struct Cli {
     #[arg(short = 'D', long = "device-id", action = ArgAction::SetTrue)]
     device_id: bool,
 
-    /// List supported devices (optional filter substring)
-    #[arg(short = 'l', long = "list", value_name = "FILTER")]
+    /// List supported devices (optional filter substring).
+    /// Use -L <FILTER> (uppercase) as a short alias for -l <FILTER> (upstream compat).
+    #[arg(short = 'l', short_alias = 'L', long = "list", value_name = "FILTER")]
     list: Option<Option<String>>,
 
     /// Restrict -l/--list to devices supported by this programmer model
