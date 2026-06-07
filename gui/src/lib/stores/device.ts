@@ -42,6 +42,11 @@ export async function searchDevices(query: string) {
 }
 
 export async function selectDevice(name: string) {
-  const info = await invoke<DeviceInfo>("get_device_info", { name });
+  const info = await invoke<DeviceInfo>("select_device", { name });
   selectedDevice.set(info);
+}
+
+export async function deselectDevice() {
+  await invoke("deselect_device");
+  selectedDevice.set(null);
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deviceList, selectedDevice, searchDevices, selectDevice } from "../stores/device";
+  import { deviceList, selectedDevice, searchDevices, selectDevice, deselectDevice } from "../stores/device";
   import { logs } from "../stores/logs";
 
   let searchQuery = $state("");
@@ -23,6 +23,15 @@
       logs.info(`Selected device: ${name}`);
     } catch (e) {
       logs.error(`Failed to select device: ${e}`);
+    }
+  }
+
+  async function onDeselect() {
+    try {
+      await deselectDevice();
+      logs.info("Device deselected");
+    } catch (e) {
+      logs.error(`Failed to deselect device: ${e}`);
     }
   }
 
@@ -71,10 +80,13 @@
   </div>
 
   {#if $selectedDevice}
-    <footer class="p-3 border-t border-surface-200-800 text-xs space-y-1">
-      <div class="font-semibold">{$selectedDevice.name}</div>
-      <div>Type: {$selectedDevice.chip_type} | Pins: {$selectedDevice.pin_count}</div>
-      <div>
+    <footer class="p-3 border-t border-surface-200-800 space-y-1">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-sm">{$selectedDevice.name}</span>
+        <button class="text-xs opacity-60 hover:opacity-100" onclick={onDeselect}>Clear</button>
+      </div>
+      <div class="text-xs">Type: {$selectedDevice.chip_type} | Pins: {$selectedDevice.pin_count}</div>
+      <div class="text-xs">
         VPP: {$selectedDevice.voltages.vpp}V | VDD: {$selectedDevice.voltages.vdd}V | VCC:
         {$selectedDevice.voltages.vcc}V
       </div>

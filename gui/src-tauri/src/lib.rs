@@ -22,6 +22,14 @@ pub fn run() {
             commands::get_programmer_info,
             commands::search_devices,
             commands::get_device_info,
+            commands::select_device,
+            commands::deselect_device,
+            commands::do_read,
+            commands::do_write,
+            commands::do_verify,
+            commands::do_erase,
+            commands::do_blank_check,
+            commands::do_chip_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
