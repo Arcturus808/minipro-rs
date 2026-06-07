@@ -11,6 +11,7 @@ use std::{
 use log::info;
 
 use crate::{
+    device::DataOrg,
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
@@ -143,11 +144,15 @@ pub fn read_chip(
     } as u32;
     let mut offset = 0usize;
 
+    // Convert byte offset to word address when device uses 16-bit word
+    // organisation for code memory (matches C read_page_ram address shift).
+    let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     while offset < size {
         let block = (read_size).min(size - offset);
+        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
         let mut ds = DataSet {
             data: vec![0u8; block],
-            address: offset as u32,
+            address,
             block_count: (block / 64) as u32,
             page_type: page,
             init: offset == 0,
@@ -224,18 +229,39 @@ pub fn write_chip(
     } else {
         1
     } as u32;
+    // Convert byte offset to word address when device uses 16-bit word
+    // organisation for code memory (matches C write_page_ram address shift).
+    let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
     while offset < size {
         let block = write_size.min(size - offset);
+        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
         let ds = DataSet {
             data: buf[offset..offset + block].to_vec(),
-            address: offset as u32,
+            address,
             block_count: (block / 64) as u32,
             page_type: page,
             init: offset == 0,
             total_blocks,
         };
         handle.protocol.write_block(&handle.usb, &ds)?;
+        // The TL866A firmware writes the EEPROM asynchronously and uses the
+        // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
+        // Without this call the firmware may receive the next write_block
+        // before the previous one has finished, causing silent data loss.
+        // This matches the C write_page_ram loop which calls get_ovc_status
+        // after every write block.
+        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+        if ovc != 0 {
+            return Err(MiniproError::Overcurrent { address: wstatus.address });
+        }
+        if wstatus.error != 0 {
+            return Err(MiniproError::VerifyFailed {
+                address: wstatus.address,
+                expected: wstatus.c2 as u8,
+                actual: wstatus.c1 as u8,
+            });
+        }
         offset += block;
         if let Some(ref mut f) = progress {
             f(offset, size);
@@ -279,12 +305,16 @@ pub fn verify_chip(
     } else {
         1
     } as u32;
+    // Convert byte offset to word address for word-organised code memory,
+    // mirroring the same shift applied in read_chip and write_chip.
+    let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
     while offset < size {
         let block = read_size.min(size - offset);
+        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
         let mut ds = DataSet {
             data: vec![0u8; block],
-            address: offset as u32,
+            address,
             block_count: (block / 64) as u32,
             page_type: page,
             init: offset == 0,

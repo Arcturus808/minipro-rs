@@ -253,6 +253,12 @@ impl UsbDevice {
     }
 
     fn bulk_out_raw(&self, ep: u8, data: Vec<u8>) -> Result<()> {
+        trace!(
+            "bulk_out_raw: ep=0x{:02x} len={} data={:02x?}",
+            ep,
+            data.len(),
+            &data[..data.len().min(16)]
+        );
         let c = pollster::block_on(self.interface.bulk_out(ep, data));
         c.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;

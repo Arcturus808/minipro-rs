@@ -74,11 +74,21 @@ const MP_FUSE_USER: u8 = 0x00;
 const MP_FUSE_CFG: u8 = 0x01;
 const MP_FUSE_LOCK: u8 = 0x02;
 
-pub struct Tl866aProtocol;
+pub struct Tl866aProtocol {
+    /// Cached protocol_id from the last begin_transaction, needed by
+    /// read_block and write_block (byte [1] of every command packet).
+    protocol_id: std::sync::atomic::AtomicU8,
+    /// Low byte of the device variant, cached from begin_transaction.
+    /// Used in end_transaction and get_ovc_status to match the C msg_init.
+    variant_lo: std::sync::atomic::AtomicU8,
+}
 
 impl Tl866aProtocol {
     pub fn new() -> Self {
-        Self
+        Self {
+            protocol_id: std::sync::atomic::AtomicU8::new(0),
+            variant_lo: std::sync::atomic::AtomicU8::new(0),
+        }
     }
 }
 
@@ -161,9 +171,16 @@ fn put_le(buf: &mut [u8], val: u32, len: usize) {
 
 impl Protocol for Tl866aProtocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
+        self.protocol_id.store(device.protocol_id, std::sync::atomic::Ordering::Relaxed);
+        self.variant_lo.store(device.variant as u8, std::sync::atomic::Ordering::Relaxed);
         let mut msg = [0u8; 64];
+        // Matches C tl866a_begin_transaction packet layout.
+        // msg_init() sets [0]=cmd, [1]=protocol_id, [2]=variant_lo.
+        // The subsequent field writes start at [3] (NOT [2]), so variant_lo
+        // at [2] is preserved — it is NOT overwritten by data_memory_size.
         msg[0] = CMD_START_TRANSACTION;
         msg[1] = device.protocol_id;
+        // [2]     variant (low byte) — kept per C msg_init
         msg[2] = device.variant as u8;
         // [3..4]  data_memory_size  (16-bit LE)
         put_le(&mut msg[3..], device.data_memory_size, 2);
@@ -175,16 +192,33 @@ impl Protocol for Tl866aProtocol {
         msg[8] = (device.voltages.vdd << 4) | device.voltages.vcc;
         // [9..10] pulse_delay       (16-bit LE)
         put_le(&mut msg[9..], device.pulse_delay, 2);
-        // [11]    icsp
+        // [10]    icsp
         msg[11] = icsp as u8;
         // [12..14] code_memory_size (24-bit LE)
         put_le(&mut msg[12..], device.code_memory_size, 3);
         usb.msg_send(&msg[..48])?;
+        // C tl866a_begin_transaction calls get_ovc_status immediately after
+        // sending the begin packet.  This clears any stale OVC latch from the
+        // previous operation (e.g. power-on inrush after a transaction reset).
+        // We call it here too, but don't fail on OVC since some adapter/chip
+        // combinations produce a transient flag at power-up that self-clears.
+        match self.get_ovc_status(usb) {
+            Ok((_, ovc)) => {
+                if ovc != 0 {
+                    trace!("begin_transaction: OVC flag set ({:#04x}); ignoring transient", ovc);
+                }
+            }
+            Err(e) => {
+                trace!("begin_transaction: get_ovc_status failed: {}; continuing", e);
+            }
+        }
         Ok(())
     }
 
     fn end_transaction(&self, usb: &UsbDevice) -> Result<()> {
-        usb.msg_send(&[CMD_END_TRANSACTION, 0, 0, 0])?;
+        let pid = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
+        let var = self.variant_lo.load(std::sync::atomic::Ordering::Relaxed);
+        usb.msg_send(&[CMD_END_TRANSACTION, pid, var, 0])?;
         Ok(())
     }
 
@@ -196,6 +230,7 @@ impl Protocol for Tl866aProtocol {
         };
         let mut msg = [0u8; 18];
         msg[0] = cmd;
+        msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         // [2..3] size (16-bit LE)  — overwrites variant byte intentionally
         put_le(&mut msg[2..], ds.data.len() as u32, 2);
         // [4..6] address (24-bit LE)
@@ -229,10 +264,11 @@ impl Protocol for Tl866aProtocol {
             MP_USER => CMD_WRITE_USER_DATA,
             _ => CMD_WRITE_CODE,
         };
-        // Payload: [cmd, 0, size(2), addr(3), data...]
-        // Must use msg_send_large — the full payload is larger than 64 bytes.
+        // Packet layout: [cmd, protocol_id, size(2), addr(3), data...]
+        // C reference sends exactly ds->size + 7 bytes (no 64-byte padding).
         let mut payload = vec![0u8; ds.data.len() + 7];
         payload[0] = cmd;
+        payload[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         put_le(&mut payload[2..], ds.data.len() as u32, 2);
         put_le(&mut payload[4..], ds.address, 3);
         payload[7..].copy_from_slice(&ds.data);
@@ -328,6 +364,7 @@ impl Protocol for Tl866aProtocol {
     fn erase(&self, usb: &UsbDevice, num_fuses: u8, _is_pld: bool) -> Result<()> {
         let mut msg = [0u8; 15];
         msg[0] = CMD_ERASE;
+        msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         msg[2] = num_fuses;
         usb.msg_send(&msg)?;
         let _ = usb.msg_recv(64);
@@ -372,7 +409,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)> {
-        usb.msg_send(&[CMD_GET_STATUS, 0, 0, 0, 0])?;
+        let pid = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
+        let var = self.variant_lo.load(std::sync::atomic::Ordering::Relaxed);
+        usb.msg_send(&[CMD_GET_STATUS, pid, var, 0, 0])?;
         let resp = usb.msg_recv(64)?;
         if resp.len() < 10 {
             return Err(MiniproError::ResponseTooShort {

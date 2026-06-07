@@ -164,6 +164,16 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // ── SPI autodetect (no device context needed) ────────────────────────────
+    if let Some(id_type_opt) = cli.spi_autodetect {
+        if cli.part.is_none() {
+            let id_type = id_type_opt.unwrap_or(0);
+            let jedec_id = spi_autodetect(&mut handle, id_type)?;
+            println!("JEDEC ID: {:#08x}", jedec_id);
+            return Ok(());
+        }
+    }
+
     // ── Device required from here on ─────────────────────────────────────────
     let part = cli
         .part
@@ -308,9 +318,14 @@ fn do_operations(
 
     // ── Erase ─────────────────────────────────────────────────────────────────
     if cli.erase {
-        eprint!("Erasing... ");
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::with_template("{spinner} Erasing...")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        pb.enable_steady_tick(std::time::Duration::from_millis(80));
         erase_chip(handle)?;
-        eprintln!("done.");
+        pb.finish_with_message("Erasing... done.");
     }
 
     // ── Blank check ───────────────────────────────────────────────────────────
@@ -333,9 +348,23 @@ fn do_operations(
         } else {
             // Auto-erase before write (unless suppressed)
             if !cli.no_erase {
-                eprint!("Erasing... ");
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::with_template("{spinner} Erasing...")
+                        .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+                );
+                pb.enable_steady_tick(std::time::Duration::from_millis(80));
                 erase_chip(handle)?;
-                eprintln!("done.");
+                pb.finish_with_message("Erasing... done.");
+                // The firmware requires a transaction reset after erase before
+                // writing (same as the C reference: end_transaction then
+                // begin_transaction).
+                let device_arc = handle
+                    .device
+                    .clone()
+                    .expect("device is set during an active transaction");
+                handle.end_transaction()?;
+                handle.begin_transaction(device_arc)?;
             }
 
             let size_mismatch = if cli.size_ignore {
@@ -371,6 +400,14 @@ fn do_operations(
 
             if !cli.no_ovc_check {
                 check_ovc(handle)?;
+            }
+
+            // C write_page_file does end_transaction + begin_transaction between
+            // write and verify so the firmware flushes/commits written data.
+            {
+                let device_arc = handle.device.clone().expect("device set");
+                handle.end_transaction()?;
+                handle.begin_transaction(device_arc)?;
             }
 
             // Auto-verify after write (unless suppressed)
