@@ -1,7 +1,8 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use minipro_core::{
-    database::{find_device, find_device_any, list_devices, DatabasePaths},
+    database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
     operations::{blank_check, erase_chip, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
     MiniproHandle,
@@ -69,7 +70,7 @@ pub struct ProgressPayload {
     operation: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct OperationOptions {
     #[serde(default)]
     pub skip_erase: bool,
@@ -89,7 +90,7 @@ fn default_size_mismatch() -> String { "error".into() }
 
 // ── Helper: resolve or reuse database paths ─────────────────────────────────
 
-fn get_db_paths(state: &State<AppState>) -> Result<DatabasePaths, String> {
+fn get_db_paths(state: &Arc<AppState>) -> Result<DatabasePaths, String> {
     {
         let guard = state.db_paths.lock().map_err(|e| e.to_string())?;
         if let Some(ref paths) = *guard {
@@ -140,7 +141,7 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 
 /// Open the programmer and return its info.
 #[tauri::command]
-pub fn get_programmer_info(state: State<AppState>) -> Result<ProgrammerInfoDto, String> {
+pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
     {
         let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         if let Some(ref info) = *guard {
@@ -153,8 +154,11 @@ pub fn get_programmer_info(state: State<AppState>) -> Result<ProgrammerInfoDto, 
         }
     }
 
-    let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
-    let info = handle.info.clone();
+    let (info, handle) = tokio::task::spawn_blocking(move || {
+        let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+        let info = handle.info.clone();
+        Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
+    }).await.map_err(|e| format!("Task panicked: {}", e))??;
 
     {
         let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
@@ -175,52 +179,61 @@ pub fn get_programmer_info(state: State<AppState>) -> Result<ProgrammerInfoDto, 
 
 /// Search devices by optional query string.
 #[tauri::command]
-pub fn search_devices(query: String, state: State<AppState>) -> Result<Vec<String>, String> {
-    let db = get_db_paths(&state)?;
-    let filter = if query.trim().is_empty() {
-        None
-    } else {
-        Some(query.trim())
-    };
-
-    let results = list_devices(&db, filter).map_err(|e| e.to_string())?;
-    Ok(results)
+pub async fn search_devices(query: String, state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
+    let filter = query.trim().to_ascii_lowercase();
+    if filter.is_empty() {
+        return Ok(vec![]);
+    }
+    // Use pre-loaded device names (loaded once at startup) for instant search
+    state.search_device_names(&filter)
 }
 
 /// Get detailed info for a single device (no programmer required).
 #[tauri::command]
-pub fn get_device_info(name: String, state: State<AppState>) -> Result<DeviceInfoDto, String> {
+pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
-    let dev = find_device_any(&db, &name).map_err(|e| e.to_string())?;
-    Ok(device_to_dto(&dev))
+    let name_clone = name.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let dev = find_device_any(&db, &name_clone).map_err(|e| e.to_string())?;
+        Ok::<DeviceInfoDto, String>(device_to_dto(&dev))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
 }
 
 /// Select a device, resolving it for the connected programmer model if available.
 #[tauri::command]
-pub fn select_device(name: String, state: State<AppState>) -> Result<DeviceInfoDto, String> {
+pub async fn select_device(name: String, state: State<'_, Arc<AppState>>) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
 
-    // If a programmer is already connected, use its model for precise lookup.
     let model = {
         let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         guard.as_ref().map(|info| info.model)
     };
 
-    let dev = if let Some(m) = model {
-        find_device(&db, &name, m)
-            .or_else(|_| find_device_any(&db, &name))
-            .map_err(|e| e.to_string())?
-    } else {
-        find_device_any(&db, &name).map_err(|e| e.to_string())?
-    };
+    let name_clone = name.clone();
+    let (dto, device) = tokio::task::spawn_blocking(move || {
+        let dev = if let Some(m) = model {
+            find_device(&db, &name_clone, m)
+                .or_else(|_| find_device_any(&db, &name_clone))
+                .map_err(|e| e.to_string())?
+        } else {
+            find_device_any(&db, &name_clone).map_err(|e| e.to_string())?
+        };
+        Ok::<(DeviceInfoDto, Device), String>((device_to_dto(&dev), dev))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))??;
 
-    state.set_device(Some(std::sync::Arc::new(dev.clone())))?;
-    Ok(device_to_dto(&dev))
+    state.set_device(Some(std::sync::Arc::new(device)))?;
+
+    Ok(dto)
 }
 
 /// Deselect the current device.
 #[tauri::command]
-pub fn deselect_device(state: State<AppState>) -> Result<(), String> {
+pub async fn deselect_device(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.set_device(None)
 }
 
@@ -228,29 +241,37 @@ pub fn deselect_device(state: State<AppState>) -> Result<(), String> {
 
 /// Read chip memory to a file.
 #[tauri::command]
-pub fn do_read(
+pub async fn do_read(
     path: String,
     options: OperationOptions,
     window: Window,
-    state: State<AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<OpStatsDto, String> {
-    if !state.try_acquire() {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
-        let page = parse_page(&options.page)?;
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let path_clone = path.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let page = parse_page(&options_clone.page)?;
         let op_name = "read".to_string();
 
         handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
         let stats = read_chip(
-            handle,
-            Path::new(&path),
+            &mut handle,
+            Path::new(&path_clone),
             page,
-            &options.format,
+            &options_clone.format,
             Some(&mut |done, total| {
-                let _ = window.emit(
+                let _ = window_clone.emit(
                     "progress",
                     ProgressPayload {
                         done,
@@ -263,34 +284,47 @@ pub fn do_read(
         .map_err(|e| e.to_string())?;
 
         let _ = handle.end_transaction();
-        Ok(stats.into())
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<OpStats, String>(stats)
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(stats)) => Ok(stats.into()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
 }
 
 /// Write file to chip memory.
 #[tauri::command]
-pub fn do_write(
+pub async fn do_write(
     path: String,
     options: OperationOptions,
     window: Window,
-    state: State<AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<OpStatsDto, String> {
-    if !state.try_acquire() {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
-        let page = parse_page(&options.page)?;
-        let size_mismatch = parse_size_mismatch(&options.size_mismatch)?;
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let path_clone = path.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let page = parse_page(&options_clone.page)?;
+        let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
         let op_name = "write".to_string();
 
-        // Auto-erase before write unless suppressed
-        if !options.skip_erase {
-            erase_chip(handle).map_err(|e| e.to_string())?;
-            // Firmware requires transaction reset after erase
+        if !options_clone.skip_erase {
+            erase_chip(&mut handle).map_err(|e| e.to_string())?;
             let device_arc = std::sync::Arc::new(handle.device().map_err(|e| e.to_string())?.clone());
             handle.end_transaction().map_err(|e| e.to_string())?;
             handle.begin_transaction(device_arc).map_err(|e| e.to_string())?;
@@ -299,13 +333,13 @@ pub fn do_write(
         }
 
         let stats = write_chip(
-            handle,
-            Path::new(&path),
+            &mut handle,
+            Path::new(&path_clone),
             page,
-            &options.format,
+            &options_clone.format,
             size_mismatch,
             Some(&mut |done, total| {
-                let _ = window.emit(
+                let _ = window_clone.emit(
                     "progress",
                     ProgressPayload {
                         done,
@@ -317,15 +351,15 @@ pub fn do_write(
         )
         .map_err(|e| e.to_string())?;
 
-        // Verify after write unless suppressed
-        if !options.skip_verify {
-            let _verify_stats = verify_chip(
-                handle,
-                Path::new(&path),
+        if !options_clone.skip_verify {
+            let verify_window = window_clone.clone();
+            let _ = verify_chip(
+                &mut handle,
+                Path::new(&path_clone),
                 page,
-                &options.format,
+                &options_clone.format,
                 Some(&mut |done, total| {
-                    let _ = window.emit(
+                    let _ = verify_window.emit(
                         "progress",
                         ProgressPayload {
                             done,
@@ -339,37 +373,52 @@ pub fn do_write(
         }
 
         let _ = handle.end_transaction();
-        Ok(stats.into())
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<OpStats, String>(stats)
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(stats)) => Ok(stats.into()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
 }
 
 /// Verify chip memory against a file.
 #[tauri::command]
-pub fn do_verify(
+pub async fn do_verify(
     path: String,
     options: OperationOptions,
     window: Window,
-    state: State<AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    if !state.try_acquire() {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
-        let page = parse_page(&options.page)?;
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let path_clone = path.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let page = parse_page(&options_clone.page)?;
 
         handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
         verify_chip(
-            handle,
-            Path::new(&path),
+            &mut handle,
+            Path::new(&path_clone),
             page,
-            &options.format,
+            &options_clone.format,
             Some(&mut |done, total| {
-                let _ = window.emit(
+                let _ = window_clone.emit(
                     "progress",
                     ProgressPayload {
                         done,
@@ -382,84 +431,127 @@ pub fn do_verify(
         .map_err(|e| e.to_string())?;
 
         let _ = handle.end_transaction();
-        Ok(())
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<(), String>(())
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
 }
 
 /// Erase the chip.
 #[tauri::command]
-pub fn do_erase(state: State<AppState>) -> Result<(), String> {
-    if !state.try_acquire() {
+pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
         handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        erase_chip(handle).map_err(|e| e.to_string())?;
+        erase_chip(&mut handle).map_err(|e| e.to_string())?;
         let _ = handle.end_transaction();
-        Ok(())
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<(), String>(())
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
 }
 
 /// Blank-check the chip.
 #[tauri::command]
-pub fn do_blank_check(state: State<AppState>) -> Result<(), String> {
-    if !state.try_acquire() {
+pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
         handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        blank_check(handle).map_err(|e| e.to_string())?;
+        blank_check(&mut handle).map_err(|e| e.to_string())?;
         let _ = handle.end_transaction();
-        Ok(())
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<(), String>(())
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
 }
 
 /// Read the chip ID.
 #[tauri::command]
-pub fn do_chip_id(state: State<AppState>) -> Result<String, String> {
-    if !state.try_acquire() {
+pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
-    let result = run_operation(&state, |handle, device| {
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
         handle.begin_transaction(device).map_err(|e| e.to_string())?;
         let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
         let _ = handle.end_transaction();
-        Ok(format!("{:#010x}", chip_id))
-    });
+        let _ = state_task.store_handle(handle);
+        Ok::<String, String>(format!("{:#010x}", chip_id))
+    })
+    .await;
 
-    state.release();
-    result
+    state_clone.release();
+
+    match result {
+        Ok(Ok(id)) => Ok(id),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// Check whether the chip database files can be located.
+#[tauri::command]
+pub async fn check_database(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    match get_db_paths(&state) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}
+
+/// Read a file on disk into raw bytes for hex viewer display.
+#[tauri::command]
+pub async fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::read(&path).map_err(|e| format!("Cannot read file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────
-
-/// Generic operation wrapper: acquires handle and device, runs the closure,
-/// and ensures the handle is always returned to state.
-fn run_operation<T>(
-    state: &State<AppState>,
-    f: impl FnOnce(&mut MiniproHandle, std::sync::Arc<Device>) -> Result<T, String>,
-) -> Result<T, String> {
-    let mut handle = state.take_handle()?;
-    let device = state.get_device()?;
-
-    let result = f(&mut handle, device);
-
-    // Always put the handle back, even on error
-    let _ = state.store_handle(handle);
-    result
-}
 
 fn device_to_dto(dev: &Device) -> DeviceInfoDto {
     let chip_type_str = ChipType::try_from(dev.chip_type)

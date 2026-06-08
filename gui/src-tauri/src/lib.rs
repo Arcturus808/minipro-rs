@@ -14,8 +14,16 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            // Initialize shared application state
-            app.manage(state::AppState::default());
+            // Initialize shared application state and pre-load device names
+            let state = std::sync::Arc::new(state::AppState::default());
+            {
+                let mut guard = state.db_paths.lock().unwrap();
+                *guard = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
+            }
+            if let Err(e) = state.load_device_names() {
+                eprintln!("Warning: failed to load device names: {}", e);
+            }
+            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -30,6 +38,8 @@ pub fn run() {
             commands::do_erase,
             commands::do_blank_check,
             commands::do_chip_id,
+            commands::read_file_bytes,
+            commands::check_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

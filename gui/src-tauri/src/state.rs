@@ -1,8 +1,9 @@
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Mutex};
 
 use minipro_core::{
+    database::{list_devices, DatabasePaths},
     device::{Device, ProgrammerInfo},
-    DatabasePaths, MiniproHandle,
+    MiniproHandle,
 };
 
 /// Shared application state managed by Tauri.
@@ -17,6 +18,8 @@ pub struct AppState {
     pub selected_device: Mutex<Option<Arc<Device>>>,
     /// Guards against concurrent operations.
     pub is_running: AtomicBool,
+    /// Pre-loaded list of all device names (loaded once at startup).
+    pub all_device_names: Mutex<Vec<String>>,
 }
 
 impl Default for AppState {
@@ -27,6 +30,7 @@ impl Default for AppState {
             programmer_info: Mutex::new(None),
             selected_device: Mutex::new(None),
             is_running: AtomicBool::new(false),
+            all_device_names: Mutex::new(Vec::new()),
         }
     }
 }
@@ -66,5 +70,29 @@ impl AppState {
         let mut guard = self.selected_device.lock().map_err(|e| e.to_string())?;
         *guard = device;
         Ok(())
+    }
+
+    /// Load all device names from the database (called once at startup).
+    pub fn load_device_names(&self) -> Result<(), String> {
+        let guard = self.db_paths.lock().map_err(|e| e.to_string())?;
+        let db = guard.as_ref().ok_or("Database not loaded")?;
+        let names = list_devices(db, None).map_err(|e| e.to_string())?;
+        drop(guard);
+        let mut guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
+        *guard = names;
+        Ok(())
+    }
+
+    /// Search the pre-loaded device names by substring.
+    pub fn search_device_names(&self, query: &str) -> Result<Vec<String>, String> {
+        let guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
+        let filter = query.to_ascii_lowercase();
+        let mut results: Vec<String> = guard
+            .iter()
+            .filter(|name| name.to_ascii_lowercase().contains(&filter))
+            .cloned()
+            .collect();
+        results.truncate(200);
+        Ok(results)
     }
 }

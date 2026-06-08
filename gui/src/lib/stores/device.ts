@@ -24,6 +24,7 @@ export const programmer = writable<ProgrammerInfo | null>(null);
 export const selectedDevice = writable<DeviceInfo | null>(null);
 export const deviceList = writable<string[]>([]);
 export const isConnected = derived(programmer, ($p) => $p !== null);
+export const dbAvailable = writable<boolean | null>(null);
 
 export async function refreshProgrammer() {
   try {
@@ -32,6 +33,17 @@ export async function refreshProgrammer() {
   } catch (e) {
     programmer.set(null);
     throw e;
+  }
+}
+
+export async function checkDatabase() {
+  try {
+    const ok = await invoke<boolean>("check_database");
+    dbAvailable.set(ok);
+    return ok;
+  } catch (e) {
+    dbAvailable.set(false);
+    return false;
   }
 }
 

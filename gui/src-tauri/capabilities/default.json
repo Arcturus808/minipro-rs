@@ -9,6 +9,9 @@
     "core:default",
     "store:default",
     "dialog:default",
-    "fs:default"
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-read-file"
   ]
 }

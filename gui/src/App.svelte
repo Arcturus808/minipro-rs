@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, selectedDevice } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
+  import { hexBuffer, clearHexBuffer, loadFile } from "./lib/stores/hex";
+  import { pickOpenFile, pickSaveFile } from "./lib/file-dialog";
   import {
     initProgressListener,
     isRunning,
@@ -16,6 +18,7 @@
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
+  import HexViewer from "./lib/components/HexViewer.svelte";
 
   let themeValue: "system" | "dark" | "light" = $state("system");
 
@@ -33,9 +36,18 @@
     });
     initProgressListener();
 
-    refreshProgrammer().catch(() => {
-      logs.warn("No programmer detected on startup");
-    });
+    // Delay startup checks to let the UI render first
+    setTimeout(() => {
+      checkDatabase().then((ok) => {
+        if (!ok) {
+          logs.error("Chip database (infoic.xml / logicic.xml) not found. Searches will not work.");
+        }
+      });
+
+      refreshProgrammer().catch(() => {
+        logs.warn("No programmer detected on startup");
+      });
+    }, 100);
   });
 
   function setTheme(t: "system" | "dark" | "light") {
@@ -53,24 +65,23 @@
   }
 
   async function onRead() {
-    const path = await pickFile("read");
+    const path = await pickSaveFile("Save chip dump as");
     if (path) await doRead(path, getOptions());
   }
 
   async function onWrite() {
-    const path = await pickFile("write");
+    const path = await pickOpenFile("Select file to write to chip");
     if (path) await doWrite(path, getOptions());
   }
 
   async function onVerify() {
-    const path = await pickFile("verify");
+    const path = await pickOpenFile("Select file to verify against");
     if (path) await doVerify(path, getOptions());
   }
 
-  // Simple file path input for now — will integrate tauri-plugin-dialog later
-  async function pickFile(_context: string): Promise<string | null> {
-    const path = prompt("Enter file path:");
-    return path;
+  async function onLoadFile() {
+    const path = await pickOpenFile("Open file to inspect");
+    if (path) await loadFile(path);
   }
 </script>
 
@@ -114,10 +125,10 @@
       <DeviceSelector />
     </aside>
 
-    <!-- Center: Operations + Hex viewer placeholder -->
-    <section class="flex-1 flex flex-col p-4 gap-4 overflow-auto">
+    <!-- Center: Operations + Hex viewer -->
+    <section class="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
       <!-- Operations panel -->
-      <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4">
+      <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
         <h2 class="text-sm font-semibold mb-3">Operations</h2>
 
         <div class="flex flex-wrap gap-2 mb-4">
@@ -163,6 +174,21 @@
           >
             Chip ID
           </button>
+          <button
+            class="btn preset-tonal"
+            onclick={onLoadFile}
+            disabled={$isRunning}
+          >
+            Load File
+          </button>
+          {#if $hexBuffer}
+            <button
+              class="btn preset-tonal"
+              onclick={clearHexBuffer}
+            >
+              Clear
+            </button>
+          {/if}
         </div>
 
         <!-- Progress panel -->
@@ -207,14 +233,9 @@
         </div>
       </div>
 
-      <!-- Hex viewer placeholder -->
-      <div
-        class="card preset-filled-surface-100-900 border border-surface-200-800 flex-1 p-4 flex flex-col"
-      >
-        <h2 class="text-sm font-semibold mb-2">Hex Viewer</h2>
-        <div class="flex-1 flex items-center justify-center opacity-40 text-sm">
-          Select a device and read a chip to view data here.
-        </div>
+      <!-- Hex viewer -->
+      <div class="flex-1 min-h-0">
+        <HexViewer />
       </div>
     </section>
 

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { logs } from "./logs";
 import { selectedDevice } from "./device";
+import { loadFile } from "./hex";
 
 export interface ProgressEvent {
   done: number;
@@ -83,9 +84,12 @@ async function runOp(
 }
 
 export async function doRead(path: string, options: OperationOptions = defaultOptions()) {
-  await runOp("Read", () =>
-    invoke("do_read", { path, options }),
-  );
+  await runOp("Read", async () => {
+    const result = await invoke("do_read", { path, options });
+    // Load the resulting file into the hex viewer
+    await loadFile(path);
+    return result;
+  });
 }
 
 export async function doWrite(path: string, options: OperationOptions = defaultOptions()) {
