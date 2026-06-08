@@ -1,12 +1,16 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { Store } from "@tauri-apps/plugin-store";
 
   let searchQuery = $state("");
   let results = $state<string[]>([]);
   let page = $state(0);
   let selectedName = $state<string | null>(null);
   let selectedInfo = $state<any>(null);
-  const PAGE_SIZE = 20;
+  let viewMode = $state<"paginated" | "scroll">("paginated");
+  const PAGE_SIZE = 12;
+  let store: Store | null = null;
 
   async function onSearch() {
     page = 0;
@@ -25,6 +29,23 @@
     if (page < maxPage) page++;
   }
 
+  onMount(async () => {
+    store = await Store.load("settings.json");
+    const saved = await store.get<string>("deviceViewMode");
+    if (saved === "scroll" || saved === "paginated") {
+      viewMode = saved;
+    }
+  });
+
+  async function toggleView() {
+    viewMode = viewMode === "paginated" ? "scroll" : "paginated";
+    page = 0;
+    if (store) {
+      await store.set("deviceViewMode", viewMode);
+      await store.save();
+    }
+  }
+
   async function onSelect(name: string) {
     selectedName = name;
     selectedInfo = await invoke("select_device", { name });
@@ -38,6 +59,7 @@
   let start = $derived(page * PAGE_SIZE);
   let pageItems = $derived(results.slice(start, start + PAGE_SIZE));
   let totalPages = $derived(Math.max(1, Math.ceil(results.length / PAGE_SIZE)));
+  let displayItems = $derived(viewMode === "paginated" ? pageItems : results);
 </script>
 
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
@@ -59,16 +81,26 @@
     {#if results.length === 0}
       <p class="text-sm opacity-50 text-center py-8">No devices found. Enter a search term.</p>
     {:else}
-      <div class="text-xs opacity-60 mb-1 flex justify-between">
+      <div class="text-xs opacity-60 mb-1 flex justify-between items-center">
         <span>{results.length} total</span>
-        <span>Page {page + 1} / {totalPages}</span>
+        <div class="flex items-center gap-2">
+          {#if viewMode === "paginated"}
+            <span>Page {page + 1} / {totalPages}</span>
+          {/if}
+          <button
+            class="btn preset-tonal text-xs px-2 py-0.5"
+            onclick={toggleView}
+            title={viewMode === "paginated" ? "Switch to scroll view" : "Switch to paginated view"}
+          >
+            {viewMode === "paginated" ? "Scroll" : "Paginate"}
+          </button>
+        </div>
       </div>
-      <ul class="space-y-1">
-        {#each pageItems as name}
+      <ul class="divide-y divide-surface-200-800">
+        {#each displayItems as name}
           <li>
             <button
-              class="w-full text-left text-sm px-2 py-1 rounded hover:preset-tonal-primary transition-colors"
-              class:preset-filled-primary-100-900={selectedName === name}
+              class={`w-full text-left text-sm py-2 px-3 transition-colors ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500 font-semibold' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
               onclick={() => onSelect(name)}
             >
               {name}
@@ -76,7 +108,7 @@
           </li>
         {/each}
       </ul>
-      {#if results.length > PAGE_SIZE}
+      {#if viewMode === "paginated" && results.length > PAGE_SIZE}
         <div class="flex justify-between mt-2">
           <button class="btn preset-tonal text-xs px-2" onclick={goPrev} disabled={page === 0}>Prev</button>
           <button class="btn preset-tonal text-xs px-2" onclick={goNext} disabled={page + 1 >= totalPages}>Next</button>

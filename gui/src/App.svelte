@@ -4,6 +4,7 @@
   import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexBuffer, clearHexBuffer, loadFile } from "./lib/stores/hex";
+  import { settings, initSettings, setSetting } from "./lib/stores/settings";
   import { pickOpenFile, pickSaveFile } from "./lib/file-dialog";
   import {
     initProgressListener,
@@ -19,10 +20,11 @@
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
+  import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 
   let themeValue: "system" | "dark" | "light" = $state("system");
 
-  // Operation options
+  // Operation options (initialized from settings)
   let skipErase = $state(false);
   let skipVerify = $state(false);
   let page = $state("code");
@@ -35,6 +37,18 @@
       themeValue = t;
     });
     initProgressListener();
+    initSettings().then(() => {
+      // Apply loaded settings to local state
+      const s = $settings;
+      skipErase = s.skipErase;
+      skipVerify = s.skipVerify;
+      page = s.defaultPage;
+      format = s.defaultFormat;
+      sizeMismatch = s.defaultSizeMismatch;
+      if (s.theme !== themeValue) {
+        theme.set(s.theme);
+      }
+    });
 
     // Delay startup checks to let the UI render first
     setTimeout(() => {
@@ -50,8 +64,17 @@
     }, 100);
   });
 
+  // Sync theme changes from settings back to theme store
+  $effect(() => {
+    const s = $settings;
+    if (s.theme && s.theme !== themeValue) {
+      theme.set(s.theme);
+    }
+  });
+
   function setTheme(t: "system" | "dark" | "light") {
     theme.set(t);
+    setSetting("theme", t);
   }
 
   function getOptions() {
@@ -65,23 +88,35 @@
   }
 
   async function onRead() {
-    const path = await pickSaveFile("Save chip dump as");
-    if (path) await doRead(path, getOptions());
+    const path = await pickSaveFile("Save chip dump as", $settings.defaultDirectory);
+    if (path) {
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await doRead(path, getOptions());
+    }
   }
 
   async function onWrite() {
-    const path = await pickOpenFile("Select file to write to chip");
-    if (path) await doWrite(path, getOptions());
+    const path = await pickOpenFile("Select file to write to chip", $settings.defaultDirectory);
+    if (path) {
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await doWrite(path, getOptions());
+    }
   }
 
   async function onVerify() {
-    const path = await pickOpenFile("Select file to verify against");
-    if (path) await doVerify(path, getOptions());
+    const path = await pickOpenFile("Select file to verify against", $settings.defaultDirectory);
+    if (path) {
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await doVerify(path, getOptions());
+    }
   }
 
   async function onLoadFile() {
-    const path = await pickOpenFile("Open file to inspect");
-    if (path) await loadFile(path);
+    const path = await pickOpenFile("Open file to inspect", $settings.defaultDirectory);
+    if (path) {
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await loadFile(path);
+    }
   }
 </script>
 
@@ -102,6 +137,7 @@
     </div>
 
     <div class="flex items-center gap-2">
+      <SettingsPanel />
       <span class="text-xs opacity-60">Theme:</span>
       <div class="segment bg-surface-200-800 rounded p-0.5 flex gap-0.5">
         {#each (["system", "dark", "light"] as const) as t}
@@ -121,7 +157,7 @@
   <!-- Main content -->
   <main class="flex-1 flex overflow-hidden">
     <!-- Left sidebar: Device selector -->
-    <aside class="w-72 flex flex-col border-r border-surface-200-800">
+    <aside class="w-80 flex flex-col border-r border-surface-200-800">
       <DeviceSelector />
     </aside>
 

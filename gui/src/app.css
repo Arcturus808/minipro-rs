@@ -2,6 +2,8 @@
 @import "@skeletonlabs/skeleton";
 @import "@skeletonlabs/skeleton/themes/cerberus";
 
+@custom-variant dark (&:is(.dark *));
+
 /* Theme-aware CSS variables */
 :root {
   --font-family-base: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
