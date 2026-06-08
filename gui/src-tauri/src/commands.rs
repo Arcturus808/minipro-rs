@@ -294,29 +294,53 @@ pub async fn do_read(
         let page = parse_page(&options_clone.page)?;
         let op_name = "read".to_string();
 
-        handle.begin_transaction(device).map_err(|e| e.to_string())?;
-
-        let stats = read_chip(
-            &mut handle,
-            Path::new(&path_clone),
+        log::info!(
+            "do_read: device={} page={:#02x} code_size={} data_size={}",
+            device.name,
             page,
-            &options_clone.format,
-            Some(&mut |done, total| {
-                let _ = window_clone.emit(
-                    "progress",
-                    ProgressPayload {
-                        done,
-                        total,
-                        operation: op_name.clone(),
-                    },
-                );
-            }),
-        )
-        .map_err(|e| e.to_string())?;
+            device.code_memory_size,
+            device.data_memory_size
+        );
+
+        let result = (|| {
+            let size = match page {
+                0x00 => device.code_memory_size as usize,
+                0x01 => device.data_memory_size as usize,
+                _ => device.code_memory_size as usize,
+            };
+            if size == 0 {
+                return Err(format!(
+                    "Device '{}' has 0 bytes for the selected page (code={}, data={}). Try a different page.",
+                    device.name, device.code_memory_size, device.data_memory_size
+                ));
+            }
+
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            let stats = read_chip(
+                &mut handle,
+                Path::new(&path_clone),
+                page,
+                &options_clone.format,
+                Some(&mut |done, total| {
+                    let _ = window_clone.emit(
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: op_name.clone(),
+                        },
+                    );
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+
+            Ok::<OpStats, String>(stats)
+        })();
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<OpStats, String>(stats)
+        result
     })
     .await;
 
@@ -354,58 +378,62 @@ pub async fn do_write(
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
         let op_name = "write".to_string();
 
-        if !options_clone.skip_erase {
-            erase_chip(&mut handle).map_err(|e| e.to_string())?;
-            let device_arc = std::sync::Arc::new(handle.device().map_err(|e| e.to_string())?.clone());
-            handle.end_transaction().map_err(|e| e.to_string())?;
-            handle.begin_transaction(device_arc).map_err(|e| e.to_string())?;
-        } else {
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        }
+        let result = (|| {
+            if !options_clone.skip_erase {
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
+                let device_arc = std::sync::Arc::new(handle.device().map_err(|e| e.to_string())?.clone());
+                handle.end_transaction().map_err(|e| e.to_string())?;
+                handle.begin_transaction(device_arc).map_err(|e| e.to_string())?;
+            } else {
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            }
 
-        let stats = write_chip(
-            &mut handle,
-            Path::new(&path_clone),
-            page,
-            &options_clone.format,
-            size_mismatch,
-            Some(&mut |done, total| {
-                let _ = window_clone.emit(
-                    "progress",
-                    ProgressPayload {
-                        done,
-                        total,
-                        operation: op_name.clone(),
-                    },
-                );
-            }),
-        )
-        .map_err(|e| e.to_string())?;
-
-        if !options_clone.skip_verify {
-            let verify_window = window_clone.clone();
-            let _ = verify_chip(
+            let stats = write_chip(
                 &mut handle,
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
+                size_mismatch,
                 Some(&mut |done, total| {
-                    let _ = verify_window.emit(
+                    let _ = window_clone.emit(
                         "progress",
                         ProgressPayload {
                             done,
                             total,
-                            operation: "verify".to_string(),
+                            operation: op_name.clone(),
                         },
                     );
                 }),
             )
             .map_err(|e| e.to_string())?;
-        }
+
+            if !options_clone.skip_verify {
+                let verify_window = window_clone.clone();
+                let _ = verify_chip(
+                    &mut handle,
+                    Path::new(&path_clone),
+                    page,
+                    &options_clone.format,
+                    Some(&mut |done, total| {
+                        let _ = verify_window.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: "verify".to_string(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+
+            Ok::<OpStats, String>(stats)
+        })();
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<OpStats, String>(stats)
+        result
     })
     .await;
 
@@ -441,29 +469,33 @@ pub async fn do_verify(
         let device = state_task.get_device()?;
         let page = parse_page(&options_clone.page)?;
 
-        handle.begin_transaction(device).map_err(|e| e.to_string())?;
+        let result = (|| {
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
-        verify_chip(
-            &mut handle,
-            Path::new(&path_clone),
-            page,
-            &options_clone.format,
-            Some(&mut |done, total| {
-                let _ = window_clone.emit(
-                    "progress",
-                    ProgressPayload {
-                        done,
-                        total,
-                        operation: "verify".to_string(),
-                    },
-                );
-            }),
-        )
-        .map_err(|e| e.to_string())?;
+            verify_chip(
+                &mut handle,
+                Path::new(&path_clone),
+                page,
+                &options_clone.format,
+                Some(&mut |done, total| {
+                    let _ = window_clone.emit(
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: "verify".to_string(),
+                        },
+                    );
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+
+            Ok::<(), String>(())
+        })();
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<(), String>(())
+        result
     })
     .await;
 
@@ -488,11 +520,16 @@ pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
-        handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        erase_chip(&mut handle).map_err(|e| e.to_string())?;
+
+        let result = (|| {
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            erase_chip(&mut handle).map_err(|e| e.to_string())?;
+            Ok::<(), String>(())
+        })();
+
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<(), String>(())
+        result
     })
     .await;
 
@@ -517,11 +554,16 @@ pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), Strin
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
-        handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        blank_check(&mut handle).map_err(|e| e.to_string())?;
+
+        let result = (|| {
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            blank_check(&mut handle).map_err(|e| e.to_string())?;
+            Ok::<(), String>(())
+        })();
+
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<(), String>(())
+        result
     })
     .await;
 
@@ -546,11 +588,16 @@ pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, Strin
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
-        handle.begin_transaction(device).map_err(|e| e.to_string())?;
-        let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
+
+        let result = (|| {
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
+            Ok::<String, String>(format!("{:#010x}", chip_id))
+        })();
+
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        Ok::<String, String>(format!("{:#010x}", chip_id))
+        result
     })
     .await;
 

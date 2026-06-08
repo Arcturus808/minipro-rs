@@ -90,10 +90,6 @@
     };
   }
 
-  function testLargeArray() {
-    console.log("test called");
-  }
-
   async function onRead() {
     const path = await pickSaveFile("Save chip dump as", get(settings).defaultDirectory);
     if (path) {
@@ -232,13 +228,6 @@
             disabled={$isRunning || $hexLoading}
           >
             Load File
-          </button>
-          <button
-            class="btn preset-tonal"
-            onclick={testLargeArray}
-            disabled={$isRunning}
-          >
-            Test 256KB
           </button>
           {#if $hexMeta}
             <button

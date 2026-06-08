@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
+  import { selectedDevice } from "../stores/device";
 
   let searchQuery = $state("");
   let results = $state<string[]>([]);
@@ -49,11 +50,13 @@
   async function onSelect(name: string) {
     selectedName = name;
     selectedInfo = await invoke("select_device", { name });
+    selectedDevice.set(name);
   }
 
   function onDeselect() {
     selectedName = null;
     selectedInfo = null;
+    selectedDevice.set(null);
   }
 
   let start = $derived(page * PAGE_SIZE);
