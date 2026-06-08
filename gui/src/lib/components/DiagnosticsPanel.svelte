@@ -3,16 +3,12 @@
   import { programmer } from "../stores/device";
   import { logs } from "../stores/logs";
 
-  function deferLog(level: "info" | "warn" | "error", message: string) {
-    requestAnimationFrame(() => logs[level](message));
-  }
-
   async function checkOvc() {
     try {
       const r = await invoke<any>("check_overcurrent");
-      deferLog("info", r.safe ? "Overcurrent check: OK" : `Overcurrent! flag=${r.ovc_flag}`);
+      logs.info(r.safe ? "Overcurrent check: OK" : `Overcurrent! flag=${r.ovc_flag}`);
     } catch (e) {
-      deferLog("error", `OVC failed: ${e}`);
+      logs.error(`OVC failed: ${e}`);
     }
   }
 
@@ -20,9 +16,9 @@
     try {
       const r = await invoke<any>("read_calibration");
       const hex = r.bytes.map((b: number) => b.toString(16).padStart(2, "0")).join(" ");
-      deferLog("info", `Calibration: ${hex}`);
+      logs.info(`Calibration: ${hex}`);
     } catch (e) {
-      deferLog("error", `Calib failed: ${e}`);
+      logs.error(`Calib failed: ${e}`);
     }
   }
 </script>

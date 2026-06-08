@@ -9,6 +9,7 @@ interface HexMeta {
 }
 
 export const hexMeta = writable<HexMeta | null>(null);
+export const hexLoading = writable(false);
 
 export const hexSize = derived(hexMeta, ($m) => $m?.size ?? 0);
 export const hexFilePath = derived(hexMeta, ($m) => $m?.path ?? null);

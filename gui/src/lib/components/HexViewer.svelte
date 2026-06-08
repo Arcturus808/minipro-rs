@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hexMeta } from "../stores/hex";
+  import { hexMeta, hexLoading } from "../stores/hex";
 
   const ROW_SIZE = 16;
   const MAX_ROWS = 16384;
@@ -30,7 +30,12 @@
   <div
     style="flex: 1; overflow: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: 22px; padding: 8px;"
   >
-    {#if $hexMeta?.data && $hexMeta.data.length > 0}
+    {#if $hexLoading}
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
+        <div class="spinner"></div>
+        <span style="opacity: 0.6;">Loading...</span>
+      </div>
+    {:else if $hexMeta?.data && $hexMeta.data.length > 0}
       {#each Array.from({length: Math.min(MAX_ROWS, Math.ceil($hexMeta.data.length / ROW_SIZE))}, (_, i) => i) as rowIdx}
         {@const offset = rowIdx * ROW_SIZE}
         {@const end = Math.min(offset + ROW_SIZE, $hexMeta.data.length)}
@@ -56,3 +61,17 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ccc;
+    border-top-color: #333;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>

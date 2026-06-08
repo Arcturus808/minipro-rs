@@ -3,7 +3,7 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexMeta, hasHexData, hexFilePath, clearHexBuffer, loadFile, setHexData } from "./lib/stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, loadFile } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -120,9 +120,13 @@
 
   async function onLoadFile() {
     const path = await pickOpenFile("Open file to inspect");
-    if (path) {
+    if (!path) return;
+    hexLoading.set(true);
+    try {
       await loadFile(path);
       logs.info(`File loaded: ${path}`);
+    } finally {
+      hexLoading.set(false);
     }
   }
 </script>
@@ -225,7 +229,7 @@
           <button
             class="btn preset-tonal"
             onclick={onLoadFile}
-            disabled={$isRunning}
+            disabled={$isRunning || $hexLoading}
           >
             Load File
           </button>

@@ -592,24 +592,28 @@ pub async fn check_overcurrent(state: State<'_, Arc<AppState>>) -> Result<Overcu
     }
 
     let state_task = state_clone.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let handle = state_task.take_handle()?;
-        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb).map_err(|e| e.to_string())?;
-        let _ = state_task.store_handle(handle);
-        Ok::<(minipro_core::protocol::OvcStatus, u8), String>((wstatus, ovc))
-    })
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::task::spawn_blocking(move || {
+            let handle = state_task.take_handle()?;
+            let result = handle.protocol.get_ovc_status(&handle.usb).map_err(|e| e.to_string());
+            let _ = state_task.store_handle(handle);
+            result
+        }),
+    )
     .await;
 
     state_clone.release();
 
     match result {
-        Ok(Ok((wstatus, ovc))) => Ok(OvercurrentDto {
+        Ok(Ok(Ok((wstatus, ovc)))) => Ok(OvercurrentDto {
             ovc_flag: ovc,
             address: wstatus.address,
             safe: ovc == 0,
         }),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(format!("Task panicked: {}", e)),
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
     }
 }
 
@@ -622,20 +626,24 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
     }
 
     let state_task = state_clone.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let handle = state_task.take_handle()?;
-        let bytes = handle.protocol.read_calibration(&handle.usb, 4).map_err(|e| e.to_string())?;
-        let _ = state_task.store_handle(handle);
-        Ok::<Vec<u8>, String>(bytes)
-    })
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::task::spawn_blocking(move || {
+            let handle = state_task.take_handle()?;
+            let result = handle.protocol.read_calibration(&handle.usb, 4).map_err(|e| e.to_string());
+            let _ = state_task.store_handle(handle);
+            result
+        }),
+    )
     .await;
 
     state_clone.release();
 
     match result {
-        Ok(Ok(bytes)) => Ok(CalibrationDto { bytes }),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(format!("Task panicked: {}", e)),
+        Ok(Ok(Ok(bytes))) => Ok(CalibrationDto { bytes }),
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
     }
 }
 
