@@ -2,7 +2,7 @@
   import { hexMeta } from "../stores/hex";
 
   const ROW_SIZE = 16;
-  const MAX_ROWS = 2000;
+  const MAX_ROWS = 16384;
 
   function formatHex(n: number): string {
     return n.toString(16).padStart(2, "0").toUpperCase();
