@@ -18,6 +18,7 @@
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
+  import DiagnosticsPanel from "./lib/components/DiagnosticsPanel.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
@@ -156,9 +157,14 @@
 
   <!-- Main content -->
   <main class="flex-1 flex overflow-hidden">
-    <!-- Left sidebar: Device selector -->
-    <aside class="w-80 flex flex-col border-r border-surface-200-800">
-      <DeviceSelector />
+    <!-- Left sidebar: Device selector + Diagnostics -->
+    <aside class="w-80 flex flex-col border-r border-surface-200-800 gap-2 p-2">
+      <div class="flex-1 min-h-0">
+        <DeviceSelector />
+      </div>
+      <div class="shrink-0 h-64">
+        <DiagnosticsPanel />
+      </div>
     </aside>
 
     <!-- Center: Operations + Hex viewer -->

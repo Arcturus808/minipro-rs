@@ -23,6 +23,30 @@ pub struct ProgrammerInfoDto {
 }
 
 #[derive(Serialize)]
+pub struct ProgrammerDetailsDto {
+    model: String,
+    status: String,
+    firmware: String,
+    firmware_raw: u32,
+    device_code: String,
+    serial_number: String,
+    hardware_version: String,
+    hardware_version_raw: u8,
+}
+
+#[derive(Serialize)]
+pub struct OvercurrentDto {
+    ovc_flag: u8,
+    address: u32,
+    safe: bool,
+}
+
+#[derive(Serialize)]
+pub struct CalibrationDto {
+    bytes: Vec<u8>,
+}
+
+#[derive(Serialize)]
 pub struct DeviceInfoDto {
     name: String,
     chip_type: String,
@@ -538,6 +562,80 @@ pub async fn check_database(state: State<'_, Arc<AppState>>) -> Result<bool, Str
     match get_db_paths(&state) {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
+    }
+}
+
+/// Return expanded programmer details (no USB reconnection required).
+#[tauri::command]
+pub async fn get_programmer_details(state: State<'_, Arc<AppState>>) -> Result<ProgrammerDetailsDto, String> {
+    let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+    let info = guard.as_ref().ok_or("No programmer connected")?;
+
+    Ok(ProgrammerDetailsDto {
+        model: format!("{:?}", info.model),
+        status: format!("{:?}", info.status),
+        firmware: info.firmware_str.clone(),
+        firmware_raw: info.firmware,
+        device_code: info.device_code.clone(),
+        serial_number: info.serial_number.clone(),
+        hardware_version: format!("{:02x}", info.hardware_version),
+        hardware_version_raw: info.hardware_version,
+    })
+}
+
+/// Check the programmer's over-current protection status.
+#[tauri::command]
+pub async fn check_overcurrent(state: State<'_, Arc<AppState>>) -> Result<OvercurrentDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let handle = state_task.take_handle()?;
+        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb).map_err(|e| e.to_string())?;
+        let _ = state_task.store_handle(handle);
+        Ok::<(minipro_core::protocol::OvcStatus, u8), String>((wstatus, ovc))
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok((wstatus, ovc))) => Ok(OvercurrentDto {
+            ovc_flag: ovc,
+            address: wstatus.address,
+            safe: ovc == 0,
+        }),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// Read the programmer's internal RC calibration bytes.
+#[tauri::command]
+pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<CalibrationDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let handle = state_task.take_handle()?;
+        let bytes = handle.protocol.read_calibration(&handle.usb, 4).map_err(|e| e.to_string())?;
+        let _ = state_task.store_handle(handle);
+        Ok::<Vec<u8>, String>(bytes)
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(bytes)) => Ok(CalibrationDto { bytes }),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
     }
 }
 

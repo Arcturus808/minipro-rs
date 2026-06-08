@@ -28,6 +28,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_programmer_info,
+            commands::get_programmer_details,
             commands::search_devices,
             commands::get_device_info,
             commands::select_device,
@@ -40,6 +41,8 @@ pub fn run() {
             commands::do_chip_id,
             commands::read_file_bytes,
             commands::check_database,
+            commands::check_overcurrent,
+            commands::read_calibration,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
