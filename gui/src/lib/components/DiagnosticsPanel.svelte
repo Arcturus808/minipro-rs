@@ -12,13 +12,16 @@
     }
   }
 
-  async function readCalib() {
+  async function runHardwareCheck() {
     try {
-      const r = await invoke<any>("read_calibration");
-      const hex = r.bytes.map((b: number) => b.toString(16).padStart(2, "0")).join(" ");
-      logs.info(`Calibration: ${hex}`);
+      const r = await invoke<{ supported: boolean; pass: boolean; message: string }>("run_hardware_check");
+      if (r.supported && r.pass) {
+        logs.info("Hardware check: PASS");
+      } else {
+        logs.warn(`Hardware check: ${r.message}`);
+      }
     } catch (e) {
-      logs.error(`Calib failed: ${e}`);
+      logs.error(`Hardware check failed: ${e}`);
     }
   }
 </script>
@@ -36,7 +39,7 @@
   {/if}
   <div class="space-y-1">
     <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={checkOvc} disabled={!$programmer}>Check Overcurrent</button>
-    <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={readCalib} disabled={!$programmer}>Read Calibration</button>
+    <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
     <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled>Pin Test (unsupported)</button>
   </div>
 </div>

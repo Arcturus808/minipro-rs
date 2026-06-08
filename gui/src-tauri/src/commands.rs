@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,13 @@ pub struct ProgrammerInfoDto {
     firmware: String,
     serial_number: String,
     hardware_version: String,
+}
+
+#[derive(Serialize)]
+pub struct HardwareCheckResultDto {
+    supported: bool,
+    pass: bool,
+    message: String,
 }
 
 #[derive(Serialize)]
@@ -642,6 +649,50 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
     match result {
         Ok(Ok(Ok(bytes))) => Ok(CalibrationDto { bytes }),
         Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
+/// Run the programmer's built-in hardware self-test.
+#[tauri::command]
+pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<HardwareCheckResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::task::spawn_blocking(move || {
+            let mut handle = state_task.take_handle()?;
+            let result = hardware_check(&mut handle).map_err(|e| e.to_string());
+            let _ = state_task.store_handle(handle);
+            result
+        }),
+    )
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(Ok(()))) => Ok(HardwareCheckResultDto {
+            supported: true,
+            pass: true,
+            message: "PASS".into(),
+        }),
+        Ok(Ok(Err(e))) => {
+            if e.contains("UnsupportedOperation") || e.contains("not supported") {
+                Ok(HardwareCheckResultDto {
+                    supported: false,
+                    pass: false,
+                    message: "Not supported on this programmer model".into(),
+                })
+            } else {
+                Err(e)
+            }
+        }
         Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
         Err(_) => Err("Operation timed out".into()),
     }

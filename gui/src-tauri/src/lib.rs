@@ -44,6 +44,7 @@ pub fn run() {
             commands::check_database,
             commands::check_overcurrent,
             commands::read_calibration,
+            commands::run_hardware_check,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
