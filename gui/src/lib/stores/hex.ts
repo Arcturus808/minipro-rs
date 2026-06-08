@@ -1,26 +1,54 @@
-import { writable, derived } from "svelte/store";
+import { writable, derived, get } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { logs } from "./logs";
 
-export const hexBuffer = writable<Uint8Array | null>(null);
-export const hexFilePath = writable<string | null>(null);
+interface HexMeta {
+  size: number;
+  path: string | null;
+  data: Uint8Array | null;
+}
 
-export const hexSize = derived(hexBuffer, ($b) => $b?.length ?? 0);
+export const hexMeta = writable<HexMeta | null>(null);
+
+export const hexSize = derived(hexMeta, ($m) => $m?.size ?? 0);
+export const hexFilePath = derived(hexMeta, ($m) => $m?.path ?? null);
+
+/** Get the raw hex data (not reactive — call this imperatively when needed). */
+export function getHexData(): Uint8Array | null {
+  return get(hexMeta)?.data ?? null;
+}
+
+/** Check if any hex data is loaded. */
+export function hasHexData(): boolean {
+  return get(hexMeta)?.data !== null;
+}
+
+/** Directly set hex data (for testing or chip reads). */
+export function setHexData(data: Uint8Array | null, path: string | null = null) {
+  hexMeta.set(data ? { size: data.length, path, data } : null);
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
 
 export async function loadFile(path: string) {
   try {
-    const bytes = await invoke<number[]>("read_file_bytes", { path });
-    hexBuffer.set(new Uint8Array(bytes));
-    hexFilePath.set(path);
-    logs.info(`Loaded ${bytes.length} bytes from ${path}`);
+    const base64 = await invoke<string>("read_file_bytes", { path });
+    const bytes = base64ToUint8Array(base64);
+    setHexData(bytes, path);
   } catch (e) {
     logs.error(`Failed to load file: ${e}`);
-    hexBuffer.set(null);
-    hexFilePath.set(null);
+    setHexData(null);
   }
 }
 
 export function clearHexBuffer() {
-  hexBuffer.set(null);
-  hexFilePath.set(null);
+  setHexData(null);
 }

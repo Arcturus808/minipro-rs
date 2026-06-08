@@ -1,15 +1,10 @@
 <script lang="ts">
   import { logs, logText } from "../stores/logs";
-  import { tick } from "svelte";
 
   let scrollContainer: HTMLDivElement;
 
-  $: if ($logs.length > 0) {
-    tick().then(() => {
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
-    });
+  $: if ($logs.length > 0 && scrollContainer) {
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
   }
 
   function formatTime(d: Date): string {

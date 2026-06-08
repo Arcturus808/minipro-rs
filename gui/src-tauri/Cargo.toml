@@ -29,3 +29,4 @@ minipro-core = { path = "../../crates/minipro-core" }
 
 # Async runtime for blocking USB ops
 tokio = { version = "1", features = ["rt-multi-thread"] }
+base64 = "0.22"

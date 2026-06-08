@@ -639,11 +639,13 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
     }
 }
 
-/// Read a file on disk into raw bytes for hex viewer display.
+/// Read a file on disk and return as base64 for efficient IPC transfer.
 #[tauri::command]
-pub async fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+pub async fn read_file_bytes(path: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        std::fs::read(&path).map_err(|e| format!("Cannot read file: {}", e))
+        std::fs::read(&path)
+            .map(|bytes| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
+            .map_err(|e| format!("Cannot read file: {}", e))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?

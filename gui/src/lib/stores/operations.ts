@@ -54,28 +54,32 @@ function defaultOptions(): OperationOptions {
   };
 }
 
+function deferLog(level: "info" | "warn" | "error", message: string) {
+  requestAnimationFrame(() => logs[level](message));
+}
+
 async function runOp(
   name: string,
   fn: () => Promise<unknown>,
 ) {
   if (!selectedDevice) {
-    logs.error("No device selected");
+    deferLog("error", "No device selected");
     return;
   }
   isRunning.set(true);
   currentOperation.set(name);
   progress.set(null);
-  logs.info(`${name} started...`);
+  deferLog("info", `${name} started...`);
 
   try {
     const result = await fn();
-    logs.info(`${name} completed successfully`);
+    deferLog("info", `${name} completed successfully`);
     if (result && typeof result === "object" && "bytes" in result) {
       const stats = result as { bytes: number; crc32: number };
-      logs.info(`  ${stats.bytes} bytes, CRC-32: ${stats.crc32.toString(16).padStart(8, "0")}`);
+      deferLog("info", `  ${stats.bytes} bytes, CRC-32: ${stats.crc32.toString(16).padStart(8, "0")}`);
     }
   } catch (e) {
-    logs.error(`${name} failed: ${e}`);
+    deferLog("error", `${name} failed: ${e}`);
   } finally {
     isRunning.set(false);
     currentOperation.set(null);
@@ -115,6 +119,6 @@ export async function doBlankCheck() {
 export async function doChipId() {
   await runOp("Chip ID", async () => {
     const id = await invoke<string>("do_chip_id");
-    logs.info(`Chip ID: ${id}`);
+    deferLog("info", `Chip ID: ${id}`);
   });
 }

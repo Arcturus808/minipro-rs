@@ -3,8 +3,10 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexBuffer, clearHexBuffer, loadFile } from "./lib/stores/hex";
-  import { settings, initSettings, setSetting } from "./lib/stores/settings";
+  import { hexMeta, hasHexData, hexFilePath, clearHexBuffer, loadFile, setHexData } from "./lib/stores/hex";
+  import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
+  import { get } from "svelte/store";
+  import { invoke } from "@tauri-apps/api/core";
   import { pickOpenFile, pickSaveFile } from "./lib/file-dialog";
   import {
     initProgressListener,
@@ -88,8 +90,12 @@
     };
   }
 
+  function testLargeArray() {
+    console.log("test called");
+  }
+
   async function onRead() {
-    const path = await pickSaveFile("Save chip dump as", $settings.defaultDirectory);
+    const path = await pickSaveFile("Save chip dump as", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       await doRead(path, getOptions());
@@ -97,7 +103,7 @@
   }
 
   async function onWrite() {
-    const path = await pickOpenFile("Select file to write to chip", $settings.defaultDirectory);
+    const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       await doWrite(path, getOptions());
@@ -105,7 +111,7 @@
   }
 
   async function onVerify() {
-    const path = await pickOpenFile("Select file to verify against", $settings.defaultDirectory);
+    const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       await doVerify(path, getOptions());
@@ -113,10 +119,10 @@
   }
 
   async function onLoadFile() {
-    const path = await pickOpenFile("Open file to inspect", $settings.defaultDirectory);
+    const path = await pickOpenFile("Open file to inspect");
     if (path) {
-      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       await loadFile(path);
+      logs.info(`File loaded: ${path}`);
     }
   }
 </script>
@@ -223,7 +229,14 @@
           >
             Load File
           </button>
-          {#if $hexBuffer}
+          <button
+            class="btn preset-tonal"
+            onclick={testLargeArray}
+            disabled={$isRunning}
+          >
+            Test 256KB
+          </button>
+          {#if $hexMeta}
             <button
               class="btn preset-tonal"
               onclick={clearHexBuffer}
