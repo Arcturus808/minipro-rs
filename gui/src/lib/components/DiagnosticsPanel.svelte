@@ -3,6 +3,17 @@
   import { programmer } from "../stores/device";
   import { logs } from "../stores/logs";
 
+  const HARDWARE_CHECK_SUPPORTED = new Set([
+    "Tl866iiPlus",
+    "T48",
+    "T56",
+    "T76",
+  ]);
+
+  $: hardwareCheckSupported = $programmer
+    ? HARDWARE_CHECK_SUPPORTED.has($programmer.model)
+    : false;
+
   async function checkOvc() {
     try {
       const r = await invoke<any>("check_overcurrent");
@@ -39,7 +50,11 @@
   {/if}
   <div class="space-y-1">
     <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={checkOvc} disabled={!$programmer}>Check Overcurrent</button>
-    <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
-    <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled>Pin Test (unsupported)</button>
+    {#if hardwareCheckSupported}
+      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
+    {:else}
+      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Hardware Check</button>
+    {/if}
+    <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not yet implemented">Pin Test (unsupported)</button>
   </div>
 </div>
