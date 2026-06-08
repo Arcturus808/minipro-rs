@@ -171,8 +171,10 @@ fn put_le(buf: &mut [u8], val: u32, len: usize) {
 
 impl Protocol for Tl866aProtocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
-        self.protocol_id.store(device.protocol_id, std::sync::atomic::Ordering::Relaxed);
-        self.variant_lo.store(device.variant as u8, std::sync::atomic::Ordering::Relaxed);
+        self.protocol_id
+            .store(device.protocol_id, std::sync::atomic::Ordering::Relaxed);
+        self.variant_lo
+            .store(device.variant as u8, std::sync::atomic::Ordering::Relaxed);
         let mut msg = [0u8; 64];
         // Matches C tl866a_begin_transaction packet layout.
         // msg_init() sets [0]=cmd, [1]=protocol_id, [2]=variant_lo.
@@ -205,11 +207,17 @@ impl Protocol for Tl866aProtocol {
         match self.get_ovc_status(usb) {
             Ok((_, ovc)) => {
                 if ovc != 0 {
-                    trace!("begin_transaction: OVC flag set ({:#04x}); ignoring transient", ovc);
+                    trace!(
+                        "begin_transaction: OVC flag set ({:#04x}); ignoring transient",
+                        ovc
+                    );
                 }
             }
             Err(e) => {
-                trace!("begin_transaction: get_ovc_status failed: {}; continuing", e);
+                trace!(
+                    "begin_transaction: get_ovc_status failed: {}; continuing",
+                    e
+                );
             }
         }
         Ok(())

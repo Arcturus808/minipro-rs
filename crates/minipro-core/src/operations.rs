@@ -149,7 +149,11 @@ pub fn read_chip(
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     while offset < size {
         let block = (read_size).min(size - offset);
-        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
+        let address = if use_word_addr {
+            (offset as u32) >> 1
+        } else {
+            offset as u32
+        };
         let mut ds = DataSet {
             data: vec![0u8; block],
             address,
@@ -235,7 +239,11 @@ pub fn write_chip(
     let mut offset = 0usize;
     while offset < size {
         let block = write_size.min(size - offset);
-        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
+        let address = if use_word_addr {
+            (offset as u32) >> 1
+        } else {
+            offset as u32
+        };
         let ds = DataSet {
             data: buf[offset..offset + block].to_vec(),
             address,
@@ -253,7 +261,9 @@ pub fn write_chip(
         // after every write block.
         let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
         if ovc != 0 {
-            return Err(MiniproError::Overcurrent { address: wstatus.address });
+            return Err(MiniproError::Overcurrent {
+                address: wstatus.address,
+            });
         }
         if wstatus.error != 0 {
             return Err(MiniproError::VerifyFailed {
@@ -311,7 +321,11 @@ pub fn verify_chip(
     let mut offset = 0usize;
     while offset < size {
         let block = read_size.min(size - offset);
-        let address = if use_word_addr { (offset as u32) >> 1 } else { offset as u32 };
+        let address = if use_word_addr {
+            (offset as u32) >> 1
+        } else {
+            offset as u32
+        };
         let mut ds = DataSet {
             data: vec![0u8; block],
             address,
