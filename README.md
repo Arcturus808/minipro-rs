@@ -70,40 +70,41 @@ Community contributors with Mac hardware are warmly welcomed — especially for 
 
 ---
 
-## GUI front-ends with Tauri
+## GUI — minipro-gui (Tauri + Svelte)
 
-[Tauri](https://tauri.app/) is a well-suited choice for building a native GUI front-end for this project.  Because `minipro-core` is a plain Rust library crate, a Tauri app can depend on it directly:
+A native desktop GUI is included in the `gui/` directory. It is built with **Tauri v2** + **Svelte 5** + **Tailwind CSS** and ships as a single `.msi` / `.exe` installer on Windows.
+
+### Features
+
+- Device search & selection with paginated/scrolling list
+- Read / Write / Verify / Erase / Blank Check / Chip ID
+- Hex viewer for inspecting files or chip dumps
+- Live progress bar with CRC32 verification
+- Terminal-style log panel
+- Settings persistence (theme, operation defaults, last directory)
+- Diagnostics panel (programmer info, overcurrent check, calibration read)
+
+### Quick start
+
+```bash
+cd gui
+npm install
+cargo tauri dev        # development with hot-reload
+cargo tauri build      # production installer (.msi + .exe)
+```
+
+See [`gui/README.md`](gui/README.md) for full documentation including architecture, project structure, and development notes.
+
+### Third-party GUIs
+
+`minipro-core` is a plain Rust library crate, so you can also build your own GUI front-end:
 
 ```toml
-# In your Tauri app's src-tauri/Cargo.toml
 [dependencies]
 minipro-core = { path = "../minipro-rs/crates/minipro-core" }
 ```
 
-Then expose operations as Tauri commands:
-
-```rust
-#[tauri::command]
-async fn read_chip(device: String, output: String) -> Result<(), String> {
-    // Tauri commands run on a thread pool, so blocking USB I/O is safe here.
-    tokio::task::spawn_blocking(move || {
-        let mut handle = minipro_core::MiniproHandle::open()
-            .map_err(|e| e.to_string())?;
-        // ... begin_transaction, read_chip, etc.
-        Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-```
-
-**Integration notes:**
-- `minipro-core` uses `pollster` for blocking USB calls.  Wrap them in `tokio::task::spawn_blocking` (as above) so they don't block Tauri's async executor.
-- `read_chip`, `write_chip`, and `verify_chip` accept an `Option<&mut dyn FnMut(usize, usize)>` progress callback invoked with `(bytes_done, total_bytes)` after each block.  Wire it to `window.emit("progress", …)` to drive a front-end progress bar — `minipro-core` has no terminal UI dependency.
-- `read_chip` and `write_chip` return `Result<OpStats>` with `bytes` and `crc32` fields.  Use these to update a status label without parsing CLI output.
-- The WinUSB driver requirement is identical on Windows — no extra setup for a Tauri deployment.
-- The same `minipro-core` crate works on Linux and macOS, so the Tauri app is automatically cross-platform.
-- A Tauri app ships as a native installer (`.msi` on Windows, `.dmg` on macOS, `.deb`/`.AppImage` on Linux) and still requires no `libusb` or Cygwin.
+Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_done, total_bytes)` progress callback to drive your UI.
 
 ---
 
@@ -137,10 +138,11 @@ minipro-rs/
 │   │   │   │   └── jedec.rs    # JEDEC fuse-map read/write
 │   │   │   └── operations.rs   # High-level read/write/erase/verify/blank-check
 │   │   └── Cargo.toml
-│   └── minipro-cli/      # binary: clap CLI front-end
-│       ├── src/
-│       │   └── main.rs
-│       └── Cargo.toml
+│   ├── minipro-cli/      # binary: clap CLI front-end
+│   │   ├── src/
+│   │   │   └── main.rs
+│   │   └── Cargo.toml
+│   └── (gui/ omitted — see gui/README.md)
 ├── data/
 │   ├── infoic.xml        # 13 000+ device definitions (vendored from upstream)
 │   └── logicic.xml       # Logic IC test vectors
