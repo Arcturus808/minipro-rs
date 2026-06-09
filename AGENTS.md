@@ -13,14 +13,18 @@
 
 ```bash
 # Fast dev build (reuses cached Rust artifacts)
+# ⚠️ Only use when ONLY Rust code changed.
 cd gui && npm run build && cargo build --release
 
 # Full production build (embeds fresh frontend into binary)
+# Use this when ANY frontend code (Svelte, CSS, JS, HTML) changed.
 cd gui && cargo tauri build
 
 # The `.exe` is at:
 # gui/src-tauri/target/release/minipro-gui.exe
 ```
+
+**Critical rule:** If you change any `.svelte`, `.ts`, `.css`, or `.html` file, you **must** run `cargo tauri build`. `cargo build --release` will keep stale embedded frontend assets from the previous full build.
 
 ## Store Patterns (CRITICAL)
 
@@ -94,6 +98,16 @@ tauri = { version = "2", features = ["devtools"] }
 
 Right-click → Inspect and F12 will not work otherwise.
 
+### Tauri window permissions (Tauri 2.x)
+Adding `window:default` to capabilities does **not** work. Use specific granular permissions:
+
+```json
+"permissions": [
+  "core:window:allow-set-size",
+  "core:window:allow-center"
+]
+```
+
 ## Data Handling
 
 ### Large binary files
@@ -101,6 +115,18 @@ Right-click → Inspect and F12 will not work otherwise.
 - Convert to `Uint8Array` with `atob()` in the frontend.
 - **Do NOT fear Svelte reactivity with 256KB Uint8Arrays.** The browser handles 16,384 `<div>` rows natively. Only optimize with virtual scrolling if profiling shows a real problem.
 - When rendering hex rows, use direct array indexing (`data[offset + j]`) instead of `.slice()` inside reactive blocks.
+
+### Base64 encoding large arrays
+`String.fromCharCode(...data)` crashes with "Maximum call stack size exceeded" for arrays >65K elements. Chunk the conversion:
+
+```ts
+const CHUNK = 0x8000; // 32KB
+let result = "";
+for (let i = 0; i < data.length; i += CHUNK) {
+  result += String.fromCharCode(...data.subarray(i, i + CHUNK));
+}
+return btoa(result);
+```
 
 ## Component Conventions
 
@@ -117,25 +143,40 @@ Right-click → Inspect and F12 will not work otherwise.
    {/if}
    ```
 
+## Hex Viewer Layout
+
+Use `ch` (character-width) units for columns so spacing scales with font size:
+
+```svelte
+<!-- Offset column: 8 hex chars + 1ch padding -->
+<span style="width: 9ch;">{formatOffset(offset)}</span>
+
+<!-- Hex bytes: 32 chars + 15 spaces = 47ch, rounded up -->
+<span style="width: 48ch;">{bytes.map(b => formatHex(b)).join(' ')}</span>
+
+<!-- ASCII: natural width -->
+<span>{bytes.map(b => toAscii(b)).join('')}</span>
+```
+
 ## Project Structure
 
 ```
 gui/
   src/
-    App.svelte                 — main layout, operations panel
+    App.svelte                 — main layout, operations panel, draggable splitters
     lib/
       stores/
         hex.ts                 — file data, loading state
         operations.ts          — chip read/write/verify/erase
         logs.ts                — terminal log entries
         device.ts              — connected programmer + IC database
-        settings.ts            — persisted app preferences
+        settings.ts            — persisted app preferences (includes panel widths)
       components/
-        HexViewer.svelte         — hex dump with offset/hex/ascii
-        TerminalLog.svelte       — scrollable log panel
+        HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear
+        TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list
         DiagnosticsPanel.svelte  — overcurrent, calibration, pin test
-        SettingsPanel.svelte     — theme, auto-detect, etc.
+        SettingsPanel.svelte     — theme, defaults, layout reset
         ProgressPanel.svelte     — operation progress + cancel
       file-dialog.ts             — Tauri dialog wrappers
   src-tauri/
@@ -146,3 +187,14 @@ gui/
     Cargo.toml
     tauri.conf.json
 ```
+
+## Known Bugs & Fixes
+
+### `selectedDevice` store held string instead of object
+`DeviceSelector.svelte` was doing `selectedDevice.set(name)` (a string), but the store is typed as `DeviceInfo | null`. Fixed by storing the full `DeviceInfo` object: `selectedDevice.set(selectedInfo)`.
+
+### `do_write` called `erase_chip` before `begin_transaction`
+The handle had no active device, so the firmware returned "Protocol error: no device selected". Fixed by calling `begin_transaction(device)` before `erase_chip`.
+
+### Global `select-none` prevented text selection
+Adding `select-none` to the root app container blocked selection everywhere including terminal logs. Fixed by only applying it conditionally during active drag operations.
