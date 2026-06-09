@@ -91,6 +91,10 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
 
+### Screenshot
+
+![MINIPRO-RS GUI](docs/screenshots/minipro-rs.png)
+
 ### Quick start
 
 ```bash

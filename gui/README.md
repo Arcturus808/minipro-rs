@@ -29,7 +29,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 
 ## Screenshots
 
-*(Screenshots to be added once UI stabilizes)*
+![MINIPRO-RS GUI](../docs/screenshots/minipro-rs.png)
 
 ## Tech Stack
 
