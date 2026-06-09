@@ -3,7 +3,7 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexMeta, hexLoading, clearHexBuffer, loadFile } from "./lib/stores/hex";
+  import { hexLoading, loadFile } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -11,6 +11,7 @@
   import {
     initProgressListener,
     isRunning,
+    activeOperation,
     doRead,
     doWrite,
     doVerify,
@@ -27,12 +28,17 @@
 
   let themeValue: "system" | "dark" | "light" = $state("system");
 
-  // Operation options (initialized from settings)
+  // Operation options
   let skipErase = $state(false);
   let skipVerify = $state(false);
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
+
+  // Active operation label for the options panel
+  let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
+  let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
+  let opNeedsFileOut = $derived($activeOperation === "read");
 
   onMount(() => {
     theme.init();
@@ -41,7 +47,6 @@
     });
     initProgressListener();
     initSettings().then(() => {
-      // Apply loaded settings to local state
       const s = $settings;
       skipErase = s.skipErase;
       skipVerify = s.skipVerify;
@@ -53,7 +58,6 @@
       }
     });
 
-    // Delay startup checks to let the UI render first
     setTimeout(() => {
       checkDatabase().then((ok) => {
         if (!ok) {
@@ -67,7 +71,6 @@
     }, 100);
   });
 
-  // Sync theme changes from settings back to theme store
   $effect(() => {
     const s = $settings;
     if (s.theme && s.theme !== themeValue) {
@@ -90,27 +93,70 @@
     };
   }
 
-  async function onRead() {
-    const path = await pickSaveFile("Save chip dump as", get(settings).defaultDirectory);
-    if (path) {
-      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-      await doRead(path, getOptions());
+  function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id") {
+    activeOperation.set(op);
+    switch (op) {
+      case "read":
+        page = "code";
+        format = "auto";
+        break;
+      case "write":
+        page = "code";
+        format = "auto";
+        skipErase = false;
+        skipVerify = false;
+        sizeMismatch = "error";
+        break;
+      case "verify":
+        page = "code";
+        format = "auto";
+        sizeMismatch = "error";
+        break;
+      case "erase":
+      case "blank_check":
+      case "chip_id":
+        break;
     }
   }
 
-  async function onWrite() {
-    const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
-    if (path) {
-      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-      await doWrite(path, getOptions());
-    }
-  }
+  async function onStart() {
+    const op = $activeOperation;
+    if (!op) return;
 
-  async function onVerify() {
-    const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
-    if (path) {
-      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-      await doVerify(path, getOptions());
+    switch (op) {
+      case "read": {
+        const path = await pickSaveFile("Save chip dump as", get(settings).defaultDirectory);
+        if (path) {
+          await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+          await doRead(path, getOptions());
+        }
+        break;
+      }
+      case "write": {
+        const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
+        if (path) {
+          await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+          await doWrite(path, getOptions());
+        }
+        break;
+      }
+      case "verify": {
+        const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
+        if (path) {
+          await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+          await doVerify(path, getOptions());
+        }
+        break;
+      }
+      case "erase":
+        await doErase();
+        break;
+      case "blank_check":
+        await doBlankCheck();
+        break;
+      case "chip_id":
+        await doChipId();
+        break;
     }
   }
 
@@ -147,16 +193,39 @@
       <SettingsPanel />
       <span class="text-xs opacity-60">Theme:</span>
       <div class="segment bg-surface-200-800 rounded p-0.5 flex gap-0.5">
-        {#each (["system", "dark", "light"] as const) as t}
-          <button
-            class="text-xs px-2 py-1 rounded transition-colors"
-            class:preset-filled-primary={themeValue === t}
-            class:hover:preset-tonal={themeValue !== t}
-            onclick={() => setTheme(t)}
-          >
-            {t[0].toUpperCase() + t.slice(1)}
-          </button>
-        {/each}
+        <button
+          class="p-1.5 rounded transition-colors"
+          class:preset-filled-primary={themeValue === "system"}
+          class:hover:preset-tonal={themeValue !== "system"}
+          onclick={() => setTheme("system")}
+          title="System"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <button
+          class="p-1.5 rounded transition-colors"
+          class:preset-filled-primary={themeValue === "dark"}
+          class:hover:preset-tonal={themeValue !== "dark"}
+          onclick={() => setTheme("dark")}
+          title="Dark"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+        <button
+          class="p-1.5 rounded transition-colors"
+          class:preset-filled-primary={themeValue === "light"}
+          class:hover:preset-tonal={themeValue !== "light"}
+          onclick={() => setTheme("light")}
+          title="Light"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </button>
       </div>
     </div>
   </header>
@@ -179,106 +248,177 @@
       <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
         <h2 class="text-sm font-semibold mb-3">Operations</h2>
 
-        <div class="flex flex-wrap gap-2 mb-4">
+        <div class="flex flex-wrap gap-2 mb-3">
           <button
-            class="btn preset-filled-primary"
-            onclick={onRead}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("read")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "read"}
+            class:ring-2={$activeOperation === "read"}
+            class:ring-primary-400={$activeOperation === "read"}
+            class:font-bold={$activeOperation === "read"}
           >
             Read
           </button>
           <button
-            class="btn preset-filled-primary"
-            onclick={onWrite}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("write")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "write"}
+            class:ring-2={$activeOperation === "write"}
+            class:ring-primary-400={$activeOperation === "write"}
+            class:font-bold={$activeOperation === "write"}
           >
             Write
           </button>
           <button
-            class="btn preset-tonal"
-            onclick={onVerify}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("verify")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "verify"}
+            class:ring-2={$activeOperation === "verify"}
+            class:ring-primary-400={$activeOperation === "verify"}
+            class:font-bold={$activeOperation === "verify"}
           >
             Verify
           </button>
           <button
-            class="btn preset-tonal"
-            onclick={doErase}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("erase")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "erase"}
+            class:ring-2={$activeOperation === "erase"}
+            class:ring-primary-400={$activeOperation === "erase"}
+            class:font-bold={$activeOperation === "erase"}
           >
             Erase
           </button>
           <button
-            class="btn preset-tonal"
-            onclick={doBlankCheck}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("blank_check")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "blank_check"}
+            class:ring-2={$activeOperation === "blank_check"}
+            class:ring-primary-400={$activeOperation === "blank_check"}
+            class:font-bold={$activeOperation === "blank_check"}
           >
             Blank Check
           </button>
           <button
-            class="btn preset-tonal"
-            onclick={doChipId}
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("chip_id")}
             disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "chip_id"}
+            class:ring-2={$activeOperation === "chip_id"}
+            class:ring-primary-400={$activeOperation === "chip_id"}
+            class:font-bold={$activeOperation === "chip_id"}
           >
             Chip ID
           </button>
           <button
-            class="btn preset-tonal"
+            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={onLoadFile}
             disabled={$isRunning || $hexLoading}
           >
             Load File
           </button>
-          {#if $hexMeta}
-            <button
-              class="btn preset-tonal"
-              onclick={clearHexBuffer}
-            >
-              Clear
-            </button>
-          {/if}
         </div>
+
+        <!-- Options -->
+        {#if $activeOperation}
+          <div class="border-t border-surface-200-800 pt-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
+              <button
+                class="text-xs opacity-50 hover:opacity-100 underline transition-opacity"
+                onclick={() => selectOp($activeOperation!)}
+                disabled={$isRunning}
+              >
+                Reset defaults
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              {#if $activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify"}
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="w-16 opacity-60">Page:</span>
+                  <select class="select text-sm flex-1" bind:value={page}>
+                    <option value="code">Code</option>
+                    <option value="data">Data</option>
+                    <option value="user">User</option>
+                  </select>
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="w-16 opacity-60">Format:</span>
+                  <select class="select text-sm flex-1" bind:value={format}>
+                    <option value="auto">Auto</option>
+                    <option value="bin">Binary</option>
+                    <option value="ihex">Intel HEX</option>
+                    <option value="srec">SREC</option>
+                    <option value="jedec">JEDEC</option>
+                  </select>
+                </div>
+              {/if}
+              {#if $activeOperation === "write"}
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="w-16 opacity-60">Size diff:</span>
+                  <select class="select text-sm flex-1" bind:value={sizeMismatch}>
+                    <option value="error">Error</option>
+                    <option value="warn">Warn</option>
+                    <option value="ignore">Ignore</option>
+                  </select>
+                </div>
+                <div class="flex items-center gap-4 ml-6">
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" class="checkbox" bind:checked={skipErase} />
+                    Skip erase
+                  </label>
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
+                    Skip verify
+                  </label>
+                </div>
+              {:else if $activeOperation === "verify"}
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="w-16 opacity-60">Size diff:</span>
+                  <select class="select text-sm flex-1" bind:value={sizeMismatch}>
+                    <option value="error">Error</option>
+                    <option value="warn">Warn</option>
+                    <option value="ignore">Ignore</option>
+                  </select>
+                </div>
+              {/if}
+              {#if $activeOperation === "erase" || $activeOperation === "blank_check" || $activeOperation === "chip_id"}
+                <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
+              {/if}
+            </div>
+
+            <!-- Start button -->
+            <div class="flex flex-col gap-2">
+              {#if opNeedsFileIn}
+                <span class="text-xs opacity-60 text-center">You will be prompted to select an input file</span>
+              {:else if opNeedsFileOut}
+                <span class="text-xs opacity-60 text-center">You will be prompted to choose a save location</span>
+              {/if}
+              <button
+                class="px-8 py-2.5 rounded-lg bg-primary-600 text-white text-base font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
+                onclick={onStart}
+                disabled={$isRunning || !$selectedDevice}
+              >
+                <span>Start {opLabel}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        {:else}
+          <div class="border-t border-surface-200-800 pt-3">
+            <p class="text-sm opacity-50">Select an operation above to configure options.</p>
+          </div>
+        {/if}
 
         <!-- Progress panel -->
         <ProgressPanel />
-
-        <!-- Options -->
-        <div class="mt-4 grid grid-cols-2 gap-4 border-t border-surface-200-800 pt-4">
-          <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" class="checkbox" bind:checked={skipErase} />
-            Skip erase
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
-            Skip verify
-          </label>
-          <div class="flex items-center gap-2 text-sm">
-            <span class="opacity-60">Page:</span>
-            <select class="select text-sm flex-1" bind:value={page}>
-              <option value="code">Code</option>
-              <option value="data">Data</option>
-              <option value="user">User</option>
-            </select>
-          </div>
-          <div class="flex items-center gap-2 text-sm">
-            <span class="opacity-60">Format:</span>
-            <select class="select text-sm flex-1" bind:value={format}>
-              <option value="auto">Auto</option>
-              <option value="bin">Binary</option>
-              <option value="ihex">Intel HEX</option>
-              <option value="srec">SREC</option>
-              <option value="jedec">JEDEC</option>
-            </select>
-          </div>
-          <div class="flex items-center gap-2 text-sm">
-            <span class="opacity-60">Size mismatch:</span>
-            <select class="select text-sm flex-1" bind:value={sizeMismatch}>
-              <option value="error">Error</option>
-              <option value="warn">Warn</option>
-              <option value="ignore">Ignore</option>
-            </select>
-          </div>
-        </div>
       </div>
 
       <!-- Hex viewer -->
@@ -287,9 +427,11 @@
       </div>
     </section>
 
-    <!-- Right: Terminal log -->
-    <aside class="w-96 flex flex-col border-l border-surface-200-800">
-      <TerminalLog />
+    <!-- Right sidebar: Terminal log -->
+    <aside class="w-80 flex flex-col border-l border-surface-200-800 gap-2 p-2">
+      <div class="flex-1 min-h-0">
+        <TerminalLog />
+      </div>
     </aside>
   </main>
 </div>
