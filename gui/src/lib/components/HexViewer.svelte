@@ -1,6 +1,7 @@
 <script lang="ts">
   import { hexMeta, hexLoading, clearHexBuffer } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
+  import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
   import { pickSaveFile } from "../file-dialog";
   import { get } from "svelte/store";
@@ -96,7 +97,10 @@
           class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1"
           onclick={async () => {
             const dir = get(settings).defaultDirectory ?? "";
-            const defaultPath = dir ? `${dir}\\dump.bin` : "dump.bin";
+            const dev = get(selectedDevice);
+            const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
+            const defaultName = `${devName}.bin`;
+            const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
             let path = await pickSaveFile(
               "Save chip dump as",
               defaultPath,
@@ -142,7 +146,7 @@
   <div
     bind:this={scrollContainer}
     onscroll={onScroll}
-    style="flex: 1; overflow: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: {fontSize}px; line-height: {rowHeight}px; padding: 8px;"
+    style="flex: 1; overflow: auto; font-family: 'Hack', 'Consolas', 'Courier New', monospace; font-size: {fontSize}px; line-height: {rowHeight}px; padding: 8px;"
   >
     {#if $hexLoading}
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
@@ -156,20 +160,11 @@
           {@const offset = rowIdx * ROW_SIZE}
           {@const end = Math.min(offset + ROW_SIZE, $hexMeta.data.length)}
           {@const len = end - offset}
+          {@const bytes = Array.from({length: len}, (_, j) => $hexMeta.data[offset + j])}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
-            <span style="width: 80px; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
-            <span style="width: 340px; flex-shrink: 0; display: flex; gap: 4px;">
-              {#each {length: len} as _, j}
-                {@const b = $hexMeta.data[offset + j]}
-                <span>{formatHex(b)}</span>
-              {/each}
-            </span>
-            <span style="opacity: 0.7;">
-              {#each {length: len} as _, j}
-                {@const b = $hexMeta.data[offset + j]}
-                {toAscii(b)}
-              {/each}
-            </span>
+            <span style="width: 9ch; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
+            <span style="width: 48ch; flex-shrink: 0; opacity: 0.85;">{bytes.map(b => formatHex(b)).join(' ')}</span>
+            <span style="opacity: 0.7;">{bytes.map(b => toAscii(b)).join('')}</span>
           </div>
         {/each}
       </div>

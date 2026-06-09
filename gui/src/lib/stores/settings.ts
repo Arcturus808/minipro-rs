@@ -11,6 +11,8 @@ export interface AppSettings {
   theme: "system" | "dark" | "light";
   deviceViewMode: "paginated" | "scroll";
   hexViewerFontSize: number;
+  leftPanelWidth: number;
+  rightPanelWidth: number;
 }
 
 const DEFAULTS: AppSettings = {
@@ -23,6 +25,8 @@ const DEFAULTS: AppSettings = {
   theme: "system",
   deviceViewMode: "paginated",
   hexViewerFontSize: 13,
+  leftPanelWidth: 288,
+  rightPanelWidth: 448,
 };
 
 let store: Store | null = null;

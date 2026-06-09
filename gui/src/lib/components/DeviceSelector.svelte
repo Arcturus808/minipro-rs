@@ -49,7 +49,7 @@
   async function onSelect(name: string) {
     selectedName = name;
     selectedInfo = await invoke("select_device", { name });
-    selectedDevice.set(name);
+    selectedDevice.set(selectedInfo);
   }
 
   function onDeselect() {

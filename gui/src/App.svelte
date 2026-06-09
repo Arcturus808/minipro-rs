@@ -40,6 +40,43 @@
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
   let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
 
+  // Panel widths (px) — draggable splitters, persisted to settings
+  let leftWidth = $state(288);
+  let rightWidth = $state(448);
+
+  // Drag state
+  let dragMode: "left" | "right" | null = $state(null);
+  let dragStartX = $state(0);
+  let dragStartLeft = $state(0);
+  let dragStartRight = $state(0);
+
+  function startDrag(mode: "left" | "right", e: MouseEvent) {
+    dragMode = mode;
+    dragStartX = e.clientX;
+    dragStartLeft = leftWidth;
+    dragStartRight = rightWidth;
+    e.preventDefault();
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!dragMode) return;
+    const delta = e.clientX - dragStartX;
+    if (dragMode === "left") {
+      leftWidth = Math.max(220, Math.min(400, dragStartLeft + delta));
+    } else if (dragMode === "right") {
+      // Dragging right splitter right → right panel gets narrower
+      rightWidth = Math.max(320, Math.min(600, dragStartRight - delta));
+    }
+  }
+
+  function stopDrag() {
+    if (dragMode) {
+      setSetting("leftPanelWidth", leftWidth);
+      setSetting("rightPanelWidth", rightWidth);
+    }
+    dragMode = null;
+  }
+
   onMount(() => {
     theme.init();
     theme.subscribe((t) => {
@@ -50,6 +87,8 @@
       const s = $settings;
       skipErase = s.skipErase;
       skipVerify = s.skipVerify;
+      leftWidth = s.leftPanelWidth;
+      rightWidth = s.rightPanelWidth;
       page = s.defaultPage;
       format = s.defaultFormat;
       sizeMismatch = s.defaultSizeMismatch;
@@ -76,6 +115,9 @@
     if (s.theme && s.theme !== themeValue) {
       theme.set(s.theme);
     }
+    // React to panel width resets from SettingsPanel
+    leftWidth = s.leftPanelWidth;
+    rightWidth = s.rightPanelWidth;
   });
 
   function setTheme(t: "system" | "dark" | "light") {
@@ -168,7 +210,9 @@
   }
 </script>
 
-<div class="h-screen flex flex-col bg-surface-50-950 text-surface-950-50">
+<svelte:window onmousemove={onMouseMove} onmouseup={stopDrag} />
+
+<div class="h-screen flex flex-col bg-surface-50-950 text-surface-950-50 select-none" class:cursor-col-resize={dragMode !== null}>
   <!-- Top bar -->
   <header
     class="flex items-center justify-between px-4 py-2 border-b border-surface-200-800 bg-surface-100-900"
@@ -228,7 +272,7 @@
   <!-- Main content -->
   <main class="flex-1 flex overflow-hidden">
     <!-- Left sidebar: Device selector + Diagnostics -->
-    <aside class="w-80 flex flex-col border-r border-surface-200-800 gap-2 p-2">
+    <aside class="flex flex-col border-r border-surface-200-800 gap-2 p-2 shrink-0" style="width: {leftWidth}px;">
       <div class="flex-1 min-h-0">
         <DeviceSelector />
       </div>
@@ -237,15 +281,24 @@
       </div>
     </aside>
 
+    <!-- Left splitter -->
+    <div
+      class="w-1 shrink-0 cursor-col-resize hover:bg-primary-500/30 transition-colors self-stretch flex items-center justify-center"
+      onmousedown={(e) => startDrag("left", e)}
+      title="Drag to resize"
+    >
+      <div class="w-0.5 h-8 rounded-full bg-surface-300-700"></div>
+    </div>
+
     <!-- Center: Operations + Hex viewer -->
-    <section class="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+    <section class="flex-1 flex flex-col p-4 gap-4 overflow-hidden min-w-0">
       <!-- Operations panel -->
       <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
         <h2 class="text-sm font-semibold mb-3">Operations</h2>
 
-        <div class="flex flex-wrap gap-2 mb-3">
+        <div class="flex flex-wrap gap-1.5 mb-3">
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("read")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "read"}
@@ -256,7 +309,7 @@
             Read
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("write")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "write"}
@@ -267,7 +320,7 @@
             Write
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("verify")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "verify"}
@@ -278,7 +331,7 @@
             Verify
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("erase")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "erase"}
@@ -289,7 +342,7 @@
             Erase
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("blank_check")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "blank_check"}
@@ -300,7 +353,7 @@
             Blank Check
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("chip_id")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "chip_id"}
@@ -311,7 +364,7 @@
             Chip ID
           </button>
           <button
-            class="btn preset-tonal hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={onLoadFile}
             disabled={$isRunning || $hexLoading}
           >
@@ -420,8 +473,17 @@
       </div>
     </section>
 
+    <!-- Right splitter -->
+    <div
+      class="w-1 shrink-0 cursor-col-resize hover:bg-primary-500/30 transition-colors self-stretch flex items-center justify-center"
+      onmousedown={(e) => startDrag("right", e)}
+      title="Drag to resize"
+    >
+      <div class="w-0.5 h-8 rounded-full bg-surface-300-700"></div>
+    </div>
+
     <!-- Right sidebar: Terminal log -->
-    <aside class="w-80 flex flex-col border-l border-surface-200-800 gap-2 p-2">
+    <aside class="flex flex-col border-l border-surface-200-800 gap-2 p-2 shrink-0" style="width: {rightWidth}px;">
       <div class="flex-1 min-h-0">
         <TerminalLog />
       </div>

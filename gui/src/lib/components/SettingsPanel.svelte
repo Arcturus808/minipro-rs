@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settings, setSetting } from "../stores/settings";
   import type { AppSettings } from "../stores/settings";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
 
   let show = $state(false);
 
@@ -142,6 +143,25 @@
             <option value="scroll">Scroll</option>
           </select>
         </div>
+      </div>
+
+      <!-- Layout -->
+      <div class="space-y-3">
+        <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Layout</h3>
+        <button
+          class="btn preset-tonal text-sm w-full"
+          onclick={async () => {
+            update("leftPanelWidth", 288);
+            update("rightPanelWidth", 448);
+            update("hexViewerFontSize", 13);
+            const win = getCurrentWindow();
+            await win.setSize({ type: "Logical", width: 1400, height: 900 });
+            await win.center();
+          }}
+        >
+          Reset layout & font size
+        </button>
+        <p class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Resets panel widths, font size, and window position to defaults. Takes effect immediately.</p>
       </div>
     </div>
   </div>
