@@ -29,7 +29,13 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 
 ## Screenshots
 
-![MINIPRO-RS GUI](../docs/screenshots/minipro-rs.png)
+**Light theme:**
+
+![MINIPRO-RS GUI — Light](../docs/screenshots/minipro_rs_light.png)
+
+**Dark theme:**
+
+![MINIPRO-RS GUI — Dark](../docs/screenshots/minipro_rs_dark.png)
 
 ## Tech Stack
 
