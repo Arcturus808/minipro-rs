@@ -10,6 +10,7 @@ export interface AppSettings {
   skipVerify: boolean;
   theme: "system" | "dark" | "light";
   deviceViewMode: "paginated" | "scroll";
+  hexViewerFontSize: number;
 }
 
 const DEFAULTS: AppSettings = {
@@ -21,6 +22,7 @@ const DEFAULTS: AppSettings = {
   skipVerify: false,
   theme: "system",
   deviceViewMode: "paginated",
+  hexViewerFontSize: 13,
 };
 
 let store: Store | null = null;

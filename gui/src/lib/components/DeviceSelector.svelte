@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
   import { selectedDevice } from "../stores/device";
+  import ComboSearch from "./ComboSearch.svelte";
 
   let searchQuery = $state("");
   let results = $state<string[]>([]);
@@ -14,14 +15,12 @@
   let store: Store | null = null;
 
   async function onSearch() {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
     page = 0;
     selectedName = null;
     selectedInfo = null;
-    results = await invoke<string[]>("search_devices", { query: searchQuery });
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter") onSearch();
+    results = await invoke<string[]>("search_devices", { query: trimmed });
   }
 
   function goPrev() { if (page > 0) page--; }
@@ -69,13 +68,15 @@
   <header class="p-3 border-b border-surface-200-800">
     <h3 class="text-sm font-semibold mb-2">Device Selector</h3>
     <div class="flex gap-2">
-      <input
-        type="text"
-        class="input flex-1 text-sm"
-        placeholder="Search devices..."
-        bind:value={searchQuery}
-        onkeydown={handleKeydown}
-      />
+      <div class="flex-1">
+        <ComboSearch
+          bind:value={searchQuery}
+          placeholder="Search devices..."
+          storageKey="minipro_device_search_history"
+          onselect={() => onSearch()}
+          onsubmit={() => onSearch()}
+        />
+      </div>
       <button class="btn preset-filled-primary text-sm px-3" onclick={onSearch}>Search</button>
     </div>
   </header>

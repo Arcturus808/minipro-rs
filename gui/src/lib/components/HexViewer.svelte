@@ -1,9 +1,21 @@
 <script lang="ts">
   import { hexMeta, hexLoading, clearHexBuffer } from "../stores/hex";
+  import { settings, setSetting } from "../stores/settings";
 
   const ROW_SIZE = 16;
-  const ROW_HEIGHT = 22;
   const BUFFER_ROWS = 5;
+
+  let fontSize = $state($settings.hexViewerFontSize);
+  let rowHeight = $derived(fontSize + 9);
+
+  $effect(() => {
+    fontSize = $settings.hexViewerFontSize;
+  });
+
+  function setFontSize(size: number) {
+    fontSize = size;
+    setSetting("hexViewerFontSize", size);
+  }
 
   let scrollContainer: HTMLDivElement;
   let scrollTop = $state(0);
@@ -28,18 +40,12 @@
     }
   }
 
-  function onResize() {
-    if (scrollContainer) {
-      containerHeight = scrollContainer.clientHeight;
-    }
-  }
-
   let totalRows = $derived($hexMeta?.data ? Math.ceil($hexMeta.data.length / ROW_SIZE) : 0);
-  let startRow = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_ROWS));
-  let endRow = $derived(Math.min(totalRows, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + BUFFER_ROWS));
+  let startRow = $derived(Math.max(0, Math.floor(scrollTop / rowHeight) - BUFFER_ROWS));
+  let endRow = $derived(Math.min(totalRows, Math.ceil((scrollTop + containerHeight) / rowHeight) + BUFFER_ROWS));
   let visibleRows = $derived(Array.from({ length: endRow - startRow }, (_, i) => startRow + i));
-  let totalHeight = $derived(totalRows * ROW_HEIGHT);
-  let topPadding = $derived(startRow * ROW_HEIGHT);
+  let totalHeight = $derived(totalRows * rowHeight);
+  let topPadding = $derived(startRow * rowHeight);
 
   $effect(() => {
     if (scrollContainer) {
@@ -58,19 +64,43 @@
         </span>
       {/if}
     </div>
-    {#if $hexMeta}
-      <button
-        class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800"
-        onclick={clearHexBuffer}
-      >
-        Clear
-      </button>
-    {/if}
+    <div class="flex items-center gap-2">
+      {#if $hexMeta}
+        <select
+          class="text-xs opacity-60 hover:opacity-100 bg-transparent border border-surface-200-800 rounded px-1 py-0.5"
+          value={fontSize}
+          onchange={(e) => setFontSize(Number(e.currentTarget.value))}
+          title="Font size"
+        >
+          <option value={10}>10px</option>
+          <option value={11}>11px</option>
+          <option value={12}>12px</option>
+          <option value={13}>13px</option>
+          <option value={14}>14px</option>
+          <option value={16}>16px</option>
+        </select>
+        {#if fontSize !== 13}
+          <button
+            class="text-xs opacity-40 hover:opacity-80 transition-opacity underline"
+            onclick={() => setFontSize(13)}
+            title="Reset font size"
+          >
+            Reset
+          </button>
+        {/if}
+        <button
+          class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800"
+          onclick={clearHexBuffer}
+        >
+          Clear
+        </button>
+      {/if}
+    </div>
   </div>
   <div
     bind:this={scrollContainer}
     onscroll={onScroll}
-    style="flex: 1; overflow: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: {ROW_HEIGHT}px; padding: 8px;"
+    style="flex: 1; overflow: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: {fontSize}px; line-height: {rowHeight}px; padding: 8px;"
   >
     {#if $hexLoading}
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
@@ -84,7 +114,7 @@
           {@const offset = rowIdx * ROW_SIZE}
           {@const end = Math.min(offset + ROW_SIZE, $hexMeta.data.length)}
           {@const len = end - offset}
-          <div style="display: flex; white-space: nowrap; height: {ROW_HEIGHT}px;">
+          <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
             <span style="width: 80px; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
             <span style="width: 340px; flex-shrink: 0; display: flex; gap: 4px;">
               {#each {length: len} as _, j}
