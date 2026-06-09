@@ -111,12 +111,14 @@ cargo tauri build
 ```
 
 Output:
-- `src-tauri/target/release/bundle/msi/MINIPRO-RS_0.1.0_x64_en-US.msi`
-- `src-tauri/target/release/bundle/nsis/MINIPRO-RS_0.1.0_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/MINIPRO-RS_0.2.0_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/MINIPRO-RS_0.2.0_x64-setup.exe`
 
 ### Chip Database
 
-The GUI searches for `infoic.xml` and `logicic.xml` in the same locations as the CLI. For development, copy them next to the built `.exe`:
+The **production installer bundles `infoic.xml` and `logicic.xml`** — end users do not need to download them separately.
+
+For **development**, copy them next to the built `.exe` so the database resolver can find them:
 
 ```powershell
 Copy-Item ..\data\infoic.xml src-tauri\target\release\

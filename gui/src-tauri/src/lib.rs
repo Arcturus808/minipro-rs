@@ -19,7 +19,26 @@ pub fn run() {
             let state = std::sync::Arc::new(state::AppState::default());
             {
                 let mut guard = state.db_paths.lock().unwrap();
-                *guard = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
+                // First try standard search paths (CWD, exe dir, MINIPRO_HOME, %PROGRAMDATA%)
+                let mut db_paths = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
+
+                // If not found, try Tauri bundled resources (for installed builds)
+                if db_paths.is_none() {
+                    if let (Ok(infoic_res), Ok(logicic_res)) = (
+                        app.path().resolve("infoic.xml", tauri::path::BaseDirectory::Resource),
+                        app.path().resolve("logicic.xml", tauri::path::BaseDirectory::Resource)
+                    ) {
+                        if infoic_res.exists() && logicic_res.exists() {
+                            db_paths = Some(minipro_core::database::DatabasePaths {
+                                infoic: infoic_res,
+                                logicic: logicic_res,
+                                algorithms: None,
+                            });
+                        }
+                    }
+                }
+
+                *guard = db_paths;
             }
             if let Err(e) = state.load_device_names() {
                 eprintln!("Warning: failed to load device names: {}", e);

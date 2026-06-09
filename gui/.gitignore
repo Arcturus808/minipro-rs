@@ -11,3 +11,6 @@ src-tauri/target/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated database copies for bundling
+src-tauri/resources/*.xml
