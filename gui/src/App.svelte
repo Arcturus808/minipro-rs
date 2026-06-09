@@ -212,13 +212,13 @@
 
 <svelte:window onmousemove={onMouseMove} onmouseup={stopDrag} />
 
-<div class="h-screen flex flex-col bg-surface-50-950 text-surface-950-50 select-none" class:cursor-col-resize={dragMode !== null}>
+<div class="h-screen flex flex-col bg-surface-50-950 text-surface-950-50" class:cursor-col-resize={dragMode !== null} class:select-none={dragMode !== null}>
   <!-- Top bar -->
   <header
     class="flex items-center justify-between px-4 py-2 border-b border-surface-200-800 bg-surface-100-900"
   >
     <div class="flex items-center gap-3">
-      <h1 class="text-lg font-bold">MINIPRO</h1>
+      <h1 class="text-lg font-bold">MINIPRO-RS</h1>
       {#if $programmer}
         <span class="badge preset-filled-success-500 text-xs">
           {$programmer.model} (FW {$programmer.firmware})
