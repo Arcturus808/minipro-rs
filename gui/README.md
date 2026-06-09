@@ -234,6 +234,10 @@ A **Reset layout & font size** button in Settings restores all of the above to f
 
 *(Phases 3, 3.5, and 5 were completed out of order.)*
 
+## Third-Party Licenses
+
+The **Hack** monospace font is bundled under the MIT License and Bitstream Vera License. See [`gui/public/fonts/LICENSE-Hack.md`](public/fonts/LICENSE-Hack.md).
+
 ## License
 
 Same as the parent project: see [../LICENSE](../LICENSE).
