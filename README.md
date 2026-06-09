@@ -70,7 +70,7 @@ Community contributors with Mac hardware are warmly welcomed — especially for 
 
 ---
 
-## GUI — minipro-gui (Tauri + Svelte)
+## GUI — MINIPRO-RS (Tauri + Svelte)
 
 A native desktop GUI is included in the `gui/` directory. It is built with **Tauri v2** + **Svelte 5** + **Tailwind CSS** and ships as a single `.msi` / `.exe` installer on Windows.
 
@@ -80,11 +80,14 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
 - Read / Write / Verify / Erase / Blank Check / Chip ID
-- Hex viewer for inspecting files or chip dumps — **virtualized rendering** for instant load/clear of large files
-- Adjustable hex viewer font size (10-16px) with persistence
+- **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
+- **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files
+- Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
+- **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
+- **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
 - Live progress bar with CRC32 verification
-- Terminal-style log panel
-- Settings persistence (theme, operation defaults, last directory, hex font size)
+- Terminal-style log panel with **Copy to clipboard** button and drag-select support
+- Settings persistence (theme, operation defaults, last directory, hex font size, panel widths)
 - Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
 

@@ -8,21 +8,23 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 |---------|--------|-------------|
 | **Device Search** | Done | Search the 13,000+ device database with instant results |
 | **Device Selection** | Done | Select a device to configure operations; shows chip type, pin count, voltages |
-| **Read** | Done | Read chip contents to a file (bin/hex/srec/jedec) |
+| **Read** | Done | Read chip contents directly into hex viewer memory (optional save afterward) |
 | **Write** | Done | Write a file to the chip with optional erase/verify skipping |
 | **Verify** | Done | Compare chip contents against a file |
 | **Erase** | Done | Erase the selected chip |
 | **Blank Check** | Done | Verify the chip is blank |
 | **Chip ID** | Done | Read and display the chip ID |
-| **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size |
-| **File Dialogs** | Done | Native OS open/save dialogs with last-used-directory persistence |
+| **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size (10-16px); Save/Open Folder/Clear buttons |
+| **File Dialogs** | Done | Native OS open/save dialogs with last-used-directory persistence; save defaults to device name |
 | **Progress** | Done | Live progress bar with bytes-read/written and CRC32 |
-| **Terminal Log** | Done | Timestamped info/warn/error log panel |
-| **Settings** | Done | Persisted preferences (defaults, theme, device view mode) via `tauri-plugin-store` |
+| **Terminal Log** | Done | Timestamped info/warn/error log panel with Copy to clipboard button and drag-select |
+| **Settings** | Done | Persisted preferences (defaults, theme, device view mode, panel widths) via `tauri-plugin-store` |
 | **Diagnostics** | Done | Programmer details, overcurrent check, hardware check |
 | **Search History** | Done | Persistent search history with star/favorite, delete, and autocomplete |
 | **Context Options** | Done | Operation buttons are selectors; Start button triggers execution with per-op defaults |
-| **Hex Font Size** | Done | Adjustable font size (10-16px) with Reset and persistence |
+| **Draggable Panels** | Done | Resize Device Selector, Hex Viewer, and Terminal with mouse drag; widths persist |
+| **Layout Reset** | Done | One-click restore of panel widths, font size, and window position in Settings |
+| **Hack Font** | Done | Open-source Hack monospace font bundled for hex viewer |
 | **Firmware Update** | Planned | TL866A/CS `update.dat` decryption + flashing (algorithm known, pending implementation) |
 
 ## Screenshots
@@ -103,8 +105,8 @@ cargo tauri build
 ```
 
 Output:
-- `src-tauri/target/release/bundle/msi/minipro-gui_0.1.0_x64_en-US.msi`
-- `src-tauri/target/release/bundle/nsis/minipro-gui_0.1.0_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/MINIPRO-RS_0.1.0_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/MINIPRO-RS_0.1.0_x64-setup.exe`
 
 ### Chip Database
 
@@ -138,9 +140,12 @@ All USB/programmer operations are exposed as async Tauri commands in `src-tauri/
 | `select_device` | Load full `Device` struct and begin USB transaction |
 | `do_read` / `do_write` / `do_verify` | High-level chip operations with progress events |
 | `do_erase` / `do_blank_check` / `do_chip_id` | Chip control operations |
+| `read_chip_to_bytes` | Read chip to memory and return as base64 (for hex viewer) |
+| `save_bytes_to_file` | Write base64 data to disk (hex viewer Save button) |
+| `open_folder` | Open containing folder in OS file explorer |
+| `read_file_bytes` | Read a local file into bytes for the hex viewer |
 | `check_overcurrent` | Read programmer OVC status registers |
 | `hardware_check` | Run hardware self-test (T48/T56/T76 only) |
-| `read_file_bytes` | Read a local file into bytes for the hex viewer |
 | `check_database` | Verify `infoic.xml` / `logicic.xml` are locatable |
 
 Commands that access USB use `tokio::task::spawn_blocking` to avoid blocking Tauri's async executor.
@@ -190,6 +195,17 @@ Operation buttons (Read, Write, Verify, etc.) are **selectors**, not immediate t
 
 This prevents accidental one-click operations and lets users review settings before committing.
 
+### Hex Viewer
+
+The hex viewer renders chip dumps and files with three columns (offset, hex bytes, ASCII) using `ch` units so spacing stays proportional at any font size. It uses the **Hack** open-source monospace font for clean character distinction.
+
+**Features:**
+- **Virtualized rendering** — only visible rows are rendered (~30 at a time); clearing 256KB is instant
+- **Font size** — 10px to 16px via dropdown; Reset button returns to 13px default
+- **Save** — writes the in-memory buffer to disk; dialog defaults to the selected device name (e.g. `W25X20CL_SOIC8.bin`)
+- **Open Folder** — opens the save location in Explorer/Finder
+- **Clear** — wipes the memory buffer
+
 ### Theme System
 
 The app supports System / Dark / Light themes. Skeleton's `preset-filled-surface-100-900` classes adapt automatically. For custom modals that need explicit backgrounds, we use `$derived` from `$settings.theme` rather than Tailwind's `dark:` prefix, because `@custom-variant dark (&:is(.dark *))` is required in `app.css` for the `dark:` variant to work with Skeleton's theme class toggling.
@@ -202,7 +218,10 @@ The app supports System / Dark / Light themes. Skeleton's `preset-filled-surface
 - Theme preference
 - Device list view mode (paginated vs scroll)
 - Hex viewer font size
+- Panel widths (Device Selector, Terminal)
 - Last-used directory for file dialogs
+
+A **Reset layout & font size** button in Settings restores all of the above to factory defaults and re-centers the window.
 
 ## Roadmap
 
