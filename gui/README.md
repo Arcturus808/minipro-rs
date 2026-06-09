@@ -14,12 +14,15 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Erase** | Done | Erase the selected chip |
 | **Blank Check** | Done | Verify the chip is blank |
 | **Chip ID** | Done | Read and display the chip ID |
-| **Hex Viewer** | Done | Inspect loaded files or chip dumps with virtualized scrolling |
+| **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size |
 | **File Dialogs** | Done | Native OS open/save dialogs with last-used-directory persistence |
 | **Progress** | Done | Live progress bar with bytes-read/written and CRC32 |
 | **Terminal Log** | Done | Timestamped info/warn/error log panel |
 | **Settings** | Done | Persisted preferences (defaults, theme, device view mode) via `tauri-plugin-store` |
-| **Diagnostics** | Done | Programmer details, overcurrent check, calibration read |
+| **Diagnostics** | Done | Programmer details, overcurrent check, hardware check |
+| **Search History** | Done | Persistent search history with star/favorite, delete, and autocomplete |
+| **Context Options** | Done | Operation buttons are selectors; Start button triggers execution with per-op defaults |
+| **Hex Font Size** | Done | Adjustable font size (10-16px) with Reset and persistence |
 | **Firmware Update** | Planned | TL866A/CS `update.dat` decryption + flashing (algorithm known, pending implementation) |
 
 ## Screenshots
@@ -47,11 +50,12 @@ gui/
 │   ├── lib/
 │   │   ├── file-dialog.ts            # Native open/save wrappers with defaultPath
 │   │   ├── components/
-│   │   │   ├── DeviceSelector.svelte # Search + paginated/scrollable device list
-│   │   │   ├── HexViewer.svelte      # Virtualized hex grid
-│   │   │   ├── ProgressPanel.svelte  # Progress bar + stats
-│   │   │   ├── TerminalLog.svelte    # Scrollable log output
-│   │   │   ├── SettingsPanel.svelte  # Modal preferences panel
+│   │   │   ├── ComboSearch.svelte      # Search input with persistent history, favorites, delete
+│   │   │   ├── DeviceSelector.svelte   # Search + paginated/scrollable device list
+│   │   │   ├── HexViewer.svelte        # Virtualized hex grid with font size toggle
+│   │   │   ├── ProgressPanel.svelte    # Progress bar + stats
+│   │   │   ├── TerminalLog.svelte      # Scrollable log output
+│   │   │   ├── SettingsPanel.svelte    # Modal preferences panel
 │   │   │   └── DiagnosticsPanel.svelte # Programmer info + diagnostic buttons
 │   │   └── stores/
 │   │       ├── device.ts             # programmer, selectedDevice, deviceList stores
@@ -118,7 +122,7 @@ Copy-Item ..\data\logicic.xml src-tauri\target\release\
 Svelte 5 runes (`$state`, `$derived`) are used for local component state. Cross-component state lives in module-level stores under `src/lib/stores/`:
 
 - **`device.ts`** — `programmer` (connection info), `selectedDevice`, `deviceList`, `dbAvailable`
-- **`operations.ts`** — `isRunning` flag, `doRead`/`doWrite`/... async action wrappers, `initProgressListener()` that listens for `"progress"` events from the backend
+- **`operations.ts`** — `isRunning` flag, `activeOperation`, `doRead`/`doWrite`/... async action wrappers, `initProgressListener()` that listens for `"progress"` events from the backend
 - **`settings.ts`** — `settings` object persisted via `tauri-plugin-store`, `initSettings()` loads on app startup
 - **`logs.ts`** — `logs` array with `info()`/`warn()`/`error()` helpers; `TerminalLog.svelte` subscribes and auto-scrolls
 - **`hex.ts`** — `hexBuffer` for the hex viewer; `loadFile()` reads a file via `invoke("read_file_bytes")`
@@ -135,7 +139,7 @@ All USB/programmer operations are exposed as async Tauri commands in `src-tauri/
 | `do_read` / `do_write` / `do_verify` | High-level chip operations with progress events |
 | `do_erase` / `do_blank_check` / `do_chip_id` | Chip control operations |
 | `check_overcurrent` | Read programmer OVC status registers |
-| `read_calibration` | Read internal RC oscillator calibration bytes |
+| `hardware_check` | Run hardware self-test (T48/T56/T76 only) |
 | `read_file_bytes` | Read a local file into bytes for the hex viewer |
 | `check_database` | Verify `infoic.xml` / `logicic.xml` are locatable |
 
@@ -155,12 +159,36 @@ The frontend `operations.ts` listens and updates `progress` / `isRunning` stores
 
 ### WebView2 Thread Sensitivity (Windows)
 
-On Windows, Tauri uses the system's WebView2 (Edge) renderer. Complex reactive updates — especially rendering large lists with Svelte's `{#each}` — can freeze the UI thread. We encountered this during device search with 200+ results.
+On Windows, Tauri uses the system's WebView2 (Edge) renderer. Complex reactive updates — especially rendering large lists with Svelte's `{#each}` — can freeze the UI thread. We encountered this during device search with 200+ results and hex viewer with 16,000+ rows.
 
 **Mitigations applied:**
-- Paginated list rendering (12 items per page) with a "Paginate / Scroll" toggle
+- **Paginated list rendering** (12 items per page) with a "Paginate / Scroll" toggle
+- **Virtualized hex viewer** — only renders visible rows (~30) instead of all 16,000; instant load/clear of 256KB files
 - Avoid `flex`/`card` wrapper classes in small panels (e.g., DiagnosticsPanel) — use minimal Tailwind utilities
 - Keep reactive computations simple; offload heavy work to the backend
+
+### ComboSearch Component
+
+`ComboSearch.svelte` replaces plain text inputs in the Device Selector with a searchable dropdown that persists history to `localStorage`:
+
+| Feature | Behavior |
+|---------|----------|
+| **Focus** | Opens dropdown showing all stored entries |
+| **Star** | Click ★ to pin an entry to the top (favorites sorted first) |
+| **Trash** | Hover over a row to reveal 🗑, click to delete (stays open via `stopPropagation`) |
+| **Filter** | Typing filters the dropdown; favorites still appear above non-favorites |
+| **Enter** | New text → saved as entry + submitted; Existing text → selected |
+| **Persist** | All entries and favorites survive app restarts via `localStorage` |
+
+### Two-Step Operation Flow
+
+Operation buttons (Read, Write, Verify, etc.) are **selectors**, not immediate triggers:
+
+1. **Select** an operation — the button highlights, relevant options appear below
+2. **Configure** options (Page, Format, etc.) — only controls relevant to that operation are shown
+3. **Click Start** — the actual execution begins, with per-operation defaults applied automatically
+
+This prevents accidental one-click operations and lets users review settings before committing.
 
 ### Theme System
 
@@ -173,17 +201,19 @@ The app supports System / Dark / Light themes. Skeleton's `preset-filled-surface
 - Default operation options (skip erase/verify, page, format, size mismatch)
 - Theme preference
 - Device list view mode (paginated vs scroll)
+- Hex viewer font size
 - Last-used directory for file dialogs
 
 ## Roadmap
 
 - [x] Phase 1 — Core operations + progress + basic layout
 - [x] Phase 2 — Hex viewer + file I/O + device search
-- [x] Phase 3 — Diagnostics (overcurrent, calibration, programmer details)
+- [x] Phase 3 — Diagnostics (overcurrent, hardware check, programmer details)
+- [x] Phase 3.5 — Two-step operations, context-aware options, ComboSearch with favorites
 - [ ] Phase 4 — Firmware update (TL866A/CS `update.dat` decryption)
-- [ ] Phase 5 — Settings & config (completed; includes theme, defaults, last directory)
+- [ ] Phase 5 — Pin test integration
 
-*(Phases 3 and 5 were completed out of order.)*
+*(Phases 3, 3.5, and 5 were completed out of order.)*
 
 ## License
 

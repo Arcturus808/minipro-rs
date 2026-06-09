@@ -76,13 +76,17 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 ### Features
 
-- Device search & selection with paginated/scrolling list
+- Device search & selection with **persistent search history**, favorites, and starred entries (ComboSearch)
+- **Two-step operation flow**: select operation → configure options → click Start
+- **Context-aware options panel**: only relevant controls shown per operation
 - Read / Write / Verify / Erase / Blank Check / Chip ID
-- Hex viewer for inspecting files or chip dumps
+- Hex viewer for inspecting files or chip dumps — **virtualized rendering** for instant load/clear of large files
+- Adjustable hex viewer font size (10-16px) with persistence
 - Live progress bar with CRC32 verification
 - Terminal-style log panel
-- Settings persistence (theme, operation defaults, last directory)
-- Diagnostics panel (programmer info, overcurrent check, calibration read)
+- Settings persistence (theme, operation defaults, last directory, hex font size)
+- Diagnostics panel (programmer info, overcurrent check, hardware check)
+- Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
 
 ### Quick start
 
