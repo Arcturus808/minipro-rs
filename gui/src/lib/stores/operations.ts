@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { logs } from "./logs";
 import { selectedDevice } from "./device";
-import { loadFile } from "./hex";
+import { setHexData, base64ToUint8Array, loadFile, getHexData } from "./hex";
 
 export interface ProgressEvent {
   done: number;
@@ -97,10 +97,49 @@ export async function doRead(path: string, options: OperationOptions = defaultOp
   });
 }
 
+export async function doReadToBuffer(options: OperationOptions = defaultOptions()) {
+  await runOp("Read", async () => {
+    const result = await invoke<{ base64: string; stats: { bytes: number; crc32: number } }>("read_chip_to_bytes", { options });
+    const bytes = base64ToUint8Array(result.base64);
+    setHexData(bytes, null); // no file path since we read to memory
+    return result.stats;
+  });
+}
+
+function uint8ArrayToBase64(data: Uint8Array): string {
+  // Chunked conversion to avoid "Maximum call stack size exceeded"
+  // when spreading large arrays to String.fromCharCode
+  const CHUNK_SIZE = 0x8000; // 32KB chunks
+  let result = "";
+  for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+    const chunk = data.subarray(i, i + CHUNK_SIZE);
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
+}
+
+export async function saveBufferToFile(path: string) {
+  const data = getHexData();
+  if (!data) {
+    logs.error("No data loaded to save");
+    return;
+  }
+  const base64 = uint8ArrayToBase64(data);
+  await invoke("save_bytes_to_file", { path, base64Data: base64 });
+}
+
+export async function openFolder(path: string) {
+  await invoke("open_folder", { path });
+}
+
 export async function doWrite(path: string, options: OperationOptions = defaultOptions()) {
-  await runOp("Write", () =>
-    invoke("do_write", { path, options }),
-  );
+  await runOp("Write", async () => {
+    const result = await invoke("do_write", { path, options });
+    if (!options.skip_verify) {
+      deferLog("info", "  Verify passed");
+    }
+    return result;
+  });
 }
 
 export async function doVerify(path: string, options: OperationOptions = defaultOptions()) {

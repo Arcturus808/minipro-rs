@@ -29,7 +29,7 @@ export function setHexData(data: Uint8Array | null, path: string | null = null) 
   hexMeta.set(data ? { size: data.length, path, data } : null);
 }
 
-function base64ToUint8Array(base64: string): Uint8Array {
+export function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const len = binary.length;
   const bytes = new Uint8Array(len);

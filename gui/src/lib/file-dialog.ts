@@ -10,10 +10,11 @@ export async function pickOpenFile(title: string, defaultPath?: string | null): 
   return path ?? null;
 }
 
-export async function pickSaveFile(title: string, defaultPath?: string | null): Promise<string | null> {
+export async function pickSaveFile(title: string, defaultPath?: string | null, filters?: { name: string; extensions: string[] }[]): Promise<string | null> {
   const path = await save({
     title,
     defaultPath: defaultPath ?? undefined,
+    filters: filters ?? undefined,
   });
   return path ?? null;
 }

@@ -1,12 +1,16 @@
 <script lang="ts">
   import { hexMeta, hexLoading, clearHexBuffer } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
+  import { saveBufferToFile, openFolder } from "../stores/operations";
+  import { pickSaveFile } from "../file-dialog";
+  import { get } from "svelte/store";
 
   const ROW_SIZE = 16;
   const BUFFER_ROWS = 5;
 
   let fontSize = $state($settings.hexViewerFontSize);
   let rowHeight = $derived(fontSize + 9);
+  let savedPath = $state<string | null>(null);
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -89,8 +93,46 @@
           </button>
         {/if}
         <button
+          class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1"
+          onclick={async () => {
+            const dir = get(settings).defaultDirectory ?? "";
+            const defaultPath = dir ? `${dir}\\dump.bin` : "dump.bin";
+            let path = await pickSaveFile(
+              "Save chip dump as",
+              defaultPath,
+              [{ name: "Binary", extensions: ["bin"] }]
+            );
+            if (path) {
+              // Auto-append .bin if user didn't type an extension
+              if (!path.includes(".")) {
+                path += ".bin";
+              }
+              await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+              await saveBufferToFile(path);
+              savedPath = path;
+            }
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          Save
+        </button>
+        {#if savedPath}
+          <button
+            class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1"
+            onclick={() => savedPath && openFolder(savedPath)}
+            title="Open folder in Explorer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+            </svg>
+            Open
+          </button>
+        {/if}
+        <button
           class="text-xs opacity-50 hover:opacity-100 transition-opacity px-2 py-0.5 rounded border border-transparent hover:border-surface-200-800"
-          onclick={clearHexBuffer}
+          onclick={() => { savedPath = null; clearHexBuffer(); }}
         >
           Clear
         </button>

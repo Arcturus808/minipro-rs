@@ -13,6 +13,7 @@
     isRunning,
     activeOperation,
     doRead,
+    doReadToBuffer,
     doWrite,
     doVerify,
     doErase,
@@ -38,7 +39,6 @@
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
   let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
-  let opNeedsFileOut = $derived($activeOperation === "read");
 
   onMount(() => {
     theme.init();
@@ -124,14 +124,9 @@
     if (!op) return;
 
     switch (op) {
-      case "read": {
-        const path = await pickSaveFile("Save chip dump as", get(settings).defaultDirectory);
-        if (path) {
-          await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-          await doRead(path, getOptions());
-        }
+      case "read":
+        await doReadToBuffer(getOptions());
         break;
-      }
       case "write": {
         const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
         if (path) {
@@ -396,8 +391,6 @@
             <div class="flex flex-col gap-2">
               {#if opNeedsFileIn}
                 <span class="text-xs opacity-60 text-center">You will be prompted to select an input file</span>
-              {:else if opNeedsFileOut}
-                <span class="text-xs opacity-60 text-center">You will be prompted to choose a save location</span>
               {/if}
               <button
                 class="px-8 py-2.5 rounded-lg bg-primary-600 text-white text-base font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"

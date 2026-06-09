@@ -353,6 +353,150 @@ pub async fn do_read(
     }
 }
 
+#[derive(Serialize)]
+pub struct ChipBytesDto {
+    base64: String,
+    stats: OpStatsDto,
+}
+
+/// Read chip memory to a temporary file, then return the bytes as base64.
+/// The caller can display the bytes in a hex viewer without saving to disk.
+#[tauri::command]
+pub async fn read_chip_to_bytes(
+    options: OperationOptions,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<ChipBytesDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let page = parse_page(&options_clone.page)?;
+        let op_name = "read".to_string();
+
+        let result = (|| {
+            let size = match page {
+                0x00 => device.code_memory_size as usize,
+                0x01 => device.data_memory_size as usize,
+                _ => device.code_memory_size as usize,
+            };
+            if size == 0 {
+                return Err(format!(
+                    "Device '{}' has 0 bytes for the selected page (code={}, data={}). Try a different page.",
+                    device.name, device.code_memory_size, device.data_memory_size
+                ));
+            }
+
+            // Create a temp file for the read operation
+            let temp_dir = std::env::temp_dir();
+            let temp_path = temp_dir.join(format!("minipro_read_{}.bin", std::process::id()));
+            let _temp_path_str = temp_path.to_string_lossy().to_string();
+
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            let stats = read_chip(
+                &mut handle,
+                &temp_path,
+                page,
+                "bin", // always read raw binary for the hex viewer
+                Some(&mut |done, total| {
+                    let _ = window_clone.emit(
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: op_name.clone(),
+                        },
+                    );
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+
+            // Read the temp file bytes
+            let bytes = std::fs::read(&temp_path)
+                .map_err(|e| format!("Failed to read temp file: {}", e))?;
+
+            // Clean up temp file
+            let _ = std::fs::remove_file(&temp_path);
+
+            let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+            Ok::<(String, OpStats), String>((base64, stats))
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok((base64, stats))) => Ok(ChipBytesDto {
+            base64,
+            stats: stats.into(),
+        }),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// Write raw bytes (base64 encoded) to a file on disk.
+#[tauri::command]
+pub async fn save_bytes_to_file(path: String, base64_data: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &base64_data,
+        )
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+        std::fs::write(&path, &bytes)
+            .map_err(|e| format!("Failed to write file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
+/// Open the folder containing the given file path in the system file manager.
+#[tauri::command]
+pub fn open_folder(path: String) -> Result<(), String> {
+    let parent = std::path::Path::new(&path)
+        .parent()
+        .ok_or("Path has no parent directory")?;
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    Ok(())
+}
+
 /// Write file to chip memory.
 #[tauri::command]
 pub async fn do_write(
@@ -380,10 +524,11 @@ pub async fn do_write(
 
         let result = (|| {
             if !options_clone.skip_erase {
+                // Must begin transaction before erase_chip, just like do_erase does
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
                 erase_chip(&mut handle).map_err(|e| e.to_string())?;
-                let device_arc = std::sync::Arc::new(handle.device().map_err(|e| e.to_string())?.clone());
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device_arc).map_err(|e| e.to_string())?;
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
             } else {
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
             }
