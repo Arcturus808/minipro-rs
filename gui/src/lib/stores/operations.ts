@@ -59,6 +59,16 @@ function deferLog(level: "info" | "warn" | "error", message: string) {
   requestAnimationFrame(() => logs[level](message));
 }
 
+function formatDuration(ms: number): string {
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s.toFixed(1)}s`;
+}
+
 async function runOp(
   name: string,
   fn: () => Promise<unknown>,
@@ -72,15 +82,18 @@ async function runOp(
   progress.set(null);
   deferLog("info", `${name} started...`);
 
+  const start = Date.now();
   try {
     const result = await fn();
-    deferLog("info", `${name} completed successfully`);
+    const elapsed = Date.now() - start;
+    deferLog("info", `${name} completed in ${formatDuration(elapsed)}`);
     if (result && typeof result === "object" && "bytes" in result) {
       const stats = result as { bytes: number; crc32: number };
       deferLog("info", `  ${stats.bytes} bytes, CRC-32: ${stats.crc32.toString(16).padStart(8, "0")}`);
     }
   } catch (e) {
-    deferLog("error", `${name} failed: ${e}`);
+    const elapsed = Date.now() - start;
+    deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${e}`);
     // If the programmer was unplugged mid-operation, sync the badge state
     await refreshProgrammer();
   } finally {
