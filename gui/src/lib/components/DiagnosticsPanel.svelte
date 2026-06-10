@@ -43,9 +43,9 @@
   <h3 class="text-sm font-semibold mb-2">Programmer Diagnostics</h3>
   {#if $programmer}
     <div class="text-xs space-y-0.5 mb-2">
-      <div class="flex justify-between"><span class="opacity-60">Model</span><span>{$programmer.model}</span></div>
-      <div class="flex justify-between"><span class="opacity-60">FW</span><span>{$programmer.firmware}</span></div>
-      <div class="flex justify-between"><span class="opacity-60">SN</span><span>{$programmer.serial_number}</span></div>
+      <div class="flex gap-2"><span class="opacity-60 w-10">Model</span><span>{$programmer.model}</span></div>
+      <div class="flex gap-2"><span class="opacity-60 w-10">FW</span><span>{$programmer.firmware}</span></div>
+      <div class="flex gap-2"><span class="opacity-60 w-10">SN</span><span>{$programmer.serial_number}</span></div>
     </div>
   {:else}
     <p class="text-sm opacity-50 mb-2">No programmer detected.</p>
