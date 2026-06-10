@@ -72,6 +72,10 @@ pub struct DeviceInfoDto {
     pin_count: u8,
     package_type: String,
     voltages: VoltagesDto,
+    code_memory_size: u32,
+    data_memory_size: u32,
+    can_erase: bool,
+    has_chip_id: bool,
 }
 
 #[derive(Serialize)]
@@ -1081,6 +1085,10 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         pin_count: dev.package_details.pin_count,
         package_type: package_type_name(&dev.package_details),
         voltages: VoltagesDto::from(&dev.voltages),
+        code_memory_size: dev.code_memory_size,
+        data_memory_size: dev.data_memory_size,
+        can_erase: dev.flags.can_erase,
+        has_chip_id: dev.flags.has_chip_id,
     }
 }
 
