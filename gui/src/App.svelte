@@ -593,44 +593,42 @@
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
                   <div class="col-span-2 space-y-2">
-                    {#if $selectedDevice.config.fuses.length > 0}
-                      <div class="space-y-1">
-                        <span class="text-xs font-semibold opacity-70">Fuses</span>
-                        {#each $selectedDevice.config.fuses as field, i}
-                          <label class="flex items-center gap-2 text-xs cursor-pointer">
-                            <input
-                              type="checkbox"
-                              class="checkbox"
-                              checked={decodeFuseValue(fuseBytes[1] || [], i, field.mask)}
-                              disabled={!fuseBytes[1]}
-                              onchange={() => toggleFuseBit(1, i, field.mask)}
-                            />
-                            <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
-                            {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                            {#if !fuseBytes[1]}<span class="opacity-40">(not read)</span>{/if}
-                          </label>
-                        {/each}
-                      </div>
-                    {/if}
-                    {#if $selectedDevice.config.locks.length > 0}
-                      <div class="space-y-1">
-                        <span class="text-xs font-semibold opacity-70">Lock Bits</span>
-                        {#each $selectedDevice.config.locks as field, i}
-                          <label class="flex items-center gap-2 text-xs cursor-pointer">
-                            <input
-                              type="checkbox"
-                              class="checkbox"
-                              checked={decodeFuseValue(fuseBytes[2] || [], i, field.mask)}
-                              disabled={!fuseBytes[2]}
-                              onchange={() => toggleFuseBit(2, i, field.mask)}
-                            />
-                            <span>{field.name}</span>
-                            {#if !fuseBytes[2]}<span class="opacity-40">(not read)</span>{/if}
-                          </label>
-                        {/each}
-                      </div>
-                    {/if}
-                    {#if fuseBytes[1]?.length || fuseBytes[2]?.length}
+                    {#if !fuseBytes[1]?.length && !fuseBytes[2]?.length}
+                      <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
+                    {:else}
+                      {#if $selectedDevice.config.fuses.length > 0}
+                        <div class="space-y-1">
+                          <span class="text-xs font-semibold opacity-70">Fuses</span>
+                          {#each $selectedDevice.config.fuses as field, i}
+                            <label class="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                class="checkbox"
+                                checked={decodeFuseValue(fuseBytes[1] || [], i, field.mask)}
+                                onchange={() => toggleFuseBit(1, i, field.mask)}
+                              />
+                              <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
+                              {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                            </label>
+                          {/each}
+                        </div>
+                      {/if}
+                      {#if $selectedDevice.config.locks.length > 0}
+                        <div class="space-y-1">
+                          <span class="text-xs font-semibold opacity-70">Lock Bits</span>
+                          {#each $selectedDevice.config.locks as field, i}
+                            <label class="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                class="checkbox"
+                                checked={decodeFuseValue(fuseBytes[2] || [], i, field.mask)}
+                                onchange={() => toggleFuseBit(2, i, field.mask)}
+                              />
+                              <span>{field.name}</span>
+                            </label>
+                          {/each}
+                        </div>
+                      {/if}
                       <button
                         class="btn preset-filled-primary text-xs px-2 py-1 w-full"
                         onclick={writeAllFuses}
