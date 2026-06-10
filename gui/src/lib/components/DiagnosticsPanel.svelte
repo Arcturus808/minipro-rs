@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { programmer } from "../stores/device";
+  import { programmer, refreshProgrammer } from "../stores/device";
   import { logs } from "../stores/logs";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
@@ -20,6 +20,7 @@
       logs.info(r.safe ? "Overcurrent check: OK" : `Overcurrent! flag=${r.ovc_flag}`);
     } catch (e) {
       logs.error(`OVC failed: ${e}`);
+      await refreshProgrammer();
     }
   }
 
@@ -33,6 +34,7 @@
       }
     } catch (e) {
       logs.error(`Hardware check failed: ${e}`);
+      await refreshProgrammer();
     }
   }
 </script>

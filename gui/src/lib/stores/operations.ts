@@ -2,7 +2,7 @@ import { writable, derived } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { logs } from "./logs";
-import { selectedDevice } from "./device";
+import { selectedDevice, refreshProgrammer } from "./device";
 import { setHexData, base64ToUint8Array, loadFile, getHexData } from "./hex";
 
 export interface ProgressEvent {
@@ -81,6 +81,8 @@ async function runOp(
     }
   } catch (e) {
     deferLog("error", `${name} failed: ${e}`);
+    // If the programmer was unplugged mid-operation, sync the badge state
+    await refreshProgrammer();
   } finally {
     isRunning.set(false);
     currentOperation.set(null);

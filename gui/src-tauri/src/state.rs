@@ -46,10 +46,30 @@ impl AppState {
         self.is_running.store(false, Ordering::SeqCst);
     }
 
+    /// Clear cached programmer state (handle + info).
+    pub fn clear_programmer(&self) {
+        if let Ok(mut guard) = self.handle.lock() {
+            *guard = None;
+        }
+        if let Ok(mut guard) = self.programmer_info.lock() {
+            *guard = None;
+        }
+    }
+
     /// Take the programmer handle out of state.
+    /// Also clears cached programmer info if no handle is present.
     pub fn take_handle(&self) -> Result<MiniproHandle, String> {
         let mut guard = self.handle.lock().map_err(|e| e.to_string())?;
-        guard.take().ok_or_else(|| "No programmer connected".into())
+        match guard.take() {
+            Some(h) => Ok(h),
+            None => {
+                // Handle is gone — the programmer was likely unplugged.
+                // Clear cached info so the UI badge updates on next check.
+                drop(guard);
+                self.clear_programmer();
+                Err("No programmer connected".into())
+            }
+        }
     }
 
     /// Store the programmer handle back into state.
