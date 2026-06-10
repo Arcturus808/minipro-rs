@@ -66,6 +66,9 @@
       {#if $hexMeta}
         <span style="font-size: 12px; opacity: 0.6; margin-left: 8px;">
           {$hexMeta.size.toLocaleString()} bytes
+          {#if $hexMeta.crc32 !== null}
+            · CRC-32: {$hexMeta.crc32.toString(16).padStart(8, '0').toUpperCase()}
+          {/if}
         </span>
       {/if}
     </div>
