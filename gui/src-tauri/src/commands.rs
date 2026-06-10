@@ -119,6 +119,8 @@ pub struct OperationOptions {
     pub skip_erase: bool,
     #[serde(default)]
     pub skip_verify: bool,
+    #[serde(default)]
+    pub icsp: bool,
     #[serde(default = "default_page")]
     pub page: String,
     #[serde(default = "default_format")]
@@ -386,6 +388,7 @@ pub async fn do_read(
                 ));
             }
 
+            handle.icsp = options_clone.icsp;
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             let stats = read_chip(
@@ -474,6 +477,7 @@ pub async fn read_chip_to_bytes(
             let temp_path = temp_dir.join(format!("minipro_read_{}.bin", std::process::id()));
             let _temp_path_str = temp_path.to_string_lossy().to_string();
 
+            handle.icsp = options_clone.icsp;
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             let stats = read_chip(
@@ -600,6 +604,7 @@ pub async fn do_write(
         let op_name = "write".to_string();
 
         let result = (|| {
+            handle.icsp = options_clone.icsp;
             if !options_clone.skip_erase {
                 // Must begin transaction before erase_chip, just like do_erase does
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
@@ -695,6 +700,7 @@ pub async fn do_verify(
         let page = parse_page(&options_clone.page)?;
 
         let result = (|| {
+            handle.icsp = options_clone.icsp;
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
             verify_chip(
@@ -738,7 +744,7 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -750,6 +756,7 @@ pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
         let device = state_task.get_device()?;
 
         let result = (|| {
+            handle.icsp = icsp;
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             erase_chip(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
@@ -775,7 +782,7 @@ pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 
 /// Blank-check the chip.
 #[tauri::command]
-pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_blank_check(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -787,6 +794,7 @@ pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), Strin
         let device = state_task.get_device()?;
 
         let result = (|| {
+            handle.icsp = icsp;
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             blank_check(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
@@ -812,7 +820,7 @@ pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), Strin
 
 /// Read the chip ID.
 #[tauri::command]
-pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_chip_id(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -824,6 +832,7 @@ pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, Strin
         let device = state_task.get_device()?;
 
         let result = (|| {
+            handle.icsp = icsp;
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
             Ok::<String, String>(format!("{:#010x}", chip_id))
@@ -850,7 +859,7 @@ pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, Strin
 /// Test a logic IC against its built-in test vectors.
 /// Returns the test result table as a string.
 #[tauri::command]
-pub async fn do_logic_test(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_logic_test(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -862,6 +871,7 @@ pub async fn do_logic_test(state: State<'_, Arc<AppState>>) -> Result<String, St
         let device = state_task.get_device()?;
 
         let result = (|| {
+            handle.icsp = icsp;
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let mut output = Vec::new();
             logic_ic_test(&mut handle, &mut output).map_err(|e| e.to_string())?;

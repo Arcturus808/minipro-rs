@@ -33,6 +33,7 @@
   // Operation options
   let skipErase = $state(false);
   let skipVerify = $state(false);
+  let icsp = $state(false);
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
@@ -95,6 +96,7 @@
       const s = $settings;
       skipErase = s.skipErase;
       skipVerify = s.skipVerify;
+      icsp = s.icsp;
       leftPercent = s.leftPanelPercent;
       rightPercent = s.rightPanelPercent;
       page = s.defaultPage;
@@ -153,6 +155,7 @@
     return {
       skip_erase: skipErase,
       skip_verify: skipVerify,
+      icsp,
       page,
       format,
       size_mismatch: sizeMismatch,
@@ -211,16 +214,16 @@
         break;
       }
       case "erase":
-        await doErase();
+        await doErase(icsp);
         break;
       case "blank_check":
-        await doBlankCheck();
+        await doBlankCheck(icsp);
         break;
       case "chip_id":
-        await doChipId();
+        await doChipId(icsp);
         break;
       case "logic_test":
-        await doLogicTest();
+        await doLogicTest(icsp);
         break;
     }
   }
@@ -482,7 +485,7 @@
                     <option value="ignore">Ignore</option>
                   </select>
                 </div>
-                <div class="flex items-center gap-4 ml-6">
+                <div class="flex items-center gap-4 ml-6 flex-wrap">
                   <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="checkbox" bind:checked={skipErase} />
                     Skip erase
@@ -490,6 +493,10 @@
                   <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
                     Skip verify
+                  </label>
+                  <label class="flex items-center gap-2 text-sm" title="In-circuit serial programming">
+                    <input type="checkbox" class="checkbox" bind:checked={icsp} />
+                    ICSP
                   </label>
                 </div>
               {:else if $activeOperation === "verify"}
