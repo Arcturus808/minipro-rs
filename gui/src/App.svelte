@@ -662,18 +662,22 @@
                           {/each}
                         </div>
                       {/if}
-                      {#if configData.user_fuses.length > 0}
-                        <div class="space-y-1">
-                          <span class="text-xs font-semibold opacity-70">User/ID Fuses</span>
+                      <div class="space-y-1">
+                        <span class="text-xs font-semibold opacity-70">User/ID Fuses</span>
+                        {#if configData.user_fuses.length > 0}
                           <div class="text-xs font-mono opacity-70">{configData.user_fuses.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        </div>
-                      {/if}
-                      {#if configData.calibration.length > 0}
-                        <div class="space-y-1">
-                          <span class="text-xs font-semibold opacity-70">Calibration Bytes</span>
+                        {:else}
+                          <span class="text-xs opacity-50 italic">Not available for this device</span>
+                        {/if}
+                      </div>
+                      <div class="space-y-1">
+                        <span class="text-xs font-semibold opacity-70">Calibration Bytes</span>
+                        {#if configData.calibration.length > 0}
                           <div class="text-xs font-mono opacity-70">{configData.calibration.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        </div>
-                      {/if}
+                        {:else}
+                          <span class="text-xs opacity-50 italic">Not available for this device</span>
+                        {/if}
+                      </div>
                       <button
                         class="btn preset-filled-primary text-xs px-2 py-1 w-full"
                         onclick={writeAllFuses}
