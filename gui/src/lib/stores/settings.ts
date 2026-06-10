@@ -8,7 +8,7 @@ export interface AppSettings {
   defaultSizeMismatch: "error" | "warn" | "ignore";
   skipErase: boolean;
   skipVerify: boolean;
-  icsp: boolean;
+  icspMode: "zif" | "icsp" | "icsp_no_vcc";
   theme: "system" | "dark" | "light";
   deviceViewMode: "paginated" | "scroll";
   hexViewerFontSize: number;
@@ -27,7 +27,7 @@ const DEFAULTS: AppSettings = {
   defaultSizeMismatch: "error",
   skipErase: false,
   skipVerify: false,
-  icsp: false,
+  icspMode: "zif",
   theme: "system",
   deviceViewMode: "paginated",
   hexViewerFontSize: 13,

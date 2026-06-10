@@ -33,7 +33,7 @@
   // Operation options
   let skipErase = $state(false);
   let skipVerify = $state(false);
-  let icsp = $state(false);
+  let icspMode = $state("zif");
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
@@ -96,7 +96,7 @@
       const s = $settings;
       skipErase = s.skipErase;
       skipVerify = s.skipVerify;
-      icsp = s.icsp;
+      icspMode = s.icspMode;
       leftPercent = s.leftPanelPercent;
       rightPercent = s.rightPanelPercent;
       page = s.defaultPage;
@@ -147,7 +147,7 @@
   });
 
   $effect(() => {
-    setSetting("icsp", icsp);
+    setSetting("icspMode", icspMode);
   });
 
   function setTheme(t: "system" | "dark" | "light") {
@@ -159,7 +159,7 @@
     return {
       skip_erase: skipErase,
       skip_verify: skipVerify,
-      icsp,
+      icsp_mode: icspMode,
       page,
       format,
       size_mismatch: sizeMismatch,
@@ -218,16 +218,16 @@
         break;
       }
       case "erase":
-        await doErase(icsp);
+        await doErase(icspMode);
         break;
       case "blank_check":
-        await doBlankCheck(icsp);
+        await doBlankCheck(icspMode);
         break;
       case "chip_id":
-        await doChipId(icsp);
+        await doChipId(icspMode);
         break;
       case "logic_test":
-        await doLogicTest(icsp);
+        await doLogicTest(icspMode);
         break;
     }
   }
@@ -359,10 +359,15 @@
       <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold">Operations</h2>
-          <label class="flex items-center gap-1.5 text-sm" title="In-circuit serial programming">
-            <input type="checkbox" class="checkbox" bind:checked={icsp} />
-            ICSP
-          </label>
+          <select
+            class="select text-xs"
+            title="Programming interface"
+            bind:value={icspMode}
+          >
+            <option value="zif">ZIF socket</option>
+            <option value="icsp">ICSP</option>
+            <option value="icsp_no_vcc">ICSP (no VCC)</option>
+          </select>
         </div>
 
         <div class="flex flex-wrap gap-1.5 mb-3">

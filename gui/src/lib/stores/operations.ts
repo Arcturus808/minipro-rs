@@ -14,7 +14,7 @@ export interface ProgressEvent {
 export interface OperationOptions {
   skip_erase: boolean;
   skip_verify: boolean;
-  icsp: boolean;
+  icsp_mode: "zif" | "icsp" | "icsp_no_vcc";
   page: string;
   format: string;
   size_mismatch: string;
@@ -50,7 +50,7 @@ function defaultOptions(): OperationOptions {
   return {
     skip_erase: false,
     skip_verify: false,
-    icsp: false,
+    icsp_mode: "zif",
     page: "code",
     format: "auto",
     size_mismatch: "error",
@@ -165,24 +165,24 @@ export async function doVerify(path: string, options: OperationOptions = default
   );
 }
 
-export async function doErase(icsp: boolean = false) {
-  await runOp("Erase", () => invoke("do_erase", { icsp }));
+export async function doErase(icsp_mode: string = "zif") {
+  await runOp("Erase", () => invoke("do_erase", { icsp_mode }));
 }
 
-export async function doBlankCheck(icsp: boolean = false) {
-  await runOp("Blank check", () => invoke("do_blank_check", { icsp }));
+export async function doBlankCheck(icsp_mode: string = "zif") {
+  await runOp("Blank check", () => invoke("do_blank_check", { icsp_mode }));
 }
 
-export async function doChipId(icsp: boolean = false) {
+export async function doChipId(icsp_mode: string = "zif") {
   await runOp("Chip ID", async () => {
-    const id = await invoke<string>("do_chip_id", { icsp });
+    const id = await invoke<string>("do_chip_id", { icsp_mode });
     deferLog("info", `Chip ID: ${id}`);
   });
 }
 
-export async function doLogicTest(icsp: boolean = false) {
+export async function doLogicTest(icsp_mode: string = "zif") {
   await runOp("Logic test", async () => {
-    const result = await invoke<string>("do_logic_test", { icsp });
+    const result = await invoke<string>("do_logic_test", { icsp_mode });
     if (result.trim()) {
       // Print each line of the test result table to the terminal
       for (const line of result.trim().split("\n")) {

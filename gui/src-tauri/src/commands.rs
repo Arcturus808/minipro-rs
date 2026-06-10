@@ -119,8 +119,8 @@ pub struct OperationOptions {
     pub skip_erase: bool,
     #[serde(default)]
     pub skip_verify: bool,
-    #[serde(default)]
-    pub icsp: bool,
+    #[serde(default = "default_icsp_mode")]
+    pub icsp_mode: String,
     #[serde(default = "default_page")]
     pub page: String,
     #[serde(default = "default_format")]
@@ -129,6 +129,7 @@ pub struct OperationOptions {
     pub size_mismatch: String,
 }
 
+fn default_icsp_mode() -> String { "zif".into() }
 fn default_page() -> String { "code".into() }
 fn default_format() -> String { "auto".into() }
 fn default_size_mismatch() -> String { "error".into() }
@@ -388,7 +389,7 @@ pub async fn do_read(
                 ));
             }
 
-            handle.icsp = options_clone.icsp;
+            handle.icsp = options_clone.icsp_mode != "zif";
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             let stats = read_chip(
@@ -477,7 +478,7 @@ pub async fn read_chip_to_bytes(
             let temp_path = temp_dir.join(format!("minipro_read_{}.bin", std::process::id()));
             let _temp_path_str = temp_path.to_string_lossy().to_string();
 
-            handle.icsp = options_clone.icsp;
+            handle.icsp = options_clone.icsp_mode != "zif";
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             let stats = read_chip(
@@ -604,7 +605,7 @@ pub async fn do_write(
         let op_name = "write".to_string();
 
         let result = (|| {
-            handle.icsp = options_clone.icsp;
+            handle.icsp = options_clone.icsp_mode != "zif";
             if !options_clone.skip_erase {
                 // Must begin transaction before erase_chip, just like do_erase does
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
@@ -700,7 +701,7 @@ pub async fn do_verify(
         let page = parse_page(&options_clone.page)?;
 
         let result = (|| {
-            handle.icsp = options_clone.icsp;
+            handle.icsp = options_clone.icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
             verify_chip(
@@ -744,7 +745,7 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(icsp_mode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -756,7 +757,7 @@ pub async fn do_erase(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(),
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icsp;
+            handle.icsp = icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             erase_chip(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
@@ -782,7 +783,7 @@ pub async fn do_erase(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(),
 
 /// Blank-check the chip.
 #[tauri::command]
-pub async fn do_blank_check(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_blank_check(icsp_mode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -794,7 +795,7 @@ pub async fn do_blank_check(icsp: bool, state: State<'_, Arc<AppState>>) -> Resu
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icsp;
+            handle.icsp = icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             blank_check(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
@@ -820,7 +821,7 @@ pub async fn do_blank_check(icsp: bool, state: State<'_, Arc<AppState>>) -> Resu
 
 /// Read the chip ID.
 #[tauri::command]
-pub async fn do_chip_id(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_chip_id(icsp_mode: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -832,7 +833,7 @@ pub async fn do_chip_id(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<S
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icsp;
+            handle.icsp = icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
             Ok::<String, String>(format!("{:#010x}", chip_id))
@@ -859,7 +860,7 @@ pub async fn do_chip_id(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<S
 /// Test a logic IC against its built-in test vectors.
 /// Returns the test result table as a string.
 #[tauri::command]
-pub async fn do_logic_test(icsp: bool, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_logic_test(icsp_mode: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -871,7 +872,7 @@ pub async fn do_logic_test(icsp: bool, state: State<'_, Arc<AppState>>) -> Resul
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icsp;
+            handle.icsp = icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let mut output = Vec::new();
             logic_ic_test(&mut handle, &mut output).map_err(|e| e.to_string())?;
