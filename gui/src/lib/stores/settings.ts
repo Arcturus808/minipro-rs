@@ -25,8 +25,8 @@ const DEFAULTS: AppSettings = {
   theme: "system",
   deviceViewMode: "paginated",
   hexViewerFontSize: 13,
-  leftPanelWidth: 288,
-  rightPanelWidth: 448,
+  leftPanelWidth: 260,
+  rightPanelWidth: 320,
 };
 
 let store: Store | null = null;

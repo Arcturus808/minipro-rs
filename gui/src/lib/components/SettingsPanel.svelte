@@ -151,11 +151,11 @@
         <button
           class="btn preset-tonal text-sm w-full"
           onclick={async () => {
-            update("leftPanelWidth", 288);
-            update("rightPanelWidth", 448);
+            update("leftPanelWidth", 260);
+            update("rightPanelWidth", 320);
             update("hexViewerFontSize", 13);
             const win = getCurrentWindow();
-            await win.setSize({ type: "Logical", width: 1400, height: 900 });
+            await win.setSize({ type: "Logical", width: 1280, height: 900 });
             await win.center();
           }}
         >
