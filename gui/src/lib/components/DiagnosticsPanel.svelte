@@ -40,7 +40,7 @@
 </script>
 
 <div class="border border-surface-200-800 p-2">
-  <h3 class="text-sm font-semibold mb-2">Diagnostics</h3>
+  <h3 class="text-sm font-semibold mb-2">Programmer Diagnostics</h3>
   {#if $programmer}
     <div class="text-xs space-y-0.5 mb-2">
       <div class="flex justify-between"><span class="opacity-60">Model</span><span>{$programmer.model}</span></div>
