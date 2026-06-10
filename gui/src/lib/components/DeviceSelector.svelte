@@ -67,11 +67,9 @@
   async function readAllFuses() {
     if (!selectedInfo?.config || selectedInfo.config.type !== "Mcu") return;
     try {
-      const [user, cfg, lock] = await Promise.all([
-        readFuses(0),
-        readFuses(1),
-        readFuses(2),
-      ]);
+      const user = await readFuses(0);
+      const cfg = await readFuses(1);
+      const lock = await readFuses(2);
       fuseBytes = { 0: user, 1: cfg, 2: lock };
       logs.info("Config read successfully");
     } catch (e) {
