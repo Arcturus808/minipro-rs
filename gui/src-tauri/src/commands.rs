@@ -12,6 +12,18 @@ use tauri::{Emitter, State, Window};
 
 use crate::state::AppState;
 
+/// Check if an error indicates the programmer was physically disconnected.
+/// If so, clear cached state so the UI badge updates on next check.
+fn handle_usb_error(state: &AppState, err: &str) {
+    let usb_errors = ["STALL", "NoDevice", "LIBUSB_ERROR_NO_DEVICE",
+        "LIBUSB_ERROR_IO", "LIBUSB_ERROR_PIPE", "DeviceNotFound",
+        "endpoint", "USB error", "No programmer connected"];
+    if usb_errors.iter().any(|&keyword| err.contains(keyword)) {
+        state.clear_programmer();
+        log::warn!("USB error detected, clearing cached programmer state: {}", err);
+    }
+}
+
 // ── Data transfer objects ───────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -399,6 +411,9 @@ pub async fn do_read(
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -492,6 +507,9 @@ pub async fn read_chip_to_bytes(
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -637,6 +655,9 @@ pub async fn do_write(
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -699,6 +720,9 @@ pub async fn do_verify(
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -733,6 +757,9 @@ pub async fn do_erase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -767,6 +794,9 @@ pub async fn do_blank_check(state: State<'_, Arc<AppState>>) -> Result<(), Strin
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -801,6 +831,9 @@ pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, Strin
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
         result
     })
     .await;
@@ -856,6 +889,9 @@ pub async fn check_overcurrent(state: State<'_, Arc<AppState>>) -> Result<Overcu
             let handle = state_task.take_handle()?;
             let result = handle.protocol.get_ovc_status(&handle.usb).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
+            if let Err(ref e) = result {
+                handle_usb_error(&state_task, e);
+            }
             result
         }),
     )
@@ -890,6 +926,9 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
             let handle = state_task.take_handle()?;
             let result = handle.protocol.read_calibration(&handle.usb, 4).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
+            if let Err(ref e) = result {
+                handle_usb_error(&state_task, e);
+            }
             result
         }),
     )
@@ -920,6 +959,9 @@ pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<Hardw
             let mut handle = state_task.take_handle()?;
             let result = hardware_check(&mut handle).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
+            if let Err(ref e) = result {
+                handle_usb_error(&state_task, e);
+            }
             result
         }),
     )
