@@ -222,15 +222,15 @@
       <button
         class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
         onclick={async () => {
+          logs.info("Reconnecting programmer...");
           try {
             await forceReconnect();
             if ($programmer) {
               logs.info(`Programmer reconnected: ${$programmer.model} (FW ${$programmer.firmware})`);
-            } else {
-              logs.warn("No programmer detected after reconnect");
             }
-          } catch {
-            logs.warn("No programmer detected after reconnect");
+          } catch (e: any) {
+            const msg = typeof e === "string" ? e : e?.message || "Unknown error";
+            logs.warn(msg);
           }
         }}
         title="Click to detect programmer"

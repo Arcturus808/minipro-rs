@@ -210,6 +210,8 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
 
 /// Force-close any existing handle and re-open the programmer.
 /// Use this after unplugging/replugging the device.
+/// Retries up to 5 times with increasing delays because Windows USB
+/// enumeration can be stale immediately after a hot-plug event.
 #[tauri::command]
 pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
     // Explicitly drop any stale handle so the USB device can be re-claimed
@@ -222,30 +224,47 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
         *info_guard = None;
     }
 
-    // Small delay to let the OS release the USB interface
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Retry with increasing delays — Windows USB enumeration can lag behind
+    // the Device Manager display by several seconds after hot-plug.
+    let mut last_err = String::new();
+    for attempt in 1..=5 {
+        tokio::time::sleep(std::time::Duration::from_millis(500 * attempt)).await;
 
-    let (info, handle) = tokio::task::spawn_blocking(move || {
-        let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
-        let info = handle.info.clone();
-        Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
-    }).await.map_err(|e| format!("Task panicked: {}", e))??;
+        let result = tokio::task::spawn_blocking(move || {
+            let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+            let info = handle.info.clone();
+            Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
+        }).await;
 
-    {
-        let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
-        *guard = Some(info.clone());
+        match result {
+            Ok(Ok((info, handle))) => {
+                {
+                    let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+                    *guard = Some(info.clone());
+                }
+                {
+                    let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
+                    *guard = Some(handle);
+                }
+                return Ok(ProgrammerInfoDto {
+                    model: info.model.to_string(),
+                    firmware: info.firmware_str,
+                    serial_number: info.serial_number,
+                    hardware_version: format!("{:02x}", info.hardware_version),
+                });
+            }
+            Ok(Err(e)) => {
+                last_err = e;
+                eprintln!("force_reconnect attempt {} failed: {}", attempt, last_err);
+            }
+            Err(e) => {
+                last_err = format!("Task panicked: {}", e);
+                eprintln!("force_reconnect attempt {} panicked", attempt);
+            }
+        }
     }
-    {
-        let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
-        *guard = Some(handle);
-    }
 
-    Ok(ProgrammerInfoDto {
-        model: info.model.to_string(),
-        firmware: info.firmware_str,
-        serial_number: info.serial_number,
-        hardware_version: format!("{:02x}", info.hardware_version),
-    })
+    Err(format!("No programmer detected after 5 reconnect attempts. Last error: {}", last_err))
 }
 
 /// Search devices by optional query string.
