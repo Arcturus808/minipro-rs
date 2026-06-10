@@ -331,6 +331,7 @@ impl Protocol for Tl866aProtocol {
         };
         let mut msg = [0u8; 18];
         msg[0] = cmd;
+        msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         msg[2] = items_count;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(64)?;
@@ -354,6 +355,7 @@ impl Protocol for Tl866aProtocol {
         };
         let mut msg = [0u8; 64];
         msg[0] = cmd;
+        msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         msg[2] = items_count;
         let n = data.len().min(57);
         msg[7..7 + n].copy_from_slice(&data[..n]);

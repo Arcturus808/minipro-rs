@@ -22,6 +22,7 @@
     doLogicTest,
     readFuses,
     writeFuses,
+    type FuseValue,
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
@@ -41,7 +42,7 @@
   let sizeMismatch = $state("error");
 
   // Fuse/lock-bit state for Config operation
-  let fuseBytes = $state<Record<number, number[]>>({});
+  let fuseValues = $state<FuseValue[]>([]);
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
@@ -160,26 +161,32 @@
     setSetting("theme", t);
   }
 
-  function decodeFuseValue(bytes: number[], index: number, mask: number): boolean {
-    if (!bytes || index >= bytes.length) return false;
-    return (bytes[index] & mask) !== 0;
+  function getFuseValue(index: number): number {
+    return fuseValues[index]?.value ?? 0xff;
   }
 
-  function toggleFuseBit(fuseType: number, byteIndex: number, mask: number) {
-    const copy = { ...fuseBytes };
-    const arr = [...(copy[fuseType] || [])];
-    if (byteIndex >= arr.length) {
-      for (let i = arr.length; i <= byteIndex; i++) arr.push(0);
+  function setFuseValue(index: number, value: number) {
+    fuseValues = fuseValues.map((fv, i) => i === index ? { ...fv, value } : fv);
+  }
+
+  // AVR fuse convention: bit=0 means programmed/active, bit=1 means unprogrammed
+  // In the UI, checked means programmed (active).
+  function isFuseProgrammed(index: number, mask: number): boolean {
+    return (getFuseValue(index) & mask) === 0;
+  }
+
+  // Toggle: if programmed (checked), unprogram it (set bit=1); else program it (clear bit=0)
+  function toggleFuseProgrammed(index: number, mask: number) {
+    if (isFuseProgrammed(index, mask)) {
+      setFuseValue(index, getFuseValue(index) | mask);   // unprogram: set bit to 1
+    } else {
+      setFuseValue(index, getFuseValue(index) & ~mask);  // program: clear bit to 0
     }
-    arr[byteIndex] ^= mask;
-    copy[fuseType] = arr;
-    fuseBytes = copy;
   }
 
   async function writeAllFuses() {
     try {
-      if (fuseBytes[1]?.length) await writeFuses(1, fuseBytes[1], icspMode);
-      if (fuseBytes[2]?.length) await writeFuses(2, fuseBytes[2], icspMode);
+      await writeFuses(fuseValues, icspMode);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
@@ -227,7 +234,7 @@
         sizeMismatch = "error";
         break;
       case "config":
-        fuseBytes = {};
+        fuseValues = [];
         break;
       case "erase":
       case "blank_check":
@@ -275,11 +282,8 @@
         break;
       case "config":
         try {
-          const user = await readFuses(0, icspMode);
-          const cfg = await readFuses(1, icspMode);
-          const lock = await readFuses(2, icspMode);
-          fuseBytes = { 0: user, 1: cfg, 2: lock };
-          logs.info("Config read successfully");
+          fuseValues = await readFuses(icspMode);
+          logs.info(`Config read — ${fuseValues.length} fuse/lock values`);
         } catch (e) {
           logs.error(`Config read failed: ${e}`);
         }
@@ -593,9 +597,10 @@
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
                   <div class="col-span-2 space-y-2">
-                    {#if !fuseBytes[1]?.length && !fuseBytes[2]?.length}
+                    {#if fuseValues.length === 0}
                       <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
                     {:else}
+                      <p class="text-[10px] opacity-50">Checked = programmed (active) — AVR convention</p>
                       {#if $selectedDevice.config.fuses.length > 0}
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Fuses</span>
@@ -604,8 +609,8 @@
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={decodeFuseValue(fuseBytes[1] || [], i, field.mask)}
-                                onchange={() => toggleFuseBit(1, i, field.mask)}
+                                checked={isFuseProgrammed(i, field.mask)}
+                                onchange={() => toggleFuseProgrammed(i, field.mask)}
                               />
                               <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
                               {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
@@ -617,12 +622,13 @@
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Lock Bits</span>
                           {#each $selectedDevice.config.locks as field, i}
+                            {@const idx = $selectedDevice.config.fuses.length + i}
                             <label class="flex items-center gap-2 text-xs cursor-pointer">
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={decodeFuseValue(fuseBytes[2] || [], i, field.mask)}
-                                onchange={() => toggleFuseBit(2, i, field.mask)}
+                                checked={isFuseProgrammed(idx, field.mask)}
+                                onchange={() => toggleFuseProgrammed(idx, field.mask)}
                               />
                               <span>{field.name}</span>
                             </label>

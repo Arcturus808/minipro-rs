@@ -193,11 +193,15 @@ export async function doLogicTest(icsp_mode: string = "zif") {
   });
 }
 
-export async function readFuses(fuseType: number, icspMode: string): Promise<number[]> {
-  const dto = await invoke<{ bytes: number[] }>("read_fuses", { fuseType, icspMode });
-  return dto.bytes;
+export interface FuseValue {
+  name: string;
+  value: number;
 }
 
-export async function writeFuses(fuseType: number, data: number[], icspMode: string): Promise<void> {
-  await invoke("write_fuses", { fuseType, data, icspMode });
+export async function readFuses(icspMode: string): Promise<FuseValue[]> {
+  return await invoke<FuseValue[]>("read_fuses", { icspMode });
+}
+
+export async function writeFuses(values: FuseValue[], icspMode: string): Promise<void> {
+  await invoke("write_fuses", { data: values, icspMode });
 }

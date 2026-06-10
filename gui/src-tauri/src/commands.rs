@@ -1014,15 +1014,15 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
     }
 }
 
-#[derive(Serialize)]
-pub struct FusesDto {
-    bytes: Vec<u8>,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FuseValueDto {
+    name: String,
+    value: u8,
 }
 
 /// Read fuse / lock bytes from the chip.
-/// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn read_fuses(fuseType: u8, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
+pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<Vec<FuseValueDto>, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1033,13 +1033,13 @@ pub async fn read_fuses(fuseType: u8, icspMode: String, state: State<'_, Arc<App
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
-            let device = state_task.get_device()?;
 
+            let device = state_task.get_device()?;
             let result = (|| {
                 handle.icsp = icspMode != "zif";
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                let bytes = handle.protocol.read_fuses(&handle.usb, &device, fuseType, 64, 1).map_err(|e| e.to_string())?;
-                Ok::<Vec<u8>, String>(bytes)
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                let values = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
+                Ok::<Vec<minipro_core::operations::FuseValue>, String>(values)
             })();
 
             let _ = handle.end_transaction();
@@ -1055,7 +1055,7 @@ pub async fn read_fuses(fuseType: u8, icspMode: String, state: State<'_, Arc<App
     state_clone.release();
 
     match result {
-        Ok(Ok(Ok(bytes))) => Ok(FusesDto { bytes }),
+        Ok(Ok(Ok(values))) => Ok(values.into_iter().map(|v| FuseValueDto { name: v.name, value: v.value }).collect()),
         Ok(Ok(Err(e))) => Err(e),
         Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
         Err(_) => Err("Operation timed out".into()),
@@ -1063,26 +1063,27 @@ pub async fn read_fuses(fuseType: u8, icspMode: String, state: State<'_, Arc<App
 }
 
 /// Write fuse / lock bytes to the chip.
-/// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn write_fuses(fuseType: u8, data: Vec<u8>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(data: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
-    let data_len = data.len();
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
-            let device = state_task.get_device()?;
 
+            let device = state_task.get_device()?;
             let result = (|| {
                 handle.icsp = icspMode != "zif";
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                handle.protocol.write_fuses(&handle.usb, &device, fuseType, data_len, 1, &data).map_err(|e| e.to_string())?;
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                let values: Vec<minipro_core::operations::FuseValue> = data.iter()
+                    .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value })
+                    .collect();
+                minipro_core::operations::write_fuses(&mut handle, &values).map_err(|e| e.to_string())?;
                 Ok::<(), String>(())
             })();
 

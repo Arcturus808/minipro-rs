@@ -16,11 +16,11 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] Operation duration in terminal output
 - [x] CRC-32 display in hex viewer
 - [x] Expanded device info panel (package, memory, flags)
+- [x] Fuse/lock-bit editor for MCUs (read + write)
+- [x] Dangerous fuse warnings (RSTDISBL, SPIEN, etc.)
 
 ## Near-term
 
-- [ ] Fuse/lock-bit editor for MCUs
-- [ ] Config word / calibration byte editing
 - [ ] Hex viewer: go-to-offset navigation
 - [ ] File format support: Intel HEX, SREC, JEDEC
 - [ ] Batch / queue operations (write + verify)
