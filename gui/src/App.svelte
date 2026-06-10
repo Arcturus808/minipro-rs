@@ -357,10 +357,11 @@
     <section class="flex-1 flex flex-col p-4 gap-4 overflow-hidden min-w-0">
       <!-- Operations panel -->
       <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2 mb-3">
           <h2 class="text-sm font-semibold">Operations</h2>
           <select
             class="select text-xs"
+            style="width: auto;"
             title="Programming interface"
             bind:value={icspMode}
           >
