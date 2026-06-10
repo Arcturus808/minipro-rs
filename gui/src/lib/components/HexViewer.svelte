@@ -162,8 +162,8 @@
           {@const len = end - offset}
           {@const bytes = Array.from({length: len}, (_, j) => $hexMeta.data[offset + j])}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
-            <span style="width: 9ch; padding-right: 1.5ch; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
-            <span style="width: 48ch; padding-right: 1.5ch; flex-shrink: 0; opacity: 0.85;">{bytes.map(b => formatHex(b)).join(' ')}</span>
+            <span style="width: 9ch; padding-right: 3ch; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
+            <span style="width: 48ch; padding-right: 3ch; flex-shrink: 0; opacity: 0.85;">{bytes.map(b => formatHex(b)).join(' ')}</span>
             <span style="opacity: 0.7;">{bytes.map(b => toAscii(b)).join('')}</span>
           </div>
         {/each}
