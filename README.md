@@ -37,6 +37,18 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
 
+### Download
+
+Pre-built GUI installers are available on the [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) page:
+
+| Platform | Installer |
+|----------|-----------|
+| **Windows** | `.msi` (recommended) or `.exe` (NSIS) |
+| **Linux** | `.AppImage` (universal) or `.deb` (Debian/Ubuntu) |
+| **macOS** | `.dmg` (Apple Silicon — M1/M2/M3) |
+
+> **Note:** The GUI releases are built from a [GitHub mirror](https://github.com/Arcturus808/minipro-rs) of this repository. The CLI releases remain on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/releases).
+
 ### Quick start
 
 ```bash

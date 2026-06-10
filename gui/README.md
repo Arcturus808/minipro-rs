@@ -95,6 +95,16 @@ gui/
 - [Node.js](https://nodejs.org/) (LTS)
 - Windows: [Zadig](https://zadig.akeo.ie/) to install WinUSB driver (one-time)
 
+### Download
+
+Pre-built installers are published on the [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) page (built from a mirror of this repo):
+
+| Platform | Installer |
+|----------|-----------|
+| **Windows** | `.msi` (recommended) or `.exe` (NSIS) |
+| **Linux** | `.AppImage` (universal) or `.deb` (Debian/Ubuntu) |
+| **macOS** | `.dmg` (Apple Silicon) |
+
 ### Development
 
 ```bash

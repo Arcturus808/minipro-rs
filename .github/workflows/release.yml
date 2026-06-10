@@ -16,9 +16,6 @@ jobs:
           - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
-          - platform: 'macos-13'
-            target: 'x86_64-apple-darwin'
-            args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-22.04'
             target: 'x86_64-unknown-linux-gnu'
             args: ''
@@ -69,7 +66,7 @@ jobs:
             ## Assets
             - **Windows**: `.msi` installer + `.exe` NSIS installer
             - **Linux**: `.AppImage` + `.deb` (Debian/Ubuntu)
-            - **macOS**: `.dmg` (Intel and Apple Silicon)
+            - **macOS**: `.dmg` (Apple Silicon — M1/M2/M3)
 
             See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
