@@ -126,8 +126,11 @@
     {@const dataKb = selectedInfo.data_memory_size > 0 ? (selectedInfo.data_memory_size / 1024).toFixed(1) + " KB" : "—"}
     <footer class="p-3 border-t border-surface-200-800 space-y-1">
       <div class="flex items-center justify-between">
-        <span class="font-semibold text-sm">{selectedInfo.name}</span>
+        <span class="text-xs font-semibold opacity-70 uppercase tracking-wide">Selected Device</span>
         <button class="text-xs opacity-60 hover:opacity-100" onclick={onDeselect}>Clear</button>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-sm">{selectedInfo.name}</span>
       </div>
       <div class="text-xs">{selectedInfo.chip_type} · {selectedInfo.package_type} · {selectedInfo.pin_count} pins</div>
       <div class="text-xs">
