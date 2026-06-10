@@ -22,7 +22,7 @@ export interface OperationOptions {
 
 export const isRunning = writable(false);
 export const currentOperation = writable<string | null>(null);
-export const activeOperation = writable<"read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | null>(null);
+export const activeOperation = writable<"read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | "config" | null>(null);
 export const progress = writable<ProgressEvent | null>(null);
 export const progressPercent = derived(progress, ($p) => {
   if (!$p || $p.total === 0) return 0;

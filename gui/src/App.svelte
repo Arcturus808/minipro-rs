@@ -20,6 +20,8 @@
     doBlankCheck,
     doChipId,
     doLogicTest,
+    readFuses,
+    writeFuses,
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
@@ -37,6 +39,9 @@
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
+
+  // Fuse/lock-bit state for Config operation
+  let fuseBytes = $state<Record<number, number[]>>({});
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
@@ -155,6 +160,42 @@
     setSetting("theme", t);
   }
 
+  function decodeFuseValue(bytes: number[], index: number, mask: number): boolean {
+    if (!bytes || index >= bytes.length) return false;
+    return (bytes[index] & mask) !== 0;
+  }
+
+  function toggleFuseBit(fuseType: number, byteIndex: number, mask: number) {
+    const copy = { ...fuseBytes };
+    const arr = [...(copy[fuseType] || [])];
+    if (byteIndex >= arr.length) {
+      for (let i = arr.length; i <= byteIndex; i++) arr.push(0);
+    }
+    arr[byteIndex] ^= mask;
+    copy[fuseType] = arr;
+    fuseBytes = copy;
+  }
+
+  async function writeAllFuses() {
+    try {
+      if (fuseBytes[1]?.length) await writeFuses(1, fuseBytes[1]);
+      if (fuseBytes[2]?.length) await writeFuses(2, fuseBytes[2]);
+      logs.info("Config written to chip");
+    } catch (e) {
+      logs.error(`Config write failed: ${e}`);
+    }
+  }
+
+  function isDangerousFuse(name: string): boolean {
+    const lower = name.toLowerCase();
+    return [
+      "rstdisbl", "disable reset", "rstdis",
+      "spien", "enable spi", "disable spi",
+      "jtagen", "jtag",
+      "dwen", "debugwire",
+    ].some((k) => lower.includes(k));
+  }
+
   function getOptions() {
     return {
       skip_erase: skipErase,
@@ -166,7 +207,7 @@
     };
   }
 
-  function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test") {
+  function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | "config") {
     activeOperation.set(op);
     switch (op) {
       case "read":
@@ -184,6 +225,9 @@
         page = "code";
         format = "auto";
         sizeMismatch = "error";
+        break;
+      case "config":
+        fuseBytes = {};
         break;
       case "erase":
       case "blank_check":
@@ -228,6 +272,17 @@
         break;
       case "logic_test":
         await doLogicTest(icspMode);
+        break;
+      case "config":
+        try {
+          const user = await readFuses(0);
+          const cfg = await readFuses(1);
+          const lock = await readFuses(2);
+          fuseBytes = { 0: user, 1: cfg, 2: lock };
+          logs.info("Config read successfully");
+        } catch (e) {
+          logs.error(`Config read failed: ${e}`);
+        }
         break;
     }
   }
@@ -451,6 +506,17 @@
           </button>
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("config")}
+            disabled={$isRunning || !$selectedDevice || !$selectedDevice?.config}
+            class:preset-filled-primary={$activeOperation === "config"}
+            class:ring-2={$activeOperation === "config"}
+            class:ring-primary-400={$activeOperation === "config"}
+            class:font-bold={$activeOperation === "config"}
+          >
+            Config
+          </button>
+          <button
+            class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={onLoadFile}
             disabled={$isRunning || $hexLoading}
           >
@@ -523,6 +589,59 @@
               {/if}
               {#if $activeOperation === "erase" || $activeOperation === "blank_check" || $activeOperation === "chip_id"}
                 <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
+              {/if}
+              {#if $activeOperation === "config"}
+                {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
+                  <div class="col-span-2 space-y-2">
+                    {#if $selectedDevice.config.fuses.length > 0}
+                      <div class="space-y-1">
+                        <span class="text-xs font-semibold opacity-70">Fuses</span>
+                        {#each $selectedDevice.config.fuses as field, i}
+                          <label class="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              class="checkbox"
+                              checked={decodeFuseValue(fuseBytes[1] || [], i, field.mask)}
+                              disabled={!fuseBytes[1]}
+                              onchange={() => toggleFuseBit(1, i, field.mask)}
+                            />
+                            <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
+                            {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                            {#if !fuseBytes[1]}<span class="opacity-40">(not read)</span>{/if}
+                          </label>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if $selectedDevice.config.locks.length > 0}
+                      <div class="space-y-1">
+                        <span class="text-xs font-semibold opacity-70">Lock Bits</span>
+                        {#each $selectedDevice.config.locks as field, i}
+                          <label class="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              class="checkbox"
+                              checked={decodeFuseValue(fuseBytes[2] || [], i, field.mask)}
+                              disabled={!fuseBytes[2]}
+                              onchange={() => toggleFuseBit(2, i, field.mask)}
+                            />
+                            <span>{field.name}</span>
+                            {#if !fuseBytes[2]}<span class="opacity-40">(not read)</span>{/if}
+                          </label>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if fuseBytes[1]?.length || fuseBytes[2]?.length}
+                      <button
+                        class="btn preset-filled-primary text-xs px-2 py-1 w-full"
+                        onclick={writeAllFuses}
+                      >
+                        Write Config to Chip
+                      </button>
+                    {/if}
+                  </div>
+                {:else}
+                  <p class="text-sm opacity-50 col-span-2">No configuration data for this device.</p>
+                {/if}
               {/if}
             </div>
 
