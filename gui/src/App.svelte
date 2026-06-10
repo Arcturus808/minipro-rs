@@ -240,7 +240,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            {$programmer.model}
+            {$programmer.model} connected
           </span>
         {:else}
           <span class="badge preset-tonal-error-500 text-xs flex items-center gap-1">
