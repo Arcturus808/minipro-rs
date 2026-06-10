@@ -43,7 +43,7 @@
 
   // Panel widths (px) — draggable splitters, persisted to settings
   let leftWidth = $state(288);
-  let rightWidth = $state(448);
+  let rightWidth = $state(400);
 
   // Drag state
   let dragMode: "left" | "right" | null = $state(null);
