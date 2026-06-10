@@ -65,6 +65,20 @@ pub struct CalibrationDto {
     bytes: Vec<u8>,
 }
 
+#[derive(Serialize, Clone)]
+pub struct FuseFieldDto {
+    name: String,
+    mask: u16,
+    default_value: u16,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+pub enum ChipConfigDto {
+    Mcu { fuses: Vec<FuseFieldDto>, locks: Vec<FuseFieldDto> },
+    Pld {},
+}
+
 #[derive(Serialize)]
 pub struct DeviceInfoDto {
     name: String,
@@ -76,6 +90,7 @@ pub struct DeviceInfoDto {
     data_memory_size: u32,
     can_erase: bool,
     has_chip_id: bool,
+    config: Option<ChipConfigDto>,
 }
 
 #[derive(Serialize)]
@@ -999,6 +1014,82 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
     }
 }
 
+#[derive(Serialize)]
+pub struct FusesDto {
+    bytes: Vec<u8>,
+}
+
+/// Read fuse / lock bytes from the chip.
+/// `fuse_type`: 0=user, 1=config, 2=lock
+#[tauri::command]
+pub async fn read_fuses(fuse_type: u8, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            let handle = state_task.take_handle()?;
+            let device = state_task.get_device()?;
+            let result = handle.protocol.read_fuses(&handle.usb, &device, fuse_type, 64, 1).map_err(|e| e.to_string());
+            let _ = state_task.store_handle(handle);
+            if let Err(ref e) = result {
+                handle_usb_error(&state_task, e);
+            }
+            result
+        }),
+    )
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(Ok(bytes))) => Ok(FusesDto { bytes }),
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
+/// Write fuse / lock bytes to the chip.
+/// `fuse_type`: 0=user, 1=config, 2=lock
+#[tauri::command]
+pub async fn write_fuses(fuse_type: u8, data: Vec<u8>, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let data_len = data.len();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            let handle = state_task.take_handle()?;
+            let device = state_task.get_device()?;
+            let result = handle.protocol.write_fuses(&handle.usb, &device, fuse_type, data_len, 1, &data).map_err(|e| e.to_string());
+            let _ = state_task.store_handle(handle);
+            if let Err(ref e) = result {
+                handle_usb_error(&state_task, e);
+            }
+            result
+        }),
+    )
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
 /// Run the programmer's built-in hardware self-test.
 #[tauri::command]
 pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<HardwareCheckResultDto, String> {
@@ -1079,6 +1170,22 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         .map(|t| format!("{:?}", t))
         .unwrap_or_else(|_| format!("Unknown({})", dev.chip_type));
 
+    let config = dev.config.as_ref().map(|cfg| match cfg {
+        minipro_core::device::ChipConfig::Mcu(fuse_cfg) => ChipConfigDto::Mcu {
+            fuses: fuse_cfg.fuses.iter().map(|f| FuseFieldDto {
+                name: f.name.clone(),
+                mask: f.mask,
+                default_value: f.default,
+            }).collect(),
+            locks: fuse_cfg.locks.iter().map(|f| FuseFieldDto {
+                name: f.name.clone(),
+                mask: f.mask,
+                default_value: f.default,
+            }).collect(),
+        },
+        minipro_core::device::ChipConfig::Pld(_) => ChipConfigDto::Pld {},
+    });
+
     DeviceInfoDto {
         name: dev.name.clone(),
         chip_type: chip_type_str,
@@ -1089,6 +1196,7 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         data_memory_size: dev.data_memory_size,
         can_erase: dev.flags.can_erase,
         has_chip_id: dev.flags.has_chip_id,
+        config,
     }
 }
 

@@ -8,6 +8,18 @@ export interface ProgrammerInfo {
   hardware_version: string;
 }
 
+export interface FuseField {
+  name: string;
+  mask: number;
+  default_value: number;
+}
+
+export interface ChipConfig {
+  type: "Mcu" | "Pld";
+  fuses: FuseField[];
+  locks: FuseField[];
+}
+
 export interface DeviceInfo {
   name: string;
   chip_type: string;
@@ -18,6 +30,11 @@ export interface DeviceInfo {
     vdd: number;
     vcc: number;
   };
+  code_memory_size: number;
+  data_memory_size: number;
+  can_erase: boolean;
+  has_chip_id: boolean;
+  config: ChipConfig | null;
 }
 
 export const programmer = writable<ProgrammerInfo | null>(null);

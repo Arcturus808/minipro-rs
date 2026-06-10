@@ -115,6 +115,8 @@ pub fn run() {
             commands::read_calibration,
             commands::run_hardware_check,
             commands::get_dynamic_window_size,
+            commands::read_fuses,
+            commands::write_fuses,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

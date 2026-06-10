@@ -192,3 +192,12 @@ export async function doLogicTest(icsp_mode: string = "zif") {
     deferLog("info", "Logic test completed");
   });
 }
+
+export async function readFuses(fuseType: number): Promise<number[]> {
+  const dto = await invoke<{ bytes: number[] }>("read_fuses", { fuse_type: fuseType });
+  return dto.bytes;
+}
+
+export async function writeFuses(fuseType: number, data: number[]): Promise<void> {
+  await invoke("write_fuses", { fuse_type: fuseType, data });
+}
