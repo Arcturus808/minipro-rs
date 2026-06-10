@@ -44,6 +44,26 @@ pub fn run() {
                 eprintln!("Warning: failed to load device names: {}", e);
             }
             app.manage(state);
+
+            // Dynamically size the main window based on the primary monitor.
+            // Uses 90% of screen width and 85% of height, clamped to reasonable bounds.
+            if let Ok(Some(monitor)) = app.primary_monitor() {
+                let scale = monitor.scale_factor();
+                let screen_w = (monitor.size().width as f64 / scale) as u32;
+                let screen_h = (monitor.size().height as f64 / scale) as u32;
+
+                let win_w = ((screen_w as f64 * 0.90) as u32).clamp(1280, 1600);
+                let win_h = ((screen_h as f64 * 0.85) as u32).clamp(768, 1000);
+
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                        width: win_w as f64,
+                        height: win_h as f64,
+                    }));
+                    let _ = window.center();
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
