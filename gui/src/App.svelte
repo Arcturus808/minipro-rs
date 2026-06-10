@@ -42,8 +42,8 @@
   let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
 
   // Panel widths (px) — draggable splitters, persisted to settings
-  let leftWidth = $state(288);
-  let rightWidth = $state(400);
+  let leftWidth = $state(260);
+  let rightWidth = $state(320);
 
   // Drag state
   let dragMode: "left" | "right" | null = $state(null);
@@ -63,7 +63,7 @@
     if (!dragMode) return;
     const delta = e.clientX - dragStartX;
     if (dragMode === "left") {
-      leftWidth = Math.max(220, Math.min(400, dragStartLeft + delta));
+      leftWidth = Math.max(200, Math.min(400, dragStartLeft + delta));
     } else if (dragMode === "right") {
       // Dragging right splitter right → right panel gets narrower
       rightWidth = Math.max(320, Math.min(600, dragStartRight - delta));
@@ -331,7 +331,7 @@
 
         <div class="flex flex-wrap gap-1.5 mb-3">
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("read")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "read"}
@@ -342,7 +342,7 @@
             Read
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("write")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "write"}
@@ -353,7 +353,7 @@
             Write
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("verify")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "verify"}
@@ -364,7 +364,7 @@
             Verify
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("erase")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "erase"}
@@ -375,7 +375,7 @@
             Erase
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("blank_check")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "blank_check"}
@@ -386,7 +386,7 @@
             Blank Check
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("chip_id")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "chip_id"}
@@ -397,7 +397,7 @@
             Chip ID
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("logic_test")}
             disabled={$isRunning || !$selectedDevice}
             class:preset-filled-primary={$activeOperation === "logic_test"}
@@ -408,7 +408,7 @@
             Logic Test
           </button>
           <button
-            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            class="btn preset-tonal px-2 py-1 text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={onLoadFile}
             disabled={$isRunning || $hexLoading}
           >
