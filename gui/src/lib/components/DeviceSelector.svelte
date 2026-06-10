@@ -82,6 +82,16 @@
     return (bytes[index] & mask) !== 0;
   }
 
+  function isDangerousFuse(name: string): boolean {
+    const lower = name.toLowerCase();
+    return [
+      "rstdisbl", "disable reset", "rstdis",
+      "spien", "enable spi", "disable spi",
+      "jtagen", "jtag",
+      "dwen", "debugwire",
+    ].some((k) => lower.includes(k));
+  }
+
   function toggleFuseBit(fuseType: number, byteIndex: number, mask: number) {
     const copy = { ...fuseBytes };
     const arr = [...(copy[fuseType] || [])];
@@ -217,7 +227,8 @@
                         disabled={!fuseBytes[1]}
                         onchange={() => toggleFuseBit(1, i, field.mask)}
                       />
-                      <span>{field.name}</span>
+                      <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
+                      {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
                       {#if !fuseBytes[1]}<span class="opacity-40">(not read)</span>{/if}
                     </label>
                   {/each}
@@ -235,7 +246,8 @@
                         disabled={!fuseBytes[2]}
                         onchange={() => toggleFuseBit(2, i, field.mask)}
                       />
-                      <span>{field.name}</span>
+                      <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
+                      {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
                       {#if !fuseBytes[2]}<span class="opacity-40">(not read)</span>{/if}
                     </label>
                   {/each}
