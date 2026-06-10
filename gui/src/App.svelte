@@ -146,6 +146,10 @@
     rightPercent = s.rightPanelPercent;
   });
 
+  $effect(() => {
+    setSetting("icsp", icsp);
+  });
+
   function setTheme(t: "system" | "dark" | "light") {
     theme.set(t);
     setSetting("theme", t);
@@ -353,7 +357,13 @@
     <section class="flex-1 flex flex-col p-4 gap-4 overflow-hidden min-w-0">
       <!-- Operations panel -->
       <div class="card preset-filled-surface-100-900 border border-surface-200-800 p-4 shrink-0">
-        <h2 class="text-sm font-semibold mb-3">Operations</h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold">Operations</h2>
+          <label class="flex items-center gap-1.5 text-sm" title="In-circuit serial programming">
+            <input type="checkbox" class="checkbox" bind:checked={icsp} />
+            ICSP
+          </label>
+        </div>
 
         <div class="flex flex-wrap gap-1.5 mb-3">
           <button
@@ -493,10 +503,6 @@
                   <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
                     Skip verify
-                  </label>
-                  <label class="flex items-center gap-2 text-sm" title="In-circuit serial programming">
-                    <input type="checkbox" class="checkbox" bind:checked={icsp} />
-                    ICSP
                   </label>
                 </div>
               {:else if $activeOperation === "verify"}
