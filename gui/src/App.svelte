@@ -605,7 +605,7 @@
                       <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
                     {:else}
                       {#if $selectedDevice.invert_fuse_bits}
-                        <p class="text-[10px] opacity-50">Checked = programmed (active) — AVR convention</p>
+                        <p class="text-xs opacity-50">Checked = programmed (active) — AVR convention</p>
                       {/if}
                       {#if $selectedDevice.config.fuses.length > 0}
                         <div class="space-y-1">
