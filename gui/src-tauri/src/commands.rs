@@ -1022,9 +1022,17 @@ pub struct FuseValueDto {
     value: u8,
 }
 
-/// Read fuse / lock bytes from the chip.
+#[derive(Serialize)]
+pub struct ConfigDataDto {
+    cfg_fuses: Vec<FuseValueDto>,
+    lock_bits: Vec<FuseValueDto>,
+    user_fuses: Vec<u8>,
+    calibration: Vec<u8>,
+}
+
+/// Read all fuse / lock / user / calibration data from the chip.
 #[tauri::command]
-pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<Vec<FuseValueDto>, String> {
+pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<ConfigDataDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1040,8 +1048,49 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             let result = (|| {
                 handle.icsp = icspMode != "zif";
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
-                let values = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
-                Ok::<Vec<minipro_core::operations::FuseValue>, String>(values)
+
+                // Read named CFG fuses + LOCK bits
+                let named = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
+
+                // Read user/ID fuses (num_uids bytes)
+                let user_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
+                    cfg.num_uids as u8
+                } else { 0 };
+                let user_bytes = if user_count > 0 {
+                    handle.protocol.read_fuses(
+                        &handle.usb,
+                        handle.device().map_err(|e| e.to_string())?,
+                        minipro_core::operations::MP_FUSE_USER,
+                        user_count as usize,
+                        user_count,
+                    ).unwrap_or_default()
+                } else {
+                    vec![]
+                };
+
+                // Read calibration bytes
+                let calib_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
+                    cfg.num_calibytes as usize
+                } else { 0 };
+                let calibration = if calib_count > 0 {
+                    handle.protocol.read_calibration(&handle.usb, calib_count).unwrap_or_default()
+                } else {
+                    vec![]
+                };
+
+                let dev = handle.device().map_err(|e| e.to_string())?;
+                let fuse_len = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config { cfg.fuses.len() } else { 0 };
+
+                Ok::<ConfigDataDto, String>(ConfigDataDto {
+                    cfg_fuses: named.iter().take(fuse_len)
+                        .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
+                        .collect(),
+                    lock_bits: named.iter().skip(fuse_len)
+                        .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
+                        .collect(),
+                    user_fuses: user_bytes,
+                    calibration,
+                })
             })();
 
             let _ = handle.end_transaction();
@@ -1057,7 +1106,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
     state_clone.release();
 
     match result {
-        Ok(Ok(Ok(values))) => Ok(values.into_iter().map(|v| FuseValueDto { name: v.name, value: v.value }).collect()),
+        Ok(Ok(Ok(dto))) => Ok(dto),
         Ok(Ok(Err(e))) => Err(e),
         Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
         Err(_) => Err("Operation timed out".into()),
@@ -1066,7 +1115,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
 /// Write fuse / lock bytes to the chip.
 #[tauri::command]
-pub async fn write_fuses(data: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueDto>, user_fuses: Vec<u8>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1081,11 +1130,28 @@ pub async fn write_fuses(data: Vec<FuseValueDto>, icspMode: String, state: State
             let device = state_task.get_device()?;
             let result = (|| {
                 handle.icsp = icspMode != "zif";
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
-                let values: Vec<minipro_core::operations::FuseValue> = data.iter()
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+                // Write user fuses
+                if !user_fuses.is_empty() {
+                    handle.protocol.write_fuses(
+                        &handle.usb,
+                        &device,
+                        minipro_core::operations::MP_FUSE_USER,
+                        user_fuses.len(),
+                        user_fuses.len() as u8,
+                        &user_fuses,
+                    ).map_err(|e| e.to_string())?;
+                }
+
+                // Write CFG + LOCK via high-level function
+                let mut all: Vec<minipro_core::operations::FuseValue> = cfg_fuses.iter()
                     .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value })
                     .collect();
-                minipro_core::operations::write_fuses(&mut handle, &values).map_err(|e| e.to_string())?;
+                all.extend(lock_bits.iter()
+                    .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value }));
+                minipro_core::operations::write_fuses(&mut handle, &all).map_err(|e| e.to_string())?;
+
                 Ok::<(), String>(())
             })();
 

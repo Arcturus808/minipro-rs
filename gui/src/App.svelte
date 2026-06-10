@@ -23,6 +23,7 @@
     readFuses,
     writeFuses,
     type FuseValue,
+    type ConfigData,
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
@@ -41,8 +42,8 @@
   let format = $state("auto");
   let sizeMismatch = $state("error");
 
-  // Fuse/lock-bit state for Config operation
-  let fuseValues = $state<FuseValue[]>([]);
+  // Config data state (fuses, locks, user bytes, calibration)
+  let configData = $state<ConfigData | null>(null);
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
@@ -166,36 +167,51 @@
     setSetting("theme", t);
   }
 
-  function getFuseValue(index: number): number {
-    return fuseValues[index]?.value ?? 0xff;
+  function getCfgValue(index: number): number {
+    return configData?.cfg_fuses[index]?.value ?? 0xff;
   }
 
-  function setFuseValue(index: number, value: number) {
-    fuseValues = fuseValues.map((fv, i) => i === index ? { ...fv, value } : fv);
+  function setCfgValue(index: number, value: number) {
+    if (!configData) return;
+    configData = {
+      ...configData,
+      cfg_fuses: configData.cfg_fuses.map((fv, i) => i === index ? { ...fv, value } : fv),
+    };
+  }
+
+  function getLockValue(index: number): number {
+    return configData?.lock_bits[index]?.value ?? 0xff;
+  }
+
+  function setLockValue(index: number, value: number) {
+    if (!configData) return;
+    configData = {
+      ...configData,
+      lock_bits: configData.lock_bits.map((fv, i) => i === index ? { ...fv, value } : fv),
+    };
   }
 
   // isProgrammed: true when the fuse is active.
   // invert=true (AVR): bit=0 means programmed.
   // invert=false (PIC, etc.): bit=1 means programmed.
-  function isFuseProgrammed(index: number, mask: number, invert: boolean): boolean {
-    const bitSet = (getFuseValue(index) & mask) !== 0;
+  function isFuseProgrammed(value: number, mask: number, invert: boolean): boolean {
+    const bitSet = (value & mask) !== 0;
     return invert ? !bitSet : bitSet;
   }
 
-  function toggleFuseProgrammed(index: number, mask: number, invert: boolean) {
-    const programmed = isFuseProgrammed(index, mask, invert);
+  function toggleFuseValue(current: number, mask: number, invert: boolean): number {
+    const programmed = isFuseProgrammed(current, mask, invert);
     if (programmed) {
-      // Unprogram: set bit to the "off" value
-      setFuseValue(index, invert ? getFuseValue(index) | mask : getFuseValue(index) & ~mask);
+      return invert ? current | mask : current & ~mask;  // unprogram
     } else {
-      // Program: set bit to the "on" value
-      setFuseValue(index, invert ? getFuseValue(index) & ~mask : getFuseValue(index) | mask);
+      return invert ? current & ~mask : current | mask;  // program
     }
   }
 
   async function writeAllFuses() {
+    if (!configData) return;
     try {
-      await writeFuses(fuseValues, icspMode);
+      await writeFuses(configData.cfg_fuses, configData.lock_bits, configData.user_fuses, icspMode);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
@@ -243,7 +259,7 @@
         sizeMismatch = "error";
         break;
       case "config":
-        fuseValues = [];
+        configData = null;
         break;
       case "erase":
       case "blank_check":
@@ -291,8 +307,9 @@
         break;
       case "config":
         try {
-          fuseValues = await readFuses(icspMode);
-          logs.info(`Config read — ${fuseValues.length} fuse/lock values`);
+          configData = await readFuses(icspMode);
+          const total = configData.cfg_fuses.length + configData.lock_bits.length;
+          logs.info(`Config read — ${total} fuse/lock values, ${configData.user_fuses.length} user bytes, ${configData.calibration.length} calibration bytes`);
         } catch (e) {
           logs.error(`Config read failed: ${e}`);
         }
@@ -606,22 +623,22 @@
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
                   <div class="col-span-2 space-y-2">
-                    {#if fuseValues.length === 0}
+                    {#if !configData}
                       <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
                     {:else}
                       {#if $selectedDevice.invert_fuse_bits}
                         <p class="text-xs opacity-50">Checked = programmed (active) — AVR convention</p>
                       {/if}
-                      {#if $selectedDevice.config.fuses.length > 0}
+                      {#if configData.cfg_fuses.length > 0}
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Fuses</span>
-                          {#each $selectedDevice.config.fuses as field, i}
+                          {#each configData.cfg_fuses as field, i}
                             <label class="flex items-center gap-2 text-xs cursor-pointer">
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={isFuseProgrammed(i, field.mask, $selectedDevice.invert_fuse_bits)}
-                                onchange={() => toggleFuseProgrammed(i, field.mask, $selectedDevice.invert_fuse_bits)}
+                                checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
+                                onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
                               />
                               <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
                               {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
@@ -629,21 +646,32 @@
                           {/each}
                         </div>
                       {/if}
-                      {#if $selectedDevice.config.locks.length > 0}
+                      {#if configData.lock_bits.length > 0}
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Lock Bits</span>
-                          {#each $selectedDevice.config.locks as field, i}
-                            {@const idx = $selectedDevice.config.fuses.length + i}
+                          {#each configData.lock_bits as field, i}
                             <label class="flex items-center gap-2 text-xs cursor-pointer">
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={isFuseProgrammed(idx, field.mask, $selectedDevice.invert_fuse_bits)}
-                                onchange={() => toggleFuseProgrammed(idx, field.mask, $selectedDevice.invert_fuse_bits)}
+                                checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
+                                onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
                               />
                               <span>{field.name}</span>
                             </label>
                           {/each}
+                        </div>
+                      {/if}
+                      {#if configData.user_fuses.length > 0}
+                        <div class="space-y-1">
+                          <span class="text-xs font-semibold opacity-70">User/ID Fuses</span>
+                          <div class="text-xs font-mono opacity-70">{configData.user_fuses.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
+                        </div>
+                      {/if}
+                      {#if configData.calibration.length > 0}
+                        <div class="space-y-1">
+                          <span class="text-xs font-semibold opacity-70">Calibration Bytes</span>
+                          <div class="text-xs font-mono opacity-70">{configData.calibration.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
                         </div>
                       {/if}
                       <button

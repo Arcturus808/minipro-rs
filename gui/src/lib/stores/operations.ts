@@ -198,10 +198,17 @@ export interface FuseValue {
   value: number;
 }
 
-export async function readFuses(icspMode: string): Promise<FuseValue[]> {
-  return await invoke<FuseValue[]>("read_fuses", { icspMode });
+export interface ConfigData {
+  cfg_fuses: FuseValue[];
+  lock_bits: FuseValue[];
+  user_fuses: number[];
+  calibration: number[];
 }
 
-export async function writeFuses(values: FuseValue[], icspMode: string): Promise<void> {
-  await invoke("write_fuses", { data: values, icspMode });
+export async function readFuses(icspMode: string): Promise<ConfigData> {
+  return await invoke<ConfigData>("read_fuses", { icspMode });
+}
+
+export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], user: number[], icspMode: string): Promise<void> {
+  await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, user_fuses: user, icspMode });
 }
