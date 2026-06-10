@@ -1022,7 +1022,7 @@ pub struct FusesDto {
 /// Read fuse / lock bytes from the chip.
 /// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn read_fuses(fuseType: u8, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
+pub async fn read_fuses(fuseType: u8, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1032,9 +1032,17 @@ pub async fn read_fuses(fuseType: u8, state: State<'_, Arc<AppState>>) -> Result
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
-            let handle = state_task.take_handle()?;
+            let mut handle = state_task.take_handle()?;
             let device = state_task.get_device()?;
-            let result = handle.protocol.read_fuses(&handle.usb, &device, fuseType, 64, 1).map_err(|e| e.to_string());
+
+            let result = (|| {
+                handle.icsp = icspMode != "zif";
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                let bytes = handle.protocol.read_fuses(&handle.usb, &device, fuseType, 64, 1).map_err(|e| e.to_string())?;
+                Ok::<Vec<u8>, String>(bytes)
+            })();
+
+            let _ = handle.end_transaction();
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);
@@ -1057,7 +1065,7 @@ pub async fn read_fuses(fuseType: u8, state: State<'_, Arc<AppState>>) -> Result
 /// Write fuse / lock bytes to the chip.
 /// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn write_fuses(fuseType: u8, data: Vec<u8>, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(fuseType: u8, data: Vec<u8>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1068,9 +1076,17 @@ pub async fn write_fuses(fuseType: u8, data: Vec<u8>, state: State<'_, Arc<AppSt
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
-            let handle = state_task.take_handle()?;
+            let mut handle = state_task.take_handle()?;
             let device = state_task.get_device()?;
-            let result = handle.protocol.write_fuses(&handle.usb, &device, fuseType, data_len, 1, &data).map_err(|e| e.to_string());
+
+            let result = (|| {
+                handle.icsp = icspMode != "zif";
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                handle.protocol.write_fuses(&handle.usb, &device, fuseType, data_len, 1, &data).map_err(|e| e.to_string())?;
+                Ok::<(), String>(())
+            })();
+
+            let _ = handle.end_transaction();
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);

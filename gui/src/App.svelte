@@ -178,8 +178,8 @@
 
   async function writeAllFuses() {
     try {
-      if (fuseBytes[1]?.length) await writeFuses(1, fuseBytes[1]);
-      if (fuseBytes[2]?.length) await writeFuses(2, fuseBytes[2]);
+      if (fuseBytes[1]?.length) await writeFuses(1, fuseBytes[1], icspMode);
+      if (fuseBytes[2]?.length) await writeFuses(2, fuseBytes[2], icspMode);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
@@ -275,9 +275,9 @@
         break;
       case "config":
         try {
-          const user = await readFuses(0);
-          const cfg = await readFuses(1);
-          const lock = await readFuses(2);
+          const user = await readFuses(0, icspMode);
+          const cfg = await readFuses(1, icspMode);
+          const lock = await readFuses(2, icspMode);
           fuseBytes = { 0: user, 1: cfg, 2: lock };
           logs.info("Config read successfully");
         } catch (e) {
