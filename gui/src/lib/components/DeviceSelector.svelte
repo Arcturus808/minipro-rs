@@ -84,6 +84,27 @@
     return (bytes[index] & mask) !== 0;
   }
 
+  function toggleFuseBit(fuseType: number, byteIndex: number, mask: number) {
+    const copy = { ...fuseBytes };
+    const arr = [...(copy[fuseType] || [])];
+    if (byteIndex >= arr.length) {
+      for (let i = arr.length; i <= byteIndex; i++) arr.push(0);
+    }
+    arr[byteIndex] ^= mask;
+    copy[fuseType] = arr;
+    fuseBytes = copy;
+  }
+
+  async function writeAllFuses() {
+    try {
+      if (fuseBytes[1]?.length) await writeFuses(1, fuseBytes[1]);
+      if (fuseBytes[2]?.length) await writeFuses(2, fuseBytes[2]);
+      logs.info("Config written to chip");
+    } catch (e) {
+      logs.error(`Config write failed: ${e}`);
+    }
+  }
+
   let start = $derived(page * PAGE_SIZE);
   let pageItems = $derived(results.slice(start, start + PAGE_SIZE));
   let totalPages = $derived(Math.max(1, Math.ceil(results.length / PAGE_SIZE)));
@@ -190,17 +211,17 @@
                 <div class="space-y-1">
                   <span class="text-xs font-semibold opacity-70">Fuses</span>
                   {#each selectedInfo.config.fuses as field, i}
-                    <div class="flex items-center gap-2 text-xs">
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
                       <input
                         type="checkbox"
                         class="checkbox"
                         checked={decodeFuseValue(fuseBytes[1] || [], i, field.mask)}
                         disabled={!fuseBytes[1]}
-                        title={field.name}
+                        onchange={() => toggleFuseBit(1, i, field.mask)}
                       />
                       <span>{field.name}</span>
                       {#if !fuseBytes[1]}<span class="opacity-40">(not read)</span>{/if}
-                    </div>
+                    </label>
                   {/each}
                 </div>
               {/if}
@@ -208,19 +229,27 @@
                 <div class="space-y-1">
                   <span class="text-xs font-semibold opacity-70">Lock Bits</span>
                   {#each selectedInfo.config.locks as field, i}
-                    <div class="flex items-center gap-2 text-xs">
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
                       <input
                         type="checkbox"
                         class="checkbox"
                         checked={decodeFuseValue(fuseBytes[2] || [], i, field.mask)}
                         disabled={!fuseBytes[2]}
-                        title={field.name}
+                        onchange={() => toggleFuseBit(2, i, field.mask)}
                       />
                       <span>{field.name}</span>
                       {#if !fuseBytes[2]}<span class="opacity-40">(not read)</span>{/if}
-                    </div>
+                    </label>
                   {/each}
                 </div>
+              {/if}
+              {#if fuseBytes[1]?.length || fuseBytes[2]?.length}
+                <button
+                  class="btn preset-filled-primary text-xs px-2 py-1 w-full"
+                  onclick={writeAllFuses}
+                >
+                  Write Config to Chip
+                </button>
               {/if}
             </div>
           {/if}
