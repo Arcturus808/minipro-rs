@@ -1040,7 +1040,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
     let state_task = state_clone.clone();
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
 
@@ -1052,32 +1052,6 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
                 // Read named CFG fuses + LOCK bits
                 let named = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
 
-                // Read user/ID fuses (num_uids bytes)
-                let user_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
-                    cfg.num_uids as u8
-                } else { 0 };
-                let user_bytes = if user_count > 0 {
-                    handle.protocol.read_fuses(
-                        &handle.usb,
-                        handle.device().map_err(|e| e.to_string())?,
-                        minipro_core::operations::MP_FUSE_USER,
-                        user_count as usize,
-                        user_count,
-                    ).unwrap_or_default()
-                } else {
-                    vec![]
-                };
-
-                // Read calibration bytes
-                let calib_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
-                    cfg.num_calibytes as usize
-                } else { 0 };
-                let calibration = if calib_count > 0 {
-                    handle.protocol.read_calibration(&handle.usb, calib_count).unwrap_or_default()
-                } else {
-                    vec![]
-                };
-
                 let dev = handle.device().map_err(|e| e.to_string())?;
                 let fuse_len = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config { cfg.fuses.len() } else { 0 };
 
@@ -1088,8 +1062,8 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
                     lock_bits: named.iter().skip(fuse_len)
                         .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
                         .collect(),
-                    user_fuses: user_bytes,
-                    calibration,
+                    user_fuses: vec![],  // TODO: TL866A user fuse read hangs firmware
+                    calibration: vec![], // TODO: TL866A calibration read hangs firmware
                 })
             })();
 
@@ -1115,7 +1089,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
 /// Write fuse / lock bytes to the chip.
 #[tauri::command]
-pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueDto>, user_fuses: Vec<u8>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1123,7 +1097,7 @@ pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueD
 
     let state_task = state_clone.clone();
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
 
@@ -1131,18 +1105,6 @@ pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueD
             let result = (|| {
                 handle.icsp = icspMode != "zif";
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-
-                // Write user fuses
-                if !user_fuses.is_empty() {
-                    handle.protocol.write_fuses(
-                        &handle.usb,
-                        &device,
-                        minipro_core::operations::MP_FUSE_USER,
-                        user_fuses.len(),
-                        user_fuses.len() as u8,
-                        &user_fuses,
-                    ).map_err(|e| e.to_string())?;
-                }
 
                 // Write CFG + LOCK via high-level function
                 let mut all: Vec<minipro_core::operations::FuseValue> = cfg_fuses.iter()
@@ -1185,7 +1147,7 @@ pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<Hardw
 
     let state_task = state_clone.clone();
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
             let result = hardware_check(&mut handle).map_err(|e| e.to_string());

@@ -209,6 +209,6 @@ export async function readFuses(icspMode: string): Promise<ConfigData> {
   return await invoke<ConfigData>("read_fuses", { icspMode });
 }
 
-export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], user: number[], icspMode: string): Promise<void> {
-  await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, user_fuses: user, icspMode });
+export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: string): Promise<void> {
+  await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icspMode });
 }

@@ -211,7 +211,7 @@
   async function writeAllFuses() {
     if (!configData) return;
     try {
-      await writeFuses(configData.cfg_fuses, configData.lock_bits, configData.user_fuses, icspMode);
+      await writeFuses(configData.cfg_fuses, configData.lock_bits, icspMode);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
