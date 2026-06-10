@@ -1040,7 +1040,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
     let state_task = state_clone.clone();
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
+        std::time::Duration::from_secs(30),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
 
@@ -1123,7 +1123,7 @@ pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueD
 
     let state_task = state_clone.clone();
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
+        std::time::Duration::from_secs(30),
         tokio::task::spawn_blocking(move || {
             let mut handle = state_task.take_handle()?;
 
