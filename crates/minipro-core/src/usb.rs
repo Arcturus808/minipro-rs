@@ -88,8 +88,22 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
         1 => {
             let (info, model) = found.remove(0);
             let pid = info.product_id();
-            let device = info.open().map_err(MiniproError::Usb)?;
-            let interface = device.claim_interface(0).map_err(MiniproError::Usb)?;
+            let device = info.open().map_err(|e| {
+                MiniproError::Protocol(format!(
+                    "USB device found but cannot open it. \
+                     This usually means the WinUSB driver is not installed. \
+                     Run Zadig (https://zadig.akeo.ie/), select the programmer, \
+                     choose WinUSB, and click Install Driver. (nusb error: {})",
+                    e
+                ))
+            })?;
+            let interface = device.claim_interface(0).map_err(|e| {
+                MiniproError::Protocol(format!(
+                    "USB device opened but cannot claim interface 0. \
+                     Try unplugging and replugging the programmer. (nusb error: {})",
+                    e
+                ))
+            })?;
             Ok((UsbDevice { interface, pid }, model))
         }
         _ => Err(MiniproError::MultipleProgrammersFound),
