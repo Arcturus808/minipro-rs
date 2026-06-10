@@ -1,7 +1,6 @@
 import { writable, derived } from "svelte/store";
 
 export interface LogEntry {
-  timestamp: Date;
   level: "info" | "warn" | "error";
   message: string;
 }
@@ -13,7 +12,7 @@ function createLogStore() {
     subscribe,
     add: (level: LogEntry["level"], message: string) => {
       update((logs) => {
-        const entry: LogEntry = { timestamp: new Date(), level, message };
+        const entry: LogEntry = { level, message };
         // Keep last 2000 entries to prevent memory bloat
         const next = [...logs, entry];
         if (next.length > 2000) next.splice(0, next.length - 2000);
@@ -23,7 +22,7 @@ function createLogStore() {
     clear: () => update(() => []),
     info: (message: string) => {
       update((logs) => {
-        const entry: LogEntry = { timestamp: new Date(), level: "info", message };
+        const entry: LogEntry = { level: "info", message };
         const next = [...logs, entry];
         if (next.length > 2000) next.splice(0, next.length - 2000);
         return next;
@@ -31,7 +30,7 @@ function createLogStore() {
     },
     warn: (message: string) => {
       update((logs) => {
-        const entry: LogEntry = { timestamp: new Date(), level: "warn", message };
+        const entry: LogEntry = { level: "warn", message };
         const next = [...logs, entry];
         if (next.length > 2000) next.splice(0, next.length - 2000);
         return next;
@@ -39,7 +38,7 @@ function createLogStore() {
     },
     error: (message: string) => {
       update((logs) => {
-        const entry: LogEntry = { timestamp: new Date(), level: "error", message };
+        const entry: LogEntry = { level: "error", message };
         const next = [...logs, entry];
         if (next.length > 2000) next.splice(0, next.length - 2000);
         return next;
@@ -54,7 +53,7 @@ export const logText = derived(logs, ($logs) =>
   $logs
     .map(
       (entry) =>
-        `[${entry.timestamp.toLocaleTimeString()}] [${entry.level.toUpperCase()}] ${entry.message}`,
+        `[${entry.level.toUpperCase()}] ${entry.message}`,
     )
     .join("\n"),
 );

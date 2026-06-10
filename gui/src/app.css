@@ -54,9 +54,7 @@ body {
   word-break: break-all;
 }
 
-.terminal-log .timestamp {
-  opacity: 0.6;
-}
+
 
 .terminal-log .level-info { color: var(--color-success-500); }
 .terminal-log .level-warn { color: var(--color-warning-500); }
