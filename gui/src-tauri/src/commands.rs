@@ -1043,6 +1043,20 @@ pub async fn read_file_bytes(path: String) -> Result<String, String> {
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
+/// Return the dynamic window size that would be computed for the primary monitor.
+#[tauri::command]
+pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32), String> {
+    let monitor = app.primary_monitor().map_err(|e| e.to_string())?
+        .ok_or("No primary monitor found")?;
+    let scale = monitor.scale_factor();
+    let screen_w = (monitor.size().width as f64 / scale) as u32;
+    let screen_h = (monitor.size().height as f64 / scale) as u32;
+
+    let win_w = ((screen_w as f64 * 0.90) as u32).clamp(1280, 1600);
+    let win_h = ((screen_h as f64 * 0.85) as u32).clamp(768, 1000);
+    Ok((win_w, win_h))
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────
 
 fn device_to_dto(dev: &Device) -> DeviceInfoDto {

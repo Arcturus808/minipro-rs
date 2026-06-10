@@ -11,10 +11,14 @@ export interface AppSettings {
   theme: "system" | "dark" | "light";
   deviceViewMode: "paginated" | "scroll";
   hexViewerFontSize: number;
-  leftPanelWidth: number;
-  rightPanelWidth: number;
+  leftPanelPercent: number;
+  rightPanelPercent: number;
+  windowWidth: number | null;
+  windowHeight: number | null;
 }
 
+// Panel widths as fractions of window width (0.0–1.0)
+// At 1280px: left=208px (16%), right=288px (22.5%)
 const DEFAULTS: AppSettings = {
   defaultDirectory: null,
   defaultPage: "code",
@@ -25,8 +29,10 @@ const DEFAULTS: AppSettings = {
   theme: "system",
   deviceViewMode: "paginated",
   hexViewerFontSize: 13,
-  leftPanelWidth: 260,
-  rightPanelWidth: 320,
+  leftPanelPercent: 0.20,
+  rightPanelPercent: 0.25,
+  windowWidth: null,
+  windowHeight: null,
 };
 
 let store: Store | null = null;

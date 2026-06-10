@@ -1,4 +1,18 @@
 use tauri::Manager;
+use tauri_plugin_store::StoreExt;
+
+/// Compute a sensible window size based on the primary monitor.
+/// Returns (width, height) in logical pixels.
+fn dynamic_window_size(app: &tauri::App) -> Option<(u32, u32)> {
+    let monitor = app.primary_monitor().ok()??;
+    let scale = monitor.scale_factor();
+    let screen_w = (monitor.size().width as f64 / scale) as u32;
+    let screen_h = (monitor.size().height as f64 / scale) as u32;
+
+    let win_w = ((screen_w as f64 * 0.90) as u32).clamp(1280, 1600);
+    let win_h = ((screen_h as f64 * 0.85) as u32).clamp(768, 1000);
+    Some((win_w, win_h))
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 // force rebuild
@@ -45,22 +59,33 @@ pub fn run() {
             }
             app.manage(state);
 
-            // Dynamically size the main window based on the primary monitor.
-            // Uses 90% of screen width and 85% of height, clamped to reasonable bounds.
-            if let Ok(Some(monitor)) = app.primary_monitor() {
-                let scale = monitor.scale_factor();
-                let screen_w = (monitor.size().width as f64 / scale) as u32;
-                let screen_h = (monitor.size().height as f64 / scale) as u32;
+            // Window sizing: restore saved size on subsequent launches,
+            // apply dynamic sizing only on first launch.
+            if let Ok(store) = app.app_handle().store("settings.json") {
+                let saved_w: Option<f64> = store.get("windowWidth").and_then(|v| v.as_f64());
+                let saved_h: Option<f64> = store.get("windowHeight").and_then(|v| v.as_f64());
 
-                let win_w = ((screen_w as f64 * 0.90) as u32).clamp(1280, 1600);
-                let win_h = ((screen_h as f64 * 0.85) as u32).clamp(768, 1000);
-
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-                        width: win_w as f64,
-                        height: win_h as f64,
-                    }));
-                    let _ = window.center();
+                if let (Some(w), Some(h)) = (saved_w, saved_h) {
+                    // Restore saved size
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                            width: w,
+                            height: h,
+                        }));
+                        let _ = window.center();
+                    }
+                } else if let Some((win_w, win_h)) = dynamic_window_size(app) {
+                    // First launch — apply dynamic sizing and save
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                            width: win_w as f64,
+                            height: win_h as f64,
+                        }));
+                        let _ = window.center();
+                    }
+                    let _ = store.set("windowWidth", serde_json::json!(win_w));
+                    let _ = store.set("windowHeight", serde_json::json!(win_h));
+                    let _ = store.save();
                 }
             }
 
@@ -89,6 +114,7 @@ pub fn run() {
             commands::check_overcurrent,
             commands::read_calibration,
             commands::run_hardware_check,
+            commands::get_dynamic_window_size,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -41,39 +41,46 @@
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
   let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
 
-  // Panel widths (px) — draggable splitters, persisted to settings
-  let leftWidth = $state(260);
-  let rightWidth = $state(320);
+  // Panel widths as fractions of window width (persisted as percentages)
+  let leftPercent = $state(0.20);
+  let rightPercent = $state(0.25);
+
+  // Computed pixel widths based on current window width
+  let leftWidth = $derived(Math.round(window.innerWidth * leftPercent));
+  let rightWidth = $derived(Math.round(window.innerWidth * rightPercent));
 
   // Drag state
   let dragMode: "left" | "right" | null = $state(null);
   let dragStartX = $state(0);
-  let dragStartLeft = $state(0);
-  let dragStartRight = $state(0);
+  let dragStartLeftPct = $state(0);
+  let dragStartRightPct = $state(0);
 
   function startDrag(mode: "left" | "right", e: MouseEvent) {
     dragMode = mode;
     dragStartX = e.clientX;
-    dragStartLeft = leftWidth;
-    dragStartRight = rightWidth;
+    dragStartLeftPct = leftPercent;
+    dragStartRightPct = rightPercent;
     e.preventDefault();
   }
 
   function onMouseMove(e: MouseEvent) {
     if (!dragMode) return;
-    const delta = e.clientX - dragStartX;
+    const deltaPx = e.clientX - dragStartX;
+    const winW = window.innerWidth;
     if (dragMode === "left") {
-      leftWidth = Math.max(200, Math.min(400, dragStartLeft + delta));
+      const newPct = dragStartLeftPct + (deltaPx / winW);
+      leftPercent = Math.max(0.15, Math.min(0.35, newPct));
     } else if (dragMode === "right") {
       // Dragging right splitter right → right panel gets narrower
-      rightWidth = Math.max(320, Math.min(600, dragStartRight - delta));
+      const newPct = dragStartRightPct - (deltaPx / winW);
+      rightPercent = Math.max(0.20, Math.min(0.45, newPct));
     }
   }
 
   function stopDrag() {
     if (dragMode) {
-      setSetting("leftPanelWidth", leftWidth);
-      setSetting("rightPanelWidth", rightWidth);
+      setSetting("leftPanelPercent", leftPercent);
+      setSetting("rightPanelPercent", rightPercent);
     }
     dragMode = null;
   }
@@ -88,8 +95,8 @@
       const s = $settings;
       skipErase = s.skipErase;
       skipVerify = s.skipVerify;
-      leftWidth = s.leftPanelWidth;
-      rightWidth = s.rightPanelWidth;
+      leftPercent = s.leftPanelPercent;
+      rightPercent = s.rightPanelPercent;
       page = s.defaultPage;
       format = s.defaultFormat;
       sizeMismatch = s.defaultSizeMismatch;
@@ -109,6 +116,22 @@
         logs.warn("No programmer detected on startup");
       });
     }, 100);
+
+    // Save window size on resize (debounced)
+    let resizeTimeout: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        setSetting("windowWidth", window.innerWidth);
+        setSetting("windowHeight", window.innerHeight);
+      }, 500);
+    };
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      clearTimeout(resizeTimeout);
+    };
   });
 
   $effect(() => {
@@ -117,8 +140,8 @@
       theme.set(s.theme);
     }
     // React to panel width resets from SettingsPanel
-    leftWidth = s.leftPanelWidth;
-    rightWidth = s.rightPanelWidth;
+    leftPercent = s.leftPanelPercent;
+    rightPercent = s.rightPanelPercent;
   });
 
   function setTheme(t: "system" | "dark" | "light") {

@@ -2,6 +2,7 @@
   import { settings, setSetting } from "../stores/settings";
   import type { AppSettings } from "../stores/settings";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
 
   let show = $state(false);
 
@@ -151,12 +152,18 @@
         <button
           class="btn preset-tonal text-sm w-full"
           onclick={async () => {
-            update("leftPanelWidth", 260);
-            update("rightPanelWidth", 320);
+            // Reset panel percentages to defaults
+            update("leftPanelPercent", 0.20);
+            update("rightPanelPercent", 0.25);
             update("hexViewerFontSize", 13);
+            // Clear saved window size and re-apply dynamic sizing
+            const [winW, winH] = await invoke<[number, number]>("get_dynamic_window_size");
             const win = getCurrentWindow();
-            await win.setSize({ type: "Logical", width: 1280, height: 900 });
+            await win.setSize({ type: "Logical", width: winW, height: winH });
             await win.center();
+            // Save the new dynamically-computed size
+            await setSetting("windowWidth", winW);
+            await setSetting("windowHeight", winH);
           }}
         >
           Reset layout & font size
