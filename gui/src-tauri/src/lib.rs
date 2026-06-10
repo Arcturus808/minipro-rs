@@ -48,6 +48,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_programmer_info,
+            commands::force_reconnect,
             commands::get_programmer_details,
             commands::search_devices,
             commands::get_device_info,

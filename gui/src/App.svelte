@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, selectedDevice, checkDatabase } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexLoading, loadFile } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
@@ -219,13 +219,33 @@
   >
     <div class="flex items-center gap-3">
       <h1 class="text-lg font-bold">MINIPRO-RS</h1>
-      {#if $programmer}
-        <span class="badge preset-filled-success-500 text-xs">
-          {$programmer.model} (FW {$programmer.firmware})
-        </span>
-      {:else}
-        <span class="badge preset-filled-error-500 text-xs">No programmer</span>
-      {/if}
+      <button
+        class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+        onclick={async () => {
+          try {
+            await forceReconnect();
+            if ($programmer) {
+              logs.info(`Programmer reconnected: ${$programmer.model} (FW ${$programmer.firmware})`);
+            } else {
+              logs.warn("No programmer detected after reconnect");
+            }
+          } catch {
+            logs.warn("No programmer detected after reconnect");
+          }
+        }}
+        title="Click to detect programmer"
+      >
+        {#if $programmer}
+          <span class="badge preset-filled-success-500 text-xs">
+            {$programmer.model} (FW {$programmer.firmware})
+          </span>
+        {:else}
+          <span class="badge preset-filled-error-500 text-xs">No programmer</span>
+        {/if}
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-surface-600-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      </button>
     </div>
 
     <div class="flex items-center gap-2">

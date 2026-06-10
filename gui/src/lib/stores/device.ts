@@ -36,6 +36,16 @@ export async function refreshProgrammer() {
   }
 }
 
+export async function forceReconnect() {
+  try {
+    const info = await invoke<ProgrammerInfo>("force_reconnect");
+    programmer.set(info);
+  } catch (e) {
+    programmer.set(null);
+    throw e;
+  }
+}
+
 export async function checkDatabase() {
   try {
     const ok = await invoke<boolean>("check_database");
