@@ -91,6 +91,8 @@ pub struct DeviceInfoDto {
     can_erase: bool,
     has_chip_id: bool,
     config: Option<ChipConfigDto>,
+    /// True for AVR-family devices where fuse bit=0 means programmed.
+    invert_fuse_bits: bool,
 }
 
 #[derive(Serialize)]
@@ -1203,6 +1205,11 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         minipro_core::device::ChipConfig::Pld(_) => ChipConfigDto::Pld {},
     });
 
+    // Detect AVR-family devices (fuse bit=0 means programmed).
+    let name_upper = dev.name.to_uppercase();
+    let invert_fuse_bits = name_upper.starts_with("AT")
+        && (name_upper.contains("TINY") || name_upper.contains("MEGA") || name_upper.contains("90S") || name_upper.contains("90C") || name_upper.contains("SAMD") || name_upper.contains("XMEGA"));
+
     DeviceInfoDto {
         name: dev.name.clone(),
         chip_type: chip_type_str,
@@ -1214,6 +1221,7 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         can_erase: dev.flags.can_erase,
         has_chip_id: dev.flags.has_chip_id,
         config,
+        invert_fuse_bits,
     }
 }
 

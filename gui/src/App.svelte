@@ -169,18 +169,22 @@
     fuseValues = fuseValues.map((fv, i) => i === index ? { ...fv, value } : fv);
   }
 
-  // AVR fuse convention: bit=0 means programmed/active, bit=1 means unprogrammed
-  // In the UI, checked means programmed (active).
-  function isFuseProgrammed(index: number, mask: number): boolean {
-    return (getFuseValue(index) & mask) === 0;
+  // isProgrammed: true when the fuse is active.
+  // invert=true (AVR): bit=0 means programmed.
+  // invert=false (PIC, etc.): bit=1 means programmed.
+  function isFuseProgrammed(index: number, mask: number, invert: boolean): boolean {
+    const bitSet = (getFuseValue(index) & mask) !== 0;
+    return invert ? !bitSet : bitSet;
   }
 
-  // Toggle: if programmed (checked), unprogram it (set bit=1); else program it (clear bit=0)
-  function toggleFuseProgrammed(index: number, mask: number) {
-    if (isFuseProgrammed(index, mask)) {
-      setFuseValue(index, getFuseValue(index) | mask);   // unprogram: set bit to 1
+  function toggleFuseProgrammed(index: number, mask: number, invert: boolean) {
+    const programmed = isFuseProgrammed(index, mask, invert);
+    if (programmed) {
+      // Unprogram: set bit to the "off" value
+      setFuseValue(index, invert ? getFuseValue(index) | mask : getFuseValue(index) & ~mask);
     } else {
-      setFuseValue(index, getFuseValue(index) & ~mask);  // program: clear bit to 0
+      // Program: set bit to the "on" value
+      setFuseValue(index, invert ? getFuseValue(index) & ~mask : getFuseValue(index) | mask);
     }
   }
 
@@ -600,7 +604,9 @@
                     {#if fuseValues.length === 0}
                       <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
                     {:else}
-                      <p class="text-[10px] opacity-50">Checked = programmed (active) — AVR convention</p>
+                      {#if $selectedDevice.invert_fuse_bits}
+                        <p class="text-[10px] opacity-50">Checked = programmed (active) — AVR convention</p>
+                      {/if}
                       {#if $selectedDevice.config.fuses.length > 0}
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Fuses</span>
@@ -609,8 +615,8 @@
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={isFuseProgrammed(i, field.mask)}
-                                onchange={() => toggleFuseProgrammed(i, field.mask)}
+                                checked={isFuseProgrammed(i, field.mask, $selectedDevice.invert_fuse_bits)}
+                                onchange={() => toggleFuseProgrammed(i, field.mask, $selectedDevice.invert_fuse_bits)}
                               />
                               <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
                               {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
@@ -627,8 +633,8 @@
                               <input
                                 type="checkbox"
                                 class="checkbox"
-                                checked={isFuseProgrammed(idx, field.mask)}
-                                onchange={() => toggleFuseProgrammed(idx, field.mask)}
+                                checked={isFuseProgrammed(idx, field.mask, $selectedDevice.invert_fuse_bits)}
+                                onchange={() => toggleFuseProgrammed(idx, field.mask, $selectedDevice.invert_fuse_bits)}
                               />
                               <span>{field.name}</span>
                             </label>

@@ -35,6 +35,8 @@ export interface DeviceInfo {
   can_erase: boolean;
   has_chip_id: boolean;
   config: ChipConfig | null;
+  /** True for AVR-family devices where fuse bit=0 means programmed. */
+  invert_fuse_bits: boolean;
 }
 
 export const programmer = writable<ProgrammerInfo | null>(null);
