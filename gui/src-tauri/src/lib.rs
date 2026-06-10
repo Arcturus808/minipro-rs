@@ -63,6 +63,7 @@ pub fn run() {
             commands::do_erase,
             commands::do_blank_check,
             commands::do_chip_id,
+            commands::do_logic_test,
             commands::read_file_bytes,
             commands::check_database,
             commands::check_overcurrent,

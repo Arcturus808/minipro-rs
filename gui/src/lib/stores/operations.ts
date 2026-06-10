@@ -21,7 +21,7 @@ export interface OperationOptions {
 
 export const isRunning = writable(false);
 export const currentOperation = writable<string | null>(null);
-export const activeOperation = writable<"read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | null>(null);
+export const activeOperation = writable<"read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | null>(null);
 export const progress = writable<ProgressEvent | null>(null);
 export const progressPercent = derived(progress, ($p) => {
   if (!$p || $p.total === 0) return 0;
@@ -162,5 +162,18 @@ export async function doChipId() {
   await runOp("Chip ID", async () => {
     const id = await invoke<string>("do_chip_id");
     deferLog("info", `Chip ID: ${id}`);
+  });
+}
+
+export async function doLogicTest() {
+  await runOp("Logic test", async () => {
+    const result = await invoke<string>("do_logic_test");
+    if (result.trim()) {
+      // Print each line of the test result table to the terminal
+      for (const line of result.trim().split("\n")) {
+        deferLog("info", line);
+      }
+    }
+    deferLog("info", "Logic test completed");
   });
 }

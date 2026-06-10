@@ -19,6 +19,7 @@
     doErase,
     doBlankCheck,
     doChipId,
+    doLogicTest,
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
@@ -135,7 +136,7 @@
     };
   }
 
-  function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id") {
+  function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test") {
     activeOperation.set(op);
     switch (op) {
       case "read":
@@ -157,6 +158,7 @@
       case "erase":
       case "blank_check":
       case "chip_id":
+      case "logic_test":
         break;
     }
   }
@@ -193,6 +195,9 @@
         break;
       case "chip_id":
         await doChipId();
+        break;
+      case "logic_test":
+        await doLogicTest();
         break;
     }
   }
@@ -390,6 +395,17 @@
             class:font-bold={$activeOperation === "chip_id"}
           >
             Chip ID
+          </button>
+          <button
+            class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={() => selectOp("logic_test")}
+            disabled={$isRunning || !$selectedDevice}
+            class:preset-filled-primary={$activeOperation === "logic_test"}
+            class:ring-2={$activeOperation === "logic_test"}
+            class:ring-primary-400={$activeOperation === "logic_test"}
+            class:font-bold={$activeOperation === "logic_test"}
+          >
+            Logic Test
           </button>
           <button
             class="btn preset-tonal px-3 py-1.5 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"

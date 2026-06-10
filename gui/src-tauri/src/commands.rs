@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -842,6 +842,46 @@ pub async fn do_chip_id(state: State<'_, Arc<AppState>>) -> Result<String, Strin
 
     match result {
         Ok(Ok(id)) => Ok(id),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// Test a logic IC against its built-in test vectors.
+/// Returns the test result table as a string.
+#[tauri::command]
+pub async fn do_logic_test(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+
+        let result = (|| {
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            let mut output = Vec::new();
+            logic_ic_test(&mut handle, &mut output).map_err(|e| e.to_string())?;
+            let text = String::from_utf8_lossy(&output).into_owned();
+            Ok::<String, String>(text)
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(text)) => Ok(text),
         Ok(Err(e)) => Err(e),
         Err(e) => Err(format!("Task panicked: {}", e)),
     }
