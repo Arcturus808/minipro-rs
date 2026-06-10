@@ -1022,7 +1022,7 @@ pub struct FusesDto {
 /// Read fuse / lock bytes from the chip.
 /// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn read_fuses(fuse_type: u8, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
+pub async fn read_fuses(fuseType: u8, state: State<'_, Arc<AppState>>) -> Result<FusesDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1034,7 +1034,7 @@ pub async fn read_fuses(fuse_type: u8, state: State<'_, Arc<AppState>>) -> Resul
         tokio::task::spawn_blocking(move || {
             let handle = state_task.take_handle()?;
             let device = state_task.get_device()?;
-            let result = handle.protocol.read_fuses(&handle.usb, &device, fuse_type, 64, 1).map_err(|e| e.to_string());
+            let result = handle.protocol.read_fuses(&handle.usb, &device, fuseType, 64, 1).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);
@@ -1057,7 +1057,7 @@ pub async fn read_fuses(fuse_type: u8, state: State<'_, Arc<AppState>>) -> Resul
 /// Write fuse / lock bytes to the chip.
 /// `fuse_type`: 0=user, 1=config, 2=lock
 #[tauri::command]
-pub async fn write_fuses(fuse_type: u8, data: Vec<u8>, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(fuseType: u8, data: Vec<u8>, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1070,7 +1070,7 @@ pub async fn write_fuses(fuse_type: u8, data: Vec<u8>, state: State<'_, Arc<AppS
         tokio::task::spawn_blocking(move || {
             let handle = state_task.take_handle()?;
             let device = state_task.get_device()?;
-            let result = handle.protocol.write_fuses(&handle.usb, &device, fuse_type, data_len, 1, &data).map_err(|e| e.to_string());
+            let result = handle.protocol.write_fuses(&handle.usb, &device, fuseType, data_len, 1, &data).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);

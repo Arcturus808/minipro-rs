@@ -194,10 +194,10 @@ export async function doLogicTest(icsp_mode: string = "zif") {
 }
 
 export async function readFuses(fuseType: number): Promise<number[]> {
-  const dto = await invoke<{ bytes: number[] }>("read_fuses", { fuse_type: fuseType });
+  const dto = await invoke<{ bytes: number[] }>("read_fuses", { fuseType });
   return dto.bytes;
 }
 
 export async function writeFuses(fuseType: number, data: number[]): Promise<void> {
-  await invoke("write_fuses", { fuse_type: fuseType, data });
+  await invoke("write_fuses", { fuseType, data });
 }
