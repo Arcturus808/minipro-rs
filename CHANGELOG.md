@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-06-11
 
 ### Added
 
@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hex value display for fuses** — each fuse/lock byte shows its raw hex value next to its name
 - **AVR fuse bit inversion** — checkbox state correctly reflects AVR convention where bit=0 means programmed
 - **Progress callbacks** — `read_chip_to_bytes` returns `{ base64, stats }` with CRC-32 for hex viewer display
+- **In-place hex editor** — click any hex byte to edit in overwrite mode; type hex characters to replace nibbles with automatic overflow to the next byte
+- **ASCII editing mode** — click any ASCII character to edit in overwrite mode; type printable characters to set byte values directly with automatic overflow
+- **Keyboard navigation** — arrow keys move between bytes, Enter commits, Escape cancels, Backspace resets
+- **Edit highlighting** — modified cells shown in yellow in both hex and ASCII columns
+- **Column header** — sticky header row showing byte offsets `00`–`0F` for easy column identification
+- **Apply/Reset/Save** — toolbar buttons to commit edits to memory, discard pending edits, or write modified buffer to disk
 
 ### Fixed
 

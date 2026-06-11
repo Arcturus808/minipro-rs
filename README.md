@@ -29,7 +29,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
-- **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files
+- **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
 - **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
