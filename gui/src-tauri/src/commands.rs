@@ -1135,7 +1135,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
 /// Write fuse / lock bytes to the chip.
 #[tauri::command]
-pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1153,10 +1153,10 @@ pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueD
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
                 // Write CFG + LOCK via high-level function
-                let mut all: Vec<minipro_core::operations::FuseValue> = cfg_fuses.iter()
+                let mut all: Vec<minipro_core::operations::FuseValue> = cfgFuses.iter()
                     .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value })
                     .collect();
-                all.extend(lock_bits.iter()
+                all.extend(lockBits.iter()
                     .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value }));
                 minipro_core::operations::write_fuses(&mut handle, &all).map_err(|e| e.to_string())?;
 
