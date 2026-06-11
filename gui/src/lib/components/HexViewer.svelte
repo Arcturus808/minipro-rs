@@ -386,7 +386,12 @@
                     maxlength="2"
                     bind:value={editValue}
                     bind:this={editInputRef}
-                    onblur={commitEdit}
+                    onblur={(e) => {
+                      if (!document.contains(e.currentTarget)) {
+                        return;
+                      }
+                      commitEdit();
+                    }}
                   />
                 {:else}
                   <span
