@@ -133,9 +133,21 @@
       const pos = editCursorPos;
 
       if (pos >= 2) {
-        // Overflow to next byte
-        const nextOffset = editingOffset + 1;
-        commitEdit();
+        // Overflow to next byte — manually commit current to avoid blur re-entry
+        const currentOffset = editingOffset;
+        const currentValue = parseInt(editValue, 16);
+        if (!isNaN(currentValue) && currentValue >= 0 && currentValue <= 0xFF) {
+          const meta = $hexMeta;
+          if (meta?.data) {
+            const original = meta.data[currentOffset];
+            if (currentValue !== original) {
+              setHexEdit(currentOffset, currentValue);
+            } else {
+              setHexEdit(currentOffset, null);
+            }
+          }
+        }
+        const nextOffset = currentOffset + 1;
         if (nextOffset < dataLen) {
           const nextByte = getByte(nextOffset);
           const nextHex = nextByte.toString(16).padStart(2, "0").toUpperCase();
@@ -143,6 +155,8 @@
           editValue = e.key.toUpperCase() + nextHex.charAt(1);
           editCursorPos = 1;
           focusInput(1);
+        } else {
+          editingOffset = null;
         }
         return;
       }
