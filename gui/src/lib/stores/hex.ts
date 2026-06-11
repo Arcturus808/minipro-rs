@@ -71,3 +71,56 @@ export async function loadFile(path: string) {
 export function clearHexBuffer() {
   setHexData(null);
 }
+
+// ── Hex editing ─────────────────────────────────────────────────────────────
+
+/** Sparse map of edited bytes: offset → new value.  Does not modify the
+ *  underlying buffer until the user explicitly applies changes. */
+export const hexEdits = writable<Map<number, number>>(new Map());
+
+/** Record a single-byte edit.  Pass `null` to clear an edit. */
+export function setHexEdit(offset: number, value: number | null) {
+  hexEdits.update((map) => {
+    const next = new Map(map);
+    if (value === null || (value & 0xFF) === value) {
+      if (value === null) {
+        next.delete(offset);
+      } else {
+        next.set(offset, value & 0xFF);
+      }
+    }
+    return next;
+  });
+}
+
+/** Clear all pending edits. */
+export function clearHexEdits() {
+  hexEdits.set(new Map());
+}
+
+/** Apply pending edits to the underlying hex buffer and clear the edit map.
+ *  Returns the modified Uint8Array (or null if no data is loaded). */
+export function applyHexEdits(): Uint8Array | null {
+  const meta = get(hexMeta);
+  const edits = get(hexEdits);
+  if (!meta || !meta.data || edits.size === 0) return null;
+
+  const newData = new Uint8Array(meta.data);
+  for (const [offset, value] of edits) {
+    if (offset >= 0 && offset < newData.length) {
+      newData[offset] = value;
+    }
+  }
+  setHexData(newData, meta.path);
+  clearHexEdits();
+  return newData;
+}
+
+/** Get the effective value at an offset (edited or original). */
+export function getHexByte(offset: number): number | null {
+  const meta = get(hexMeta);
+  if (!meta || !meta.data) return null;
+  const edits = get(hexEdits);
+  if (edits.has(offset)) return edits.get(offset)!;
+  return meta.data[offset] ?? null;
+}

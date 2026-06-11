@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hexMeta, hexLoading, clearHexBuffer } from "../stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
@@ -12,6 +12,10 @@
   let fontSize = $state($settings.hexViewerFontSize);
   let rowHeight = $derived(fontSize + 9);
   let savedPath = $state<string | null>(null);
+
+  // Hex editing state
+  let editingOffset = $state<number | null>(null);
+  let editValue = $state("");
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -52,11 +56,98 @@
   let totalHeight = $derived(totalRows * rowHeight);
   let topPadding = $derived(startRow * rowHeight);
 
+  // Edit count for toolbar
+  let editCount = $derived($hexEdits.size);
+
   $effect(() => {
     if (scrollContainer) {
       containerHeight = scrollContainer.clientHeight;
     }
   });
+
+  // ── Hex editing helpers ────────────────────────────────────────────────────
+
+  function isEdited(offset: number): boolean {
+    return $hexEdits.has(offset);
+  }
+
+  function getByte(offset: number): number {
+    if (!($hexMeta?.data)) return 0;
+    if ($hexEdits.has(offset)) return $hexEdits.get(offset)!;
+    return $hexMeta.data[offset];
+  }
+
+  function startEdit(offset: number) {
+    if (!($hexMeta?.data) || offset < 0 || offset >= $hexMeta.data.length) return;
+    editingOffset = offset;
+    const b = getByte(offset);
+    editValue = b.toString(16).padStart(2, "0").toUpperCase();
+  }
+
+  function commitEdit() {
+    if (editingOffset === null) return;
+    const v = parseInt(editValue, 16);
+    if (!isNaN(v) && v >= 0 && v <= 0xFF) {
+      const meta = $hexMeta;
+      if (meta?.data) {
+        const original = meta.data[editingOffset];
+        if (v !== original) {
+          setHexEdit(editingOffset, v);
+        } else {
+          setHexEdit(editingOffset, null); // reset to original
+        }
+      }
+    }
+    editingOffset = null;
+  }
+
+  function cancelEdit() {
+    editingOffset = null;
+  }
+
+  function onEditKeydown(e: KeyboardEvent) {
+    if (!($hexMeta?.data)) return;
+    const dataLen = $hexMeta.data.length;
+
+    switch (e.key) {
+      case "Enter":
+        e.preventDefault();
+        commitEdit();
+        break;
+      case "Escape":
+        e.preventDefault();
+        cancelEdit();
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        if (editingOffset !== null && editingOffset > 0) {
+          commitEdit();
+          startEdit(editingOffset - 1);
+        }
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        if (editingOffset !== null && editingOffset < dataLen - 1) {
+          commitEdit();
+          startEdit(editingOffset + 1);
+        }
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (editingOffset !== null && editingOffset >= ROW_SIZE) {
+          commitEdit();
+          startEdit(editingOffset - ROW_SIZE);
+        }
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        if (editingOffset !== null && editingOffset < dataLen - ROW_SIZE) {
+          commitEdit();
+          startEdit(editingOffset + ROW_SIZE);
+        }
+        break;
+    }
+  }
 </script>
 
 <div style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
@@ -70,6 +161,11 @@
             · CRC-32: {$hexMeta.crc32.toString(16).padStart(8, '0').toUpperCase()}
           {/if}
         </span>
+        {#if editCount > 0}
+          <span style="font-size: 12px; color: #f59e0b; margin-left: 8px; font-weight: 500;">
+            {editCount} edit{editCount === 1 ? '' : 's'} pending
+          </span>
+        {/if}
       {/if}
     </div>
     <div class="flex items-center gap-2">
@@ -96,6 +192,27 @@
             Reset
           </button>
         {/if}
+        {#if editCount > 0}
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5 text-amber-600 font-medium"
+            style="font-size: 13px;"
+            onclick={() => { applyHexEdits(); savedPath = null; }}
+            title="Apply pending edits to the buffer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Apply
+          </button>
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+            style="font-size: 13px;"
+            onclick={() => clearHexEdits()}
+            title="Discard all pending edits"
+          >
+            Reset
+          </button>
+        {/if}
         <button
           class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
           onclick={async () => {
@@ -110,7 +227,6 @@
               [{ name: "Binary", extensions: ["bin"] }]
             );
             if (path) {
-              // Auto-append .bin if user didn't type an extension
               if (!path.includes(".")) {
                 path += ".bin";
               }
@@ -138,8 +254,9 @@
           </button>
         {/if}
         <button
-          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800" style="font-size: 13px;"
-          onclick={() => { savedPath = null; clearHexBuffer(); }}
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px;"
+          onclick={() => { savedPath = null; clearHexEdits(); clearHexBuffer(); }}
         >
           Clear
         </button>
@@ -163,11 +280,48 @@
           {@const offset = rowIdx * ROW_SIZE}
           {@const end = Math.min(offset + ROW_SIZE, $hexMeta.data.length)}
           {@const len = end - offset}
-          {@const bytes = Array.from({length: len}, (_, j) => $hexMeta.data[offset + j])}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
             <span style="width: 9ch; margin-right: 1.5ch; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
-            <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85;">{bytes.map(b => formatHex(b)).join(' ')}</span>
-            <span style="opacity: 0.7;">{bytes.map(b => toAscii(b)).join('')}</span>
+            <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none;">
+              {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset, j}
+                {@const isEditing = editingOffset === byteOffset}
+                {@const edited = isEdited(byteOffset)}
+                {@const byteVal = getByte(byteOffset)}
+                {#if isEditing}
+                  <input
+                    type="text"
+                    class="hex-edit-input"
+                    style="width: 1.5ch; padding: 0; margin: 0; border: none; background: #f59e0b; color: white; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit;"
+                    maxlength="2"
+                    bind:value={editValue}
+                    onkeydown={onEditKeydown}
+                    onblur={commitEdit}
+                    autofocus
+                  />
+                {:else}
+                  <span
+                    class="hex-cell"
+                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}"
+                    onclick={() => startEdit(byteOffset)}
+                    title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
+                  >{formatHex(byteVal)}</span>
+                {/if}
+                {#if j < len - 1}
+                  <span> </span>
+                {/if}
+              {/each}
+            </span>
+            <span style="opacity: 0.7;">
+              {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset}
+                {@const edited = isEdited(byteOffset)}
+                {@const byteVal = getByte(byteOffset)}
+                <span
+                  style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}"
+                  onclick={() => startEdit(byteOffset)}
+                  title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
+                >{toAscii(byteVal)}</span>
+              {/each}
+            </span>
           </div>
         {/each}
       </div>
@@ -188,5 +342,10 @@
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+  .hex-cell:hover {
+    background: #e5e7eb;
+    color: #111827;
+    border-radius: 2px;
   }
 </style>
