@@ -80,12 +80,13 @@
   }
 
   function focusInput(pos: number) {
-    setTimeout(() => {
-      if (editInputRef) {
-        editInputRef.focus();
-        editInputRef.setSelectionRange(pos, pos);
+    requestAnimationFrame(() => {
+      const input = document.querySelector('.hex-edit-input') as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        input.setSelectionRange(pos, pos);
       }
-    }, 0);
+    });
   }
 
   function startEdit(offset: number) {
