@@ -329,7 +329,8 @@
       case "chip_id": {
         const chipResult = await doChipId(icspMode);
         if (chipResult) {
-          if (chipResult.expected === "0x00000000") {
+          const expectedVal = parseInt(chipResult.expected, 16);
+          if (expectedVal === 0) {
             logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
           } else if (chipResult.is_match) {
             logs.info(`Chip ID: ${chipResult.id} (matches expected)`);

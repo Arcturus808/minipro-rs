@@ -878,9 +878,18 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
             let expected = device.chip_id;
-            let id_str = format!("{:#010x}", chip_id);
-            let expected_str = format!("{:#010x}", expected);
-            let is_match = expected == 0 || chip_id == expected;
+            let bytes = device.chip_id_bytes_count.max(1).min(4);
+            let mask = match bytes {
+                1 => 0xFFu32,
+                2 => 0xFFFF,
+                3 => 0xFFFFFF,
+                _ => 0xFFFFFFFF,
+            };
+            let masked_id = chip_id & mask;
+            let masked_expected = expected & mask;
+            let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
+            let expected_str = format!("0x{:0width$x}", masked_expected, width = (bytes * 2) as usize);
+            let is_match = masked_expected == 0 || masked_id == masked_expected;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match })
         })();
 
