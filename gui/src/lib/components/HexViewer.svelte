@@ -17,6 +17,7 @@
   let editingOffset = $state<number | null>(null);
   let editValue = $state("");
   let editInputRef = $state<HTMLInputElement | null>(null);
+  let editCursorPos = $state(0);
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -69,7 +70,7 @@
   $effect(() => {
     if (editingOffset !== null && editInputRef) {
       editInputRef.focus();
-      editInputRef.setSelectionRange(0, 0);
+      editInputRef.setSelectionRange(editCursorPos, editCursorPos);
     }
   });
 
@@ -90,6 +91,7 @@
     editingOffset = offset;
     const b = getByte(offset);
     editValue = b.toString(16).padStart(2, "0").toUpperCase();
+    editCursorPos = 0;
   }
 
   function commitEdit() {
@@ -122,6 +124,21 @@
       e.preventDefault();
       const input = e.currentTarget as HTMLInputElement;
       const pos = input.selectionStart ?? 0;
+
+      if (pos >= 2 && editingOffset !== null) {
+        // Overflow: commit current and start editing next byte
+        const nextOffset = editingOffset + 1;
+        commitEdit();
+        if (nextOffset < dataLen) {
+          const nextByte = getByte(nextOffset);
+          const nextHex = nextByte.toString(16).padStart(2, "0").toUpperCase();
+          editingOffset = nextOffset;
+          editValue = e.key.toUpperCase() + nextHex.charAt(1);
+          editCursorPos = 1;
+        }
+        return;
+      }
+
       const chars = input.value.split("");
       chars[pos] = e.key.toUpperCase();
       const newValue = chars.join("").slice(0, 2);
@@ -129,6 +146,7 @@
       editValue = newValue;
       const newPos = Math.min(pos + 1, 2);
       input.setSelectionRange(newPos, newPos);
+      editCursorPos = newPos;
       return;
     }
 
@@ -144,6 +162,7 @@
         input.value = newValue;
         editValue = newValue;
         input.setSelectionRange(pos - 1, pos - 1);
+        editCursorPos = pos - 1;
       }
       return;
     }
