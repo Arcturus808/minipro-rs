@@ -369,7 +369,17 @@
         <span style="opacity: 0.6;">Loading...</span>
       </div>
     {:else if $hexMeta?.data && $hexMeta.data.length > 0}
-      <div style="height: {totalHeight}px; position: relative;">
+      <div style="height: {totalHeight + rowHeight}px; position: relative;">
+        <!-- Column header -->
+        <div style="display: flex; white-space: nowrap; height: {rowHeight}px; position: sticky; top: 0; z-index: 1; background: var(--color-surface-50, #fff); border-bottom: 1px solid #ddd; margin-bottom: 4px;">
+          <span style="width: 9ch; margin-right: 1.5ch; color: #888; flex-shrink: 0; font-weight: 600;">Offset</span>
+          <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none; font-weight: 600;">
+            {#each Array.from({length: ROW_SIZE}, (_, i) => i) as colIdx}
+              <span style="display: inline-block; width: 2ch; text-align: center;">{colIdx.toString(16).toUpperCase().padStart(2, '0')}</span>{#if colIdx < ROW_SIZE - 1}<span> </span>{/if}
+            {/each}
+          </span>
+          <span style="opacity: 0.7; font-weight: 600;">ASCII</span>
+        </div>
         <div style="height: {topPadding}px;"></div>
         {#each visibleRows as rowIdx (rowIdx)}
           {@const offset = rowIdx * ROW_SIZE}
