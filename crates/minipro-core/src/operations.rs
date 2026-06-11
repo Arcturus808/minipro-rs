@@ -302,7 +302,9 @@ pub fn verify_chip(
         0x01 => device.data_memory_size as usize,
         _ => device.code_memory_size as usize,
     };
-    let expected = read_file(path, format, size, device.blank_value as u8)?;
+    let mut expected = read_file(path, format, size, device.blank_value as u8)?;
+    // Pad or truncate the reference file to match the device size.
+    expected.resize(size, device.blank_value as u8);
     info!("Verifying {} bytes...", size);
 
     let read_size = if device.read_buffer_size > 0 {
