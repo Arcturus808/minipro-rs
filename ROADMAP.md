@@ -48,3 +48,14 @@ This is a living list of features and improvements planned for minipro-rs.
   - Pad with `0xFF` to a specific size (e.g., exact device memory size) for tools that require full-size files
   - Useful when exporting to other tools, version control, or creating "canonical" firmware files
   - Could be a right-click menu in the hex viewer or a Save dialog option
+
+- [ ] **Logic Test GUI panel** — replace raw text output with a visual grid for testing logic ICs
+  - Current state: backend returns ANSI-colored text table (vectors × pins). The GUI just dumps this to the terminal.
+  - Design challenges:
+    - Backend outputs unstructured text with ANSI codes; needs structured DTO (JSON with per-cell pass/fail/expected/actual)
+    - Grid scales with pin count and vector count (e.g., 74HC00 = 14 pins × 8 vectors = 112 cells; larger ICs = more)
+    - Need visual encoding for 8+ state types: L=Low, H=High, Z=Hi-Z, G=GND, V=VCC, C=Clock, X=Don't care, 0/1=Logic levels
+    - Two-pass test data (pull-up vs pull-down) — show both or just conclusion?
+    - Error highlighting must be prominent (red cells, summary banner)
+  - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
+  - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
