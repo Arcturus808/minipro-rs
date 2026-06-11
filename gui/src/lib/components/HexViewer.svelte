@@ -18,6 +18,7 @@
   let editValue = $state("");
   let editInputRef = $state<HTMLInputElement | null>(null);
   let editCursorPos = $state(0);
+  let editingMode = $state<"hex" | "ascii">("hex");
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -91,22 +92,32 @@
     });
   }
 
-  function startEdit(offset: number) {
+  function startEdit(offset: number, mode: "hex" | "ascii" = "hex") {
     if (!($hexMeta?.data) || offset < 0 || offset >= $hexMeta.data.length) return;
     // Commit any pending edit on the current byte before switching
     if (editingOffset !== null && editingOffset !== offset) {
       commitEdit();
     }
     editingOffset = offset;
+    editingMode = mode;
     const b = getByte(offset);
-    editValue = b.toString(16).padStart(2, "0").toUpperCase();
+    if (mode === "hex") {
+      editValue = b.toString(16).padStart(2, "0").toUpperCase();
+    } else {
+      editValue = toAscii(b);
+    }
     editCursorPos = 0;
     focusInput(0);
   }
 
   function commitEdit() {
     if (editingOffset === null) return;
-    const v = parseInt(editValue, 16);
+    let v: number;
+    if (editingMode === "ascii") {
+      v = editValue.length > 0 ? editValue.charCodeAt(0) : 0x20;
+    } else {
+      v = parseInt(editValue, 16);
+    }
     if (!isNaN(v) && v >= 0 && v <= 0xFF) {
       const meta = $hexMeta;
       if (meta?.data) {
@@ -131,32 +142,30 @@
     if (editingOffset === null || !($hexMeta?.data)) return;
     const dataLen = $hexMeta.data.length;
 
-    // Hex char: overwrite nibble at cursor, overflow to next byte
-    if (/^[0-9A-Fa-f]$/.test(e.key)) {
-      e.preventDefault();
-      const pos = editCursorPos;
-
-      if (pos >= 2) {
-        // Overflow to next byte — manually commit current to avoid blur re-entry
+    if (editingMode === "ascii") {
+      // ASCII mode: any printable character sets the byte and overflows
+      if (e.key.length === 1 && e.key.charCodeAt(0) >= 0x20 && e.key.charCodeAt(0) <= 0x7E) {
+        e.preventDefault();
+        const byteVal = e.key.charCodeAt(0);
         const currentOffset = editingOffset;
-        const currentValue = parseInt(editValue, 16);
-        if (!isNaN(currentValue) && currentValue >= 0 && currentValue <= 0xFF) {
+        // Commit current
+        if (currentOffset !== null && currentOffset >= 0 && currentOffset < dataLen) {
           const meta = $hexMeta;
           if (meta?.data) {
             const original = meta.data[currentOffset];
-            if (currentValue !== original) {
-              setHexEdit(currentOffset, currentValue);
+            if (byteVal !== original) {
+              setHexEdit(currentOffset, byteVal);
             } else {
               setHexEdit(currentOffset, null);
             }
           }
         }
+        // Overflow to next byte
         const nextOffset = currentOffset + 1;
         if (nextOffset < dataLen) {
           const nextByte = getByte(nextOffset);
-          const nextHex = nextByte.toString(16).padStart(2, "0").toUpperCase();
           editingOffset = nextOffset;
-          editValue = e.key.toUpperCase() + nextHex.charAt(1);
+          editValue = toAscii(nextByte);
           editCursorPos = 1;
           focusInput(1);
         } else {
@@ -165,35 +174,82 @@
         return;
       }
 
-      const chars = editValue.split("");
-      chars[pos] = e.key.toUpperCase();
-      const newValue = chars.join("").slice(0, 2);
-      editValue = newValue;
-      editCursorPos = Math.min(pos + 1, 2);
-      // Sync the actual input element's value and cursor
-      if (editInputRef) {
-        editInputRef.value = newValue;
-        editInputRef.setSelectionRange(editCursorPos, editCursorPos);
+      // Backspace in ASCII mode: reset to space (0x20)
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        editValue = " ";
+        editCursorPos = 0;
+        if (editInputRef) {
+          editInputRef.value = " ";
+          editInputRef.setSelectionRange(0, 0);
+        }
+        return;
       }
-      return;
-    }
+    } else {
+      // Hex char: overwrite nibble at cursor, overflow to next byte
+      if (/^[0-9A-Fa-f]$/.test(e.key)) {
+        e.preventDefault();
+        const pos = editCursorPos;
 
-    // Backspace
-    if (e.key === "Backspace") {
-      e.preventDefault();
-      const pos = editCursorPos;
-      if (pos > 0) {
+        if (pos >= 2) {
+          // Overflow to next byte — manually commit current to avoid blur re-entry
+          const currentOffset = editingOffset;
+          const currentValue = parseInt(editValue, 16);
+          if (!isNaN(currentValue) && currentValue >= 0 && currentValue <= 0xFF) {
+            const meta = $hexMeta;
+            if (meta?.data) {
+              const original = meta.data[currentOffset];
+              if (currentValue !== original) {
+                setHexEdit(currentOffset, currentValue);
+              } else {
+                setHexEdit(currentOffset, null);
+              }
+            }
+          }
+          const nextOffset = currentOffset + 1;
+          if (nextOffset < dataLen) {
+            const nextByte = getByte(nextOffset);
+            const nextHex = nextByte.toString(16).padStart(2, "0").toUpperCase();
+            editingOffset = nextOffset;
+            editValue = e.key.toUpperCase() + nextHex.charAt(1);
+            editCursorPos = 1;
+            focusInput(1);
+          } else {
+            editingOffset = null;
+          }
+          return;
+        }
+
         const chars = editValue.split("");
-        chars[pos - 1] = "0";
-        const newValue = chars.join("");
+        chars[pos] = e.key.toUpperCase();
+        const newValue = chars.join("").slice(0, 2);
         editValue = newValue;
-        editCursorPos = pos - 1;
+        editCursorPos = Math.min(pos + 1, 2);
+        // Sync the actual input element's value and cursor
         if (editInputRef) {
           editInputRef.value = newValue;
           editInputRef.setSelectionRange(editCursorPos, editCursorPos);
         }
+        return;
       }
-      return;
+
+      // Backspace in hex mode
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        const pos = editCursorPos;
+        if (pos > 0) {
+          const chars = editValue.split("");
+          chars[pos - 1] = "0";
+          const newValue = chars.join("");
+          editValue = newValue;
+          editCursorPos = pos - 1;
+          if (editInputRef) {
+            editInputRef.value = newValue;
+            editInputRef.setSelectionRange(editCursorPos, editCursorPos);
+          }
+        }
+        return;
+      }
     }
 
     switch (e.key) {
@@ -419,11 +475,22 @@
                 {@const edited = isEdited(byteOffset)}
                 {@const isEditingAscii = editingOffset === byteOffset}
                 {@const byteVal = getByte(byteOffset)}
-                <span
-                  style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
-                  onclick={() => startEdit(byteOffset)}
-                  title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
-                >{toAscii(byteVal)}</span>
+                {#if isEditingAscii}
+                  <input
+                    type="text"
+                    class="hex-edit-input"
+                    style="width: 1ch; padding: 0; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
+                    maxlength="1"
+                    bind:value={editValue}
+                    bind:this={editInputRef}
+                  />
+                {:else}
+                  <span
+                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    onclick={() => startEdit(byteOffset, "ascii")}
+                    title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
+                  >{toAscii(byteVal)}</span>
+                {/if}
               {/each}
             </span>
           </div>
