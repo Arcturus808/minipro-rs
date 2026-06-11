@@ -226,7 +226,7 @@ export async function readFuses(icspMode: string): Promise<ConfigData> {
 }
 
 export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: string): Promise<void> {
-  await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icspMode });
+  await invoke("write_fuses", { cfgFuses: cfg, lockBits: lock, icspMode });
 }
 
 export interface LockStatus {
