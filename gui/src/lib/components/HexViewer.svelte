@@ -93,6 +93,10 @@
 
   function startEdit(offset: number) {
     if (!($hexMeta?.data) || offset < 0 || offset >= $hexMeta.data.length) return;
+    // Commit any pending edit on the current byte before switching
+    if (editingOffset !== null && editingOffset !== offset) {
+      commitEdit();
+    }
     editingOffset = offset;
     const b = getByte(offset);
     editValue = b.toString(16).padStart(2, "0").toUpperCase();
