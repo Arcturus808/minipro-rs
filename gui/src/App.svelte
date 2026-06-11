@@ -329,13 +329,17 @@
       case "chip_id": {
         const chipResult = await doChipId(icspMode);
         if (chipResult) {
-          const expectedVal = parseInt(chipResult.expected, 16);
-          if (expectedVal === 0) {
-            logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
-          } else if (chipResult.is_match) {
-            logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
+          if (chipResult.is_variant) {
+            logs.info(`Chip ID: ${chipResult.id} — for chip ID verification, select "${chipResult.base_name}" instead of "${$selectedDevice.name}"`);
           } else {
-            logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
+            const expectedVal = parseInt(chipResult.expected, 16);
+            if (expectedVal === 0) {
+              logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
+            } else if (chipResult.is_match) {
+              logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
+            } else {
+              logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
+            }
           }
         }
         break;

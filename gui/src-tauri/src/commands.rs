@@ -858,6 +858,8 @@ pub struct ChipIdResultDto {
     id: String,
     expected: String,
     is_match: bool,
+    is_variant: bool,
+    base_name: String,
 }
 
 /// Read the chip ID.
@@ -881,6 +883,11 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             // chip that don't match what the firmware returns for that variant's protocol.
             // Treat them as "no expected value" to avoid false mismatch warnings.
             let is_variant = device.name.contains('@');
+            let base_name = if let Some(at) = device.name.find('@') {
+                device.name[..at].to_string()
+            } else {
+                device.name.clone()
+            };
             let expected = if is_variant { 0 } else { device.chip_id };
             let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.max(1).min(4) };
             let mask = match bytes {
@@ -894,7 +901,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
             let expected_str = format!("0x{:0width$x}", masked_expected, width = (bytes * 2) as usize);
             let is_match = masked_expected == 0 || masked_id == masked_expected;
-            Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match })
+            Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match, is_variant, base_name })
         })();
 
         let _ = handle.end_transaction();
