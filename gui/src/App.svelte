@@ -335,7 +335,12 @@
           } else if (chipResult.is_match) {
             logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
           } else {
-            logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
+            const isVariant = $selectedDevice.name.includes("@");
+            if (isVariant) {
+              logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}. Package variants sometimes use different protocols in the database.`);
+            } else {
+              logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
+            }
           }
         }
         break;
