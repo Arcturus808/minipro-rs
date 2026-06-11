@@ -688,7 +688,15 @@
                             <div class="space-y-0.5">
                               <div class="flex items-center gap-2">
                                 <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
-                                <span class="text-xs font-mono opacity-50">0x{field.value.toString(16).padStart(2, '0').toUpperCase()}</span>
+                                <input
+                                  type="text"
+                                  class="input text-xs font-mono w-12 px-1 py-0.5"
+                                  value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                  onchange={(e) => {
+                                    const v = parseInt(e.currentTarget.value, 16);
+                                    if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
+                                  }}
+                                />
                               </div>
                               <label class="flex items-center gap-2 text-xs cursor-pointer">
                                 <input
@@ -710,7 +718,15 @@
                           {#each configData.lock_bits as field, i}
                             <div class="flex items-center gap-2">
                               <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
-                              <span class="text-xs font-mono opacity-50">0x{field.value.toString(16).padStart(2, '0').toUpperCase()}</span>
+                              <input
+                                type="text"
+                                class="input text-xs font-mono w-12 px-1 py-0.5"
+                                value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                onchange={(e) => {
+                                  const v = parseInt(e.currentTarget.value, 16);
+                                  if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
+                                }}
+                              />
                             </div>
                             <label class="flex items-center gap-2 text-xs cursor-pointer">
                               <input
