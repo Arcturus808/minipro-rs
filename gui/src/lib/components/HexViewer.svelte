@@ -121,18 +121,19 @@
     editingOffset = null;
   }
 
-  function onEditKeydown(e: KeyboardEvent) {
-    if (!($hexMeta?.data)) return;
+  // Global keydown handler for hex editing — attached to document so it survives
+  // DOM changes when the input element is destroyed/recreated on overflow.
+  function handleEditKeydown(e: KeyboardEvent) {
+    if (editingOffset === null || !($hexMeta?.data)) return;
     const dataLen = $hexMeta.data.length;
 
-    // Overwrite mode: hex chars replace the nibble at cursor position
+    // Hex char: overwrite nibble at cursor, overflow to next byte
     if (/^[0-9A-Fa-f]$/.test(e.key)) {
       e.preventDefault();
-      const input = e.currentTarget as HTMLInputElement;
-      const pos = input.selectionStart ?? 0;
+      const pos = editCursorPos;
 
-      if (pos >= 2 && editingOffset !== null) {
-        // Overflow: commit current and start editing next byte
+      if (pos >= 2) {
+        // Overflow to next byte
         const nextOffset = editingOffset + 1;
         commitEdit();
         if (nextOffset < dataLen) {
@@ -146,30 +147,33 @@
         return;
       }
 
-      const chars = input.value.split("");
+      const chars = editValue.split("");
       chars[pos] = e.key.toUpperCase();
       const newValue = chars.join("").slice(0, 2);
-      input.value = newValue;
       editValue = newValue;
-      const newPos = Math.min(pos + 1, 2);
-      input.setSelectionRange(newPos, newPos);
-      editCursorPos = newPos;
+      editCursorPos = Math.min(pos + 1, 2);
+      // Sync the actual input element's value and cursor
+      if (editInputRef) {
+        editInputRef.value = newValue;
+        editInputRef.setSelectionRange(editCursorPos, editCursorPos);
+      }
       return;
     }
 
-    // Backspace: move cursor left (resetting that nibble to 00)
+    // Backspace
     if (e.key === "Backspace") {
       e.preventDefault();
-      const input = e.currentTarget as HTMLInputElement;
-      const pos = input.selectionStart ?? 0;
+      const pos = editCursorPos;
       if (pos > 0) {
-        const chars = input.value.split("");
+        const chars = editValue.split("");
         chars[pos - 1] = "0";
         const newValue = chars.join("");
-        input.value = newValue;
         editValue = newValue;
-        input.setSelectionRange(pos - 1, pos - 1);
         editCursorPos = pos - 1;
+        if (editInputRef) {
+          editInputRef.value = newValue;
+          editInputRef.setSelectionRange(editCursorPos, editCursorPos);
+        }
       }
       return;
     }
@@ -185,34 +189,42 @@
         break;
       case "ArrowLeft":
         e.preventDefault();
-        if (editingOffset !== null && editingOffset > 0) {
+        if (editingOffset > 0) {
           commitEdit();
           startEdit(editingOffset - 1);
         }
         break;
       case "ArrowRight":
         e.preventDefault();
-        if (editingOffset !== null && editingOffset < dataLen - 1) {
+        if (editingOffset < dataLen - 1) {
           commitEdit();
           startEdit(editingOffset + 1);
         }
         break;
       case "ArrowUp":
         e.preventDefault();
-        if (editingOffset !== null && editingOffset >= ROW_SIZE) {
+        if (editingOffset >= ROW_SIZE) {
           commitEdit();
           startEdit(editingOffset - ROW_SIZE);
         }
         break;
       case "ArrowDown":
         e.preventDefault();
-        if (editingOffset !== null && editingOffset < dataLen - ROW_SIZE) {
+        if (editingOffset < dataLen - ROW_SIZE) {
           commitEdit();
           startEdit(editingOffset + ROW_SIZE);
         }
         break;
     }
   }
+
+  // Attach/detach global keydown listener when editing state changes
+  $effect(() => {
+    if (editingOffset !== null) {
+      document.addEventListener("keydown", handleEditKeydown);
+      return () => document.removeEventListener("keydown", handleEditKeydown);
+    }
+  });
 </script>
 
 <div style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
@@ -360,7 +372,6 @@
                     maxlength="2"
                     bind:value={editValue}
                     bind:this={editInputRef}
-                    onkeydown={onEditKeydown}
                     onblur={commitEdit}
                   />
                 {:else}
