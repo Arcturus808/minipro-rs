@@ -685,16 +685,22 @@
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Fuses</span>
                           {#each configData.cfg_fuses as field, i}
-                            <label class="flex items-center gap-2 text-xs cursor-pointer">
-                              <input
-                                type="checkbox"
-                                class="checkbox"
-                                checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
-                                onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
-                              />
-                              <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
-                              {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                            </label>
+                            <div class="space-y-0.5">
+                              <div class="flex items-center gap-2">
+                                <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
+                                <span class="text-xs font-mono opacity-50">0x{field.value.toString(16).padStart(2, '0').toUpperCase()}</span>
+                              </div>
+                              <label class="flex items-center gap-2 text-xs cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  class="checkbox"
+                                  checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
+                                  onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
+                                />
+                                <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
+                                {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                              </label>
+                            </div>
                           {/each}
                         </div>
                       {/if}
@@ -702,6 +708,10 @@
                         <div class="space-y-1">
                           <span class="text-xs font-semibold opacity-70">Lock Bits</span>
                           {#each configData.lock_bits as field, i}
+                            <div class="flex items-center gap-2">
+                              <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
+                              <span class="text-xs font-mono opacity-50">0x{field.value.toString(16).padStart(2, '0').toUpperCase()}</span>
+                            </div>
                             <label class="flex items-center gap-2 text-xs cursor-pointer">
                               <input
                                 type="checkbox"
