@@ -11,6 +11,13 @@
 # tag/release.  Semantic versioning: tag the repo as `v0.2.0` to publish a
 # release artifact set.
 
+# --- Compute-minutes gate ---
+# Remove this block to restore per-push pipelines once quota is available.
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "web"  # allow manual trigger via "Run pipeline"
+
 default:
   image: rust:1.93
 
