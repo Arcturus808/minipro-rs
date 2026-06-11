@@ -18,6 +18,14 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] Expanded device info panel (package, memory, flags)
 - [x] Fuse/lock-bit editor for MCUs (read + write)
 - [x] Dangerous fuse warnings (RSTDISBL, SPIEN, etc.)
+- [x] Hex input fields for direct fuse/lock byte editing
+- [x] Chip ID comparison with expected value from database
+- [x] Package variant detection and chip ID mismatch handling
+- [x] Warning when package variant selected for flash operations
+- [x] Blank check result messages (blank vs not-blank with address)
+- [x] Lock-bit protection safeguards (pre-read / pre-write warnings)
+- [x] Auto-verify after write (with file-size padding support)
+- [x] "Size diff" option for handling file/device size mismatches (Error / Warn / Ignore)
 
 ## Near-term
 

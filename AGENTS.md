@@ -108,6 +108,32 @@ Adding `window:default` to capabilities does **not** work. Use specific granular
 ]
 ```
 
+### Tauri v2 command parameter naming
+Tauri v2 automatically camelCases top-level invoke keys before matching them to Rust function parameter names. The Rust parameter names must use camelCase to match.
+
+**Rule:** When JS sends `{ snake_case: value }`, Tauri converts it to `camelCase`. Rust params must match that camelCase.
+
+```ts
+// JS invoke — Tauri auto-converts keys to camelCase
+await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icsp_mode });
+// Tauri converts: cfg_fuses -> cfgFuses, lock_bits -> lockBits, icsp_mode -> icspMode
+```
+
+```rust
+// Rust handler — parameter names must match camelCase keys
+#[tauri::command]
+pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String) { ... }
+```
+
+**Note:** This only applies to top-level invoke keys. Nested objects (like `options`) are serialized directly by serde and are not affected by Tauri's key mapping.
+
+**Commands using this convention:**
+| Command | JS sends | Rust expects |
+|---------|----------|--------------|
+| `write_fuses` | `cfg_fuses`, `lock_bits`, `icsp_mode` | `cfgFuses`, `lockBits`, `icspMode` |
+| `save_bytes_to_file` | `base64Data` | `base64Data` |
+| `do_erase`, `do_blank_check`, `do_chip_id`, `do_logic_test`, `read_fuses`, `check_lock_protection` | `icspMode` | `icspMode` (already camelCase in JS) |
+
 ## Data Handling
 
 ### Large binary files
@@ -167,7 +193,7 @@ gui/
     lib/
       stores/
         hex.ts                 — file data, loading state
-        operations.ts          — chip read/write/verify/erase
+        operations.ts          — chip read/write/verify/erase/blank-check/chip-id/logic-test/config
         logs.ts                — terminal log entries
         device.ts              — connected programmer + IC database
         settings.ts            — persisted app preferences (includes panel widths)
@@ -198,3 +224,6 @@ The handle had no active device, so the firmware returned "Protocol error: no de
 
 ### Global `select-none` prevented text selection
 Adding `select-none` to the root app container blocked selection everywhere including terminal logs. Fixed by only applying it conditionally during active drag operations.
+
+### `verify_chip` panic when file smaller than device
+`verify_chip` read the reference file but did not pad it to device size. When auto-verify ran after a write with a smaller file, `expected[offset..]` panicked at offsets beyond the file length. Fixed by resizing the expected buffer to `size` with blank_value padding, matching `write_chip` behavior.

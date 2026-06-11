@@ -25,14 +25,20 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Device search & selection with **persistent search history**, favorites, and starred entries (ComboSearch)
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
-- Read / Write / Verify / Erase / Blank Check / Chip ID
+- Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
+- **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
+- **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
 - **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
 - **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
+- **Fuse and lock-bit editor** (Config tab): read/write MCU configuration bytes with checkbox UI and direct hex input
+- **Chip ID comparison**: reads chip ID and compares against expected database value with clear match/mismatch messages
+- **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
+- **Lock-bit protection safeguards**: warns before read/write when lock bits indicate protection is active
 - Settings persistence (theme, operation defaults, last directory, hex font size, panel widths)
 - Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)

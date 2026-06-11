@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Fuse/lock-bit editor** — interactive Config panel for reading and writing MCU fuses and lock bits with checkbox UI, hex value display, and direct hex input fields
+- **Chip ID comparison** — reads chip ID and compares against expected value from database, with clear match/mismatch/no-expected-value messages
+- **Package variant warning** — warns user when a package variant (e.g., `@DIP8`) is selected for flash operations, as these often have incorrect protocol configurations
+- **Package variant chip ID handling** — skips misleading mismatch warnings for variants and suggests selecting the base device name instead
+- **Lock-bit protection safeguards** — warns before read/write when lock bits are active, and detects read-protected chips after read operations
+- **"Size diff" option** — `Error` / `Warn` / `Ignore` modes for handling file size mismatches during write operations
+- **Auto-verify after write** — automatically verifies chip contents after write unless `Skip verify` is checked
+- **Blank check status messages** — explicitly reports whether chip is blank or not blank with address
+- **Erase success message** — explicitly confirms chip was erased successfully
+- **Hex value display for fuses** — each fuse/lock byte shows its raw hex value next to its name
+- **AVR fuse bit inversion** — checkbox state correctly reflects AVR convention where bit=0 means programmed
+- **Progress callbacks** — `read_chip_to_bytes` returns `{ base64, stats }` with CRC-32 for hex viewer display
+
+### Fixed
+
+- **Tauri v2 command parameter naming** — fixed `write_fuses` and `save_bytes_to_file` commands where Tauri's auto-camelCase key mapping caused "missing required key" errors
+- **`verify_chip` panic** — fixed panic when verifying a file smaller than the device memory (now pads with blank_value, matching `write_chip` behavior)
+- **`doReadToBuffer` TypeError** — fixed `TypeError: Cannot read properties of undefined` caused by mismatched return shape from `runOp`
+- **Blank check as error** — changed "not blank" result from `[ERROR]` to `[INFO]` since a non-blank chip is a valid state
+- **TL866A fuse read/write** — fixed missing `protocol_id` in fuse command messages and corrected `items_count` for multi-byte fuse operations
+
 ---
 
 ## [0.1.5] - 2026-05-18
@@ -48,79 +71,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.4] - 2026-05-17
 
 ### Fixed
-
-- **TL866A write truncated to 64 bytes** — `write_block` was calling `msg_send` (which caps the
-  transfer at 64 bytes) instead of `msg_send_large`.  For a 256-byte page this left 199 bytes of
-  data unsent, causing the firmware to stall waiting for the remainder and hanging every subsequent
-  operation.  Fix: route the full payload (7-byte header + page data) through `msg_send_large`.
-
----
-
-## [0.1.3] - 2026-05-17
-
-### Added
-
-- **`--icsp` flag** — wired through the `Protocol` trait (`begin_transaction` now takes
-  `icsp: bool`); TL866A sets byte 11, TL866II+/T48 sets byte 3 of the begin-transaction packet.
-- **`--verbose` / `-v` flag** — controls the default `env_logger` level (`info` with the flag,
-  `warn` without).  `MINIPRO_LOG` / `RUST_LOG` override as usual.
-- **`info!` logging** — programmer model + firmware version, device name, chip-ID result,
-  and byte counts for read/write/verify are logged at `INFO` level.
-
----
-
-## [0.1.2] - 2026-05-21
-
-### Fixed
-
-- **`-r` hangs indefinitely on Windows** — `read_payload_limit()` incorrectly routed any read
-  larger than 64 bytes through the dual-EP2+EP3 interleaved path.  For SPI flash chips the
-  programmer sends all data on EP2 only, so the code blocked forever waiting for EP3 data that
-  never arrived.  Fix: change the single-EP condition from `length < limit` to `length <= limit`,
-  and have `read_block()` / `read_jedec_row()` pass the actual read length as both arguments —
-  matching the behaviour of the C reference implementation.
-
----
-
-## [0.1.1] - 2026-05-17
-
-### Fixed
-
-- **TL866A/CS "Response too short" error** — `MiniproHandle::open()` always used the TL866II+
-  system-info parser, which expects a 41-byte response. The TL866A/CS returns 40 bytes with a
-  different layout (`hardware_version` at byte 6, `device_type` at byte 7). A model-specific
-  parser is now selected based on the USB VID/PID detected at open time.
-
----
-
-## [0.1.0] - 2026-05-16
-
-### Added
-
-- **Core library (`minipro-core`)** — USB device access via [`nusb`](https://crates.io/crates/nusb) (pure Rust, no `libusb` dependency, no C FFI)
-- **Protocol support** for XGecu TL866A/CS, TL866II+, T48, T56 (with FPGA bitstream upload), and T76
-- **Chip database** — XML-driven device definitions parsed from vendored `infoic.xml` and `logicic.xml`
-- **File format support** — Intel HEX, Motorola S-Record, and JEDEC fuse-map read/write with auto-detection
-- **Operations** — read, write, erase, verify, blank-check, fuse read/write, logic-IC test, and firmware update
-- **CLI binary (`minipro-cli`)** — `clap`-based interface targeting feature parity with upstream C `minipro` 0.7.x
-- **Shell completions** for Bash, Zsh, Fish, and PowerShell via `clap_complete`
-- **Integration test framework** with `MockUsb` fixture replay (no physical hardware required)
-- **CI/CD pipeline** (GitLab CI) with the following stages:
-  - `check` — `cargo clippy` and `cargo fmt --check`
-  - `test` — `cargo test` on Linux
-  - `build` — release binaries for Linux x86_64 and Windows x86_64 (cross-compiled via `x86_64-pc-windows-gnu`)
-  - `package` — `.deb`, `.rpm`, `.msi` (Windows installer via `wixl`), and shell completion archive
-  - `release` — tag-triggered GitLab release with links to all build artifacts
-
-### Notes
-
-- Windows binaries are fully self-contained — no Cygwin, MSYS2, WSL, Visual C++ Redistributable, or `libusb.dll` required. A one-time [Zadig](https://zadig.akeo.ie/) WinUSB driver association is needed per machine.
-- macOS binaries are not produced in CI (no macOS runner available on the free tier). Mac users should build from source with `cargo build --release`. Community contributions for macOS testing are welcome.
-- This is an initial release. Not all of the 13,000+ devices in the chip database have been validated against physical hardware.
-
-[0.1.0]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.0
-[0.1.1]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.1
-[0.1.2]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.2
-[0.1.3]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.3
-[0.1.4]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.4
-[0.1.5]: https://gitlab.com/arcturus8081/minipro-rs/-/releases/v0.1.5
