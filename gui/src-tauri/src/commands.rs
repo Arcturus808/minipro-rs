@@ -853,9 +853,16 @@ pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -
     }
 }
 
+#[derive(Serialize)]
+pub struct ChipIdResultDto {
+    id: String,
+    expected: String,
+    is_match: bool,
+}
+
 /// Read the chip ID.
 #[tauri::command]
-pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<ChipIdResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -868,9 +875,13 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
         let result = (|| {
             handle.icsp = icspMode != "zif";
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
-            Ok::<String, String>(format!("{:#010x}", chip_id))
+            let expected = device.chip_id;
+            let id_str = format!("{:#010x}", chip_id);
+            let expected_str = format!("{:#010x}", expected);
+            let is_match = expected == 0 || chip_id == expected;
+            Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match })
         })();
 
         let _ = handle.end_transaction();
@@ -885,7 +896,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
     state_clone.release();
 
     match result {
-        Ok(Ok(id)) => Ok(id),
+        Ok(Ok(dto)) => Ok(dto),
         Ok(Err(e)) => Err(e),
         Err(e) => Err(format!("Task panicked: {}", e)),
     }

@@ -326,9 +326,19 @@
         }
         break;
       }
-      case "chip_id":
-        await doChipId(icspMode);
+      case "chip_id": {
+        const chipResult = await doChipId(icspMode);
+        if (chipResult) {
+          if (chipResult.expected === "0x00000000") {
+            logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
+          } else if (chipResult.is_match) {
+            logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
+          } else {
+            logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
+          }
+        }
         break;
+      }
       case "logic_test":
         await doLogicTest(icspMode);
         break;

@@ -181,10 +181,16 @@ export async function doBlankCheck(icspMode: string = "zif") {
   );
 }
 
-export async function doChipId(icspMode: string = "zif") {
-  await runOp("Chip ID", async () => {
-    const id = await invoke<string>("do_chip_id", { icspMode });
-    deferLog("info", `Chip ID: ${id}`);
+export interface ChipIdResult {
+  id: string;
+  expected: string;
+  is_match: boolean;
+}
+
+export async function doChipId(icspMode: string = "zif"): Promise<ChipIdResult | undefined> {
+  return await runOp("Chip ID", async () => {
+    const result = await invoke<ChipIdResult>("do_chip_id", { icspMode });
+    return result;
   });
 }
 
