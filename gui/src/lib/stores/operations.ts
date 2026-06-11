@@ -120,7 +120,7 @@ export async function doReadToBuffer(options: OperationOptions = defaultOptions(
     const result = await invoke<{ base64: string; stats: { bytes: number; crc32: number } }>("read_chip_to_bytes", { options });
     const bytes = base64ToUint8Array(result.base64);
     setHexData(bytes, null); // no file path since we read to memory
-    return { stats: result.stats, bytes };
+    return result.stats;
   });
 }
 

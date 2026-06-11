@@ -3,7 +3,7 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexLoading, loadFile, hexMeta } from "./lib/stores/hex";
+  import { hexLoading, loadFile, hexMeta, getHexData } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -293,8 +293,8 @@
     switch (op) {
       case "read":
         await warnIfLocked();
-        const readResult = await doReadToBuffer(getOptions());
-        if (readResult && isAllBlank(readResult.bytes)) {
+        await doReadToBuffer(getOptions());
+        if (isAllBlank(getHexData())) {
           logs.warn("Read returned all 0xFF bytes. The chip may be read-protected (lock bits active) or blank.");
         }
         break;
