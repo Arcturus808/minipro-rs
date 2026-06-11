@@ -683,31 +683,31 @@
               {/if}
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
-                  <div class="col-span-2 space-y-2">
+                  <div class="col-span-2 space-y-3">
                     {#if !configData}
                       <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
                     {:else}
                       {#if $selectedDevice.invert_fuse_bits}
-                        <p class="text-xs opacity-50">Checked = programmed (active) — AVR convention</p>
+                        <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">
+                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
+                        </div>
                       {/if}
                       {#if configData.cfg_fuses.length > 0}
-                        <div class="space-y-1">
-                          <span class="text-xs font-semibold opacity-70">Fuses</span>
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Fuses</span>
                           {#each configData.cfg_fuses as field, i}
-                            <div class="space-y-0.5">
-                              <div class="flex items-center gap-2">
-                                <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
-                                <input
-                                  type="text"
-                                  class="input text-xs font-mono w-12 px-1 py-0.5"
-                                  value={field.value.toString(16).padStart(2, '0').toUpperCase()}
-                                  onchange={(e) => {
-                                    const v = parseInt(e.currentTarget.value, 16);
-                                    if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
-                                  }}
-                                />
-                              </div>
-                              <label class="flex items-center gap-2 text-xs cursor-pointer">
+                            <div class="flex items-center gap-3">
+                              <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
+                              <input
+                                type="text"
+                                class="input text-xs font-mono w-12 px-1 py-0.5"
+                                value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                onchange={(e) => {
+                                  const v = parseInt(e.currentTarget.value, 16);
+                                  if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
+                                }}
+                              />
+                              <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
                                 <input
                                   type="checkbox"
                                   class="checkbox"
@@ -722,11 +722,11 @@
                         </div>
                       {/if}
                       {#if configData.lock_bits.length > 0}
-                        <div class="space-y-1">
-                          <span class="text-xs font-semibold opacity-70">Lock Bits</span>
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Lock Bits</span>
                           {#each configData.lock_bits as field, i}
-                            <div class="flex items-center gap-2">
-                              <span class="text-xs font-mono font-semibold opacity-70">{field.name}</span>
+                            <div class="flex items-center gap-3">
+                              <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
                               <input
                                 type="text"
                                 class="input text-xs font-mono w-12 px-1 py-0.5"
@@ -736,37 +736,33 @@
                                   if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
                                 }}
                               />
+                              <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
+                                <input
+                                  type="checkbox"
+                                  class="checkbox"
+                                  checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
+                                  onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
+                                />
+                                <span>{$selectedDevice.config.locks[i].display_name}</span>
+                              </label>
                             </div>
-                            <label class="flex items-center gap-2 text-xs cursor-pointer">
-                              <input
-                                type="checkbox"
-                                class="checkbox"
-                                checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
-                                onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
-                              />
-                              <span>{$selectedDevice.config.locks[i].display_name}</span>
-                            </label>
                           {/each}
                         </div>
                       {/if}
-                      <div class="space-y-1">
-                        <span class="text-xs font-semibold opacity-70">User/ID Fuses</span>
-                        {#if configData.user_fuses.length > 0}
+                      {#if configData.user_fuses.length > 0}
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">User/ID Fuses</span>
                           <div class="text-xs font-mono opacity-70">{configData.user_fuses.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        {:else}
-                          <span class="text-xs opacity-50 italic">Not available for this device</span>
-                        {/if}
-                      </div>
-                      <div class="space-y-1">
-                        <span class="text-xs font-semibold opacity-70">Calibration Bytes</span>
-                        {#if configData.calibration.length > 0}
+                        </div>
+                      {/if}
+                      {#if configData.calibration.length > 0}
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Calibration Bytes</span>
                           <div class="text-xs font-mono opacity-70">{configData.calibration.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        {:else}
-                          <span class="text-xs opacity-50 italic">Not available for this device</span>
-                        {/if}
-                      </div>
+                        </div>
+                      {/if}
                       <button
-                        class="btn preset-filled-primary text-xs px-2 py-1 w-full"
+                        class="btn preset-filled-primary text-sm px-3 py-2 w-full font-semibold"
                         onclick={writeAllFuses}
                       >
                         Write Config to Chip
