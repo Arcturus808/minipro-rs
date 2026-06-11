@@ -555,11 +555,11 @@ pub async fn read_chip_to_bytes(
 
 /// Write raw bytes (base64 encoded) to a file on disk.
 #[tauri::command]
-pub async fn save_bytes_to_file(path: String, base64_data: String) -> Result<(), String> {
+pub async fn save_bytes_to_file(path: String, base64Data: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let bytes = base64::Engine::decode(
             &base64::engine::general_purpose::STANDARD,
-            &base64_data,
+            &base64Data,
         )
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
