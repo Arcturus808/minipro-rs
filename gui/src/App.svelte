@@ -328,11 +328,16 @@
       }
       case "erase":
         await doErase(icspMode);
+        logs.info("Chip erased successfully");
         break;
       case "blank_check": {
         const bcResult = await doBlankCheck(icspMode);
-        if (bcResult && !bcResult.is_blank) {
-          logs.info(`Chip is not blank at 0x${bcResult.address.toString(16).padStart(8, '0').toUpperCase()}`);
+        if (bcResult) {
+          if (bcResult.is_blank) {
+            logs.info("Chip is blank");
+          } else {
+            logs.info(`Chip is not blank at 0x${bcResult.address.toString(16).padStart(8, '0').toUpperCase()}`);
+          }
         }
         break;
       }
