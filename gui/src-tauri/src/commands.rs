@@ -803,9 +803,16 @@ pub async fn do_erase(icspMode: String, state: State<'_, Arc<AppState>>) -> Resu
     }
 }
 
+#[derive(Serialize)]
+pub struct BlankCheckResultDto {
+    is_blank: bool,
+    address: u32,
+}
+
 /// Blank-check the chip.
+/// Returns Ok(is_blank=true) if blank, Ok(is_blank=false, address) if not blank.
 #[tauri::command]
-pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<BlankCheckResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -820,14 +827,11 @@ pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             blank_check(&mut handle).map_err(|e| e.to_string())?;
-            Ok::<(), String>(())
+            Ok::<BlankCheckResultDto, String>(BlankCheckResultDto { is_blank: true, address: 0 })
         })();
 
         let _ = handle.end_transaction();
         let _ = state_task.store_handle(handle);
-        if let Err(ref e) = result {
-            handle_usb_error(&state_task, e);
-        }
         result
     })
     .await;
@@ -835,8 +839,16 @@ pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -
     state_clone.release();
 
     match result {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(e)) => Err(e),
+        Ok(Ok(dto)) => Ok(dto),
+        Ok(Err(e)) => {
+            // Parse the NotBlank error to extract the address
+            if let Some(addr_str) = e.strip_prefix("Chip is not blank at 0x") {
+                if let Ok(addr) = u32::from_str_radix(addr_str.trim(), 16) {
+                    return Ok(BlankCheckResultDto { is_blank: false, address: addr });
+                }
+            }
+            Err(e)
+        }
         Err(e) => Err(format!("Task panicked: {}", e)),
     }
 }

@@ -319,9 +319,13 @@
       case "erase":
         await doErase(icspMode);
         break;
-      case "blank_check":
-        await doBlankCheck(icspMode);
+      case "blank_check": {
+        const bcResult = await doBlankCheck(icspMode);
+        if (bcResult && !bcResult.is_blank) {
+          logs.info(`Chip is not blank at 0x${bcResult.address.toString(16).padStart(8, '0').toUpperCase()}`);
+        }
         break;
+      }
       case "chip_id":
         await doChipId(icspMode);
         break;

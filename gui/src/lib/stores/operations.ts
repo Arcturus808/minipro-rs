@@ -170,8 +170,15 @@ export async function doErase(icspMode: string = "zif") {
   await runOp("Erase", () => invoke("do_erase", { icspMode }));
 }
 
+export interface BlankCheckResult {
+  is_blank: boolean;
+  address: number;
+}
+
 export async function doBlankCheck(icspMode: string = "zif") {
-  await runOp("Blank check", () => invoke("do_blank_check", { icspMode }));
+  return await runOp("Blank check", () =>
+    invoke<BlankCheckResult>("do_blank_check", { icspMode })
+  );
 }
 
 export async function doChipId(icspMode: string = "zif") {
