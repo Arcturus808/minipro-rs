@@ -166,24 +166,24 @@ export async function doVerify(path: string, options: OperationOptions = default
   );
 }
 
-export async function doErase(icsp_mode: string = "zif") {
-  await runOp("Erase", () => invoke("do_erase", { icsp_mode }));
+export async function doErase(icspMode: string = "zif") {
+  await runOp("Erase", () => invoke("do_erase", { icspMode }));
 }
 
-export async function doBlankCheck(icsp_mode: string = "zif") {
-  await runOp("Blank check", () => invoke("do_blank_check", { icsp_mode }));
+export async function doBlankCheck(icspMode: string = "zif") {
+  await runOp("Blank check", () => invoke("do_blank_check", { icspMode }));
 }
 
-export async function doChipId(icsp_mode: string = "zif") {
+export async function doChipId(icspMode: string = "zif") {
   await runOp("Chip ID", async () => {
-    const id = await invoke<string>("do_chip_id", { icsp_mode });
+    const id = await invoke<string>("do_chip_id", { icspMode });
     deferLog("info", `Chip ID: ${id}`);
   });
 }
 
-export async function doLogicTest(icsp_mode: string = "zif") {
+export async function doLogicTest(icspMode: string = "zif") {
   await runOp("Logic test", async () => {
-    const result = await invoke<string>("do_logic_test", { icsp_mode });
+    const result = await invoke<string>("do_logic_test", { icspMode });
     if (result.trim()) {
       // Print each line of the test result table to the terminal
       for (const line of result.trim().split("\n")) {
