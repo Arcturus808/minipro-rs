@@ -1138,6 +1138,70 @@ pub async fn write_fuses(cfg_fuses: Vec<FuseValueDto>, lock_bits: Vec<FuseValueD
     }
 }
 
+#[derive(Serialize)]
+pub struct LockStatusDto {
+    is_protected: bool,
+    lock_byte: u8,
+}
+
+/// Quick check whether the chip's lock bits indicate read/write protection.
+#[tauri::command]
+pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<LockStatusDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            let mut handle = state_task.take_handle()?;
+
+            let device = state_task.get_device()?;
+            let result = (|| {
+                handle.icsp = icspMode != "zif";
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+
+                let lock_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
+                    cfg.locks.len() as u8
+                } else { 0 };
+
+                let lock_byte = if lock_count > 0 {
+                    handle.protocol.read_fuses(
+                        &handle.usb,
+                        handle.device().map_err(|e| e.to_string())?,
+                        minipro_core::operations::MP_FUSE_LOCK,
+                        lock_count as usize,
+                        lock_count,
+                    ).map(|b| b.first().copied().unwrap_or(0xff)).unwrap_or(0xff)
+                } else {
+                    0xff
+                };
+
+                // AVR: any bit cleared means some lock protection is active
+                let is_protected = lock_byte != 0xff;
+
+                Ok::<LockStatusDto, String>(LockStatusDto { is_protected, lock_byte })
+            })();
+
+            let _ = handle.end_transaction();
+            let _ = state_task.store_handle(handle);
+            result
+        }),
+    )
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(Ok(status))) => Ok(status),
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
 /// Run the programmer's built-in hardware self-test.
 #[tauri::command]
 pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<HardwareCheckResultDto, String> {

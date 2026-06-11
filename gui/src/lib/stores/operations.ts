@@ -93,6 +93,7 @@ async function runOp(
       const stats = result as { bytes: number; crc32: number };
       deferLog("info", `  ${stats.bytes} bytes, CRC-32: ${stats.crc32.toString(16).padStart(8, "0")}`);
     }
+    return result;
   } catch (e) {
     const elapsed = Date.now() - start;
     deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${e}`);
@@ -115,11 +116,11 @@ export async function doRead(path: string, options: OperationOptions = defaultOp
 }
 
 export async function doReadToBuffer(options: OperationOptions = defaultOptions()) {
-  await runOp("Read", async () => {
+  return await runOp("Read", async () => {
     const result = await invoke<{ base64: string; stats: { bytes: number; crc32: number } }>("read_chip_to_bytes", { options });
     const bytes = base64ToUint8Array(result.base64);
     setHexData(bytes, null); // no file path since we read to memory
-    return result.stats;
+    return { stats: result.stats, bytes };
   });
 }
 
@@ -211,4 +212,13 @@ export async function readFuses(icspMode: string): Promise<ConfigData> {
 
 export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: string): Promise<void> {
   await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icspMode });
+}
+
+export interface LockStatus {
+  is_protected: boolean;
+  lock_byte: number;
+}
+
+export async function checkLockProtection(icspMode: string): Promise<LockStatus> {
+  return await invoke<LockStatus>("check_lock_protection", { icspMode });
 }

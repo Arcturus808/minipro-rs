@@ -117,6 +117,7 @@ pub fn run() {
             commands::get_dynamic_window_size,
             commands::read_fuses,
             commands::write_fuses,
+            commands::check_lock_protection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

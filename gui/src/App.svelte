@@ -3,7 +3,7 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexLoading, loadFile } from "./lib/stores/hex";
+  import { hexLoading, loadFile, hexMeta } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -22,6 +22,7 @@
     doLogicTest,
     readFuses,
     writeFuses,
+    checkLockProtection,
     type FuseValue,
     type ConfigData,
   } from "./lib/stores/operations";
@@ -269,15 +270,36 @@
     }
   }
 
+  async function warnIfLocked() {
+    try {
+      const status = await checkLockProtection(icspMode);
+      if (status.is_protected) {
+        logs.warn(`Lock bits are active (0x${status.lock_byte.toString(16).toUpperCase().padStart(2, '0')}). This chip may be read/write protected.`);
+      }
+    } catch {
+      // Ignore — programmer might not be connected
+    }
+  }
+
+  function isAllBlank(data: Uint8Array | null): boolean {
+    if (!data || data.length === 0) return false;
+    return data.every((b) => b === 0xff);
+  }
+
   async function onStart() {
     const op = $activeOperation;
     if (!op) return;
 
     switch (op) {
       case "read":
-        await doReadToBuffer(getOptions());
+        await warnIfLocked();
+        const readResult = await doReadToBuffer(getOptions());
+        if (readResult && isAllBlank(readResult.bytes)) {
+          logs.warn("Read returned all 0xFF bytes. The chip may be read-protected (lock bits active) or blank.");
+        }
         break;
       case "write": {
+        await warnIfLocked();
         const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
@@ -286,6 +308,7 @@
         break;
       }
       case "verify": {
+        await warnIfLocked();
         const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
