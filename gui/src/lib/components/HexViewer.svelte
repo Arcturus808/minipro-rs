@@ -417,9 +417,10 @@
             <span style="opacity: 0.7;">
               {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset}
                 {@const edited = isEdited(byteOffset)}
+                {@const isEditingAscii = editingOffset === byteOffset}
                 {@const byteVal = getByte(byteOffset)}
                 <span
-                  style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}"
+                  style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                   onclick={() => startEdit(byteOffset)}
                   title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                 >{toAscii(byteVal)}</span>
