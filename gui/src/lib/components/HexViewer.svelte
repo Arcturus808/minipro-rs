@@ -232,16 +232,29 @@
     }
   }
 
-  // Attach/detach global keydown listener when editing state changes
+  // Click-outside handler to end editing when user clicks outside the hex viewer
+  function handleClickOutside(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    const viewer = document.querySelector('.hex-viewer-container');
+    if (viewer && !viewer.contains(target)) {
+      commitEdit();
+    }
+  }
+
+  // Attach/detach global listeners when editing state changes
   $effect(() => {
     if (editingOffset !== null) {
       document.addEventListener("keydown", handleEditKeydown);
-      return () => document.removeEventListener("keydown", handleEditKeydown);
+      document.addEventListener("click", handleClickOutside);
+      return () => {
+        document.removeEventListener("keydown", handleEditKeydown);
+        document.removeEventListener("click", handleClickOutside);
+      };
     }
   });
 </script>
 
-<div style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
+<div class="hex-viewer-container" style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
   <div style="padding: 8px 12px; border-bottom: 1px solid #ccc; display: flex; align-items: center; justify-content: space-between;">
     <div>
       <span style="font-size: 14px; font-weight: 600;">Hex Viewer</span>
@@ -386,12 +399,6 @@
                     maxlength="2"
                     bind:value={editValue}
                     bind:this={editInputRef}
-                    onblur={(e) => {
-                      if (!document.contains(e.currentTarget)) {
-                        return;
-                      }
-                      commitEdit();
-                    }}
                   />
                 {:else}
                   <span
