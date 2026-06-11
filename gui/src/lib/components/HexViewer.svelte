@@ -16,6 +16,7 @@
   // Hex editing state
   let editingOffset = $state<number | null>(null);
   let editValue = $state("");
+  let editInputRef = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -65,6 +66,13 @@
     }
   });
 
+  $effect(() => {
+    if (editingOffset !== null && editInputRef) {
+      editInputRef.focus();
+      editInputRef.setSelectionRange(0, 0);
+    }
+  });
+
   // ── Hex editing helpers ────────────────────────────────────────────────────
 
   function isEdited(offset: number): boolean {
@@ -108,6 +116,37 @@
   function onEditKeydown(e: KeyboardEvent) {
     if (!($hexMeta?.data)) return;
     const dataLen = $hexMeta.data.length;
+
+    // Overwrite mode: hex chars replace the nibble at cursor position
+    if (/^[0-9A-Fa-f]$/.test(e.key)) {
+      e.preventDefault();
+      const input = e.currentTarget as HTMLInputElement;
+      const pos = input.selectionStart ?? 0;
+      const chars = input.value.split("");
+      chars[pos] = e.key.toUpperCase();
+      const newValue = chars.join("").slice(0, 2);
+      input.value = newValue;
+      editValue = newValue;
+      const newPos = Math.min(pos + 1, 2);
+      input.setSelectionRange(newPos, newPos);
+      return;
+    }
+
+    // Backspace: move cursor left (resetting that nibble to 00)
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const input = e.currentTarget as HTMLInputElement;
+      const pos = input.selectionStart ?? 0;
+      if (pos > 0) {
+        const chars = input.value.split("");
+        chars[pos - 1] = "0";
+        const newValue = chars.join("");
+        input.value = newValue;
+        editValue = newValue;
+        input.setSelectionRange(pos - 1, pos - 1);
+      }
+      return;
+    }
 
     switch (e.key) {
       case "Enter":
@@ -291,12 +330,12 @@
                   <input
                     type="text"
                     class="hex-edit-input"
-                    style="width: 3ch; padding: 0 0.25ch; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
+                    style="width: 2ch; padding: 0; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
                     maxlength="2"
                     bind:value={editValue}
+                    bind:this={editInputRef}
                     onkeydown={onEditKeydown}
                     onblur={commitEdit}
-                    autofocus
                   />
                 {:else}
                   <span
