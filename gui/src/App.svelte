@@ -286,6 +286,13 @@
     return data.every((b) => b === 0xff);
   }
 
+  function warnIfVariant() {
+    if ($selectedDevice?.name.includes("@")) {
+      const base = $selectedDevice.name.split("@")[0];
+      logs.warn(`Package variant selected (${$selectedDevice.name}). For reliable flash operations, select "${base}" instead.`);
+    }
+  }
+
   async function onStart() {
     const op = $activeOperation;
     if (!op) return;
@@ -293,6 +300,7 @@
     switch (op) {
       case "read":
         await warnIfLocked();
+        warnIfVariant();
         await doReadToBuffer(getOptions());
         if (isAllBlank(getHexData())) {
           logs.warn("Read returned all 0xFF bytes. The chip may be read-protected (lock bits active) or blank.");
@@ -300,6 +308,7 @@
         break;
       case "write": {
         await warnIfLocked();
+        warnIfVariant();
         const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
@@ -309,6 +318,7 @@
       }
       case "verify": {
         await warnIfLocked();
+        warnIfVariant();
         const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
