@@ -12,9 +12,12 @@
 # release artifact set.
 
 # --- Compute-minutes gate ---
-# Remove this block to restore per-push pipelines once quota is available.
+# Keeps CI efficient by skipping feature-branch pushes while still protecting
+# main and building releases.  Feature branches can be tested manually via the
+# "Run pipeline" button before merging.
 workflow:
   rules:
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "web"  # allow manual trigger via "Run pipeline"
 
@@ -219,77 +222,47 @@ msi:
 
 release:
   stage: package
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: node:20-alpine
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: $CI_COMMIT_TAG
   needs:
-    - completions
-    - deb
-    - rpm
-    - msi
+    - job: build:linux-x86_64
+      artifacts: true
+    - job: build:windows-x86_64
+      artifacts: true
+    - job: completions
+      artifacts: true
+    - job: deb
+      artifacts: true
+    - job: rpm
+      artifacts: true
+    - job: msi
+      artifacts: true
   script:
-    - echo "Creating release for ${CI_COMMIT_TAG}"
-  release:
-    name: "minipro-rs ${CI_COMMIT_TAG}"
-    description: "See CHANGELOG.md for details."
-    tag_name: "${CI_COMMIT_TAG}"
-    assets:
-      links:
-        - name: "Linux x86_64 binary"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/target/release/minipro?job=build:linux-x86_64"
-        - name: "Windows x86_64 binary"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/target/x86_64-pc-windows-gnu/release/minipro.exe?job=build:windows-x86_64"
-        - name: "Debian package"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=deb"
-        - name: "RPM package"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=rpm"
-        - name: "Windows MSI"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=msi"
-        - name: "Shell completions"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/browse?job=completions"
+    - npm install -g @gitlab/release-cli
+    - |
+      release-cli create \
+        --name "minipro-rs ${CI_COMMIT_TAG}" \
+        --tag-name "${CI_COMMIT_TAG}" \
+        --description "Release ${CI_COMMIT_TAG}" \
+        --assets-link "{\"name\":\"minipro-linux-x86_64\",\"url\":\"${CI_JOB_URL}/artifacts/raw/target/release/minipro\"}" \
+        --assets-link "{\"name\":\"minipro-windows-x86_64\",\"url\":\"${CI_JOB_URL}/artifacts/raw/target/x86_64-pc-windows-gnu/release/minipro.exe\"}" \
+        --assets-link "{\"name\":\"minipro-completions\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz\"}" \
+        --assets-link "{\"name\":\"minipro-deb\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_amd64.deb\"}" \
+        --assets-link "{\"name\":\"minipro-rpm\",\"url\":\"${CI_JOB_URL}/artifacts/raw/*.rpm\"}" \
+        --assets-link "{\"name\":\"minipro-msi\",\"url\":\"${CI_JOB_URL}/artifacts/raw/*.msi\"}"
 
-# ── GitLab Pages (HTML docs) ──────────────────────────────────────────────────
+# ── Deploy ────────────────────────────────────────────────────────────────────
 
 pages:
   stage: deploy
-  image: ubuntu:latest
-  needs:
-    - build:linux-x86_64
+  image: node:20-alpine
   script:
-    - apt-get update -q && apt-get install -qy pandoc
+    - npm install -g @gitlab/release-cli
     - mkdir -p public
-    # Write a minimal stylesheet (system-ui picks native OS font)
-    - |
-      cat > style.css << 'EOF'
-      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-             max-width: 900px; margin: 0 auto; padding: 1em 2em; line-height: 1.6; color: #222; }
-      code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-                  font-size: 0.9em; }
-      pre { background: #f4f4f4; padding: 0.8em 1em; border-radius: 4px; overflow-x: auto; }
-      a { color: #0066cc; }
-      h1, h2, h3 { border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
-      EOF
-    - cp style.css public/style.css
-    # Generate man page → HTML
-    - chmod +x target/release/minipro
-    - target/release/minipro --generate-man > minipro.1
-    - |
-      pandoc -s -f man -t html5 \
-        --css style.css \
-        --metadata title="minipro(1) — manual page" \
-        -o public/minipro.1.html minipro.1
-    # Convert README → index
-    - |
-      pandoc -s -f gfm -t html5 \
-        --css style.css \
-        --metadata title="minipro-rs" \
-        -o public/index.html README.md
-    # Inject a simple nav bar into both pages
-    - |
-      NAV='<nav style="font-family:sans-serif;padding:0.5em 1em;background:#f5f5f5;border-bottom:1px solid #ccc"><a href="index.html">Home<\/a> &nbsp;|&nbsp; <a href="minipro.1.html">Manual Page<\/a><\/nav>'
-      sed -i "s@<body>@<body>$NAV@" public/index.html public/minipro.1.html
+    - cp -r docs/* public/ 2>/dev/null || true
   artifacts:
     paths:
       - public
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  only:
+    - main
