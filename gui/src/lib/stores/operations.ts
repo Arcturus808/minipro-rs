@@ -161,9 +161,10 @@ export async function doWrite(path: string, options: OperationOptions = defaultO
 }
 
 export async function doVerify(path: string, options: OperationOptions = defaultOptions()) {
-  await runOp("Verify", () =>
-    invoke("do_verify", { path, options }),
-  );
+  await runOp("Verify", async () => {
+    await invoke("do_verify", { path, options });
+    deferLog("info", "Verify passed");
+  });
 }
 
 export async function doErase(icspMode: string = "zif") {
