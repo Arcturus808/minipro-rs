@@ -10,6 +10,7 @@ export interface ProgrammerInfo {
 
 export interface FuseField {
   name: string;
+  display_name: string;
   mask: number;
   default_value: number;
 }

@@ -640,7 +640,7 @@
                                 checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
                                 onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
                               />
-                              <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{field.name}</span>
+                              <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
                               {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
                             </label>
                           {/each}
@@ -657,7 +657,7 @@
                                 checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
                                 onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
                               />
-                              <span>{field.name}</span>
+                              <span>{$selectedDevice.config.locks[i].display_name}</span>
                             </label>
                           {/each}
                         </div>

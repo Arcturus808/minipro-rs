@@ -68,6 +68,7 @@ pub struct CalibrationDto {
 #[derive(Serialize, Clone)]
 pub struct FuseFieldDto {
     name: String,
+    display_name: String,
     mask: u16,
     default_value: u16,
 }
@@ -1212,6 +1213,17 @@ pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32)
 
 // ── Internal helpers ──────────────────────────────────────────────────────
 
+fn fuse_display_name(name: &str) -> String {
+    match name.to_lowercase().as_str() {
+        "lfuse" => "Low Fuse".to_string(),
+        "hfuse" => "High Fuse".to_string(),
+        "efuse" => "Extended Fuse".to_string(),
+        "fuse" => "Fuse".to_string(),
+        "lock" => "Lock Bits".to_string(),
+        other => other.to_string(),
+    }
+}
+
 fn device_to_dto(dev: &Device) -> DeviceInfoDto {
     let chip_type_str = ChipType::try_from(dev.chip_type)
         .map(|t| format!("{:?}", t))
@@ -1221,11 +1233,13 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         minipro_core::device::ChipConfig::Mcu(fuse_cfg) => ChipConfigDto::Mcu {
             fuses: fuse_cfg.fuses.iter().map(|f| FuseFieldDto {
                 name: f.name.clone(),
+                display_name: fuse_display_name(&f.name),
                 mask: f.mask,
                 default_value: f.default,
             }).collect(),
             locks: fuse_cfg.locks.iter().map(|f| FuseFieldDto {
                 name: f.name.clone(),
+                display_name: fuse_display_name(&f.name),
                 mask: f.mask,
                 default_value: f.default,
             }).collect(),
