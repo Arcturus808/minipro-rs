@@ -42,3 +42,9 @@ This is a living list of features and improvements planned for minipro-rs.
 - [ ] Auto SN_NUM — production programming with auto-incrementing serial numbers
   - Requires: production-mode UI (start value, step, target address), buffer injection, auto-increment on successful write
   - Priority: low — factory/production feature, most hobbyist users don't need it
+
+- [ ] **Manual trim/pad to size** — let advanced users resize firmware files before saving
+  - Trim trailing `0xFF` bytes to reduce a read-back (8192 bytes) to actual code size (1936 bytes)
+  - Pad with `0xFF` to a specific size (e.g., exact device memory size) for tools that require full-size files
+  - Useful when exporting to other tools, version control, or creating "canonical" firmware files
+  - Could be a right-click menu in the hex viewer or a Save dialog option
