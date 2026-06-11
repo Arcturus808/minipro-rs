@@ -289,7 +289,7 @@
   function warnIfVariant() {
     if ($selectedDevice?.name.includes("@")) {
       const base = $selectedDevice.name.split("@")[0];
-      logs.warn(`Package variant selected (${$selectedDevice.name}). For reliable flash operations, select "${base}" instead.`);
+      logs.warn(`Package variant selected (${$selectedDevice.name}). The data read may be incorrect or garbage. For reliable flash operations, select "${base}" instead.`);
     }
   }
 
