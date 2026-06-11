@@ -232,24 +232,11 @@
     }
   }
 
-  // Click-outside handler to end editing when user clicks outside the hex viewer
-  function handleClickOutside(e: MouseEvent) {
-    const target = e.target as HTMLElement;
-    const viewer = document.querySelector('.hex-viewer-container');
-    if (viewer && !viewer.contains(target)) {
-      commitEdit();
-    }
-  }
-
-  // Attach/detach global listeners when editing state changes
+  // Attach/detach global keydown listener when editing state changes
   $effect(() => {
     if (editingOffset !== null) {
       document.addEventListener("keydown", handleEditKeydown);
-      document.addEventListener("click", handleClickOutside);
-      return () => {
-        document.removeEventListener("keydown", handleEditKeydown);
-        document.removeEventListener("click", handleClickOutside);
-      };
+      return () => document.removeEventListener("keydown", handleEditKeydown);
     }
   });
 </script>
