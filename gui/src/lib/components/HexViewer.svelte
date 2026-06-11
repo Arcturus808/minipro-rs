@@ -81,11 +81,13 @@
 
   function focusInput(pos: number) {
     requestAnimationFrame(() => {
-      const input = document.querySelector('.hex-edit-input') as HTMLInputElement | null;
-      if (input) {
-        input.focus();
-        input.setSelectionRange(pos, pos);
-      }
+      requestAnimationFrame(() => {
+        const input = document.querySelector('.hex-edit-input') as HTMLInputElement | null;
+        if (input) {
+          input.focus();
+          input.setSelectionRange(pos, pos);
+        }
+      });
     });
   }
 
