@@ -877,8 +877,12 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
-            let expected = device.chip_id;
-            let bytes = device.chip_id_bytes_count.max(1).min(4);
+            // Package variants (e.g. @DIP8) often have copied chip_id values from the base
+            // chip that don't match what the firmware returns for that variant's protocol.
+            // Treat them as "no expected value" to avoid false mismatch warnings.
+            let is_variant = device.name.contains('@');
+            let expected = if is_variant { 0 } else { device.chip_id };
+            let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.max(1).min(4) };
             let mask = match bytes {
                 1 => 0xFFu32,
                 2 => 0xFFFF,
