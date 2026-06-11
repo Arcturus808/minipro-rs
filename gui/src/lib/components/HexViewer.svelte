@@ -67,13 +67,6 @@
     }
   });
 
-  $effect(() => {
-    if (editingOffset !== null && editInputRef) {
-      editInputRef.focus();
-      editInputRef.setSelectionRange(editCursorPos, editCursorPos);
-    }
-  });
-
   // ── Hex editing helpers ────────────────────────────────────────────────────
 
   function isEdited(offset: number): boolean {
@@ -86,12 +79,22 @@
     return $hexMeta.data[offset];
   }
 
+  function focusInput(pos: number) {
+    setTimeout(() => {
+      if (editInputRef) {
+        editInputRef.focus();
+        editInputRef.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  }
+
   function startEdit(offset: number) {
     if (!($hexMeta?.data) || offset < 0 || offset >= $hexMeta.data.length) return;
     editingOffset = offset;
     const b = getByte(offset);
     editValue = b.toString(16).padStart(2, "0").toUpperCase();
     editCursorPos = 0;
+    focusInput(0);
   }
 
   function commitEdit() {
@@ -135,6 +138,7 @@
           editingOffset = nextOffset;
           editValue = e.key.toUpperCase() + nextHex.charAt(1);
           editCursorPos = 1;
+          focusInput(1);
         }
         return;
       }
