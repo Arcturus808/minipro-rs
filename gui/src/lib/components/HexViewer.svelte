@@ -375,7 +375,7 @@
           <span style="width: 9ch; margin-right: 1.5ch; color: #888; flex-shrink: 0; font-weight: 600;">Offset</span>
           <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none; font-weight: 600;">
             {#each Array.from({length: ROW_SIZE}, (_, i) => i) as colIdx}
-              <span style="display: inline-block; width: 2ch; text-align: center;">{colIdx.toString(16).toUpperCase().padStart(2, '0')}</span>{#if colIdx < ROW_SIZE - 1}<span> </span>{/if}
+              <span style="display: inline-block; width: 2ch; text-align: center; margin-right: {colIdx < ROW_SIZE - 1 ? '1ch' : '0'}">{colIdx.toString(16).toUpperCase().padStart(2, '0')}</span>
             {/each}
           </span>
           <span style="opacity: 0.7; font-weight: 600;">ASCII</span>
