@@ -53,7 +53,11 @@
     $activeOperation === "config" ? "Read Config from Chip" :
     $activeOperation ? `Start ${opLabel}` : ""
   );
-  let opNeedsFileIn = $derived($activeOperation === "write" || $activeOperation === "verify");
+  let opFileHint = $derived(
+    $activeOperation === "write" ? "You will be prompted to select a file to write to the chip" :
+    $activeOperation === "verify" ? "You will be prompted to select a file to verify against" :
+    null
+  );
 
   // Panel widths as fractions of window width (persisted as percentages)
   let leftPercent = $state(0.20);
@@ -777,8 +781,8 @@
 
             <!-- Start button -->
             <div class="flex flex-col gap-2">
-              {#if opNeedsFileIn}
-                <span class="text-xs opacity-60 text-center">You will be prompted to select an input file</span>
+              {#if opFileHint}
+                <span class="text-xs opacity-60 text-center">{opFileHint}</span>
               {/if}
               <button
                 class="px-8 py-2.5 rounded-lg bg-primary-600 text-white text-base font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
