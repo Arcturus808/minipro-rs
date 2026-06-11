@@ -291,7 +291,7 @@
                   <input
                     type="text"
                     class="hex-edit-input"
-                    style="width: 1.5ch; padding: 0; margin: 0; border: none; background: #f59e0b; color: white; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit;"
+                    style="width: 3ch; padding: 0 0.25ch; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
                     maxlength="2"
                     bind:value={editValue}
                     onkeydown={onEditKeydown}
