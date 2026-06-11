@@ -204,7 +204,8 @@ pub fn write_chip(
         match size_mismatch {
             SizeMismatch::Error => {
                 return Err(MiniproError::FileFormat(format!(
-                    "file size {} does not match device size {}",
+                    "file size {} does not match device size {}. \
+Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                     buf.len(),
                     size
                 )));
