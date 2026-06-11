@@ -888,7 +888,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             } else {
                 device.name.clone()
             };
-            let expected = if is_variant { 0 } else { device.chip_id };
+            let expected = device.chip_id;
             let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.max(1).min(4) };
             let mask = match bytes {
                 1 => 0xFFu32,
@@ -900,7 +900,9 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             let masked_expected = expected & mask;
             let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
             let expected_str = format!("0x{:0width$x}", masked_expected, width = (bytes * 2) as usize);
-            let is_match = masked_expected == 0 || masked_id == masked_expected;
+            // For variants, treat as a match so we don't show a generic mismatch error,
+            // but the frontend will show a contextual message instead.
+            let is_match = expected == 0 || masked_id == masked_expected || is_variant;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match, is_variant, base_name })
         })();
 

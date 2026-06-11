@@ -330,7 +330,7 @@
         const chipResult = await doChipId(icspMode);
         if (chipResult) {
           if (chipResult.is_variant) {
-            logs.info(`Chip ID: ${chipResult.id} — for chip ID verification, select "${chipResult.base_name}" instead of "${$selectedDevice.name}"`);
+            logs.info(`Chip ID mismatch for ${$selectedDevice.name}: read ${chipResult.id}, expected ${chipResult.expected}. For chip ID verification, select "${chipResult.base_name}" instead.`);
           } else {
             const expectedVal = parseInt(chipResult.expected, 16);
             if (expectedVal === 0) {
