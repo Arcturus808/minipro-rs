@@ -32,6 +32,10 @@ This is a living list of features and improvements planned for minipro-rs.
 - [ ] Hex viewer: go-to-offset navigation
 - [ ] File format support: Intel HEX, SREC, JEDEC
 - [ ] Batch / queue operations (write + verify)
+- [ ] **Smart firmware diff** — compare two firmware files ignoring trailing `0xFF` padding
+  - Problem: minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical.
+  - Solution: Strip trailing blank bytes (`0xFF`) from both files, then compare remaining content. Report "identical" or first difference with offset/expected/actual.
+  - Could extend to "File vs Chip" comparison without requiring an intermediate save.
 
 ## Backlog
 
