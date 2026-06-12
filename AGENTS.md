@@ -275,3 +275,13 @@ msg[0x65] = 0x03; // comment
 ```
 
 **When editing `.svelte` / `.ts` files:** Run `cargo tauri build` (not just `cargo build`), because the frontend is embedded into the Rust binary at build time.
+
+---
+
+### Commit message rules
+
+- **Do NOT add any AI attribution footers** to commit messages
+- **Do NOT add** `"Generated with [Devin]"` or similar watermarks
+- **Do NOT add** `"Co-Authored-By"` lines for AI agents or bots
+- **Commit messages must be written as if authored solely by the human developer**
+- Keep commit messages concise: a short subject line, optional body, nothing else
