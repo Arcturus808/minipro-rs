@@ -222,7 +222,7 @@ impl Protocol for T76Protocol {
                 put_le32(&mut msg[0x40..0x44], 0x0800_0000); // read-setup word 1
                 put_le32(&mut msg[0x50..0x54], 0x0080_0000); // read-setup word 2
                 put_le32(&mut msg[0x60..0x64], 0x0f05_172f); // SPI clock config
-                msg[0x65] = 0x03;                              // SPI clock sub-config
+                msg[0x65] = 0x03; // SPI clock sub-config
                 usb.msg_send(&msg)?;
             } else {
                 usb.msg_send(&msg[..64])?;
