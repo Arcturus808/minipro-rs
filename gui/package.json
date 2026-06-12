@@ -1,6 +1,6 @@
 {
   "name": "minipro-gui",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "GUI front-end for minipro-rs chip programmer",
   "type": "module",
   "scripts": {
