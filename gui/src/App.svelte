@@ -383,7 +383,9 @@
     if (!path) return;
     hexLoading.set(true);
     try {
-      await loadFile(path);
+      const dev = get(selectedDevice);
+      const size = dev?.code_memory_size ?? 0;
+      await loadFile(path, size > 0 ? size : undefined);
       logs.info(`File loaded: ${path}`);
     } finally {
       hexLoading.set(false);

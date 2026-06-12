@@ -57,9 +57,14 @@ export function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-export async function loadFile(path: string) {
+export async function loadFile(path: string, deviceSize?: number) {
   try {
-    const base64 = await invoke<string>("read_file_bytes", { path });
+    const args: Record<string, any> = { path };
+    if (path.toLowerCase().endsWith(".hex") && deviceSize && deviceSize > 0) {
+      args.target_size = deviceSize;
+      args.blank_value = 0xFF;
+    }
+    const base64 = await invoke<string>("read_file_bytes", args);
     const bytes = base64ToUint8Array(base64);
     setHexData(bytes, path);
   } catch (e) {

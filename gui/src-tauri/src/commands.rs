@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, verify_chip, write_chip, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, write_chip, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -1300,13 +1300,37 @@ pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<Hardw
     }
 }
 
+/// Trim trailing blank bytes from a buffer.
+fn trim_trailing_blanks(mut bytes: Vec<u8>, blank: u8) -> Vec<u8> {
+    let last = bytes.iter().rposition(|&b| b != blank);
+    if let Some(idx) = last {
+        bytes.truncate(idx + 1);
+    } else {
+        bytes.clear();
+    }
+    bytes
+}
+
 /// Read a file on disk and return as base64 for efficient IPC transfer.
+/// Automatically detects and parses Intel HEX / SREC / JEDEC files.
+/// Parsed text-format files are trimmed of trailing blank bytes for cleaner display.
 #[tauri::command]
-pub async fn read_file_bytes(path: String) -> Result<String, String> {
+pub async fn read_file_bytes(path: String, target_size: Option<u32>, blank_value: Option<u8>) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        std::fs::read(&path)
-            .map(|bytes| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
-            .map_err(|e| format!("Cannot read file: {}", e))
+        let p = Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let is_text_format = matches!(ext.to_lowercase().as_str(), "hex" | "srec" | "mot" | "jed");
+
+        let bytes = if is_text_format {
+            let size = target_size.unwrap_or(65536) as usize;
+            let blank = blank_value.unwrap_or(0xFF);
+            let buf = read_file(p, "auto", size, blank).map_err(|e| format!("Cannot parse file: {}", e))?;
+            trim_trailing_blanks(buf, blank)
+        } else {
+            std::fs::read(p).map_err(|e| format!("Cannot read file: {}", e))?
+        };
+
+        Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
