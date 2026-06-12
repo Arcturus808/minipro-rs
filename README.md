@@ -1,5 +1,10 @@
 # minipro-rs
 
+[![GitLab Pipeline](https://gitlab.com/arcturus8081/minipro-rs/badges/main/pipeline.svg)](https://gitlab.com/arcturus8081/minipro-rs/-/pipelines)
+[![GitHub Release](https://img.shields.io/github/v/release/Arcturus808/minipro-rs)](https://github.com/Arcturus808/minipro-rs/releases)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Rust Version](https://img.shields.io/badge/rust-1.77%2B-orange.svg)](https://www.rust-lang.org)
+
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
 > **Status:** CI/CD pipeline fully operational — clippy, fmt, tests, Linux/Windows release builds, and all package jobs (`.deb`, `.rpm`, `.msi`, shell completions) passing on every commit. macOS builds are community-supported (see [macOS support](#macos-support)).
