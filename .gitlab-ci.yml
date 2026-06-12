@@ -257,7 +257,8 @@ release:
         --assets-link "{\"name\":\"minipro-completions\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz\"}" \
         --assets-link "{\"name\":\"minipro-deb\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_amd64.deb\"}" \
         --assets-link "{\"name\":\"minipro-rpm\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-${VERSION}-1.x86_64.rpm\"}" \
-        --assets-link "{\"name\":\"minipro-msi\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_x86_64.msi\"}"
+        --assets-link "{\"name\":\"minipro-msi\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_x86_64.msi\"}" \
+        || echo "Release already exists or another error occurred"
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
 
