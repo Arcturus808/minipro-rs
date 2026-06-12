@@ -239,7 +239,9 @@ release:
     - job: msi
       artifacts: true
   before_script:
-    - npm install -g @gitlab/release-cli
+    - |
+      curl --silent --location --output /usr/local/bin/release-cli "https://gitlab.com/api/v4/projects/gitlab-org%2Frelease-cli/packages/generic/release-cli/latest/release-cli-linux-amd64"
+      chmod +x /usr/local/bin/release-cli
     - |
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
       echo "VERSION=${VERSION}" >> build.env
@@ -263,7 +265,6 @@ pages:
   stage: deploy
   image: node:20-alpine
   script:
-    - npm install -g @gitlab/release-cli
     - mkdir -p public
     - cp -r docs/* public/ 2>/dev/null || true
   artifacts:
