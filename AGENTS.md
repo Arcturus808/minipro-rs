@@ -238,6 +238,7 @@ All version numbers in the repo must match for any given release:
 |------|-------|---------|
 | `Cargo.toml` (workspace root) | `version` | `0.2.1` |
 | `gui/src-tauri/Cargo.toml` | `version` | `0.2.1` |
+| `gui/src-tauri/tauri.conf.json` | `version` | `0.2.1` |
 | `gui/package.json` | `version` | `0.2.1` |
 
 **Why:** The project is a monorepo with a single tag (`v0.2.1`) that triggers builds for both the CLI and GUI. If versions drift:
@@ -246,7 +247,7 @@ All version numbers in the repo must match for any given release:
 - Changelogs become unreliable
 
 **When bumping for a release:**
-1. Update all three version fields above
+1. Update all four version fields above
 2. Commit with message like `chore(release): bump version to X.Y.Z`
 3. Create/push the tag `vX.Y.Z`
 4. Let CI build and release everything consistently
