@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-12
+
+### Fixed
+
+- **Hex viewer header in dark mode** — header row (Offset, 00-0F, ASCII) now uses theme-aware colors (`bg-surface-100-900`, `border-surface-300-700`) and proper opacity, making it readable in both light and dark themes
+- **T76 SPI NOR silent failure** — T76 firmware requires a 128-byte `BEGIN_TRANS` with chip-class geometry in `msg[0x40..0x7f]`. Previously sending only 64 bytes caused SPI-NOR reads to clock out all zeros, READID to return `0x0000`, and erase to be a no-op. Now packs verified read-setup constants for SPI 25-series (protocol_id `0x03` / `0x0f`). Also bumps expected T76 firmware from `0.1.13` to `0.1.17`
+
 ## [0.2.1] - 2026-06-11
 
 ### Fixed

@@ -236,10 +236,10 @@ All version numbers in the repo must match for any given release:
 
 | File | Field | Example |
 |------|-------|---------|
-| `Cargo.toml` (workspace root) | `version` | `0.2.1` |
-| `gui/src-tauri/Cargo.toml` | `version` | `0.2.1` |
-| `gui/src-tauri/tauri.conf.json` | `version` | `0.2.1` |
-| `gui/package.json` | `version` | `0.2.1` |
+| `Cargo.toml` (workspace root) | `version` | `0.2.2` |
+| `gui/src-tauri/Cargo.toml` | `version` | `0.2.2` |
+| `gui/src-tauri/tauri.conf.json` | `version` | `0.2.2` |
+| `gui/package.json` | `version` | `0.2.2` |
 
 **Why:** The project is a monorepo with a single tag (`v0.2.1`) that triggers builds for both the CLI and GUI. If versions drift:
 - GUI installer filenames will show the wrong version (e.g., `MINIPRO-RS_0.2.0_x64.msi` inside a `v0.2.1` release)
