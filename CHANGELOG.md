@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+## [0.2.1] - 2026-06-11
+
+### Fixed
+
+- **Hex editor column consistency** — when editing in ASCII mode, the hex column now correctly shows the hex value span (highlighted in amber) instead of displaying the ASCII character in the input field. The input field only appears in the column that was clicked (hex or ASCII), making the editing mode visually clear.
+
+---
+
 ## [0.2.0] - 2026-06-11
 
 ### Added
@@ -77,3 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.4] - 2026-05-17
 
 ### Fixed
+
+- Logic IC detection (`search_logic_ic`) no longer incorrectly falls back to analogue ICs when no
+  exact match is found.  Searching for `74HC00` now correctly returns the `74HC00` NAND gate
+  instead of a `TC74HC00AP` optocoupler.
