@@ -3,7 +3,7 @@
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
-  import { pickSaveFile } from "../file-dialog";
+  import { pickSaveFile, getIterativeSavePath } from "../file-dialog";
   import { get } from "svelte/store";
 
   const ROW_SIZE = 16;
@@ -372,9 +372,10 @@
             const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
             const defaultName = `${devName}.bin`;
             const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
+            const iterativePath = await getIterativeSavePath(defaultPath);
             let path = await pickSaveFile(
               "Save chip dump as",
-              defaultPath,
+              iterativePath,
               [{ name: "Binary", extensions: ["bin"] }]
             );
             if (path) {

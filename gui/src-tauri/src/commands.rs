@@ -601,6 +601,12 @@ pub fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Check whether a file exists at the given path.
+#[tauri::command]
+pub fn file_exists(path: String) -> Result<bool, String> {
+    Ok(std::path::Path::new(&path).exists())
+}
+
 /// Write file to chip memory.
 #[tauri::command]
 pub async fn do_write(

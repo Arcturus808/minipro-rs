@@ -103,6 +103,7 @@ pub fn run() {
             commands::read_chip_to_bytes,
             commands::save_bytes_to_file,
             commands::open_folder,
+            commands::file_exists,
             commands::do_write,
             commands::do_verify,
             commands::do_erase,
