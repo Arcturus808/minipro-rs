@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Write chip directly from hex viewer buffer** — when Write is selected and the hex viewer contains data, the start button splits into "Write from Hex Buffer" (primary) and "Write from File" (secondary). The hex buffer path auto-applies pending edits, respects size-diff settings, and supports skip erase/verify options
+
+### Fixed
+
+- **Hex viewer arrow key navigation** — ArrowLeft/Right/Up/Down now correctly move the selection after `commitEdit()` sets `editingOffset` to `null`. Previously ArrowRight always jumped to offset 1 and ArrowDown to offset 16 due to JavaScript `null + n` coercion
+- **Hex viewer auto-scroll on navigation** — arrow keys now scroll the viewport to keep the selected byte visible when navigating outside the current view
+
 ## [0.2.2] - 2026-06-12
 
 ### Fixed

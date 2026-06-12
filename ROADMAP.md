@@ -26,6 +26,9 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] Lock-bit protection safeguards (pre-read / pre-write warnings)
 - [x] Auto-verify after write (with file-size padding support)
 - [x] "Size diff" option for handling file/device size mismatches (Error / Warn / Ignore)
+- [x] **Write chip directly from hex viewer buffer** — when hex viewer has data, Write operation shows "Write from Hex Buffer" + "Write from File" buttons
+- [x] Hex viewer: keyboard arrow key navigation (Left/Right/Up/Down)
+- [x] Hex viewer: auto-scroll to keep selected byte visible during navigation
 
 ## Near-term
 
