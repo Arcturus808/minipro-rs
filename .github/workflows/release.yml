@@ -6,7 +6,7 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build-gui:
+  build:
     permissions:
       contents: write
     strategy:
@@ -16,12 +16,15 @@ jobs:
           - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
+            cli_name: 'minipro-macos-aarch64'
           - platform: 'ubuntu-22.04'
             target: 'x86_64-unknown-linux-gnu'
             args: ''
+            cli_name: 'minipro-linux-x86_64'
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             args: ''
+            cli_name: 'minipro-windows-x86_64.exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -50,11 +53,31 @@ jobs:
             patchelf \
             file
 
+      - name: Build CLI
+        run: cargo build --release --locked --bin minipro ${{ matrix.args }}
+
+      - name: Strip and stage CLI binary (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          if [ -n "${{ matrix.args }}" ]; then
+            BIN="target/${{ matrix.target }}/release/minipro"
+          else
+            BIN="target/release/minipro"
+          fi
+          strip "$BIN"
+          cp "$BIN" "${{ matrix.cli_name }}"
+
+      - name: Strip and stage CLI binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          copy target\release\minipro.exe ${{ matrix.cli_name }}
+
       - name: Install frontend dependencies
         working-directory: ./gui
         run: npm install
 
-      - name: Build and release
+      - name: Build and release GUI
+        id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,12 +86,22 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'MINIPRO-RS ${{ github.ref_name }}'
           releaseBody: |
-            ## Assets
+            ## GUI Installers
             - **Windows**: `.msi` installer + `.exe` NSIS installer
             - **Linux**: `.AppImage` + `.deb` (Debian/Ubuntu)
             - **macOS**: `.dmg` (Apple Silicon — M1/M2/M3)
+
+            ## CLI Binaries
+            Standalone `minipro` CLI binaries for each platform are attached below.
+            No installation required — download, make executable (`chmod +x`), and run.
 
             See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Upload CLI binary to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} ${{ matrix.cli_name }} --clobber
