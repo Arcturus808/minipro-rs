@@ -522,19 +522,9 @@
         <div class="flex flex-wrap gap-1.5 mb-3">
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
-            onclick={onLoadFile}
-            disabled={$isRunning || $hexLoading}
-          >
-            Load File
-          </button>
-        </div>
-
-        {#if $selectedDevice}
-        <div class="flex flex-wrap gap-1.5 mb-3">
-          <button
-            class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("read")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "read"}
             class:ring-2={$activeOperation === "read"}
             class:ring-primary-400={$activeOperation === "read"}
@@ -546,6 +536,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("write")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "write"}
             class:ring-2={$activeOperation === "write"}
             class:ring-primary-400={$activeOperation === "write"}
@@ -557,6 +548,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("verify")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "verify"}
             class:ring-2={$activeOperation === "verify"}
             class:ring-primary-400={$activeOperation === "verify"}
@@ -568,6 +560,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("erase")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "erase"}
             class:ring-2={$activeOperation === "erase"}
             class:ring-primary-400={$activeOperation === "erase"}
@@ -579,6 +572,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("blank_check")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "blank_check"}
             class:ring-2={$activeOperation === "blank_check"}
             class:ring-primary-400={$activeOperation === "blank_check"}
@@ -590,6 +584,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("chip_id")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "chip_id"}
             class:ring-2={$activeOperation === "chip_id"}
             class:ring-primary-400={$activeOperation === "chip_id"}
@@ -601,6 +596,7 @@
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("logic_test")}
             disabled={$isRunning}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "logic_test"}
             class:ring-2={$activeOperation === "logic_test"}
             class:ring-primary-400={$activeOperation === "logic_test"}
@@ -611,7 +607,8 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("config")}
-            disabled={$isRunning || !$selectedDevice?.config}
+            disabled={$isRunning || ($selectedDevice !== null && !$selectedDevice.config)}
+            class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "config"}
             class:ring-2={$activeOperation === "config"}
             class:ring-primary-400={$activeOperation === "config"}
@@ -619,11 +616,19 @@
           >
             Config
           </button>
+          <button
+            class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={onLoadFile}
+            disabled={$isRunning || $hexLoading}
+          >
+            Load File
+          </button>
         </div>
 
         <!-- Options -->
         {#if $activeOperation}
           <div class="border-t border-surface-200-800 pt-3">
+            {#if $selectedDevice}
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
               <button
@@ -797,20 +802,19 @@
                 </svg>
               </button>
             </div>
+            {:else}
+              <div class="border border-dashed border-surface-300-600 rounded-lg p-6 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <p class="text-sm font-medium opacity-70 mb-1">No device selected</p>
+                <p class="text-xs opacity-50">Search for your chip in the Device Selector (left panel) to enable this operation.</p>
+              </div>
+            {/if}
           </div>
         {:else}
           <div class="border-t border-surface-200-800 pt-3">
             <p class="text-sm opacity-50">Select an operation above to configure options.</p>
-          </div>
-        {/if}
-
-        {:else}
-          <div class="border border-dashed border-surface-300-600 rounded-lg p-6 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <p class="text-sm font-medium opacity-70 mb-1">No device selected</p>
-            <p class="text-xs opacity-50">Search for your chip in the Device Selector (left panel) to enable operations.</p>
           </div>
         {/if}
 
