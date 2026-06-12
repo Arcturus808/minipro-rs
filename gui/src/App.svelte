@@ -519,6 +519,16 @@
           </select>
         </div>
 
+        <div class="flex flex-wrap gap-1.5 mb-3">
+          <button
+            class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+            onclick={onLoadFile}
+            disabled={$isRunning || $hexLoading}
+          >
+            Load File
+          </button>
+        </div>
+
         {#if $selectedDevice}
         <div class="flex flex-wrap gap-1.5 mb-3">
           <button
@@ -608,13 +618,6 @@
             class:font-bold={$activeOperation === "config"}
           >
             Config
-          </button>
-          <button
-            class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
-            onclick={onLoadFile}
-            disabled={$isRunning || $hexLoading}
-          >
-            Load File
           </button>
         </div>
 
