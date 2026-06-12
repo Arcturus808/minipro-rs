@@ -227,3 +227,26 @@ Adding `select-none` to the root app container blocked selection everywhere incl
 
 ### `verify_chip` panic when file smaller than device
 `verify_chip` read the reference file but did not pad it to device size. When auto-verify ran after a write with a smaller file, `expected[offset..]` panicked at offsets beyond the file length. Fixed by resizing the expected buffer to `size` with blank_value padding, matching `write_chip` behavior.
+
+## Release Versioning
+
+### Keep GUI and CLI versions in sync
+
+All version numbers in the repo must match for any given release:
+
+| File | Field | Example |
+|------|-------|---------|
+| `Cargo.toml` (workspace root) | `version` | `0.2.1` |
+| `gui/src-tauri/Cargo.toml` | `version` | `0.2.1` |
+| `gui/package.json` | `version` | `0.2.1` |
+
+**Why:** The project is a monorepo with a single tag (`v0.2.1`) that triggers builds for both the CLI and GUI. If versions drift:
+- GUI installer filenames will show the wrong version (e.g., `MINIPRO-RS_0.2.0_x64.msi` inside a `v0.2.1` release)
+- Users get confused about which version they have
+- Changelogs become unreliable
+
+**When bumping for a release:**
+1. Update all three version fields above
+2. Commit with message like `chore(release): bump version to X.Y.Z`
+3. Create/push the tag `vX.Y.Z`
+4. Let CI build and release everything consistently
