@@ -445,10 +445,11 @@
             <span style="width: 9ch; margin-right: 1.5ch; color: #888; flex-shrink: 0;">{formatOffset(offset)}</span>
             <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none;">
               {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset, j}
-                {@const isEditing = editingOffset === byteOffset}
+                {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
+                {@const isEditingAscii = editingOffset === byteOffset && editingMode === "ascii"}
                 {@const edited = isEdited(byteOffset)}
                 {@const byteVal = getByte(byteOffset)}
-                {#if isEditing}
+                {#if isEditingHex}
                   <input
                     type="text"
                     class="hex-edit-input"
@@ -460,7 +461,7 @@
                 {:else}
                   <span
                     class="hex-cell"
-                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}"
+                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset)}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{formatHex(byteVal)}</span>
@@ -473,7 +474,8 @@
             <span style="opacity: 0.7;">
               {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset}
                 {@const edited = isEdited(byteOffset)}
-                {@const isEditingAscii = editingOffset === byteOffset}
+                {@const isEditingAscii = editingOffset === byteOffset && editingMode === "ascii"}
+                {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
                 {@const byteVal = getByte(byteOffset)}
                 {#if isEditingAscii}
                   <input
@@ -486,7 +488,7 @@
                   />
                 {:else}
                   <span
-                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset, "ascii")}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{toAscii(byteVal)}</span>
