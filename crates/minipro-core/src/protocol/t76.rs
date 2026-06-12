@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Minimum firmware version for the T76.
-pub const MIN_FIRMWARE_T76: u32 = 0x10D; // 0.1.13
+pub const MIN_FIRMWARE_T76: u32 = 0x111; // 0.1.17
 
 // T76 firmware update constants
 const T76_UPDATE_FILE_VERSION: u32 = 0xf076_0000;
@@ -200,7 +200,11 @@ impl Protocol for T76Protocol {
 
         // 2. Send begin_transaction (custom bit-bang deferred to Phase 4).
         if !device.flags.custom_protocol {
-            let mut msg = build_begin_msg(device, icsp);
+            // T76 uses a 128-byte BEGIN_TRANS (vs 64-byte for T56).
+            // Bytes 0x00..0x3f are the standard chip parameters.
+            // Bytes 0x40..0x7f are a chip-class-specific FPGA-setup extension.
+            let mut msg = [0u8; 128];
+            msg[..64].copy_from_slice(&build_begin_msg(device, icsp));
 
             // T76 extras: I2C address and algorithm number
             if device.flags.can_adjust_address {
@@ -209,7 +213,20 @@ impl Protocol for T76Protocol {
             // msg[63] = high byte of variant = algorithm number
             msg[63] = (device.variant >> 8) as u8;
 
-            usb.msg_send(&msg)?;
+            // SPI 25-series NOR needs a geometry block in the extension area.
+            // Without it the FPGA has no valid SPI setup: reads clock out all
+            // zeros, READID returns 0x0000, and erase is a no-op.
+            // Values verified by USB capture of XGPro V13.19 (fw 00.1.17).
+            let is_spi_nor = device.protocol_id == 0x03 || device.protocol_id == 0x0f;
+            if is_spi_nor {
+                put_le32(&mut msg[0x40..0x44], 0x0800_0000); // read-setup word 1
+                put_le32(&mut msg[0x50..0x54], 0x0080_0000); // read-setup word 2
+                put_le32(&mut msg[0x60..0x64], 0x0f05_172f); // SPI clock config
+                msg[0x65] = 0x03;                              // SPI clock sub-config
+                usb.msg_send(&msg)?;
+            } else {
+                usb.msg_send(&msg[..64])?;
+            }
         }
 
         Ok(())
