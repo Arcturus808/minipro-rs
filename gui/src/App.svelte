@@ -3,7 +3,7 @@
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
-  import { hexLoading, loadFile, hexMeta, getHexData } from "./lib/stores/hex";
+  import { hexLoading, loadFile, hexMeta, getHexData, hexEdits, applyHexEdits } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -15,6 +15,7 @@
     doRead,
     doReadToBuffer,
     doWrite,
+    doWriteBytes,
     doVerify,
     doErase,
     doBlankCheck,
@@ -58,6 +59,8 @@
     $activeOperation === "verify" ? "You will be prompted to select a file to verify against" :
     null
   );
+  let hasHexData = $derived(!!$hexMeta?.data && $hexMeta.data.length > 0);
+  let hasPendingHexEdits = $derived($hexEdits.size > 0);
 
   // Panel widths as fractions of window width (persisted as percentages)
   let leftPercent = $state(0.20);
@@ -297,6 +300,26 @@
     }
   }
 
+  async function onWriteFromFile() {
+    await warnIfLocked();
+    warnIfVariant();
+    const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
+    if (path) {
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await doWrite(path, getOptions());
+    }
+  }
+
+  async function onWriteFromHex() {
+    await warnIfLocked();
+    warnIfVariant();
+    if (hasPendingHexEdits) {
+      applyHexEdits();
+      logs.info("Applied pending hex edits before write");
+    }
+    await doWriteBytes(getOptions());
+  }
+
   async function onStart() {
     const op = $activeOperation;
     if (!op) return;
@@ -310,16 +333,11 @@
           logs.warn("Read returned all 0xFF bytes. The chip may be read-protected (lock bits active) or blank.");
         }
         break;
-      case "write": {
-        await warnIfLocked();
-        warnIfVariant();
-        const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
-        if (path) {
-          await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-          await doWrite(path, getOptions());
-        }
+      case "write":
+        // When hex data exists, onStart shouldn't be called directly;
+        // the UI shows separate buttons instead.
+        await onWriteFromFile();
         break;
-      }
       case "verify": {
         await warnIfLocked();
         warnIfVariant();
@@ -788,19 +806,47 @@
 
             <!-- Start button -->
             <div class="flex flex-col gap-2">
-              {#if opFileHint}
+              {#if opFileHint && !($activeOperation === "write" && hasHexData)}
                 <span class="text-xs opacity-60 text-center">{opFileHint}</span>
               {/if}
-              <button
-                class="px-8 py-2.5 rounded-lg bg-primary-600 text-white text-base font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
-                onclick={onStart}
-                disabled={$isRunning || !$selectedDevice}
-              >
-                <span>{startButtonLabel}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
-                </svg>
-              </button>
+              {#if $activeOperation === "write" && hasHexData}
+                <div class="flex flex-col gap-2">
+                  {#if hasPendingHexEdits}
+                    <span class="text-xs text-amber-500 text-center">{ $hexEdits.size } pending edit{ $hexEdits.size === 1 ? "" : "s" } will be applied</span>
+                  {/if}
+                  <button
+                    class="px-6 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
+                    onclick={onWriteFromHex}
+                    disabled={$isRunning || !$selectedDevice}
+                  >
+                    <span>Write from Hex Buffer</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  <button
+                    class="px-6 py-2 rounded-lg bg-surface-200-800 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-surface-300-700 transition-all disabled:opacity-40"
+                    onclick={onWriteFromFile}
+                    disabled={$isRunning || !$selectedDevice}
+                  >
+                    <span>Write from File</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              {:else}
+                <button
+                  class="px-8 py-2.5 rounded-lg bg-primary-600 text-white text-base font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
+                  onclick={onStart}
+                  disabled={$isRunning || !$selectedDevice}
+                >
+                  <span>{startButtonLabel}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              {/if}
             </div>
             {:else}
               <div class="border border-dashed border-surface-300-600 rounded-lg p-6 text-center">

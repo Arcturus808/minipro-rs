@@ -282,6 +282,99 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     Ok(OpStats { bytes: size, crc32 })
 }
 
+/// Write `buf` (raw bytes) to chip memory.
+///
+/// Same as [`write_chip`] but takes an in-memory buffer instead of a file path.
+/// The buffer is padded with the device's blank value or truncated to match the
+/// selected memory page size.
+pub fn write_chip_bytes(
+    handle: &mut MiniproHandle,
+    mut buf: Vec<u8>,
+    page: u8,
+    size_mismatch: SizeMismatch,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<OpStats> {
+    let device = handle.device()?.clone();
+    let size = match page {
+        0x00 => device.code_memory_size as usize,
+        0x01 => device.data_memory_size as usize,
+        _ => device.code_memory_size as usize,
+    };
+
+    // Size mismatch check.
+    if buf.len() != size {
+        match size_mismatch {
+            SizeMismatch::Error => {
+                return Err(MiniproError::FileFormat(format!(
+                    "buffer size {} does not match device size {}. \
+Set Size Diff to 'Warn' or 'Ignore' to proceed.",
+                    buf.len(),
+                    size
+                )));
+            }
+            SizeMismatch::Warn => eprintln!(
+                "Warning: buffer size {} does not match device size {}; padding/truncating",
+                buf.len(),
+                size
+            ),
+            SizeMismatch::Ignore => {}
+        }
+        buf.resize(size, device.blank_value as u8);
+    }
+
+    info!("Writing {} bytes...", size);
+
+    let write_size = if device.write_buffer_size > 0 {
+        device.write_buffer_size as usize
+    } else {
+        size
+    };
+
+    let total_blocks = if write_size > 0 {
+        size.div_ceil(write_size)
+    } else {
+        1
+    } as u32;
+    let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
+    let mut offset = 0usize;
+    while offset < size {
+        let block = write_size.min(size - offset);
+        let address = if use_word_addr {
+            (offset as u32) >> 1
+        } else {
+            offset as u32
+        };
+        let ds = DataSet {
+            data: buf[offset..offset + block].to_vec(),
+            address,
+            block_count: (block / 64) as u32,
+            page_type: page,
+            init: offset == 0,
+            total_blocks,
+        };
+        handle.protocol.write_block(&handle.usb, &ds)?;
+        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+        if ovc != 0 {
+            return Err(MiniproError::Overcurrent {
+                address: wstatus.address,
+            });
+        }
+        if wstatus.error != 0 {
+            return Err(MiniproError::VerifyFailed {
+                address: wstatus.address,
+                expected: wstatus.c2 as u8,
+                actual: wstatus.c1 as u8,
+            });
+        }
+        offset += block;
+        if let Some(ref mut f) = progress {
+            f(offset, size);
+        }
+    }
+    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
+    Ok(OpStats { bytes: size, crc32 })
+}
+
 /// Verify chip memory against `path`.
 ///
 /// `format` controls how the reference file is parsed: `"auto"` (default),
@@ -320,6 +413,70 @@ pub fn verify_chip(
     } as u32;
     // Convert byte offset to word address for word-organised code memory,
     // mirroring the same shift applied in read_chip and write_chip.
+    let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
+    let mut offset = 0usize;
+    while offset < size {
+        let block = read_size.min(size - offset);
+        let address = if use_word_addr {
+            (offset as u32) >> 1
+        } else {
+            offset as u32
+        };
+        let mut ds = DataSet {
+            data: vec![0u8; block],
+            address,
+            block_count: (block / 64) as u32,
+            page_type: page,
+            init: offset == 0,
+            total_blocks,
+        };
+        handle.protocol.read_block(&handle.usb, &mut ds)?;
+        for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
+            if got != want {
+                return Err(MiniproError::VerifyFailed {
+                    address: (offset + i) as u32,
+                    expected: want,
+                    actual: got,
+                });
+            }
+        }
+        offset += block;
+        if let Some(ref mut f) = progress {
+            f(offset, size);
+        }
+    }
+    Ok(())
+}
+
+/// Verify chip memory against `expected` (raw bytes).
+///
+/// Same as [`verify_chip`] but takes an in-memory buffer instead of a file path.
+pub fn verify_chip_bytes(
+    handle: &mut MiniproHandle,
+    mut expected: Vec<u8>,
+    page: u8,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
+    let device = handle.device()?.clone();
+    let size = match page {
+        0x00 => device.code_memory_size as usize,
+        0x01 => device.data_memory_size as usize,
+        _ => device.code_memory_size as usize,
+    };
+    expected.resize(size, device.blank_value as u8);
+    info!("Verifying {} bytes...", size);
+
+    let read_size = if device.read_buffer_size > 0 {
+        device.read_buffer_size as usize
+    } else {
+        size
+    };
+
+    let total_blocks = if read_size > 0 {
+        size.div_ceil(read_size)
+    } else {
+        1
+    } as u32;
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
     while offset < size {

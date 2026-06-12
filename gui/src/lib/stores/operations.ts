@@ -160,6 +160,21 @@ export async function doWrite(path: string, options: OperationOptions = defaultO
   });
 }
 
+export async function doWriteBytes(options: OperationOptions = defaultOptions()) {
+  await runOp("Write", async () => {
+    const data = getHexData();
+    if (!data) {
+      throw new Error("No data in hex viewer to write");
+    }
+    const base64 = uint8ArrayToBase64(data);
+    const result = await invoke("do_write_bytes", { base64Data: base64, options });
+    if (!options.skip_verify) {
+      deferLog("info", "  Verify passed");
+    }
+    return result;
+  });
+}
+
 export async function doVerify(path: string, options: OperationOptions = defaultOptions()) {
   await runOp("Verify", async () => {
     await invoke("do_verify", { path, options });

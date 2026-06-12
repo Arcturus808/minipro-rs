@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, write_chip, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -670,6 +670,107 @@ pub async fn do_write(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
+                    Some(&mut |done, total| {
+                        let _ = verify_window.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: "verify".to_string(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+
+            Ok::<OpStats, String>(stats)
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(stats)) => Ok(stats.into()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// Write the hex buffer (base64-encoded) to the chip.
+#[tauri::command]
+pub async fn do_write_bytes(
+    base64Data: String,
+    options: OperationOptions,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<OpStatsDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &base64Data,
+        )
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let page = parse_page(&options_clone.page)?;
+        let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
+        let op_name = "write".to_string();
+
+        let result = (|| {
+            handle.icsp = options_clone.icsp_mode != "zif";
+            if !options_clone.skip_erase {
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
+                handle.end_transaction().map_err(|e| e.to_string())?;
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            } else {
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            }
+
+            let verify_bytes = bytes.clone();
+            let stats = write_chip_bytes(
+                &mut handle,
+                bytes,
+                page,
+                size_mismatch,
+                Some(&mut |done, total| {
+                    let _ = window_clone.emit(
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: op_name.clone(),
+                        },
+                    );
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+
+            if !options_clone.skip_verify {
+                let verify_window = window_clone.clone();
+                let _ = verify_chip_bytes(
+                    &mut handle,
+                    verify_bytes,
+                    page,
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
