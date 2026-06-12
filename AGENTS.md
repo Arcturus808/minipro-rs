@@ -276,6 +276,12 @@ msg[0x65] = 0x03; // comment
 
 **When editing `.svelte` / `.ts` files:** Run `cargo tauri build` (not just `cargo build`), because the frontend is embedded into the Rust binary at build time.
 
+**Commit `Cargo.lock` after dependency changes:** The CI runs `cargo test --all --locked`, which fails if `Cargo.lock` is out of sync with `Cargo.toml`. Always regenerate and commit the lockfile when adding/updating dependencies or bumping versions:
+```bash
+cargo generate-lockfile   # updates Cargo.lock
+git add Cargo.lock gui/src-tauri/Cargo.lock
+```
+
 ---
 
 ### Commit message rules
