@@ -251,3 +251,27 @@ All version numbers in the repo must match for any given release:
 2. Commit with message like `chore(release): bump version to X.Y.Z`
 3. Create/push the tag `vX.Y.Z`
 4. Let CI build and release everything consistently
+
+---
+
+### Pre-commit checks (prevent CI failures)
+
+The GitLab CI runs `cargo fmt --all -- --check` and `cargo clippy`. Running these locally before pushing prevents red pipelines.
+
+```bash
+# Must pass before committing Rust changes
+cargo fmt --all          # auto-fixes formatting
+cargo fmt --all -- --check   # verify (same as CI)
+cargo clippy --all-targets -- -D warnings  # lint check
+```
+
+**Common `fmt` failure:** Inline comment alignment. `rustfmt` enforces exactly **one space** before `//`. This will fail:
+```rust
+msg[0x65] = 0x03;                              // comment  (too much space)
+```
+This passes:
+```rust
+msg[0x65] = 0x03; // comment
+```
+
+**When editing `.svelte` / `.ts` files:** Run `cargo tauri build` (not just `cargo build`), because the frontend is embedded into the Rust binary at build time.
