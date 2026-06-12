@@ -80,6 +80,20 @@
     return $hexMeta.data[offset];
   }
 
+  function scrollToOffset(offset: number) {
+    if (!scrollContainer || !($hexMeta?.data)) return;
+    const row = Math.floor(offset / ROW_SIZE);
+    const rowTop = row * rowHeight;
+    const rowBottom = rowTop + rowHeight;
+    const viewTop = scrollContainer.scrollTop;
+    const viewBottom = viewTop + containerHeight;
+    // If the row is already fully visible, don't scroll
+    if (rowTop >= viewTop && rowBottom <= viewBottom) return;
+    // Scroll to center the row, or to the edge if near the top/bottom
+    const target = Math.max(0, rowTop - containerHeight / 2 + rowHeight / 2);
+    scrollContainer.scrollTo({ top: target, behavior: "auto" });
+  }
+
   function focusInput(pos: number) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -107,6 +121,7 @@
       editValue = toAscii(b);
     }
     editCursorPos = 0;
+    scrollToOffset(offset);
     focusInput(0);
   }
 
@@ -261,34 +276,42 @@
         e.preventDefault();
         cancelEdit();
         break;
-      case "ArrowLeft":
+      case "ArrowLeft": {
         e.preventDefault();
-        if (editingOffset > 0) {
+        const current = editingOffset;
+        if (current !== null && current > 0) {
           commitEdit();
-          startEdit(editingOffset - 1);
+          startEdit(current - 1);
         }
         break;
-      case "ArrowRight":
+      }
+      case "ArrowRight": {
         e.preventDefault();
-        if (editingOffset < dataLen - 1) {
+        const current = editingOffset;
+        if (current !== null && current < dataLen - 1) {
           commitEdit();
-          startEdit(editingOffset + 1);
+          startEdit(current + 1);
         }
         break;
-      case "ArrowUp":
+      }
+      case "ArrowUp": {
         e.preventDefault();
-        if (editingOffset >= ROW_SIZE) {
+        const current = editingOffset;
+        if (current !== null && current >= ROW_SIZE) {
           commitEdit();
-          startEdit(editingOffset - ROW_SIZE);
+          startEdit(current - ROW_SIZE);
         }
         break;
-      case "ArrowDown":
+      }
+      case "ArrowDown": {
         e.preventDefault();
-        if (editingOffset < dataLen - ROW_SIZE) {
+        const current = editingOffset;
+        if (current !== null && current < dataLen - ROW_SIZE) {
           commitEdit();
-          startEdit(editingOffset + ROW_SIZE);
+          startEdit(current + ROW_SIZE);
         }
         break;
+      }
     }
   }
 
