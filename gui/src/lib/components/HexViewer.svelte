@@ -477,7 +477,7 @@
                   <input
                     type="text"
                     class="hex-edit-input"
-                    style="width: 2ch; padding: 0; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
+                    style="width: 2ch; padding: 0; margin: 0; border: none; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box; display: inline-block; vertical-align: middle;"
                     maxlength="2"
                     bind:value={editValue}
                     bind:this={editInputRef}
@@ -485,7 +485,7 @@
                 {:else}
                   <span
                     class="hex-cell"
-                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset)}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{formatHex(byteVal)}</span>
@@ -505,14 +505,14 @@
                   <input
                     type="text"
                     class="hex-edit-input"
-                    style="width: 1ch; padding: 0; margin: 0; border: 1px solid #d97706; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box;"
+                    style="width: 1ch; padding: 0; margin: 0; border: none; border-radius: 2px; background: #fbbf24; color: #78350f; outline: none; text-align: center; font-family: inherit; font-size: inherit; line-height: inherit; box-sizing: border-box; display: inline-block; vertical-align: middle;"
                     maxlength="1"
                     bind:value={editValue}
                     bind:this={editInputRef}
                   />
                 {:else}
                   <span
-                    style="cursor: pointer; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset, "ascii")}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{toAscii(byteVal)}</span>
