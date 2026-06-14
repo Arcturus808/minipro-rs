@@ -105,3 +105,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ github.ref_name }} ${{ matrix.cli_name }} --clobber
+
+      - name: Update release body from CHANGELOG (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          NOTES=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
+          if [ -z "$NOTES" ]; then
+            NOTES="Release ${TAG}"
+          fi
+          printf '%s\n' "$NOTES" > /tmp/release_notes.md
+          gh release edit "${TAG}" --notes-file /tmp/release_notes.md
