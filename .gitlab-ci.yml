@@ -245,6 +245,16 @@ release:
     - |
       VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
       echo "VERSION=${VERSION}" >> build.env
+  artifacts:
+    name: "minipro-rs-${CI_COMMIT_TAG}-assets"
+    paths:
+      - target/release/minipro
+      - target/x86_64-pc-windows-gnu/release/minipro.exe
+      - "minipro-completions-*.tar.gz"
+      - "minipro_*.deb"
+      - "minipro-*.rpm"
+      - "minipro_*.msi"
+    expire_in: 1 month
   script:
     - |
       source build.env
