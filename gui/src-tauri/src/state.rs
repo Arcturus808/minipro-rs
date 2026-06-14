@@ -10,7 +10,7 @@ use minipro_core::{
 pub struct AppState {
     /// The active USB programmer handle, if any.
     pub handle: Mutex<Option<MiniproHandle>>,
-    /// Resolved database paths for infoic.xml / logicic.xml / algorithms.xml.
+    /// Resolved database paths for infoic.xml / logicic.xml / algorithm.xml.
     pub db_paths: Mutex<Option<DatabasePaths>>,
     /// Cached programmer info for the UI status bar.
     pub programmer_info: Mutex<Option<ProgrammerInfo>>,

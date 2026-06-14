@@ -84,7 +84,7 @@ struct Cli {
     #[arg(long = "logicic-path", value_name = "PATH")]
     logicic_path: Option<PathBuf>,
 
-    /// Override path to algorithms.xml FPGA bitstream database (T56/T76)
+    /// Override path to algorithm.xml FPGA bitstream database (T56/T76)
     #[arg(long = "algorithms", value_name = "PATH")]
     algorithms_path: Option<PathBuf>,
 

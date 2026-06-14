@@ -849,7 +849,7 @@ Chip database (MCUs, memory chips, etc.).
 Logic IC database (for logic IC testing with
 .BR \-\-logic\-test ).
 .TP
-.B algorithms.xml
+.B algorithm.xml
 FPGA bitstream algorithm descriptions (T56/T76 only).
 .P
 File paths can be overridden explicitly with
@@ -879,7 +879,7 @@ environment variable.
 The
 .B \-\-algorithms
 option specifies the path to
-.IR algorithms.xml ,
+.IR algorithm.xml ,
 which describes the FPGA bitstream algorithms used by the T56 and T76 programmers.
 This file is only required for devices that use algorithm-based programming;
 it is ignored for all other programmer models.

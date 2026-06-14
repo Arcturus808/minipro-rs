@@ -30,7 +30,7 @@ use crate::{
 
 const INFOIC_FILENAME: &str = "infoic.xml";
 const LOGICIC_FILENAME: &str = "logicic.xml";
-const ALGORITHMS_FILENAME: &str = "algorithms.xml";
+const ALGORITHMS_FILENAME: &str = "algorithm.xml";
 
 const DB_ATTR_INFOIC: &str = "INFOIC";
 const DB_ATTR_INFOIC2: &str = "INFOIC2PLUS";
@@ -57,7 +57,7 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 pub struct DatabasePaths {
     pub infoic: PathBuf,
     pub logicic: PathBuf,
-    /// Path to algorithms.xml for T56/T76 FPGA bitstreams, if found or overridden.
+    /// Path to algorithm.xml for T56/T76 FPGA bitstreams, if found or overridden.
     pub algorithms: Option<PathBuf>,
 }
 
@@ -134,7 +134,7 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
 }
 
 /// Like `resolve_one` but returns `None` instead of an error when the file
-/// cannot be found.  Used for optional databases (e.g. `algorithms.xml`).
+/// cannot be found.  Used for optional databases (e.g. `algorithm.xml`).
 fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<PathBuf> {
     resolve_one(filename, override_path).ok()
 }

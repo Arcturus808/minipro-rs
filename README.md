@@ -136,18 +136,16 @@ cargo build --release
 
 ## T56 / T76 FPGA algorithm support
 
-> **Note:** The T56 and T76 programmers require FPGA bitstream algorithms for certain chip families. These algorithms are stored in **`algorithms.xml`** (distinct from `infoic.xml` / `logicic.xml`).
+> **Note:** The T56 and T76 programmers require FPGA bitstream algorithms for certain chip families. These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
 >
 > This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, T56/T76 can still program many standard devices (SPI NOR, I2C EEPROM, etc.), but some advanced or newer chips will fail with a protocol error.
 >
-> To enable full T56/T76 support, place an `algorithms.xml` file in one of these locations (searched in order):
+> To enable full T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
 > 1. The directory containing the `minipro` executable
 > 2. The system data directory (`/usr/share/minipro-rs/` on Linux, `%APPDATA%\minipro-rs\` on Windows)
 > 3. The current working directory
 >
 > The CLI also accepts `--algorithms PATH` to specify the file directly.
->
-> **Filename:** Our codebase expects `algorithms.xml` (plural). The original `minipro` project used `algorithm.xml` (singular). If you have the original file, rename it to `algorithms.xml` before placing it in one of the directories above.
 
 ---
 

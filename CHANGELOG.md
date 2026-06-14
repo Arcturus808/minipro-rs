@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--pulse US` — programming pulse width (microseconds)
   - `--spi_clock N` (also `--spi-clock`) — SPI clock divisor
   - `--address HEX` — starting address (decimal or `0x`-prefixed hex)
-- **`--algorithms PATH`** — override the path to `algorithms.xml` (T56/T76 FPGA bitstream
+- **`--algorithms PATH`** — override the path to `algorithm.xml` (T56/T76 FPGA bitstream
   descriptions).  Searched via the same four-location fallback chain as `infoic.xml`.
 - **`--logicic-out FILE`** — redirect logic IC test result table to a file instead of stdout.
 - **`--fuses` / `--uid` / `--lock`** — page-selector shortcuts equivalent to
