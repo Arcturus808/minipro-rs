@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-06-13
+
+### Fixed
+
+- **Hex viewer row shift on edit** — selecting a byte for editing no longer causes the row to shift downward. The `<input>` element replacing the `<span>` had a visible border and different default `vertical-align`, causing misalignment. Fixed by removing the border and normalizing both elements to `display: inline-block` + `vertical-align: middle`
+
 ## [0.2.3] - 2026-06-12
 
 ### Added
