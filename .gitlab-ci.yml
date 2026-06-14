@@ -271,11 +271,11 @@ release:
         --tag-name "${CI_COMMIT_TAG}" \
         --description "$(cat /tmp/release_notes.md)" \
         --assets-link "{\"name\":\"minipro-linux-x86_64\",\"url\":\"${CI_JOB_URL}/artifacts/raw/target/release/minipro\"}" \
-        --assets-link "{\"name\":\"minipro-windows-x86_64\",\"url\":\"${CI_JOB_URL}/artifacts/raw/target/x86_64-pc-windows-gnu/release/minipro.exe\"}" \
+        --assets-link "{\"name\":\"minipro-windows-x86_64\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/minipro-windows-x86_64.exe\"}" \
         --assets-link "{\"name\":\"minipro-completions\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz\"}" \
         --assets-link "{\"name\":\"minipro-deb\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_amd64.deb\"}" \
         --assets-link "{\"name\":\"minipro-rpm\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-${VERSION}-1.x86_64.rpm\"}" \
-        --assets-link "{\"name\":\"minipro-msi\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_x86_64.msi\"}" \
+        --assets-link "{\"name\":\"minipro-msi\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/MINIPRO-RS_${TAG_VERSION}_x64_en-US.msi\"}" \
         || echo "Release already exists or another error occurred"
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
