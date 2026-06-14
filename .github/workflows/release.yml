@@ -16,15 +16,15 @@ jobs:
           - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
-            cli_name: 'minipro-macos-aarch64'
+            cli_name: 'minipro-cli-macos-aarch64'
           - platform: 'ubuntu-22.04'
             target: 'x86_64-unknown-linux-gnu'
             args: ''
-            cli_name: 'minipro-linux-x86_64'
+            cli_name: 'minipro-cli-linux-x86_64'
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             args: ''
-            cli_name: 'minipro-windows-x86_64.exe'
+            cli_name: 'minipro-cli-windows-x86_64.exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
