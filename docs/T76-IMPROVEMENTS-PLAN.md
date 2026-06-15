@@ -19,35 +19,37 @@ Additionally, the branch adds support for:
 
 ## Current Rust codebase status
 
-| Feature | Status | File |
-|---------|--------|------|
-| USB detection (VID 0xA466, PID 0x1A86) | ✅ Working | `usb.rs` |
-| FPGA bitstream upload (3-phase chunked) | ✅ Working | `protocol/t76.rs` |
-| SPI NOR read/write/erase | ⚠️ **Broken** — 64-byte BEGIN_TRANS | `protocol/t76.rs` |
-| NAND (0x2d) | ❌ Not implemented | — |
-| eMMC (0x31) | ❌ Not implemented | — |
-| Parallel NOR (0x12/0x14) | ❌ Not implemented | — |
-| Firmware check (0x10D / 0.1.13) | ⚠️ Needs update to 0x111 | `protocol/t76.rs` |
-| SPI-NAND database unpacking | ❌ Not implemented | `database.rs` |
-| 2,028 new T76 chips | ❌ Missing | `infoic.xml` |
+| Feature | Status | File | Notes |
+|---------|--------|------|-------|
+| USB detection (VID 0xA466, PID 0x1A86) | ✅ Working | `usb.rs` | |
+| FPGA bitstream upload (3-phase chunked) | ✅ Working | `protocol/t76.rs` | |
+| SPI NOR read/write/erase | ✅ Implemented | `protocol/t76.rs` | 128-byte BEGIN_TRANS with geometry block. **Pending hardware validation.** |
+| NAND (0x2d) | ❌ Not implemented | — | |
+| eMMC (0x31) | ❌ Not implemented | — | |
+| Parallel NOR (0x12/0x14) | ❌ Not implemented | — | |
+| Firmware check (0x111 / 0.1.17) | ✅ Updated | `protocol/t76.rs` | |
+| SPI-NAND database unpacking | ❌ Not implemented | `database.rs` | |
+| 2,028 new T76 chips | ❌ Missing | `infoic.xml` | |
 
 ## Implementation phases
 
-### Phase 1: 128-byte BEGIN_TRANS (SPI NOR fix)
-**Goal**: Fix the silent read-zero bug for T76 SPI NOR.
+### Phase 1: 128-byte BEGIN_TRANS (SPI NOR fix) — ✅ IMPLEMENTED
+**Status**: Code is in `main`, pending hardware validation.
 
-**Changes in `protocol/t76.rs`**:
-- Change `begin_transaction` to send **128 bytes** instead of 64
-- For SPI 25-series (protocol_id 3/0xF), pack geometry into `msg[0x40..0x7f]`:
+**What was done in `protocol/t76.rs`**:
+- `begin_transaction` now sends **128 bytes** instead of 64 when the device is SPI NOR (`protocol_id == 0x03 || 0x0f`).
+- The standard 64-byte chip parameters are packed into `msg[0x00..0x3f]` via `build_begin_msg()`.
+- For SPI 25-series, the FPGA geometry block is packed into `msg[0x40..0x7f]`:
   - `msg[0x40..0x44]` = `0x08000000` (read-setup word)
   - `msg[0x50..0x54]` = `0x00800000` (read-setup word 2)
   - `msg[0x60..0x64]` = `0x0f05172f` (SPI clock config)
   - `msg[0x65]` = `0x03` (SPI clock sub-config)
-- These values are verified by USB capture of XGPro reading a ZB25VQ64A
+- These values are verified by USB capture of XGPro V13.19 (fw 00.1.17) reading a ZB25VQ64A.
+- For non-SPI-NOR devices, the existing 64-byte path is preserved.
 
-**Risk**: Low — only affects T76 SPI NOR path. Other programmers unaffected.
+**Risk**: Low — only affects T76 SPI NOR path. Other programmers and T76 non-NOR paths unaffected.
 
-**Testing**: Read, erase, program a SPI NOR chip on T76. Verify READID is non-zero.
+**Testing needed**: Read, erase, program a SPI NOR chip on T76. Verify READID is non-zero.
 
 ---
 

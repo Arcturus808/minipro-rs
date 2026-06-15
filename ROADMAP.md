@@ -32,15 +32,22 @@ This is a living list of features and improvements planned for minipro-rs.
 
 ## Near-term
 
-- [ ] Hex viewer: go-to-offset navigation
-- [x] File format support: Intel HEX, SREC, JEDEC — backend parsers and CLI support are complete; GUI operations panel supports all formats. Hex viewer Save button still only supports `.bin` (see Backlog)
+- [x] Hex viewer: go-to-offset navigation (Ctrl+G) — completed
+- [x] File format support: Intel HEX, SREC, JEDEC — backend parsers and CLI support are complete; GUI operations panel supports all formats. Hex viewer Save dialog now supports all formats with auto-detection from extension.
 - [ ] Batch / queue operations (write + verify)
+
+## Backlog
+
 - [ ] **Smart firmware diff** — compare two firmware files ignoring trailing `0xFF` padding
   - Problem: minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical.
   - Solution: Strip trailing blank bytes (`0xFF`) from both files, then compare remaining content. Report "identical" or first difference with offset/expected/actual.
+  - **Implementation plan saved:**
+    1. Core algorithm in `minipro-core` Rust — `smart_diff(a, b)` trims trailing `0xFF`, compares, returns diff list + equality flag.
+    2. CLI: `minipro diff file1 file2 [-f format]` — outputs human-readable table, exit code 0 on match, 1 on mismatch.
+    3. GUI: Hex viewer "Compare" button — uses loaded buffer as one side, pick reference file, highlight differing bytes in red. Show summary in toolbar ("3 differences" or "Files match").
+    4. Keep algorithm in Rust (single source of truth); send both buffers via base64 for GUI comparison.
   - Could extend to "File vs Chip" comparison without requiring an intermediate save.
-
-## Backlog
+  - Status: On hold. Ready to implement when prioritized.
 
 - [ ] Auto SN_NUM — production programming with auto-incrementing serial numbers
   - Requires: production-mode UI (start value, step, target address), buffer injection, auto-increment on successful write

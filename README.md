@@ -153,6 +153,26 @@ cargo build --release
 
 ---
 
+## Programmer Compatibility
+
+| Programmer | Read | Write | Erase | Verify | Chip ID | Fuses | JEDEC | Logic Test | Pin Check | Firmware Update | Hardware Test |
+|------------|------|-------|-------|--------|---------|-------|-------|------------|-----------|-----------------|---------------|
+| **TL866A / TL866CS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌² | ✅ | ✅ |
+| **TL866II+** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
+| **T48** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
+| **T56** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌³ | ✅¹ | ✅¹ |
+| **T76** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
+
+**Legend:**
+- ✅ **Tested & working** — verified with real hardware.
+- ✅¹ **Implemented, untested** — full protocol implementation exists but has not been validated with real hardware yet. Expected to work.
+- ❌² **Hardware limitation** — the TL866A/CS firmware does not support the pull-up/pull-down pin contact check commands.
+- ❌³ **Not supported** — the T56 uses a different FPGA-based command set with no known equivalent pin contact check mechanism.
+
+> **T76 note:** The SPI NOR 128-byte `BEGIN_TRANS` fix (with FPGA geometry block) is implemented and ready for testing. NAND, eMMC, and parallel NOR chip classes are not yet supported. See [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
+
+---
+
 ## macOS support
 
 **macOS binaries are built by [GitHub Actions](https://github.com/Arcturus808/minipro-rs/releases)** — download the `.dmg` (GUI) or `minipro-cli-macos-aarch64` (CLI) from the GitHub Releases page. Apple Silicon (M1/M2/M3) is supported.

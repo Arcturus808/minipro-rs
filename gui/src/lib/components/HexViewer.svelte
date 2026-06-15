@@ -12,7 +12,6 @@
   let fontSize = $state($settings.hexViewerFontSize);
   let rowHeight = $derived(fontSize + 9);
   let savedPath = $state<string | null>(null);
-  let saveFormat = $state<string>("bin");
 
   // Hex editing state
   let editingOffset = $state<number | null>(null);
@@ -21,8 +20,72 @@
   let editCursorPos = $state(0);
   let editingMode = $state<"hex" | "ascii">("hex");
 
+  // Go-to-offset dialog state
+  let showGotoDialog = $state(false);
+  let gotoValue = $state("");
+  let gotoInputRef = $state<HTMLInputElement | null>(null);
+
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
+  });
+
+  function parseOffset(input: string): number | null {
+    const trimmed = input.trim();
+    if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
+      const v = parseInt(trimmed.slice(2), 16);
+      return isNaN(v) ? null : v;
+    }
+    const v = parseInt(trimmed, 10);
+    return isNaN(v) ? null : v;
+  }
+
+  function openGotoDialog() {
+    if (!($hexMeta?.data) || $hexMeta.data.length === 0) return;
+    // Commit any pending hex edit before opening the dialog.
+    // Navigation (Ctrl+G) should not discard the user's current edit.
+    commitEdit();
+    showGotoDialog = true;
+    gotoValue = "";
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        gotoInputRef?.focus();
+        gotoInputRef?.select();
+      });
+    });
+  }
+
+  function closeGotoDialog() {
+    showGotoDialog = false;
+    gotoValue = "";
+  }
+
+  function confirmGoto() {
+    const offset = parseOffset(gotoValue);
+    if (offset === null) return;
+    const dataLen = $hexMeta?.data?.length ?? 0;
+    if (dataLen === 0) return;
+    const clamped = Math.max(0, Math.min(offset, dataLen - 1));
+    closeGotoDialog();
+    // Defer startEdit so the modal fully unmounts and focus settles
+    // before we try to focus the hex edit input.
+    requestAnimationFrame(() => {
+      startEdit(clamped, "hex");
+    });
+  }
+
+  // Global keydown for go-to-offset (Ctrl+G)
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (e.key === "g" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      if (!showGotoDialog) {
+        openGotoDialog();
+      }
+    }
+  }
+
+  $effect(() => {
+    document.addEventListener("keydown", handleGlobalKeydown);
+    return () => document.removeEventListener("keydown", handleGlobalKeydown);
   });
 
   function setFontSize(size: number) {
@@ -388,45 +451,33 @@
             Reset
           </button>
         {/if}
-        <select
-          class="text-xs opacity-60 hover:opacity-100 bg-transparent border border-surface-200-800 rounded px-1 py-0.5"
-          value={saveFormat}
-          onchange={(e) => saveFormat = e.currentTarget.value}
-          title="Save format"
-        >
-          <option value="bin">Binary</option>
-          <option value="ihex">Intel HEX</option>
-          <option value="srec">SREC</option>
-          <option value="jedec">JEDEC</option>
-        </select>
         <button
           class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
           onclick={async () => {
             const dir = get(settings).defaultDirectory ?? "";
             const dev = get(selectedDevice);
             const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
-            const extMap: Record<string, string> = { bin: ".bin", ihex: ".hex", srec: ".srec", jedec: ".jed" };
-            const filterMap: Record<string, { name: string; extensions: string[] }> = {
-              bin: { name: "Binary", extensions: ["bin"] },
-              ihex: { name: "Intel HEX", extensions: ["hex"] },
-              srec: { name: "Motorola SREC", extensions: ["srec", "mot"] },
-              jedec: { name: "JEDEC", extensions: ["jed"] },
-            };
-            const ext = extMap[saveFormat] ?? ".bin";
-            const defaultName = `${devName}${ext}`;
+            const defaultName = `${devName}.bin`;
             const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
             const iterativePath = await getIterativeSavePath(defaultPath);
             let path = await pickSaveFile(
               "Save chip dump as",
               iterativePath,
-              [filterMap[saveFormat] ?? filterMap.bin]
+              [
+                { name: "Binary", extensions: ["bin"] },
+                { name: "Intel HEX", extensions: ["hex"] },
+                { name: "Motorola SREC", extensions: ["srec", "mot"] },
+                { name: "JEDEC", extensions: ["jed"] },
+              ]
             );
             if (path) {
               if (!path.includes(".")) {
-                path += ext;
+                path += ".bin";
               }
+              const ext = path.split(".").pop()?.toLowerCase() ?? "bin";
+              const format = ext === "hex" ? "ihex" : ext === "srec" || ext === "mot" ? "srec" : ext === "jed" ? "jedec" : "bin";
               await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-              await saveBufferToFile(path, saveFormat, dev?.name);
+              await saveBufferToFile(path, format, dev?.name);
               savedPath = path;
             }
           }}
@@ -458,10 +509,42 @@
       {/if}
     </div>
   </div>
+  {#if showGotoDialog}
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
+      onclick={(e) => { if (e.target === e.currentTarget) closeGotoDialog(); }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 280px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Go to Offset</div>
+        <div style="font-size: 12px; opacity: 0.6; margin-bottom: 12px;">Enter offset in hex (0x1234) or decimal (1234)</div>
+        <input
+          bind:this={gotoInputRef}
+          bind:value={gotoValue}
+          type="text"
+          placeholder="0x0"
+          style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: 'Hack', 'Consolas', 'Courier New', monospace; font-size: 14px; outline: none;"
+          onkeydown={(e: KeyboardEvent) => {
+            if (e.key === "Enter") { e.preventDefault(); confirmGoto(); }
+            if (e.key === "Escape") { e.preventDefault(); closeGotoDialog(); }
+          }}
+        />
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button
+            style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; font-size: 13px;"
+            onclick={closeGotoDialog}
+          >Cancel</button>
+          <button
+            style="padding: 6px 12px; border: none; border-radius: 4px; background: #d97706; color: white; cursor: pointer; font-size: 13px;"
+            onclick={confirmGoto}
+          >Go</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <div
     bind:this={scrollContainer}
     onscroll={onScroll}
-    style="flex: 1; overflow: auto; font-family: 'Hack', 'Consolas', 'Courier New', monospace; font-size: {fontSize}px; line-height: {rowHeight}px; padding: 8px;"
+    style="flex: 1; overflow: auto; font-family: 'Hack', 'Consolas', 'Courier New', monospace; font-size: {fontSize}px; line-height: {rowHeight}px; padding: 0 8px 8px 8px;"
   >
     {#if $hexLoading}
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
