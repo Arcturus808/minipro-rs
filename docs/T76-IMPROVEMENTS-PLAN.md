@@ -26,7 +26,7 @@ Additionally, the branch adds support for:
 | SPI NOR read/write/erase | ✅ Implemented | `protocol/t76.rs` | 128-byte BEGIN_TRANS with geometry block. **Pending hardware validation.** |
 | NAND (0x2d) | ✅ Implemented | `protocol/t76.rs` | Parallel + SPI-NAND read/erase/program. **Pending hardware validation.** |
 | eMMC (0x31) | ✅ Implemented | `protocol/t76.rs` | Read/erase/program (USER partition). **Pending hardware validation.** |
-| Parallel NOR (0x12/0x14) | ❌ Not implemented | — | |
+| Parallel NOR (0x12/0x14) | ✅ Implemented | `protocol/t76.rs` | x16 family (family=0x0b, geom>=8) BEGIN extension only. READ + ERASE verified in C source; PROGRAM non-functional. **Pending hardware validation.** |
 | Firmware check (0x111 / 0.1.17) | ✅ Updated | `protocol/t76.rs` | |
 | SPI-NAND database unpacking | ❌ Not implemented | `database.rs` | |
 | 2,028 new T76 chips | ❌ Missing | `infoic.xml` | |
@@ -97,7 +97,28 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 4: Database & firmware updates
+### Phase 4: Parallel NOR support (protocols 0x12/0x14) — ✅ IMPLEMENTED
+**Status**: Code is in `t76-improvements` branch, pending hardware validation.
+
+**What was done in `protocol/t76.rs`**:
+- Added vendor packer sub_4b5a70 equivalent for the x16 parallel-NOR family (package_details low byte 0x0b, geometry >= 8).
+- BEGIN extension bytes:
+  - `msg[0x40..0x43]` = `0x01000000`
+  - `msg[0x44..0x47]` = `0x00000040`
+  - `msg[0x48..0x4b]` = adapter-dependent (`0x0200`–`0x1800`, default `0x0800`)
+  - `msg[0x50..0x53]` = `0x10000000`
+  - `msg[0x54..0x57]` = `0x00008000`
+  - `msg[0x60..0x63]` = `0x0f05172f`, `msg[0x65]` = `0x03`
+- READ and ERASE use the standard T76 paths (no special handling needed).
+- PROGRAM is marked non-functional in upstream C (needs per-command descriptor).
+
+**Risk**: Low — only affects BEGIN extension; no new opcodes.
+
+**Testing needed**: Read + erase an S29GL512N or equivalent x16 NOR on T76.
+
+---
+
+### Phase 5: Database & firmware updates
 **Goal**: Update database parser, firmware version, and chip list.
 
 **Changes**:
@@ -110,7 +131,7 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 5: Testing
+### Phase 6: Testing
 **Goal**: Validate all chip classes on real T76 hardware.
 
 | Chip Class | Test Chips | Operations |
@@ -119,7 +140,7 @@ Additionally, the branch adds support for:
 | SPI-NAND | GD5F1GM7UEYIG | Read, erase, program |
 | Parallel NAND | W29N02GZ | Read, erase, program |
 | eMMC | KLM8G1GEAC-B001 | Read, erase, program (all partitions) |
-| Parallel NOR | Any x16 NOR | Read, erase, program |
+| Parallel NOR | Any x16 NOR | Read, erase (program non-functional) |
 
 ---
 

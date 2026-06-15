@@ -407,6 +407,37 @@ impl Protocol for T76Protocol {
                 msglen = 128;
             }
 
+            // Parallel NOR (protocol_id 0x12/0x14): vendor packer sub_4b5a70
+            // builds the 0x40..0x7f BEGIN extension. Only the x16 family
+            // (package_details low byte 0x0b) with >=8 geometry is verified.
+            // Verified READ + ERASE on S29GL512N; PROGRAM still non-functional.
+            let is_parallel_nor = device.protocol_id == 0x12 || device.protocol_id == 0x14;
+            if is_parallel_nor {
+                let family = (device.package_details.raw & 0xff) as u8;
+                let adapter = (device.variant & 0xf0) as u8;
+                let geom = (device.variant & 0x0f) as u8;
+                if family == 0x0b && geom >= 8 {
+                    put_le32(&mut msg[0x40..0x44], 0x0100_0000);
+                    put_le32(&mut msg[0x44..0x48], 0x0000_0040);
+                    put_le32(&mut msg[0x50..0x54], 0x1000_0000);
+                    put_le32(&mut msg[0x54..0x58], 0x0000_8000);
+                    let b48 = match adapter {
+                        0x10 => 0x0200,
+                        0x20 => 0x1200,
+                        0x30 => 0x0a00,
+                        0x40 => 0x1000,
+                        0x50 => 0x0800,
+                        0x60 => 0x1800,
+                        0x70 => 0x0400,
+                        _ => 0x0800,
+                    };
+                    put_le32(&mut msg[0x48..0x4c], b48);
+                    put_le32(&mut msg[0x60..0x64], 0x0f05_172f);
+                    msg[0x65] = 0x03;
+                    msglen = 128;
+                }
+            }
+
             // NAND (protocol_id 0x2d): the FPGA algorithm bitstream drives the
             // NAND command/address bus, so there is NO 0x40..0x5f geometry
             // block. The only required extension bytes are the clock/timing
