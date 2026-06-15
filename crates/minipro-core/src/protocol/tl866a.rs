@@ -28,9 +28,8 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use crate::{
-    device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
@@ -230,7 +229,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn read_block(&self, usb: &UsbDevice, ds: &mut DataSet) -> Result<()> {
+    fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
         let cmd = match ds.page_type {
             MP_DATA => CMD_READ_DATA,
             MP_USER => CMD_READ_USER_DATA,
@@ -266,7 +265,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = match ds.page_type {
             MP_DATA => CMD_WRITE_DATA,
             MP_USER => CMD_WRITE_USER_DATA,
@@ -371,7 +370,7 @@ impl Protocol for Tl866aProtocol {
         usb.msg_recv(size)
     }
 
-    fn erase(&self, usb: &UsbDevice, num_fuses: u8, _is_pld: bool) -> Result<()> {
+    fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, _is_pld: bool) -> Result<()> {
         let mut msg = [0u8; 15];
         msg[0] = CMD_ERASE;
         msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);

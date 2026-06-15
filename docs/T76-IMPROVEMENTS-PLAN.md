@@ -24,7 +24,7 @@ Additionally, the branch adds support for:
 | USB detection (VID 0xA466, PID 0x1A86) | ✅ Working | `usb.rs` | |
 | FPGA bitstream upload (3-phase chunked) | ✅ Working | `protocol/t76.rs` | |
 | SPI NOR read/write/erase | ✅ Implemented | `protocol/t76.rs` | 128-byte BEGIN_TRANS with geometry block. **Pending hardware validation.** |
-| NAND (0x2d) | ❌ Not implemented | — | |
+| NAND (0x2d) | ✅ Implemented | `protocol/t76.rs` | Parallel + SPI-NAND read/erase/program. **Pending hardware validation.** |
 | eMMC (0x31) | ❌ Not implemented | — | |
 | Parallel NOR (0x12/0x14) | ❌ Not implemented | — | |
 | Firmware check (0x111 / 0.1.17) | ✅ Updated | `protocol/t76.rs` | |
@@ -40,38 +40,39 @@ Additionally, the branch adds support for:
 - `begin_transaction` now sends **128 bytes** instead of 64 when the device is SPI NOR (`protocol_id == 0x03 || 0x0f`).
 - The standard 64-byte chip parameters are packed into `msg[0x00..0x3f]` via `build_begin_msg()`.
 - For SPI 25-series, the FPGA geometry block is packed into `msg[0x40..0x7f]`:
-  - `msg[0x40..0x44]` = `0x08000000` (read-setup word)
-  - `msg[0x50..0x54]` = `0x00800000` (read-setup word 2)
-  - `msg[0x60..0x64]` = `0x0f05172f` (SPI clock config)
-  - `msg[0x65]` = `0x03` (SPI clock sub-config)
-- These values are verified by USB capture of XGPro V13.19 (fw 00.1.17) reading a ZB25VQ64A.
+  - 8-pin (default, e.g. ZB25VQ64A): `msg[0x40..0x44]` = `0x08000000`, `msg[0x50..0x54]` = `0x00800000`
+  - 16-pin (e.g. MX25L12845E): `msg[0x40..0x44]` = `0x00020000`, `msg[0x50..0x54]` = `0x02000000`
+  - Both: `msg[0x60..0x64]` = `0x0f05172f` (SPI clock config), `msg[0x65]` = `0x03` (SPI clock sub-config)
+- The 8-pin/16-pin split is keyed off `variant >> 8` (0x11 = 8-pin, 0x21 = 16-pin), matching the vendor packer.
 - For non-SPI-NOR devices, the existing 64-byte path is preserved.
 
 **Risk**: Low — only affects T76 SPI NOR path. Other programmers and T76 non-NOR paths unaffected.
 
-**Testing needed**: Read, erase, program a SPI NOR chip on T76. Verify READID is non-zero.
+**Testing needed**: Read, erase, program both 8-pin (ZB25VQ64A) and 16-pin (MX25L12845E) SPI NOR chips on T76. Verify READID is non-zero.
 
 ---
 
-### Phase 2: NAND support (protocol 0x2d)
-**Goal**: Add parallel and SPI-NAND read/erase/program.
+### Phase 2: NAND support (protocol 0x2d) — ✅ IMPLEMENTED
+**Status**: Code is in `t76-improvements` branch, pending hardware validation.
 
-**Changes**:
-1. **`protocol/t76.rs`**:
-   - Add 0x02 "logic begin" prelude (64 bytes sent before BEGIN_TRANS for NAND)
-   - Implement per-block erase with 0x3A bad-block check
-   - Implement 0x1F per-page program with 0x39 commit
-   - Add `read_block`/`write_block` paths for NAND page size
+**What was done in `protocol/t76.rs`**:
+- Added NAND-specific command constants (`0x02` logic begin, `0x1F` NAND program, `0x3A` bad-block check).
+- `begin_transaction` now:
+  - Calls `t76_adapter_init()` (0x24 FPGA register I/O + 0x3E pin detection) for NAND before bitstream upload.
+  - Sends the 64-byte `0x02` "logic begin" prelude with NAND page/block geometry and bus clock before the `0x03` BEGIN_TRANS.
+  - Packs the 128-byte BEGIN_TRANS with NAND-specific fields (block size at `msg[0x10]`, NAND flag `0x800` in raw_flags, clock config `0x0b09272f`).
+- `upload_bitstream_t76` now sends the real last-block size in the END command for NAND (required for FPGA finalization).
+- `read_block`: Added NAND path — sends `0x0D` with block index and fixed NAND read-parameter header, then streams the block via EP82.
+- `write_block`: Added NAND path — sends `0x1F` init with page size, block index, and pages-per-block, then streams each page (with 16-byte header) via EP05, followed by `0x39` commit.
+- `erase`: Added NAND erase — loops over every block, first probing with `0x3A` bad-block check (skipping flagged blocks), then issuing `0x0E` per block.
+- Updated the `Protocol` trait to pass `&Device` to `read_block`, `write_block`, and `erase` so protocol implementations can branch on `protocol_id`.
+- Updated all protocol implementations (TL866A, TL866II+, T48, T56, T76) and `operations.rs` call sites to match the new trait signatures.
 
-2. **`database.rs`**:
-   - Add SPI-NAND geometry unpacking: when `chip_type == Nand` and `code_memory_size == 0`, compute real size from packed fields
-   - `page_size` field holds BLOCK COUNT
-   - `pages_per_block` carries vendor flags in top byte
-   - `write_buffer_size` = real page + spare
+**Database changes**: Not yet implemented — SPI-NAND geometry unpacking in `database.rs` is still needed.
 
-**Risk**: Medium — touches database parser which affects all programmers.
+**Risk**: Medium — trait signature change touches all programmers. NAND-specific code is isolated to T76.
 
-**Testing**: Read/erase/program a Winbond W29N02GZ (parallel) and GD5F1GM7UEYIG (SPI-NAND).
+**Testing needed**: Read/erase/program a Winbond W29N02GZ (parallel) and GD5F1GM7UEYIG (SPI-NAND).
 
 ---
 

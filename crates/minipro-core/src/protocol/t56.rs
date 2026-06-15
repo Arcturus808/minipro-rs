@@ -9,9 +9,8 @@
 //! addition of T56-specific commands 0x26 (write bitstream), 0x2A (write
 //! bitstream 2, logic chips), 0x39 (request OVC status), etc.
 
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use crate::{
-    device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
@@ -189,7 +188,7 @@ impl Protocol for T56Protocol {
         usb.msg_send(&msg)
     }
 
-    fn read_block(&self, usb: &UsbDevice, ds: &mut DataSet) -> Result<()> {
+    fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
         let cmd = match ds.page_type {
             MP_CODE => CMD_READ_CODE,
             MP_DATA => CMD_READ_DATA,
@@ -217,7 +216,7 @@ impl Protocol for T56Protocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = match ds.page_type {
             MP_CODE => CMD_WRITE_CODE,
             MP_DATA => CMD_WRITE_DATA,
@@ -328,7 +327,7 @@ impl Protocol for T56Protocol {
         usb.msg_recv(size)
     }
 
-    fn erase(&self, usb: &UsbDevice, num_fuses: u8, is_pld: bool) -> Result<()> {
+    fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
         // T56 uses a 15-byte erase packet (T76 uses 16)
         let mut msg = [0u8; 15];
         msg[0] = CMD_ERASE;

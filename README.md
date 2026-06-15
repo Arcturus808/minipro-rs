@@ -169,7 +169,7 @@ cargo build --release
 - ❌² **Hardware limitation** — the TL866A/CS firmware does not support the pull-up/pull-down pin contact check commands.
 - ❌³ **Not supported** — the T56 uses a different FPGA-based command set with no known equivalent pin contact check mechanism.
 
-> **T76 note:** The SPI NOR 128-byte `BEGIN_TRANS` fix (with FPGA geometry block) is implemented and ready for testing. NAND, eMMC, and parallel NOR chip classes are not yet supported. See [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
+> **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry) and NAND (parallel + SPI-NAND) are implemented and ready for hardware testing. eMMC and parallel NOR chip classes are not yet supported. See [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
 ---
 

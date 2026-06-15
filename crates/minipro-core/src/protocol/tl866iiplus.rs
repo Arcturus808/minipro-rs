@@ -26,9 +26,8 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Hardware check               |
 
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use crate::{
-    device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
@@ -234,7 +233,7 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)
     }
 
-    fn read_block(&self, usb: &UsbDevice, ds: &mut DataSet) -> Result<()> {
+    fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
         // 8-byte read command: [cmd, block_count, length_lo, length_hi, addr x4]
         let cmd = read_cmd(ds);
         trace!(
@@ -258,7 +257,7 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = write_cmd(ds);
         usb.msg_send(&cmd)?;
         usb.write_payload(&ds.data)?;
@@ -346,7 +345,7 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_recv(64)
     }
 
-    fn erase(&self, usb: &UsbDevice, num_fuses: u8, is_pld: bool) -> Result<()> {
+    fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
         let mut pkt = [0u8; 64];
         pkt[0] = CMD_ERASE;
         pkt[1] = num_fuses;

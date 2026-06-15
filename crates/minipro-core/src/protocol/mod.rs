@@ -56,10 +56,10 @@ pub trait Protocol: Send + Sync {
     fn end_transaction(&self, usb: &UsbDevice) -> Result<()>;
 
     /// Read one block of memory into `ds.data`.
-    fn read_block(&self, usb: &UsbDevice, ds: &mut DataSet) -> Result<()>;
+    fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()>;
 
     /// Write `ds.data` to the chip starting at `ds.address`.
-    fn write_block(&self, usb: &UsbDevice, ds: &DataSet) -> Result<()>;
+    fn write_block(&self, usb: &UsbDevice, device: &Device, ds: &DataSet) -> Result<()>;
 
     /// Read the chip identification bytes.
     /// Returns `(id_type, chip_id)`.
@@ -99,7 +99,7 @@ pub trait Protocol: Send + Sync {
     }
 
     /// Erase the chip.
-    fn erase(&self, usb: &UsbDevice, num_fuses: u8, is_pld: bool) -> Result<()>;
+    fn erase(&self, usb: &UsbDevice, device: &Device, num_fuses: u8, is_pld: bool) -> Result<()>;
 
     /// Read a JEDEC fuse-map row.
     fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {

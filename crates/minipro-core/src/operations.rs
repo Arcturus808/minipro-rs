@@ -11,12 +11,25 @@ use std::{
 use log::info;
 
 use crate::{
-    device::DataOrg,
+    device::{ChipType, DataOrg, Device},
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
     protocol::DataSet,
 };
+
+/// Compute the effective read/write block size for a device.
+///
+/// For NAND chips this is the erase-block size (`write_buffer_size` *
+/// `pages_per_block`).  For all other chip types it falls back to the
+/// database `buffer_size` field.
+fn effective_block_size(device: &Device, buffer_size: u16) -> usize {
+    if device.chip_type == ChipType::Nand as u32 && device.pages_per_block > 0 {
+        (buffer_size as usize) * (device.pages_per_block as usize)
+    } else {
+        buffer_size as usize
+    }
+}
 
 /// Controls how a file-size mismatch between the input file and the device
 /// memory is handled in [`write_chip`].
@@ -130,7 +143,7 @@ pub fn read_chip(
     };
 
     let read_size = if device.read_buffer_size > 0 {
-        device.read_buffer_size as usize
+        effective_block_size(&device, device.read_buffer_size)
     } else {
         size
     };
@@ -162,7 +175,7 @@ pub fn read_chip(
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.read_block(&handle.usb, &mut ds)?;
+        handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
         buf[offset..offset + block].copy_from_slice(&ds.data);
         offset += block;
         if let Some(ref mut f) = progress {
@@ -224,7 +237,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     info!("Writing {} bytes...", size);
 
     let write_size = if device.write_buffer_size > 0 {
-        device.write_buffer_size as usize
+        effective_block_size(&device, device.write_buffer_size)
     } else {
         size
     };
@@ -253,25 +266,25 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.write_block(&handle.usb, &ds)?;
+        handle.protocol.write_block(&handle.usb, &device, &ds)?;
         // The TL866A firmware writes the EEPROM asynchronously and uses the
         // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
-        // Without this call the firmware may receive the next write_block
-        // before the previous one has finished, causing silent data loss.
-        // This matches the C write_page_ram loop which calls get_ovc_status
-        // after every write block.
-        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
-        if ovc != 0 {
-            return Err(MiniproError::Overcurrent {
-                address: wstatus.address,
-            });
-        }
-        if wstatus.error != 0 {
-            return Err(MiniproError::VerifyFailed {
-                address: wstatus.address,
-                expected: wstatus.c2 as u8,
-                actual: wstatus.c1 as u8,
-            });
+        // NAND and eMMC handle their own per-block status internally (0x39
+        // commit in write_block); a zeroed 0x39 poll deselects them.
+        if device.chip_type != ChipType::Nand as u32 {
+            let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+            if ovc != 0 {
+                return Err(MiniproError::Overcurrent {
+                    address: wstatus.address,
+                });
+            }
+            if wstatus.error != 0 {
+                return Err(MiniproError::VerifyFailed {
+                    address: wstatus.address,
+                    expected: wstatus.c2 as u8,
+                    actual: wstatus.c1 as u8,
+                });
+            }
         }
         offset += block;
         if let Some(ref mut f) = progress {
@@ -325,7 +338,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     info!("Writing {} bytes...", size);
 
     let write_size = if device.write_buffer_size > 0 {
-        device.write_buffer_size as usize
+        effective_block_size(&device, device.write_buffer_size)
     } else {
         size
     };
@@ -352,19 +365,22 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.write_block(&handle.usb, &ds)?;
-        let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
-        if ovc != 0 {
-            return Err(MiniproError::Overcurrent {
-                address: wstatus.address,
-            });
-        }
-        if wstatus.error != 0 {
-            return Err(MiniproError::VerifyFailed {
-                address: wstatus.address,
-                expected: wstatus.c2 as u8,
-                actual: wstatus.c1 as u8,
-            });
+        handle.protocol.write_block(&handle.usb, &device, &ds)?;
+        // NAND and eMMC handle their own per-block status internally.
+        if device.chip_type != ChipType::Nand as u32 {
+            let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+            if ovc != 0 {
+                return Err(MiniproError::Overcurrent {
+                    address: wstatus.address,
+                });
+            }
+            if wstatus.error != 0 {
+                return Err(MiniproError::VerifyFailed {
+                    address: wstatus.address,
+                    expected: wstatus.c2 as u8,
+                    actual: wstatus.c1 as u8,
+                });
+            }
         }
         offset += block;
         if let Some(ref mut f) = progress {
@@ -401,7 +417,7 @@ pub fn verify_chip(
     info!("Verifying {} bytes...", size);
 
     let read_size = if device.read_buffer_size > 0 {
-        device.read_buffer_size as usize
+        effective_block_size(&device, device.read_buffer_size)
     } else {
         size
     };
@@ -430,7 +446,7 @@ pub fn verify_chip(
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.read_block(&handle.usb, &mut ds)?;
+        handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
         for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
             if got != want {
                 return Err(MiniproError::VerifyFailed {
@@ -467,7 +483,7 @@ pub fn verify_chip_bytes(
     info!("Verifying {} bytes...", size);
 
     let read_size = if device.read_buffer_size > 0 {
-        device.read_buffer_size as usize
+        effective_block_size(&device, device.read_buffer_size)
     } else {
         size
     };
@@ -494,7 +510,7 @@ pub fn verify_chip_bytes(
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.read_block(&handle.usb, &mut ds)?;
+        handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
         for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
             if got != want {
                 return Err(MiniproError::VerifyFailed {
@@ -519,7 +535,7 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     let blank = device.blank_value as u8;
 
     let read_size = if device.read_buffer_size > 0 {
-        device.read_buffer_size as usize
+        effective_block_size(&device, device.read_buffer_size)
     } else {
         size
     };
@@ -540,7 +556,7 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
             init: offset == 0,
             total_blocks,
         };
-        handle.protocol.read_block(&handle.usb, &mut ds)?;
+        handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
         for (i, &b) in ds.data.iter().enumerate() {
             if b != blank {
                 return Err(MiniproError::NotBlank {
@@ -566,7 +582,7 @@ pub fn erase_chip(handle: &mut MiniproHandle) -> Result<()> {
         .unwrap_or(0);
     handle
         .protocol
-        .erase(&handle.usb, num_fuses, device.chip_type == 0x03)
+        .erase(&handle.usb, &device, num_fuses, device.chip_type == 0x03)
 }
 
 /// Read chip ID and compare against expected value.
