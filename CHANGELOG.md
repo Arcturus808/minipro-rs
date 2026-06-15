@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-06-15
+
+### Added
+
+- **T76 NAND support** (protocol 0x2d) — read, erase, and program for parallel NAND and SPI-NAND. Includes adapter power/init sequence, 64-byte FPGA prelude with page/block geometry, per-erase-block read (0x0D), per-page program with 0x39 commit (0x1F), and per-block erase with 0x3A bad-block skip
+- **T76 eMMC support** (protocol 0x31) — read, erase, and program via 0x27 command tunnel (timing, partition switch, program setup, status poll). Supports 64 KiB block streaming on EP82/EP05. Defaults to USER partition
+- **T76 parallel NOR support** (protocols 0x12/0x14) — x16 family BEGIN extension with vendor packer sub_4b5a70 equivalent. READ and ERASE verified against upstream; PROGRAM deferred
+
+### Fixed
+
+- **T76 SPI NOR 8-pin/16-pin geometry** — the 128-byte BEGIN_TRANS now branches on `variant >> 8` (0x11 = 8-pin, 0x21 = 16-pin) with correct read-setup word pairs for each package type
+- **T76 bitstream END for NAND** — last-block size is now sent in the END packet, fixing NAND FPGA finalization (without it READID returned 0xFF)
+- **NAND/eMMC OVC skip** — per-block `get_ovc_status` poll is now skipped for NAND and eMMC chips; a zeroed 0x39 deselects these devices
+- **eMMC block size and addressing** — `effective_block_size` returns 64 KiB for eMMC; read/write init uses LBA (sectors) and total block count matching firmware expectations
+
+### Changed
+
+- **Protocol trait** — `read_block`, `write_block`, and `erase` now take `&Device` so implementations can branch on `protocol_id` and `chip_type`
+- **Erase-block-aware I/O** — `operations.rs` now uses `effective_block_size()` for all chip operations (read, write, verify, blank-check), correctly handling NAND erase-block size and eMMC 64 KiB blocks
+
 ## [0.2.4] - 2026-06-13
 
 ### Fixed
