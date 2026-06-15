@@ -118,16 +118,25 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 5: Database & firmware updates
-**Goal**: Update database parser, firmware version, and chip list.
+### Phase 5: Database & firmware updates — ✅ COMPLETE (partial)
+**Status**: Firmware bumped; database refresh requires upstream data.
 
 **Changes**:
-1. **`protocol/t76.rs`**: Bump `MIN_FIRMWARE_T76` from `0x10D` to `0x111`
-2. **`database.rs`**: Add SPI-NAND geometry fix-up (see Phase 2)
-3. **`infoic.xml`**: Add 2,028 new T76 chips (or document how to refresh)
-4. **`operations.rs`**: Add `--partition` CLI argument for eMMC
+1. ✅ **`protocol/t76.rs`**: `MIN_FIRMWARE_T76` already at `0x111` (0.1.17)
+2. ✅ **`database.rs`**: SPI-NAND geometry is handled correctly in the NAND prelude (`page_size` stores block count for SPI-NAND, real page derived from `write_buffer_size`)
+3. ⏳ **`infoic.xml`**: 2,028 new T76 chips require the upstream XGPro_T76 V13.19 database. Current file has T76 section (INFOICT76) from V12.91. Refresh procedure documented below.
+4. ⏳ **`operations.rs`**: `--partition` CLI flag for eMMC (USER/BOOT1/BOOT2/RPMB) deferred to post-hardware-validation.
 
-**Risk**: Low — version bump is trivial. Database refresh needs validation.
+**Database refresh procedure** (when upstream V13.19 XML is available):
+```bash
+# 1. Obtain infoic.xml from XGPro_T76 V13.19 installation
+# 2. Replace data/infoic.xml
+# 3. Verify T76 chip count increased by ~2,028
+# 4. Run: cargo test --all --locked
+# 5. Commit: git add data/infoic.xml && git commit -m "data: update infoic.xml to XGPro_T76 V13.19"
+```
+
+**Risk**: Low — no code changes needed, only data file swap.
 
 ---
 
