@@ -572,7 +572,10 @@ impl Protocol for T76Protocol {
                 if ds.init {
                     t76_emmc_timing(usb, device, false)?; // PRE-read
                     let mut init = [0u8; 40];
-                    t76_emmc_io_init(&mut init, CMD_READ_CODE, ds.address, ds.block_count);
+                    // Address is in sectors (LBA); block_count is total 64 KiB blocks.
+                    let lba = ds.address / 512;
+                    let blocks = ds.total_blocks;
+                    t76_emmc_io_init(&mut init, CMD_READ_CODE, lba, blocks);
                     usb.msg_send(&init)?;
                 }
                 ds.data = usb.read_payload(size)?;
@@ -693,9 +696,12 @@ impl Protocol for T76Protocol {
 
                     t76_emmc_timing(usb, device, false)?; // PRE
                     let mut init = [0u8; 40];
-                    t76_emmc_io_init(&mut init, CMD_NAND_PROGRAM, ds.address, ds.block_count);
+                    // Address is in sectors (LBA); block_count is total 64 KiB blocks.
+                    let lba = ds.address / 512;
+                    let blocks = ds.total_blocks;
+                    t76_emmc_io_init(&mut init, CMD_NAND_PROGRAM, lba, blocks);
                     usb.msg_send(&init)?;
-                    EMMC_BLK_TOTAL.set(ds.block_count);
+                    EMMC_BLK_TOTAL.set(blocks);
                     EMMC_BLK_IDX.set(0);
                 }
 

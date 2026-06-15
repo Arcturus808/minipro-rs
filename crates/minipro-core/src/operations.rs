@@ -21,11 +21,13 @@ use crate::{
 /// Compute the effective read/write block size for a device.
 ///
 /// For NAND chips this is the erase-block size (`write_buffer_size` *
-/// `pages_per_block`).  For all other chip types it falls back to the
-/// database `buffer_size` field.
+/// `pages_per_block`).  For eMMC it is the fixed 64 KiB firmware block.
+/// For all other chip types it falls back to the database `buffer_size` field.
 fn effective_block_size(device: &Device, buffer_size: u16) -> usize {
     if device.chip_type == ChipType::Nand as u32 && device.pages_per_block > 0 {
         (buffer_size as usize) * (device.pages_per_block as usize)
+    } else if device.chip_type == ChipType::Emmc as u32 {
+        0x10000
     } else {
         buffer_size as usize
     }
@@ -271,7 +273,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
         // NAND and eMMC handle their own per-block status internally (0x39
         // commit in write_block); a zeroed 0x39 poll deselects them.
-        if device.chip_type != ChipType::Nand as u32 {
+        if device.chip_type != ChipType::Nand as u32 && device.chip_type != ChipType::Emmc as u32 {
             let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
             if ovc != 0 {
                 return Err(MiniproError::Overcurrent {
@@ -367,7 +369,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         };
         handle.protocol.write_block(&handle.usb, &device, &ds)?;
         // NAND and eMMC handle their own per-block status internally.
-        if device.chip_type != ChipType::Nand as u32 {
+        if device.chip_type != ChipType::Nand as u32 && device.chip_type != ChipType::Emmc as u32 {
             let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
             if ovc != 0 {
                 return Err(MiniproError::Overcurrent {
@@ -606,6 +608,13 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
 
 /// Check over-current and return `true` if an OVC event occurred.
 pub fn check_ovc(handle: &mut MiniproHandle) -> Result<bool> {
+    // NAND and eMMC: get_ovc_status with a zeroed header deselects the chip.
+    // Skip the poll; per-block status is handled internally by write_block.
+    if let Some(ref device) = handle.device {
+        if device.chip_type == ChipType::Nand as u32 || device.chip_type == ChipType::Emmc as u32 {
+            return Ok(false);
+        }
+    }
     let (status, flag) = handle.protocol.get_ovc_status(&handle.usb)?;
     if flag != 0 || status.error != 0 {
         return Err(MiniproError::Overcurrent {
