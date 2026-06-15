@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="gui/src-tauri/icons/icon.png" width="128" height="128" alt="MINIPRO-RS icon">
+</p>
+
 # minipro-rs
 
 [![GitLab Pipeline](https://gitlab.com/arcturus8081/minipro-rs/badges/main/pipeline.svg)](https://gitlab.com/arcturus8081/minipro-rs/-/pipelines)
