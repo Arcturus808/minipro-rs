@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -564,6 +564,38 @@ pub async fn save_bytes_to_file(path: String, base64Data: String) -> Result<(), 
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
         std::fs::write(&path, &bytes)
+            .map_err(|e| format!("Failed to write file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
+/// Write a buffer to disk in the specified file format.
+///
+/// `format` is one of `"bin"`, `"ihex"`, `"srec"`, or `"jedec"`.
+/// `"auto"` is treated as `"bin"`.  For `"jedec"`, `deviceName` is optional.
+#[tauri::command]
+pub async fn save_buffer_to_file(
+    path: String,
+    base64Data: String,
+    format: String,
+    deviceName: Option<String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &base64Data,
+        )
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+        let path_ref = std::path::Path::new(&path);
+        let effective_fmt = if format == "auto" || format == "bin" {
+            "bin"
+        } else {
+            &format
+        };
+
+        write_file(path_ref, effective_fmt, &bytes, deviceName.as_deref())
             .map_err(|e| format!("Failed to write file: {}", e))
     })
     .await

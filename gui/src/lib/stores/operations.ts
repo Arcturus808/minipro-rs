@@ -136,14 +136,18 @@ function uint8ArrayToBase64(data: Uint8Array): string {
   return btoa(result);
 }
 
-export async function saveBufferToFile(path: string) {
+export async function saveBufferToFile(path: string, format: string = "bin", deviceName?: string) {
   const data = getHexData();
   if (!data) {
     logs.error("No data loaded to save");
     return;
   }
   const base64 = uint8ArrayToBase64(data);
-  await invoke("save_bytes_to_file", { path, base64Data: base64 });
+  if (format === "bin" || format === "auto") {
+    await invoke("save_bytes_to_file", { path, base64Data: base64 });
+  } else {
+    await invoke("save_buffer_to_file", { path, base64Data: base64, format, deviceName });
+  }
 }
 
 export async function openFolder(path: string) {

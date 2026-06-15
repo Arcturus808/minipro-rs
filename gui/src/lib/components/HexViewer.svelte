@@ -12,6 +12,7 @@
   let fontSize = $state($settings.hexViewerFontSize);
   let rowHeight = $derived(fontSize + 9);
   let savedPath = $state<string | null>(null);
+  let saveFormat = $state<string>("bin");
 
   // Hex editing state
   let editingOffset = $state<number | null>(null);
@@ -387,26 +388,45 @@
             Reset
           </button>
         {/if}
+        <select
+          class="text-xs opacity-60 hover:opacity-100 bg-transparent border border-surface-200-800 rounded px-1 py-0.5"
+          value={saveFormat}
+          onchange={(e) => saveFormat = e.currentTarget.value}
+          title="Save format"
+        >
+          <option value="bin">Binary</option>
+          <option value="ihex">Intel HEX</option>
+          <option value="srec">SREC</option>
+          <option value="jedec">JEDEC</option>
+        </select>
         <button
           class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
           onclick={async () => {
             const dir = get(settings).defaultDirectory ?? "";
             const dev = get(selectedDevice);
             const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
-            const defaultName = `${devName}.bin`;
+            const extMap: Record<string, string> = { bin: ".bin", ihex: ".hex", srec: ".srec", jedec: ".jed" };
+            const filterMap: Record<string, { name: string; extensions: string[] }> = {
+              bin: { name: "Binary", extensions: ["bin"] },
+              ihex: { name: "Intel HEX", extensions: ["hex"] },
+              srec: { name: "Motorola SREC", extensions: ["srec", "mot"] },
+              jedec: { name: "JEDEC", extensions: ["jed"] },
+            };
+            const ext = extMap[saveFormat] ?? ".bin";
+            const defaultName = `${devName}${ext}`;
             const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
             const iterativePath = await getIterativeSavePath(defaultPath);
             let path = await pickSaveFile(
               "Save chip dump as",
               iterativePath,
-              [{ name: "Binary", extensions: ["bin"] }]
+              [filterMap[saveFormat] ?? filterMap.bin]
             );
             if (path) {
               if (!path.includes(".")) {
-                path += ".bin";
+                path += ext;
               }
               await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-              await saveBufferToFile(path);
+              await saveBufferToFile(path, saveFormat, dev?.name);
               savedPath = path;
             }
           }}

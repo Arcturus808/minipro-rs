@@ -33,7 +33,7 @@ This is a living list of features and improvements planned for minipro-rs.
 ## Near-term
 
 - [ ] Hex viewer: go-to-offset navigation
-- [ ] File format support: Intel HEX, SREC, JEDEC
+- [x] File format support: Intel HEX, SREC, JEDEC — backend parsers and CLI support are complete; GUI operations panel supports all formats. Hex viewer Save button still only supports `.bin` (see Backlog)
 - [ ] Batch / queue operations (write + verify)
 - [ ] **Smart firmware diff** — compare two firmware files ignoring trailing `0xFF` padding
   - Problem: minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical.
