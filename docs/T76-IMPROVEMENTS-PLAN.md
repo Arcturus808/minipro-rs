@@ -25,7 +25,7 @@ Additionally, the branch adds support for:
 | FPGA bitstream upload (3-phase chunked) | ✅ Working | `protocol/t76.rs` | |
 | SPI NOR read/write/erase | ✅ Implemented | `protocol/t76.rs` | 128-byte BEGIN_TRANS with geometry block. **Pending hardware validation.** |
 | NAND (0x2d) | ✅ Implemented | `protocol/t76.rs` | Parallel + SPI-NAND read/erase/program. **Pending hardware validation.** |
-| eMMC (0x31) | ❌ Not implemented | — | |
+| eMMC (0x31) | ✅ Implemented | `protocol/t76.rs` | Read/erase/program (USER partition). **Pending hardware validation.** |
 | Parallel NOR (0x12/0x14) | ❌ Not implemented | — | |
 | Firmware check (0x111 / 0.1.17) | ✅ Updated | `protocol/t76.rs` | |
 | SPI-NAND database unpacking | ❌ Not implemented | `database.rs` | |
@@ -76,20 +76,24 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 3: eMMC support (protocol 0x31)
-**Goal**: Add eMMC read/erase/program with partition switching.
+### Phase 3: eMMC support (protocol 0x31) — ✅ IMPLEMENTED
+**Status**: Code is in `t76-improvements` branch, pending hardware validation.
 
-**Changes in `protocol/t76.rs`**:
-- Implement 0x27 command tunnel (partition switch, status, EXT_CSD)
-- Add `--partition` flag mapping (user/boot1/boot2/rpmb)
-- Implement 64 KiB block read via 0x0D + EP82 stream
-- Implement 64 KiB block program via 0x1F + EP05 stream
-- Implement per-group erase via 0x0E (CMD35/36/38)
-- Auto-detect capacity from EXT_CSD (SEC_COUNT, BOOT_SIZE_MULT, RPMB_SIZE_MULT)
+**What was done in `protocol/t76.rs`**:
+- `t76_emmc_adapter_init()`: 0x24 f0 power-down → 0x24 e0 init (recv 0x28) → 0x24 f1 power-up → one 0x3E pin-detect. Byte-exact from XGPro capture.
+- `t76_emmc_cmd27()`: 8-byte 0x27 command tunnel (op + ARG), checks resp[1] for errors.
+- `t76_emmc_timing()`: 16-byte PRE/POST timing command (0x27 op 0x00) with bus-width at byte [9] (0=1-bit, 1=4-bit, 2=8-bit), keyed off `variant >> 8`.
+- `t76_emmc_io_init()`: builds the 40-byte 0x0D (read) / 0x1F (program) init with start LBA, block count, and fixed param words.
+- `begin_transaction`: switches to USER partition via 0x27 op 0x46 (CMD6 SWITCH) after bitstream upload.
+- `read_block`: PRE timing + 0x0D init (once on `ds.init`) → EP82 stream per 64 KiB block.
+- `write_block`: 0x27 op 0x50 program-setup (once) → PRE timing → 0x1F init → EP05 stream per block → commit (0x39 → POST timing → 0x39) after last block. Block counter tracked via `thread_local` `Cell<u32>`, matching the C static pattern.
+- `erase`: per-group erase via 0x0E with start/end LBA (steps of 0x20000 sectors), polls 0x27 op 0x4D between groups until resp[5] != 0x0e.
+
+**Partition support**: Currently defaults to USER partition. BOOT1/BOOT2/RPMB support needs CLI `--partition` flag (Phase 5).
 
 **Risk**: Medium — new command opcodes (0x27, 0x1F) not used elsewhere.
 
-**Testing**: Read/erase/program a Samsung KLM8G1GEAC-B001 in all partitions.
+**Testing needed**: Read/erase/program a Samsung KLM8G1GEAC-B001. Verify partition switching works.
 
 ---
 

@@ -15,6 +15,8 @@
 use super::t56::build_begin_msg;
 use super::tl866iiplus::logic_ic_test_tl866;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
+use std::cell::Cell;
+
 use crate::{
     device::Device,
     error::{MiniproError, Result},
@@ -59,9 +61,20 @@ const CMD_HARDWARE_CHECK: u8 = 0x3C;
 
 // NAND / eMMC / parallel-NOR command bytes (T76-specific)
 const CMD_BEGIN_TRANS_LOGIC: u8 = 0x02; // 64-byte NAND/logic FPGA-setup prelude
-const CMD_NAND_PROGRAM: u8 = 0x1F; // per-block NAND program (init + per-page EP05)
+const CMD_NAND_PROGRAM: u8 = 0x1F; // per-block NAND/eMMC program (init + stream)
 const CMD_NAND_BAD_BLOCK_CHECK: u8 = 0x3A;
 const CMD_PIN_DETECTION: u8 = 0x3E;
+
+// eMMC (protocol_id 0x31) command bytes
+const _CMD_EMMC_IO_REG: u8 = 0x01; // FPGA eMMC register I/O
+const CMD_EMMC_SEND_CMD: u8 = 0x27; // eMMC CMD tunnel
+const EMMC_OP_SWITCH: u8 = 0x46; // CMD6 SWITCH (partition select)
+const EMMC_OP_PROGRAM_SETUP: u8 = 0x50; // program setup
+const _EMMC_OP_STATUS_POLL: u8 = 0x4D; // erase-status poll
+const EMMC_PART_USER: u32 = 0x02B3_0700;
+const _EMMC_PART_BOOT1: u32 = 0x01B3_0100;
+const _EMMC_PART_BOOT2: u32 = 0x01B3_0200;
+const _EMMC_PART_RPMB: u32 = 0x01B3_0300;
 
 // T76 bitstream sub-commands
 const T76_BEGIN_BS: u8 = 0x00;
@@ -244,15 +257,109 @@ fn t76_adapter_init(usb: &UsbDevice) -> Result<()> {
     Ok(())
 }
 
+/// eMMC socket-adapter power/init at session start.
+///
+/// Byte-exact from XGPro's eMMC READ capture: 0x24 f0 power-down (recv 8),
+/// 0x24 e0 init (12 bytes, recv 0x28), 0x24 f1 power-up, then ONE 0x3e
+/// pin-detect (recv 0x20). This enables the EXT_CSD (0x08) read to return data.
+fn t76_emmc_adapter_init(usb: &UsbDevice) -> Result<()> {
+    const PWR_DOWN: [u8; 8] = [0x24, 0xf0, 0x08, 0x00, 0x01, 0x00, 0x00, 0x00];
+    const E0_INIT: [u8; 12] = [
+        0x24, 0xe0, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
+    const PWR_UP: [u8; 8] = [0x24, 0xf1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+    t76_cmd_24(usb, &PWR_DOWN)?;
+    usb.msg_send(&E0_INIT)?;
+    usb.msg_recv(0x28)?;
+    t76_cmd_24(usb, &PWR_UP)?;
+
+    let mut pd = [0u8; 16];
+    pd[0] = CMD_PIN_DETECTION;
+    usb.msg_send(&pd)?;
+    let _ = usb.msg_recv(32)?;
+    Ok(())
+}
+
+/// Send one 0x27 eMMC command tunnel packet.
+///
+/// Form A: simple command, no payload. send 8 / recv 8.
+///   msg[0]=0x27, msg[1]=op, msg[2..3]=0, msg[4..7]=ARG.
+///   resp[1]=error (0=OK), resp[4..7]=R1/R1b.
+fn t76_emmc_cmd27(usb: &UsbDevice, op: u8, arg: u32) -> Result<()> {
+    let mut msg = [0u8; 8];
+    msg[0] = CMD_EMMC_SEND_CMD;
+    msg[1] = op;
+    put_le32(&mut msg[4..8], arg);
+    usb.msg_send(&msg)?;
+    let resp = usb.msg_recv(8)?;
+    if resp.get(1).copied().unwrap_or(1) != 0 {
+        return Err(MiniproError::Protocol(format!(
+            "eMMC cmd27 op 0x{:02x} failed (status 0x{:02x})",
+            op,
+            resp.get(1).copied().unwrap_or(0xff)
+        )));
+    }
+    Ok(())
+}
+
+/// eMMC per-region timing command (0x27 op 0x00).
+///
+/// Two fixed variants from the capture: PRE form sent before the read/program
+/// init, POST form sent after the data. Byte [9] is the eMMC bus-width code
+/// (0=1-bit, 1=4-bit, 2=8-bit), derived from variant>>8.
+fn t76_emmc_timing(usb: &UsbDevice, device: &Device, post: bool) -> Result<()> {
+    let mut timing = if post {
+        [
+            0x27, 0x00, 0xff, 0x00, 0x3b, 0x2c, 0x10, 0x0b, 0x00, 0x02, 0xb7, 0x03, 0x00, 0x01,
+            0xb9, 0x03,
+        ]
+    } else {
+        [
+            0x27, 0x00, 0xff, 0x00, 0x3b, 0x0e, 0x05, 0x02, 0x00, 0x02, 0xb7, 0x03, 0x00, 0x12,
+            0xb9, 0x03,
+        ]
+    };
+    let width = match (device.variant >> 8) as u8 {
+        0x51 => 0, // 1-bit
+        0x54 => 1, // 4-bit
+        _ => 2,    // 8-bit (0x53 or default)
+    };
+    timing[9] = width;
+    usb.msg_send(&timing)
+}
+
+/// Build the 40-byte 0x0D (read) / 0x1F (program) region init.
+///
+/// The firmware then streams (read) / accepts (program) `blocks` × 64 KiB
+/// on EP82 / EP05.
+fn t76_emmc_io_init(init: &mut [u8; 40], opcode: u8, lba: u32, blocks: u32) {
+    init.fill(0);
+    init[0] = opcode;
+    init[1] = 0x01;
+    put_le32(&mut init[4..8], lba);
+    put_le32(&mut init[8..12], 0x200);
+    put_le32(&mut init[12..16], 0x20);
+    put_le32(&mut init[16..20], blocks);
+    put_le32(&mut init[20..24], 0x80);
+    put_le32(&mut init[24..28], 0x20);
+    put_le32(&mut init[28..32], 0x04);
+    put_le32(&mut init[32..36], 0x01);
+}
+
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T76Protocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         let is_nand = device.protocol_id == 0x2d;
+        let is_emmc = device.protocol_id == 0x31;
 
-        // 1. NAND: energize/init the socket adapter before the first bitstream.
+        // 1. NAND / eMMC: energize/init the socket adapter before the first bitstream.
         if is_nand {
             t76_adapter_init(usb)?;
+        }
+        if is_emmc {
+            t76_emmc_adapter_init(usb)?;
         }
 
         // 2. Upload FPGA algorithm bitstream.
@@ -389,6 +496,12 @@ impl Protocol for T76Protocol {
             usb.msg_send(&pre)?;
         }
 
+        // 5. eMMC: switch to the active partition (default USER).
+        //    The partition must be selected before any read/write/erase.
+        if is_emmc {
+            t76_emmc_cmd27(usb, EMMC_OP_SWITCH, EMMC_PART_USER)?;
+        }
+
         Ok(())
     }
 
@@ -419,6 +532,18 @@ impl Protocol for T76Protocol {
                 put_le16(&mut msg[2..4], block_index);
                 msg[4..16].copy_from_slice(&NAND_READ_HDR);
                 usb.msg_send(&msg)?;
+                ds.data = usb.read_payload(size)?;
+                return Ok(());
+            }
+
+            // eMMC read (protocol_id 0x31).
+            if device.protocol_id == 0x31 {
+                if ds.init {
+                    t76_emmc_timing(usb, device, false)?; // PRE-read
+                    let mut init = [0u8; 40];
+                    t76_emmc_io_init(&mut init, CMD_READ_CODE, ds.address, ds.block_count);
+                    usb.msg_send(&init)?;
+                }
                 ds.data = usb.read_payload(size)?;
                 return Ok(());
             }
@@ -517,6 +642,48 @@ impl Protocol for T76Protocol {
                 st[0] = CMD_REQUEST_STATUS;
                 usb.msg_send(&st[..8])?;
                 usb.msg_recv(32)?;
+                return Ok(());
+            }
+
+            // eMMC program (protocol_id 0x31).
+            if device.protocol_id == 0x31 {
+                thread_local! {
+                    static EMMC_BLK_IDX: Cell<u32> = const { Cell::new(0) };
+                    static EMMC_BLK_TOTAL: Cell<u32> = const { Cell::new(0) };
+                }
+                if ds.init {
+                    // Program setup: 0x27 op 0x50 (ARG 0x20000), once.
+                    let mut op50 = [0u8; 8];
+                    op50[0] = CMD_EMMC_SEND_CMD;
+                    op50[1] = EMMC_OP_PROGRAM_SETUP;
+                    put_le32(&mut op50[4..8], 0x0002_0000);
+                    usb.msg_send(&op50)?;
+                    let _ = usb.msg_recv(8)?;
+
+                    t76_emmc_timing(usb, device, false)?; // PRE
+                    let mut init = [0u8; 40];
+                    t76_emmc_io_init(&mut init, CMD_NAND_PROGRAM, ds.address, ds.block_count);
+                    usb.msg_send(&init)?;
+                    EMMC_BLK_TOTAL.set(ds.block_count);
+                    EMMC_BLK_IDX.set(0);
+                }
+
+                usb.write_payload(&ds.data)?;
+
+                let idx = EMMC_BLK_IDX.get() + 1;
+                EMMC_BLK_IDX.set(idx);
+                if idx >= EMMC_BLK_TOTAL.get() {
+                    // Commit: 0x39 -> POST-timing -> 0x39.
+                    let mut st = [0u8; 32];
+                    st[0] = CMD_REQUEST_STATUS;
+                    usb.msg_send(&st[..8])?;
+                    usb.msg_recv(32)?;
+                    t76_emmc_timing(usb, device, true)?; // POST
+                    st.fill(0);
+                    st[0] = CMD_REQUEST_STATUS;
+                    usb.msg_send(&st[..8])?;
+                    usb.msg_recv(32)?;
+                }
                 return Ok(());
             }
 
@@ -682,6 +849,40 @@ impl Protocol for T76Protocol {
                     bad,
                     if bad == 1 { "" } else { "s" }
                 );
+            }
+            return Ok(());
+        }
+
+        // eMMC erase (protocol_id 0x31).
+        if device.protocol_id == 0x31 {
+            const POLL: [u8; 8] = [0x27, 0x4d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00];
+            let total = (device.code_memory_size as u64) / 512;
+            if total == 0 {
+                return Ok(());
+            }
+            for start in (0..total).step_by(0x20000) {
+                let end = (start + 0x1ffff).min(total - 1);
+                let mut cmd = [0u8; 16];
+                cmd[0] = CMD_ERASE;
+                put_le32(&mut cmd[4..8], start as u32);
+                put_le32(&mut cmd[8..12], end as u32);
+                usb.msg_send(&cmd)?;
+                let _ = usb.msg_recv(8)?;
+
+                // Poll until the erase completes (resp[5] back to 0x09).
+                let mut done = false;
+                for _ in 0..2_000_000 {
+                    let p = POLL;
+                    usb.msg_send(&p)?;
+                    let rsp = usb.msg_recv(8)?;
+                    if rsp.get(5).copied().unwrap_or(0x0e) != 0x0e {
+                        done = true;
+                        break;
+                    }
+                }
+                if !done {
+                    return Err(MiniproError::Protocol("eMMC erase timed out.".into()));
+                }
             }
             return Ok(());
         }
