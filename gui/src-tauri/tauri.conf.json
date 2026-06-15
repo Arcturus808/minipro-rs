@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MINIPRO-RS",
+  "productName": "MINIPRO-RS-GUI",
   "version": "0.2.5",
   "identifier": "com.minipro.gui",
   "build": {
