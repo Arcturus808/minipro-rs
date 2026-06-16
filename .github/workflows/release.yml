@@ -113,9 +113,21 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
-          NOTES=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
-          if [ -z "$NOTES" ]; then
-            NOTES="Release ${TAG}"
+          CHANGELOG_SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
+          if [ -z "$CHANGELOG_SECTION" ]; then
+            CHANGELOG_SECTION="Release ${TAG}"
           fi
-          printf '%s\n' "$NOTES" > /tmp/release_notes.md
+          {
+            echo '## Installers'
+            echo ''
+            echo '- **Linux**: `.deb` (Debian/Ubuntu)'
+            echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
+            echo ''
+            echo '## CLI Binaries'
+            echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
+            echo ''
+            printf '%s\n' "$CHANGELOG_SECTION"
+            echo ''
+            echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
+          } > /tmp/release_notes.md
           gh release edit "${TAG}" --notes-file /tmp/release_notes.md
