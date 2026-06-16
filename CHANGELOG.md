@@ -9,13 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.6] - 2026-06-15
+## [0.2.7] - 2026-06-16
 
 ### Added
 
-- **Skip blank pages** — new `--skip-blank` / `-B` CLI flag and GUI checkbox. During write, pages that are all blank (0xFF) are skipped, reducing write time and flash wear
-- **GUI voltage overrides** — collapsible Advanced section in the Write operation panel with dropdowns for VPP, VCC, and VDD. Shows chip defaults from infoic.xml. Includes "Reset voltages" button
-- **Version badge** — `v0.2.6` shown in the app header next to the MINIPRO-RS title, reading from package.json at build time
 - **Chip ID verification** — automatic chip ID read and comparison before read/write/erase/verify. Fails with clear mismatch message if inserted chip doesn't match selected device. `--skip-device-id` / `-S` CLI flag and GUI "Chip ID check" checkbox to bypass
 - **OSCCAL calibration preservation** — for PIC microcontrollers with `osccal_save=1` (e.g., PIC12F509, PIC12F683), the factory RC oscillator calibration word is automatically read before erase and restored afterward, preventing clock accuracy loss
 - **Calibration page read** — CLI `-c calibration` now reads the chip's calibration bytes instead of erroring
@@ -27,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Chip ID byte-order normalization** — devices with multi-byte JEDEC IDs (e.g., SPI flash chips like PM25LV010) could fail chip ID verification because different programmer protocols pack bytes at different positions. Now the most significant non-zero byte is left-aligned before comparison, matching the database value regardless of protocol-specific packing
+
+## [0.2.6] - 2026-06-15
+
+### Added
+
+- **Skip blank pages** — new `--skip-blank` / `-B` CLI flag and GUI checkbox. During write, pages that are all blank (0xFF) are skipped, reducing write time and flash wear
+- **GUI voltage overrides** — collapsible Advanced section in the Write operation panel with dropdowns for VPP, VCC, and VDD. Shows chip defaults from infoic.xml. Includes "Reset voltages" button
+- **Version badge** — `v0.2.6` shown in the app header next to the MINIPRO-RS title, reading from package.json at build time
+
+### Fixed
 
 - **Voltage display in GUI** — DeviceSelector footer and Advanced dropdowns now show actual voltage values (e.g., 9.0V, 5.0V) instead of raw index codes (0–15)
 
