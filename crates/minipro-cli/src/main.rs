@@ -25,8 +25,8 @@ use minipro_core::{
     find_device, find_device_any, list_devices, list_devices_for_model,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
-        logic_ic_test, pin_contact_check, read_chip, read_fuses, spi_autodetect, verify_chip,
-        write_chip, write_fuses, FuseValue, SizeMismatch,
+        logic_ic_test, pin_contact_check, read_chip, read_chip_calibration, read_fuses,
+        spi_autodetect, verify_chip, write_chip, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -455,7 +455,21 @@ fn do_operations(
                 .with_context(|| format!("cannot write config file {:?}", path))?;
             eprintln!("Config saved to {:?}", path);
         } else if page == PageType::Calibration {
-            anyhow::bail!("calibration bytes are read-only and not yet supported");
+            let calib = read_chip_calibration(handle)?;
+            if calib.is_empty() {
+                anyhow::bail!("this device does not have chip calibration data");
+            }
+            std::fs::write(path, &calib)
+                .with_context(|| format!("cannot write calibration file {:?}", path))?;
+            eprintln!(
+                "Calibration bytes saved to {:?}: {}",
+                path,
+                calib
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
         } else {
             let pb = ProgressBar::new(0);
             pb.set_style(

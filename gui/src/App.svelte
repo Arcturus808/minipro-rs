@@ -57,6 +57,19 @@
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
 
+  // Auto-initialize config panel with database defaults when a device is selected
+  $effect(() => {
+    const dev = $selectedDevice;
+    if (dev?.config && dev.config.type === "Mcu") {
+      configData = {
+        cfg_fuses: dev.config.fuses.map((f) => ({ name: f.name, value: f.default_value })),
+        lock_bits: dev.config.locks.map((l) => ({ name: l.name, value: l.default_value })),
+        user_fuses: [],
+        calibration: [],
+      };
+    }
+  });
+
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
   // Custom start button label per operation
@@ -285,7 +298,6 @@
         sizeMismatch = "error";
         break;
       case "config":
-        configData = null;
         break;
       case "erase":
       case "blank_check":
@@ -404,9 +416,28 @@
         break;
       case "config":
         try {
-          configData = await readFuses(icspMode);
-          const total = configData.cfg_fuses.length + configData.lock_bits.length;
-          logs.info(`Config read — ${total} fuse/lock values, ${configData.user_fuses.length} user bytes, ${configData.calibration.length} calibration bytes`);
+          const read = await readFuses(icspMode);
+          if (configData) {
+            // Merge read values into existing configData (preserving field order)
+            const mergedCfg = configData.cfg_fuses.map((fv) => {
+              const rv = read.cfg_fuses.find((r) => r.name === fv.name);
+              return rv ? { ...fv, value: rv.value } : fv;
+            });
+            const mergedLock = configData.lock_bits.map((fv) => {
+              const rv = read.lock_bits.find((r) => r.name === fv.name);
+              return rv ? { ...fv, value: rv.value } : fv;
+            });
+            configData = {
+              cfg_fuses: mergedCfg,
+              lock_bits: mergedLock,
+              user_fuses: read.user_fuses,
+              calibration: read.calibration,
+            };
+          } else {
+            configData = read;
+          }
+          const total = read.cfg_fuses.length + read.lock_bits.length;
+          logs.info(`Config read — ${total} fuse/lock values, ${read.user_fuses.length} user bytes, ${read.calibration.length} calibration bytes`);
         } catch (e) {
           logs.error(`Config read failed: ${e}`);
         }
@@ -677,6 +708,11 @@
               </button>
             </div>
             <div class="space-y-2 mb-3">
+              {#if $selectedDevice && !$selectedDevice.has_chip_id && ($activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify")}
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
+                  <p class="text-xs text-amber-700-200 font-medium">Warning: This device does not support chip ID verification. Ensure the correct chip is inserted.</p>
+                </div>
+              {/if}
               <!-- Row 1: Format, Page, Size diff -->
               {#if $activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify"}
                 <div class="flex flex-wrap items-center gap-6 text-sm">
@@ -790,18 +826,16 @@
                 <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
               {/if}
               {#if $activeOperation === "config"}
-                {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu"}
+                {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu" && configData}
                   <div class="col-span-2 space-y-3">
-                    {#if !configData}
-                      <p class="text-sm opacity-60">Click the button below to read fuse and lock-bit values from the chip.</p>
-                    {:else}
-                      {#if $selectedDevice.invert_fuse_bits}
-                        <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">
-                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
-                        </div>
-                      {/if}
+                    {#if $selectedDevice.invert_fuse_bits}
+                      <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">
+                        <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
+                      </div>
+                    {/if}
+                    <div class="flex flex-wrap gap-3">
                       {#if configData.cfg_fuses.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
                           <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Fuses</span>
                           {#each configData.cfg_fuses as field, i}
                             <div class="flex items-center gap-3">
@@ -830,7 +864,7 @@
                         </div>
                       {/if}
                       {#if configData.lock_bits.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
                           <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Lock Bits</span>
                           {#each configData.lock_bits as field, i}
                             <div class="flex items-center gap-3">
@@ -857,25 +891,25 @@
                           {/each}
                         </div>
                       {/if}
-                      {#if configData.user_fuses.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
-                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">User/ID Fuses</span>
-                          <div class="text-xs font-mono opacity-70">{configData.user_fuses.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        </div>
-                      {/if}
-                      {#if configData.calibration.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
-                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Calibration Bytes</span>
-                          <div class="text-xs font-mono opacity-70">{configData.calibration.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
-                        </div>
-                      {/if}
-                      <button
-                        class="btn preset-filled-primary text-sm px-3 py-2 w-full font-semibold"
-                        onclick={writeAllFuses}
-                      >
-                        Write Config to Chip
-                      </button>
+                    </div>
+                    {#if configData.user_fuses.length > 0}
+                      <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                        <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">User/ID Fuses</span>
+                        <div class="text-xs font-mono opacity-70">{configData.user_fuses.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
+                      </div>
                     {/if}
+                    {#if configData.calibration.length > 0}
+                      <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                        <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Calibration Bytes</span>
+                        <div class="text-xs font-mono opacity-70">{configData.calibration.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}</div>
+                      </div>
+                    {/if}
+                    <button
+                      class="btn preset-filled-primary text-sm px-3 py-2 w-full font-semibold"
+                      onclick={writeAllFuses}
+                    >
+                      Write Config to Chip
+                    </button>
                   </div>
                 {:else}
                   <p class="text-sm opacity-50 col-span-2">No configuration data for this device.</p>

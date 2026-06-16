@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_chip_calibration, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -1311,6 +1311,10 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
                 let dev = handle.device().map_err(|e| e.to_string())?;
                 let fuse_len = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config { cfg.fuses.len() } else { 0 };
 
+                // Read chip calibration bytes (OSCCAL word for PIC devices)
+                let calibration = minipro_core::operations::read_chip_calibration(&mut handle)
+                    .map_err(|e| e.to_string())?;
+
                 Ok::<ConfigDataDto, String>(ConfigDataDto {
                     cfg_fuses: named.iter().take(fuse_len)
                         .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
@@ -1319,7 +1323,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
                         .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
                         .collect(),
                     user_fuses: vec![],  // TODO: TL866A user fuse read hangs firmware
-                    calibration: vec![], // TODO: TL866A calibration read hangs firmware
+                    calibration,
                 })
             })();
 

@@ -625,12 +625,81 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     Ok(())
 }
 
+/// Read the OSCCAL calibration word from the last location of code memory.
+///
+/// For PIC microcontrollers with `osccal_save == 1`, the factory RC oscillator
+/// calibration value is stored in the last word of program memory.
+fn read_osccal(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
+    use crate::device::ChipConfig;
+
+    let device = handle.device()?.clone();
+    let config = match device.config.as_ref() {
+        Some(ChipConfig::Mcu(fc)) => fc,
+        _ => return Ok(vec![]),
+    };
+    if config.osccal_save == 0 {
+        return Ok(vec![]);
+    }
+
+    let word_size = device.word_size();
+    let address = device.code_memory_size / word_size as u32;
+    let mut ds = DataSet {
+        data: vec![0u8; word_size],
+        address,
+        block_count: (word_size / 64) as u32,
+        page_type: 0x00,
+        init: true,
+        total_blocks: 1,
+    };
+    handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
+    Ok(ds.data)
+}
+
+/// Write the OSCCAL calibration word to the last location of code memory.
+fn write_osccal(handle: &mut MiniproHandle, data: &[u8]) -> Result<()> {
+    use crate::device::ChipConfig;
+
+    let device = handle.device()?.clone();
+    let config = match device.config.as_ref() {
+        Some(ChipConfig::Mcu(fc)) => fc,
+        _ => return Ok(()),
+    };
+    if config.osccal_save == 0 {
+        return Ok(());
+    }
+
+    let word_size = device.word_size();
+    if data.len() != word_size {
+        return Err(MiniproError::Protocol(format!(
+            "OSCCAL word size mismatch: expected {} bytes, got {}",
+            word_size,
+            data.len()
+        )));
+    }
+
+    let address = device.code_memory_size / word_size as u32;
+    let ds = DataSet {
+        data: data.to_vec(),
+        address,
+        block_count: (word_size / 64) as u32,
+        page_type: 0x00,
+        init: true,
+        total_blocks: 1,
+    };
+    handle.protocol.write_block(&handle.usb, &device, &ds)?;
+    Ok(())
+}
+
 /// Erase the chip.
 pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<()> {
     if check_device_id {
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+
+    // Save OSCCAL calibration word before erase
+    let osccal = read_osccal(handle)?;
+
     let num_fuses = device
         .config
         .as_ref()
@@ -641,24 +710,49 @@ pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<(
         .unwrap_or(0);
     handle
         .protocol
-        .erase(&handle.usb, &device, num_fuses, device.chip_type == 0x03)
+        .erase(&handle.usb, &device, num_fuses, device.chip_type == 0x03)?;
+
+    // Restore OSCCAL after erase
+    if !osccal.is_empty() {
+        write_osccal(handle, &osccal)?;
+    }
+
+    Ok(())
 }
 
 /// Read chip ID and compare against expected value.
+///
+/// Always attempts the ID read when the device claims ID support (`has_chip_id`).
+/// If the database has an expected value, compares against it. If the database has
+/// no expected value (`chip_id == 0`) but a non-zero/blank ID is read, the chip
+/// is present but of an unknown/wrong type — still report mismatch.
 pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
-    if device.chip_id == 0 || !device.flags.has_chip_id {
+    if !device.flags.has_chip_id {
         return Ok(());
     }
     let (_id_type, actual) = handle.protocol.get_chip_id(&handle.usb)?;
-    if actual == device.chip_id {
-        info!("Chip ID OK: {:#010x}", actual);
-    }
-    if actual != device.chip_id {
+    if device.chip_id == 0 {
+        // No expected ID in database, but the chip supports ID read.
+        // A non-zero/blank response means a chip is present; we can't verify
+        // it's the right one, so warn and let the caller decide.
+        if actual != 0 && actual != 0xFF {
+            return Err(MiniproError::ChipIdMismatch {
+                expected: 0,
+                actual,
+            });
+        }
+        info!(
+            "Chip ID read returned {:#010x}; database has no expected value for this device",
+            actual
+        );
+    } else if actual != device.chip_id {
         return Err(MiniproError::ChipIdMismatch {
             expected: device.chip_id,
             actual,
         });
+    } else {
+        info!("Chip ID OK: {:#010x}", actual);
     }
     Ok(())
 }
@@ -807,6 +901,15 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
         )?;
     }
     Ok(())
+}
+
+/// Read the chip's calibration bytes (OSCCAL word for PIC devices).
+///
+/// For devices with `osccal_save == 1`, returns the calibration word bytes
+/// from the last location of code memory. For other devices, returns an empty
+/// vector.
+pub fn read_chip_calibration(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
+    read_osccal(handle)
 }
 
 // ── Phase 4 operations ───────────────────────────────────────────────────────

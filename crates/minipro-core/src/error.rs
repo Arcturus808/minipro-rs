@@ -14,7 +14,7 @@ pub enum MiniproError {
     #[error("{0}")]
     DeviceNotFound(String),
 
-    #[error("Chip ID mismatch: expected {expected:#010x}, got {actual:#010x}")]
+    #[error("Chip ID mismatch: expected {expected:#010x} (from database), got {actual:#010x} (from chip)")]
     ChipIdMismatch { expected: u32, actual: u32 },
 
     #[error("Overcurrent detected at address {address:#010x}")]
