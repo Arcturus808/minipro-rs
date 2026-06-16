@@ -116,6 +116,10 @@ struct Cli {
     #[arg(short = 'v', long = "skip-verify", alias = "no-verify", action = ArgAction::SetTrue)]
     no_verify: bool,
 
+    /// Skip writing blank pages (pages that are all 0xFF)
+    #[arg(short = 'B', long = "skip-blank", action = ArgAction::SetTrue)]
+    skip_blank: bool,
+
     /// Disable write protection before operation
     #[arg(short = 'u', long = "protect-off", alias = "unprotect", action = ArgAction::SetTrue)]
     protect_off: bool,

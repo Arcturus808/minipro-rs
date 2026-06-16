@@ -14,6 +14,7 @@ export interface ProgressEvent {
 export interface OperationOptions {
   skip_erase: boolean;
   skip_verify: boolean;
+  skip_blank: boolean;
   icsp_mode: "zif" | "icsp" | "icsp_no_vcc";
   page: string;
   format: string;
@@ -50,6 +51,7 @@ function defaultOptions(): OperationOptions {
   return {
     skip_erase: false,
     skip_verify: false,
+    skip_blank: false,
     icsp_mode: "zif",
     page: "code",
     format: "auto",

@@ -39,6 +39,7 @@
   // Operation options
   let skipErase = $state(false);
   let skipVerify = $state(false);
+  let skipBlank = $state(false);
   let icspMode = $state("zif");
   let page = $state("code");
   let format = $state("auto");
@@ -240,6 +241,7 @@
     return {
       skip_erase: skipErase,
       skip_verify: skipVerify,
+      skip_blank: skipBlank,
       icsp_mode: icspMode,
       page,
       format,
@@ -695,6 +697,10 @@
                   <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
                     Skip verify
+                  </label>
+                  <label class="flex items-center gap-2 text-sm" title="Skip writing pages that are all blank (0xFF)">
+                    <input type="checkbox" class="checkbox" bind:checked={skipBlank} />
+                    Skip blank
                   </label>
                 </div>
               {:else if $activeOperation === "verify"}

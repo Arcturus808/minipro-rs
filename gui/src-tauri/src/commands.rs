@@ -141,6 +141,8 @@ pub struct OperationOptions {
     pub skip_erase: bool,
     #[serde(default)]
     pub skip_verify: bool,
+    #[serde(default)]
+    pub skip_blank: bool,
     #[serde(default = "default_icsp_mode")]
     pub icsp_mode: String,
     #[serde(default = "default_page")]
@@ -682,6 +684,7 @@ pub async fn do_write(
                 page,
                 &options_clone.format,
                 size_mismatch,
+                options_clone.skip_blank,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -784,6 +787,7 @@ pub async fn do_write_bytes(
                 bytes,
                 page,
                 size_mismatch,
+                options_clone.skip_blank,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",

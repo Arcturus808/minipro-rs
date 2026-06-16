@@ -203,6 +203,7 @@ pub fn write_chip(
     page: u8,
     format: &str,
     size_mismatch: SizeMismatch,
+    skip_blank: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
     let device = handle.device()?.clone();
@@ -249,10 +250,13 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     } else {
         1
     } as u32;
+    let blank = device.blank_value as u8;
     // Convert byte offset to word address when device uses 16-bit word
     // organisation for code memory (matches C write_page_ram address shift).
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
+    let mut has_written = false;
+    let mut skipped = 0usize;
     while offset < size {
         let block = write_size.min(size - offset);
         let address = if use_word_addr {
@@ -260,38 +264,50 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         } else {
             offset as u32
         };
-        let ds = DataSet {
-            data: buf[offset..offset + block].to_vec(),
-            address,
-            block_count: (block / 64) as u32,
-            page_type: page,
-            init: offset == 0,
-            total_blocks,
-        };
-        handle.protocol.write_block(&handle.usb, &device, &ds)?;
-        // The TL866A firmware writes the EEPROM asynchronously and uses the
-        // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
-        // NAND and eMMC handle their own per-block status internally (0x39
-        // commit in write_block); a zeroed 0x39 poll deselects them.
-        if device.chip_type != ChipType::Nand as u32 && device.chip_type != ChipType::Emmc as u32 {
-            let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
-            if ovc != 0 {
-                return Err(MiniproError::Overcurrent {
-                    address: wstatus.address,
-                });
+        let page_data = &buf[offset..offset + block];
+        let is_blank = page_data.iter().all(|&b| b == blank);
+        if skip_blank && is_blank {
+            skipped += block;
+        } else {
+            let ds = DataSet {
+                data: page_data.to_vec(),
+                address,
+                block_count: (block / 64) as u32,
+                page_type: page,
+                init: !has_written,
+                total_blocks,
+            };
+            handle.protocol.write_block(&handle.usb, &device, &ds)?;
+            // The TL866A firmware writes the EEPROM asynchronously and uses the
+            // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
+            // NAND and eMMC handle their own per-block status internally (0x39
+            // commit in write_block); a zeroed 0x39 deselects them.
+            if device.chip_type != ChipType::Nand as u32
+                && device.chip_type != ChipType::Emmc as u32
+            {
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+                if ovc != 0 {
+                    return Err(MiniproError::Overcurrent {
+                        address: wstatus.address,
+                    });
+                }
+                if wstatus.error != 0 {
+                    return Err(MiniproError::VerifyFailed {
+                        address: wstatus.address,
+                        expected: wstatus.c2 as u8,
+                        actual: wstatus.c1 as u8,
+                    });
+                }
             }
-            if wstatus.error != 0 {
-                return Err(MiniproError::VerifyFailed {
-                    address: wstatus.address,
-                    expected: wstatus.c2 as u8,
-                    actual: wstatus.c1 as u8,
-                });
-            }
+            has_written = true;
         }
         offset += block;
         if let Some(ref mut f) = progress {
             f(offset, size);
         }
+    }
+    if skipped > 0 {
+        info!("Skipped {} blank bytes", skipped);
     }
     let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
     Ok(OpStats { bytes: size, crc32 })
@@ -307,6 +323,7 @@ pub fn write_chip_bytes(
     mut buf: Vec<u8>,
     page: u8,
     size_mismatch: SizeMismatch,
+    skip_blank: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
     let device = handle.device()?.clone();
@@ -350,8 +367,11 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     } else {
         1
     } as u32;
+    let blank = device.blank_value as u8;
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
+    let mut has_written = false;
+    let mut skipped = 0usize;
     while offset < size {
         let block = write_size.min(size - offset);
         let address = if use_word_addr {
@@ -359,35 +379,47 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         } else {
             offset as u32
         };
-        let ds = DataSet {
-            data: buf[offset..offset + block].to_vec(),
-            address,
-            block_count: (block / 64) as u32,
-            page_type: page,
-            init: offset == 0,
-            total_blocks,
-        };
-        handle.protocol.write_block(&handle.usb, &device, &ds)?;
-        // NAND and eMMC handle their own per-block status internally.
-        if device.chip_type != ChipType::Nand as u32 && device.chip_type != ChipType::Emmc as u32 {
-            let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
-            if ovc != 0 {
-                return Err(MiniproError::Overcurrent {
-                    address: wstatus.address,
-                });
+        let page_data = &buf[offset..offset + block];
+        let is_blank = page_data.iter().all(|&b| b == blank);
+        if skip_blank && is_blank {
+            skipped += block;
+        } else {
+            let ds = DataSet {
+                data: page_data.to_vec(),
+                address,
+                block_count: (block / 64) as u32,
+                page_type: page,
+                init: !has_written,
+                total_blocks,
+            };
+            handle.protocol.write_block(&handle.usb, &device, &ds)?;
+            // NAND and eMMC handle their own per-block status internally.
+            if device.chip_type != ChipType::Nand as u32
+                && device.chip_type != ChipType::Emmc as u32
+            {
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+                if ovc != 0 {
+                    return Err(MiniproError::Overcurrent {
+                        address: wstatus.address,
+                    });
+                }
+                if wstatus.error != 0 {
+                    return Err(MiniproError::VerifyFailed {
+                        address: wstatus.address,
+                        expected: wstatus.c2 as u8,
+                        actual: wstatus.c1 as u8,
+                    });
+                }
             }
-            if wstatus.error != 0 {
-                return Err(MiniproError::VerifyFailed {
-                    address: wstatus.address,
-                    expected: wstatus.c2 as u8,
-                    actual: wstatus.c1 as u8,
-                });
-            }
+            has_written = true;
         }
         offset += block;
         if let Some(ref mut f) = progress {
             f(offset, size);
         }
+    }
+    if skipped > 0 {
+        info!("Skipped {} blank bytes", skipped);
     }
     let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
     Ok(OpStats { bytes: size, crc32 })

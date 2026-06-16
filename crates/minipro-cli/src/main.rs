@@ -387,6 +387,7 @@ fn do_operations(
                 proto_page,
                 &cli.format,
                 size_mismatch,
+                cli.skip_blank,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
