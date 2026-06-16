@@ -118,6 +118,10 @@ jobs:
             CHANGELOG_SECTION="Release ${TAG}"
           fi
           {
+            printf '%s\n' "$CHANGELOG_SECTION"
+            echo ''
+            echo '---'
+            echo ''
             echo '## Installers'
             echo ''
             echo '- **Linux**: `.deb` (Debian/Ubuntu)'
@@ -125,8 +129,6 @@ jobs:
             echo ''
             echo '## CLI Binaries'
             echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
-            echo ''
-            printf '%s\n' "$CHANGELOG_SECTION"
             echo ''
             echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
           } > /tmp/release_notes.md

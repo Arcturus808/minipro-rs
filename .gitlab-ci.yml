@@ -264,8 +264,12 @@ release:
       if [ -z "$CHANGELOG_SECTION" ]; then
         CHANGELOG_SECTION="Release ${CI_COMMIT_TAG}"
       fi
-      # Assemble release notes with installer guidance + changelog + reference
+      # Assemble release notes: changelog first, then guidance
       {
+        printf '%s\n' "$CHANGELOG_SECTION"
+        echo ''
+        echo '---'
+        echo ''
         echo '## Installers'
         echo ''
         echo '- **Linux**: `.deb` (Debian/Ubuntu)'
@@ -273,8 +277,6 @@ release:
         echo ''
         echo '## CLI Binaries'
         echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
-        echo ''
-        printf '%s\n' "$CHANGELOG_SECTION"
         echo ''
         echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
       } > /tmp/release_notes.md
