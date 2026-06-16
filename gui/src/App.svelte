@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import pkg from "../package.json";
   import { theme } from "./lib/stores/theme";
   import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
@@ -434,6 +435,7 @@
   >
     <div class="flex items-center gap-3">
       <h1 class="text-lg font-bold">MINIPRO-RS</h1>
+      <span class="text-xs opacity-60 font-mono">v{pkg.version}</span>
       <button
         class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
         onclick={async () => {
