@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-06-15
+
+### Added
+
+- **Skip blank pages** — new `--skip-blank` / `-B` CLI flag and GUI checkbox. During write, pages that are all blank (0xFF) are skipped, reducing write time and flash wear
+- **GUI voltage overrides** — collapsible Advanced section in the Write operation panel with dropdowns for VPP, VCC, and VDD. Shows chip defaults from infoic.xml. Includes "Reset voltages" button
+- **Version badge** — `v0.2.6` shown in the app header next to the MINIPRO-RS title, reading from package.json at build time
+
+### Fixed
+
+- **Voltage display in GUI** — DeviceSelector footer and Advanced dropdowns now show actual voltage values (e.g., 9.0V, 5.0V) instead of raw index codes (0–15)
+
+### Changed
+
+- **GUI installer filenames** — Tauri productName changed to `MINIPRO-RS-GUI` so installer files (`.msi`, `.exe`) clearly indicate they are GUI builds
+- **Write options layout** — reorganized into two rows: Format/Page/Size diff dropdowns on row 1, Skip erase/verify/blank checkboxes + Advanced toggle on row 2
+
 ## [0.2.5] - 2026-06-15
 
 ### Added
