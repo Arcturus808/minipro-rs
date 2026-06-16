@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Skip blank pages** — new `--skip-blank` / `-B` CLI flag and GUI checkbox. During write, pages that are all blank (0xFF) are skipped, reducing write time and flash wear
 - **GUI voltage overrides** — collapsible Advanced section in the Write operation panel with dropdowns for VPP, VCC, and VDD. Shows chip defaults from infoic.xml. Includes "Reset voltages" button
 - **Version badge** — `v0.2.6` shown in the app header next to the MINIPRO-RS title, reading from package.json at build time
+- **Chip ID verification** — automatic chip ID read and comparison before read/write/erase/verify. Fails with clear mismatch message if inserted chip doesn't match selected device. `--skip-device-id` / `-S` CLI flag and GUI "Chip ID check" checkbox to bypass
+- **OSCCAL calibration preservation** — for PIC microcontrollers with `osccal_save=1` (e.g., PIC12F509, PIC12F683), the factory RC oscillator calibration word is automatically read before erase and restored afterward, preventing clock accuracy loss
+- **Calibration page read** — CLI `-c calibration` now reads the chip's calibration bytes instead of erroring
+- **Persistent Config panel** — auto-populates fuse/lock fields from database defaults when a device is selected. Fields are editable immediately without requiring a chip read first. "Read Config from Chip" merges actual chip values into the existing panel state
+- **Side-by-side fuse/lock layout** — Fuses and Lock Bits cards are now displayed horizontally next to each other in the Config panel
+- **No-chip-ID warning** — yellow banner in Read/Write/Verify panels when the selected device does not support chip ID verification, reminding the user to verify the correct chip is inserted
 
 ### Fixed
 

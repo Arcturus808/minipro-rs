@@ -44,8 +44,10 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
-- **Fuse and lock-bit editor** (Config tab): read/write MCU configuration bytes with checkbox UI and direct hex input
-- **Chip ID comparison**: reads chip ID and compares against expected database value with clear match/mismatch messages
+- **Fuse and lock-bit editor** (Config tab): auto-populated from database defaults when a device is selected; read/write MCU configuration bytes with checkbox UI and direct hex input; fuses and lock bits displayed side-by-side
+- **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `--skip-device-id` CLI flag and GUI checkbox to bypass
+- **No-chip-ID warning**: yellow banner when the selected device lacks chip ID support, reminding user to verify correct chip insertion
+- **OSCCAL calibration preservation**: for PIC microcontrollers with `osccal_save=1`, the factory RC oscillator calibration word is automatically saved before erase and restored afterward, preventing clock accuracy loss
 - **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
 - **Lock-bit protection safeguards**: warns before read/write when lock bits indicate protection is active
 - Settings persistence (theme, operation defaults, last directory, hex font size, panel widths)
