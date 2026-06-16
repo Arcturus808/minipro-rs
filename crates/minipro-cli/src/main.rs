@@ -88,8 +88,8 @@ fn run() -> Result<()> {
         } else {
             list_devices(&db_paths, filter)?
         };
-        for name in &names {
-            println!("{name}");
+        for item in &names {
+            println!("{}", item.name);
         }
         println!("{} devices found.", names.len());
         return Ok(());

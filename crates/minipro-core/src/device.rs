@@ -338,6 +338,7 @@ pub struct Algorithm {
 #[derive(Debug, Clone)]
 pub struct Device {
     pub name: String,
+    pub manufacturer: String,
     pub chip_type: u32,
     pub protocol_id: u8,
     pub variant: u32,

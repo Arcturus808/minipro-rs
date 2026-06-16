@@ -22,8 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Persistent Config panel** — auto-populates fuse/lock fields from database defaults when a device is selected. Fields are editable immediately without requiring a chip read first. "Read Config from Chip" merges actual chip values into the existing panel state
 - **Side-by-side fuse/lock layout** — Fuses and Lock Bits cards are now displayed horizontally next to each other in the Config panel
 - **No-chip-ID warning** — yellow banner in Read/Write/Verify panels when the selected device does not support chip ID verification, reminding the user to verify the correct chip is inserted
+- **Manufacturer column** — each device search result now shows the manufacturer name (from `infoic.xml`) on the right side of the list, making it easier to distinguish between devices with similar part numbers from different vendors
 
 ### Fixed
+
+- **Chip ID byte-order normalization** — devices with multi-byte JEDEC IDs (e.g., SPI flash chips like PM25LV010) could fail chip ID verification because different programmer protocols pack bytes at different positions. Now the most significant non-zero byte is left-aligned before comparison, matching the database value regardless of protocol-specific packing
 
 - **Voltage display in GUI** — DeviceSelector footer and Advanced dropdowns now show actual voltage values (e.g., 9.0V, 5.0V) instead of raw index codes (0–15)
 

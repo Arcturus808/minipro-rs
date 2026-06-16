@@ -35,19 +35,52 @@ export const progressPercent = derived(progress, ($p) => {
 });
 
 // Listen for progress events from Rust
-let unlisten: (() => void) | null = null;
+let unlistenProgress: (() => void) | null = null;
 
 export async function initProgressListener() {
-  if (unlisten) return;
-  unlisten = await listen<ProgressEvent>("progress", (event) => {
+  if (unlistenProgress) return;
+  unlistenProgress = await listen<ProgressEvent>("progress", (event) => {
     progress.set(event.payload);
   });
 }
 
 export function stopProgressListener() {
-  if (unlisten) {
-    unlisten();
-    unlisten = null;
+  if (unlistenProgress) {
+    unlistenProgress();
+    unlistenProgress = null;
+  }
+}
+
+// Listen for log events from Rust backend
+interface LogEvent {
+  level: "info" | "warn" | "error";
+  message: string;
+}
+
+let unlistenLog: (() => void) | null = null;
+
+export async function initLogListener() {
+  if (unlistenLog) return;
+  unlistenLog = await listen<LogEvent>("app-log", (event) => {
+    const { level, message } = event.payload;
+    switch (level) {
+      case "error":
+        logs.error(message);
+        break;
+      case "warn":
+        logs.warn(message);
+        break;
+      default:
+        logs.info(message);
+        break;
+    }
+  });
+}
+
+export function stopLogListener() {
+  if (unlistenLog) {
+    unlistenLog();
+    unlistenLog = null;
   }
 }
 

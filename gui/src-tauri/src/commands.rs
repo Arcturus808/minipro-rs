@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, erase_chip, hardware_check, logic_ic_test, read_chip, read_chip_calibration, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, check_chip_id, erase_chip, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_chip_calibration, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,14 @@ fn handle_usb_error(state: &AppState, err: &str) {
         state.clear_programmer();
         log::warn!("USB error detected, clearing cached programmer state: {}", err);
     }
+}
+
+/// Emit a log message to the frontend terminal.
+fn emit_log(window: &Window, level: &str, message: &str) {
+    let _ = window.emit("app-log", serde_json::json!({
+        "level": level,
+        "message": message,
+    }));
 }
 
 // ── Data transfer objects ───────────────────────────────────────────────────
@@ -83,6 +91,7 @@ pub enum ChipConfigDto {
 #[derive(Serialize)]
 pub struct DeviceInfoDto {
     name: String,
+    manufacturer: String,
     chip_type: String,
     pin_count: u8,
     package_type: String,
@@ -360,15 +369,25 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
     Err(format!("No programmer detected after 5 reconnect attempts. Last error: {}", last_err))
 }
 
+#[derive(Serialize, Clone)]
+pub struct DeviceSearchResultDto {
+    name: String,
+    manufacturer: String,
+}
+
 /// Search devices by optional query string.
 #[tauri::command]
-pub async fn search_devices(query: String, state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
+pub async fn search_devices(query: String, state: State<'_, Arc<AppState>>) -> Result<Vec<DeviceSearchResultDto>, String> {
     let filter = query.trim().to_ascii_lowercase();
     if filter.is_empty() {
         return Ok(vec![]);
     }
     // Use pre-loaded device names (loaded once at startup) for instant search
-    state.search_device_names(&filter)
+    let items = state.search_device_names(&filter)?;
+    Ok(items.into_iter().map(|item| DeviceSearchResultDto {
+        name: item.name,
+        manufacturer: item.manufacturer,
+    }).collect())
 }
 
 /// Get detailed info for a single device (no programmer required).
@@ -470,12 +489,24 @@ pub async fn do_read(
             handle.icsp = options_clone.icsp_mode != "zif";
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
             let stats = read_chip(
                 &mut handle,
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
-                options_clone.check_device_id,
+                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -727,13 +758,23 @@ pub async fn do_write(
 
         let result = (|| {
             handle.icsp = options_clone.icsp_mode != "zif";
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
             if !options_clone.skip_erase {
-                // Must begin transaction before erase_chip, just like do_erase does
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                erase_chip(&mut handle, options_clone.check_device_id).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
-            } else {
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
             }
 
@@ -744,7 +785,7 @@ pub async fn do_write(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
-                options_clone.check_device_id,
+                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -765,7 +806,7 @@ pub async fn do_write(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
-                    options_clone.check_device_id,
+                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -836,12 +877,23 @@ pub async fn do_write_bytes(
 
         let result = (|| {
             handle.icsp = options_clone.icsp_mode != "zif";
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
             if !options_clone.skip_erase {
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                erase_chip(&mut handle, options_clone.check_device_id).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
-            } else {
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
             }
 
@@ -852,7 +904,7 @@ pub async fn do_write_bytes(
                 page,
                 size_mismatch,
                 options_clone.skip_blank,
-                options_clone.check_device_id,
+                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -872,7 +924,7 @@ pub async fn do_write_bytes(
                     &mut handle,
                     verify_bytes,
                     page,
-                    options_clone.check_device_id,
+                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -935,12 +987,24 @@ pub async fn do_verify(
             handle.icsp = options_clone.icsp_mode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
             verify_chip(
                 &mut handle,
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
-                options_clone.check_device_id,
+                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -977,13 +1041,14 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(icspMode: String, checkDeviceId: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(icspMode: String, checkDeviceId: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
@@ -991,7 +1056,20 @@ pub async fn do_erase(icspMode: String, checkDeviceId: bool, state: State<'_, Ar
         let result = (|| {
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
-            erase_chip(&mut handle, checkDeviceId).map_err(|e| e.to_string())?;
+
+            if checkDeviceId {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
+            erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
         })();
 
@@ -1110,9 +1188,12 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             let masked_expected = expected & mask;
             let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
             let expected_str = format!("0x{:0width$x}", masked_expected, width = (bytes * 2) as usize);
+            // Use normalized comparison to handle byte-position differences across protocols
+            let norm_id = normalize_chip_id(chip_id);
+            let norm_expected = normalize_chip_id(expected);
             // For variants, treat as a match so we don't show a generic mismatch error,
             // but the frontend will show a contextual message instead.
-            let is_match = expected == 0 || masked_id == masked_expected || is_variant;
+            let is_match = expected == 0 || norm_id == norm_expected || is_variant;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match, is_variant, base_name })
         })();
 
@@ -1601,6 +1682,7 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
 
     DeviceInfoDto {
         name: dev.name.clone(),
+        manufacturer: dev.manufacturer.clone(),
         chip_type: chip_type_str,
         pin_count: dev.package_details.pin_count,
         package_type: package_type_name(&dev.package_details),

@@ -1,7 +1,7 @@
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Mutex};
 
 use minipro_core::{
-    database::{list_devices, DatabasePaths},
+    database::{list_devices, DatabasePaths, DeviceListItem},
     device::{Device, ProgrammerInfo},
     MiniproHandle,
 };
@@ -18,8 +18,8 @@ pub struct AppState {
     pub selected_device: Mutex<Option<Arc<Device>>>,
     /// Guards against concurrent operations.
     pub is_running: AtomicBool,
-    /// Pre-loaded list of all device names (loaded once at startup).
-    pub all_device_names: Mutex<Vec<String>>,
+    /// Pre-loaded list of all device names + manufacturers (loaded once at startup).
+    pub all_device_names: Mutex<Vec<DeviceListItem>>,
 }
 
 impl Default for AppState {
@@ -96,20 +96,20 @@ impl AppState {
     pub fn load_device_names(&self) -> Result<(), String> {
         let guard = self.db_paths.lock().map_err(|e| e.to_string())?;
         let db = guard.as_ref().ok_or("Database not loaded")?;
-        let names = list_devices(db, None).map_err(|e| e.to_string())?;
+        let items = list_devices(db, None).map_err(|e| e.to_string())?;
         drop(guard);
         let mut guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
-        *guard = names;
+        *guard = items;
         Ok(())
     }
 
     /// Search the pre-loaded device names by substring.
-    pub fn search_device_names(&self, query: &str) -> Result<Vec<String>, String> {
+    pub fn search_device_names(&self, query: &str) -> Result<Vec<DeviceListItem>, String> {
         let guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
         let filter = query.to_ascii_lowercase();
-        let mut results: Vec<String> = guard
+        let mut results: Vec<DeviceListItem> = guard
             .iter()
-            .filter(|name| name.to_ascii_lowercase().contains(&filter))
+            .filter(|item| item.name.to_ascii_lowercase().contains(&filter))
             .cloned()
             .collect();
         results.truncate(200);

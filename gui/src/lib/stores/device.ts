@@ -23,6 +23,7 @@ export interface ChipConfig {
 
 export interface DeviceInfo {
   name: string;
+  manufacturer: string;
   chip_type: string;
   pin_count: number;
   package_type: string;

@@ -168,16 +168,23 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
     )))
 }
 
+/// A lightweight device entry for list/search views.
+#[derive(Debug, Clone)]
+pub struct DeviceListItem {
+    pub name: String,
+    pub manufacturer: String,
+}
+
 /// List all device names matching an optional filter string.
 ///
 /// Results are deduplicated — devices that appear in multiple database
 /// sections (e.g. both INFOIC2PLUS and INFOICT76) are listed only once.
-pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<String>> {
-    let mut names = Vec::new();
+pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<DeviceListItem>> {
+    let mut items = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    collect_names(&paths.logicic, filter, &mut names, &mut seen)?;
-    collect_names(&paths.infoic, filter, &mut names, &mut seen)?;
-    Ok(names)
+    collect_names(&paths.logicic, filter, &mut items, &mut seen)?;
+    collect_names(&paths.infoic, filter, &mut items, &mut seen)?;
+    Ok(items)
 }
 
 /// List device names compatible with a specific programmer model.
@@ -188,12 +195,12 @@ pub fn list_devices_for_model(
     paths: &DatabasePaths,
     filter: Option<&str>,
     model: ProgrammerModel,
-) -> Result<Vec<String>> {
-    let mut names = Vec::new();
+) -> Result<Vec<DeviceListItem>> {
+    let mut items = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    collect_names(&paths.logicic, filter, &mut names, &mut seen)?;
-    collect_names_for_model(&paths.infoic, filter, model, &mut names, &mut seen)?;
-    Ok(names)
+    collect_names(&paths.logicic, filter, &mut items, &mut seen)?;
+    collect_names_for_model(&paths.infoic, filter, model, &mut items, &mut seen)?;
+    Ok(items)
 }
 
 /// Find a device by name, trying all programmer models.
@@ -358,25 +365,37 @@ fn search_file(
 fn collect_names(
     path: &Path,
     filter: Option<&str>,
-    out: &mut Vec<String>,
+    out: &mut Vec<DeviceListItem>,
     seen: &mut std::collections::HashSet<String>,
 ) -> Result<()> {
     let xml = read_file(path)?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
+    let mut current_manufacturer = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) if e.name().as_ref() == b"ic" => {
-                if let Some(raw_name) = get_attr_str(e, b"name") {
-                    for part in raw_name.split(',') {
-                        let part = part.trim();
-                        if filter.is_none_or(|f| {
-                            part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
-                        }) && seen.insert(part.to_ascii_lowercase())
-                        {
-                            out.push(part.to_string());
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                let tag = name.as_ref();
+                if tag == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
+                    continue;
+                }
+                if tag == b"ic" {
+                    if let Some(raw_name) = get_attr_str(e, b"name") {
+                        for part in raw_name.split(',') {
+                            let part = part.trim();
+                            if filter.is_none_or(|f| {
+                                part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
+                            }) && seen.insert(part.to_ascii_lowercase())
+                            {
+                                out.push(DeviceListItem {
+                                    name: part.to_string(),
+                                    manufacturer: current_manufacturer.to_string(),
+                                });
+                            }
                         }
                     }
                 }
@@ -395,7 +414,7 @@ fn collect_names_for_model(
     path: &Path,
     filter: Option<&str>,
     model: ProgrammerModel,
-    out: &mut Vec<String>,
+    out: &mut Vec<DeviceListItem>,
     seen: &mut std::collections::HashSet<String>,
 ) -> Result<()> {
     let xml = read_file(path)?;
@@ -411,6 +430,7 @@ fn collect_names_for_model(
 
     let mut in_correct_db = false;
     let mut skip_section = false;
+    let mut current_manufacturer = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -421,6 +441,11 @@ fn collect_names_for_model(
                     if let Some(db_type) = get_attr_str(e, b"type") {
                         in_correct_db = db_type.eq_ignore_ascii_case(expected_db);
                     }
+                    continue;
+                }
+
+                if tag.as_ref() == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
                     continue;
                 }
 
@@ -450,7 +475,10 @@ fn collect_names_for_model(
                                 part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
                             }) && seen.insert(part.to_ascii_lowercase())
                             {
-                                out.push(part.to_string());
+                                out.push(DeviceListItem {
+                                    name: part.to_string(),
+                                    manufacturer: current_manufacturer.to_string(),
+                                });
                             }
                         }
                     }
@@ -835,6 +863,7 @@ fn parse_ic(
     let mut in_correct_db = is_logic; // logic.xml has only one db type
     let mut skip_section = false;
     let mut result: Option<Device> = None;
+    let mut current_manufacturer = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -846,6 +875,11 @@ fn parse_ic(
                         in_correct_db = db_type.eq_ignore_ascii_case(expected_db)
                             || (is_logic && db_type.eq_ignore_ascii_case(DB_ATTR_LOGIC));
                     }
+                    continue;
+                }
+
+                if tag.as_ref() == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
                     continue;
                 }
 
@@ -876,7 +910,7 @@ fn parse_ic(
                             continue;
                         }
 
-                        if let Some(dev) = build_device(e, matched, model, is_logic, configs)? {
+                        if let Some(dev) = build_device(e, matched, &current_manufacturer, model, is_logic, configs)? {
                             result = Some(dev);
                             break;
                         }
@@ -923,12 +957,13 @@ fn device_matches_model(e: &BytesStart, model: ProgrammerModel) -> bool {
 fn build_device(
     e: &BytesStart,
     name: &str,
+    manufacturer: &str,
     model: ProgrammerModel,
     is_logic: bool,
     configs: &HashMap<String, ChipConfig>,
 ) -> Result<Option<Device>> {
     if is_logic {
-        return build_logic_device(e, name);
+        return build_logic_device(e, name, manufacturer);
     }
 
     let chip_type = get_attr_u32(e, b"type").unwrap_or(0);
@@ -1023,6 +1058,7 @@ fn build_device(
 
     Ok(Some(Device {
         name: name.to_string(),
+        manufacturer: manufacturer.to_string(),
         chip_type,
         protocol_id,
         variant,
@@ -1055,7 +1091,7 @@ fn build_device(
     }))
 }
 
-fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
+fn build_logic_device(e: &BytesStart, name: &str, manufacturer: &str) -> Result<Option<Device>> {
     let voltage_str = match get_attr_str(e, b"voltage") {
         Some(v) => v,
         None => return Ok(None),
@@ -1078,6 +1114,7 @@ fn build_logic_device(e: &BytesStart, name: &str) -> Result<Option<Device>> {
 
     let mut device = Device {
         name: name.to_string(),
+        manufacturer: manufacturer.to_string(),
         chip_type: 0x05, // MP_LOGIC
         protocol_id: 0,
         variant: 0,

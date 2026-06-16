@@ -5,8 +5,13 @@
   import { selectedDevice } from "../stores/device";
   import ComboSearch from "./ComboSearch.svelte";
 
+  interface SearchResult {
+    name: string;
+    manufacturer: string;
+  }
+
   let searchQuery = $state("");
-  let results = $state<string[]>([]);
+  let results = $state<SearchResult[]>([]);
   let page = $state(0);
   let selectedName = $state<string | null>(null);
   let selectedInfo = $state<any>(null);
@@ -20,7 +25,7 @@
     page = 0;
     selectedName = null;
     selectedInfo = null;
-    results = await invoke<string[]>("search_devices", { query: trimmed });
+    results = await invoke<SearchResult[]>("search_devices", { query: trimmed });
   }
 
   function goPrev() { if (page > 0) page--; }
@@ -101,13 +106,16 @@
         </div>
       </div>
       <ul class="divide-y divide-surface-200-800">
-        {#each displayItems as name}
+        {#each displayItems as item}
           <li>
             <button
-              class={`w-full text-left text-sm py-2 px-3 transition-colors ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500 font-semibold' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
-              onclick={() => onSelect(name)}
+              class={`w-full text-left py-2 px-3 transition-colors ${selectedName === item.name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
+              onclick={() => onSelect(item.name)}
             >
-              {name}
+              <div class="flex items-center justify-between gap-2">
+                <span class={`text-sm ${selectedName === item.name ? 'font-semibold' : ''}`}>{item.name}</span>
+                <span class="text-xs opacity-60 truncate max-w-[120px]">{item.manufacturer}</span>
+              </div>
             </button>
           </li>
         {/each}
@@ -132,7 +140,7 @@
       <div class="flex items-center justify-between">
         <span class="font-semibold text-sm">{selectedInfo.name}</span>
       </div>
-      <div class="text-xs">{selectedInfo.chip_type} · {selectedInfo.package_type} · {selectedInfo.pin_count} pins</div>
+      <div class="text-xs">{selectedInfo.manufacturer} · {selectedInfo.chip_type} · {selectedInfo.package_type} · {selectedInfo.pin_count} pins</div>
       <div class="text-xs">
         VPP: {selectedInfo.voltages.vpp}V · VDD: {selectedInfo.voltages.vdd}V · VCC: {selectedInfo.voltages.vcc}V
       </div>

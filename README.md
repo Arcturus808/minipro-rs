@@ -31,7 +31,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 ### Features
 
-- Device search & selection with **persistent search history**, favorites, and starred entries (ComboSearch)
+- Device search & selection with **persistent search history**, favorites, starred entries (ComboSearch), and **manufacturer name** shown alongside each result
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
 - Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config

@@ -720,6 +720,22 @@ pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<(
     Ok(())
 }
 
+/// Left-align a chip ID so the most-significant non-zero byte sits at bit 31.
+/// This allows comparison across programmer models that pack bytes differently.
+pub fn normalize_chip_id(id: u32) -> u32 {
+    if id == 0 {
+        return 0;
+    }
+    let masks = [0xff_u32, 0xff00, 0xff_0000, 0xff00_0000];
+    for (i, &m) in masks.iter().enumerate().rev() {
+        if id & m != 0 {
+            let shift = (3 - i) * 8;
+            return id << shift;
+        }
+    }
+    id << 24
+}
+
 /// Read chip ID and compare against expected value.
 ///
 /// Always attempts the ID read when the device claims ID support (`has_chip_id`).
@@ -732,11 +748,13 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
         return Ok(());
     }
     let (_id_type, actual) = handle.protocol.get_chip_id(&handle.usb)?;
+    let expected_norm = normalize_chip_id(device.chip_id);
+    let actual_norm = normalize_chip_id(actual);
     if device.chip_id == 0 {
         // No expected ID in database, but the chip supports ID read.
         // A non-zero/blank response means a chip is present; we can't verify
         // it's the right one, so warn and let the caller decide.
-        if actual != 0 && actual != 0xFF {
+        if actual_norm != 0 {
             return Err(MiniproError::ChipIdMismatch {
                 expected: 0,
                 actual,
@@ -746,7 +764,7 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
             "Chip ID read returned {:#010x}; database has no expected value for this device",
             actual
         );
-    } else if actual != device.chip_id {
+    } else if actual_norm != expected_norm {
         return Err(MiniproError::ChipIdMismatch {
             expected: device.chip_id,
             actual,
