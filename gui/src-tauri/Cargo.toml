@@ -1,6 +1,6 @@
 [package]
 name = "minipro-gui"
-version = "0.2.6"
+version = "0.2.7"
 description = "GUI front-end for minipro-rs chip programmer"
 authors = ["minipro-rs contributors"]
 license = "GPL-3.0-or-later"
