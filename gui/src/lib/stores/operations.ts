@@ -15,6 +15,7 @@ export interface OperationOptions {
   skip_erase: boolean;
   skip_verify: boolean;
   skip_blank: boolean;
+  check_device_id: boolean;
   vpp: string | null;
   vcc: string | null;
   vdd: string | null;
@@ -55,6 +56,7 @@ function defaultOptions(): OperationOptions {
     skip_erase: false,
     skip_verify: false,
     skip_blank: false,
+    check_device_id: true,
     icsp_mode: "zif",
     page: "code",
     format: "auto",
@@ -191,8 +193,8 @@ export async function doVerify(path: string, options: OperationOptions = default
   });
 }
 
-export async function doErase(icspMode: string = "zif") {
-  await runOp("Erase", () => invoke("do_erase", { icspMode }));
+export async function doErase(options: OperationOptions = defaultOptions()) {
+  await runOp("Erase", () => invoke("do_erase", { icspMode: options.icsp_mode, checkDeviceId: options.check_device_id }));
 }
 
 export interface BlankCheckResult {

@@ -324,7 +324,7 @@ fn do_operations(
                 .unwrap_or_else(|_| ProgressStyle::default_spinner()),
         );
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
-        erase_chip(handle)?;
+        erase_chip(handle, !cli.skip_device_id)?;
         pb.finish_with_message("Erasing... done.");
     }
 
@@ -354,7 +354,7 @@ fn do_operations(
                         .unwrap_or_else(|_| ProgressStyle::default_spinner()),
                 );
                 pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                erase_chip(handle)?;
+                erase_chip(handle, !cli.skip_device_id)?;
                 pb.finish_with_message("Erasing... done.");
                 // The firmware requires a transaction reset after erase before
                 // writing (same as the C reference: end_transaction then
@@ -388,6 +388,7 @@ fn do_operations(
                 &cli.format,
                 size_mismatch,
                 cli.skip_blank,
+                !cli.skip_device_id,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -430,6 +431,7 @@ fn do_operations(
                     path,
                     proto_page,
                     &cli.format,
+                    !cli.skip_device_id,
                     Some(&mut |done, total| {
                         pb.set_length(total as u64);
                         pb.set_position(done as u64);
@@ -467,6 +469,7 @@ fn do_operations(
                 path,
                 proto_page,
                 &cli.format,
+                !cli.skip_device_id,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -507,6 +510,7 @@ fn do_operations(
             path,
             proto_page,
             &cli.format,
+            !cli.skip_device_id,
             Some(&mut |done, total| {
                 pb.set_length(total as u64);
                 pb.set_position(done as u64);

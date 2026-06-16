@@ -41,6 +41,7 @@
   let skipErase = $state(false);
   let skipVerify = $state(false);
   let skipBlank = $state(false);
+  let checkDeviceId = $state(true);
   let showAdvanced = $state(false);
   let overrideVpp = $state("");
   let overrideVcc = $state("");
@@ -250,6 +251,7 @@
       skip_erase: skipErase,
       skip_verify: skipVerify,
       skip_blank: skipBlank,
+      check_device_id: checkDeviceId,
       vpp: overrideVpp || null,
       vcc: overrideVcc || null,
       vdd: overrideVdd || null,
@@ -263,6 +265,7 @@
   function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | "config") {
     activeOperation.set(op);
     showAdvanced = false;
+    checkDeviceId = true;
     switch (op) {
       case "read":
         page = "code";
@@ -364,7 +367,7 @@
         break;
       }
       case "erase":
-        await doErase(icspMode);
+        await doErase(getOptions());
         logs.info("Chip erased successfully");
         break;
       case "blank_check": {
@@ -705,6 +708,10 @@
                       </select>
                     </div>
                   {/if}
+                  <label class="flex items-center gap-2" title="Verify chip ID before operation">
+                    <input type="checkbox" class="checkbox" bind:checked={checkDeviceId} />
+                    Chip ID check
+                  </label>
                 </div>
               {/if}
               <!-- Row 2: Checkboxes + Advanced toggle -->
@@ -771,7 +778,15 @@
                   </div>
                 {/if}
               {/if}
-              {#if $activeOperation === "erase" || $activeOperation === "blank_check" || $activeOperation === "chip_id"}
+              {#if $activeOperation === "erase"}
+                <div class="flex flex-wrap items-center gap-6 text-sm">
+                  <label class="flex items-center gap-2" title="Verify chip ID before operation">
+                    <input type="checkbox" class="checkbox" bind:checked={checkDeviceId} />
+                    Chip ID check
+                  </label>
+                </div>
+              {/if}
+              {#if $activeOperation === "blank_check" || $activeOperation === "chip_id"}
                 <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
               {/if}
               {#if $activeOperation === "config"}

@@ -151,6 +151,8 @@ pub struct OperationOptions {
     pub skip_verify: bool,
     #[serde(default)]
     pub skip_blank: bool,
+    #[serde(default = "default_true")]
+    pub check_device_id: bool,
     #[serde(default)]
     pub vpp: Option<String>,
     #[serde(default)]
@@ -171,6 +173,7 @@ fn default_icsp_mode() -> String { "zif".into() }
 fn default_page() -> String { "code".into() }
 fn default_format() -> String { "auto".into() }
 fn default_size_mismatch() -> String { "error".into() }
+fn default_true() -> bool { true }
 
 /// Apply voltage overrides from GUI options to a device.
 fn apply_voltage_overrides(device: &mut Device, options: &OperationOptions) -> Result<(), String> {
@@ -472,6 +475,7 @@ pub async fn do_read(
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
+                options_clone.check_device_id,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -561,6 +565,7 @@ pub async fn read_chip_to_bytes(
                 &temp_path,
                 page,
                 "bin", // always read raw binary for the hex viewer
+                options_clone.check_device_id,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -725,7 +730,7 @@ pub async fn do_write(
             if !options_clone.skip_erase {
                 // Must begin transaction before erase_chip, just like do_erase does
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                erase_chip(&mut handle).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle, options_clone.check_device_id).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
             } else {
@@ -739,6 +744,7 @@ pub async fn do_write(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
+                options_clone.check_device_id,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -759,6 +765,7 @@ pub async fn do_write(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
+                    options_clone.check_device_id,
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -831,7 +838,7 @@ pub async fn do_write_bytes(
             handle.icsp = options_clone.icsp_mode != "zif";
             if !options_clone.skip_erase {
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-                erase_chip(&mut handle).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle, options_clone.check_device_id).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
             } else {
@@ -845,6 +852,7 @@ pub async fn do_write_bytes(
                 page,
                 size_mismatch,
                 options_clone.skip_blank,
+                options_clone.check_device_id,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -864,6 +872,7 @@ pub async fn do_write_bytes(
                     &mut handle,
                     verify_bytes,
                     page,
+                    options_clone.check_device_id,
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -931,6 +940,7 @@ pub async fn do_verify(
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
+                options_clone.check_device_id,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -967,7 +977,7 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(icspMode: String, checkDeviceId: bool, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -981,7 +991,7 @@ pub async fn do_erase(icspMode: String, state: State<'_, Arc<AppState>>) -> Resu
         let result = (|| {
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
-            erase_chip(&mut handle).map_err(|e| e.to_string())?;
+            erase_chip(&mut handle, checkDeviceId).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
         })();
 

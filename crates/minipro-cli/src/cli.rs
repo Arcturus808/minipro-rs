@@ -120,6 +120,10 @@ struct Cli {
     #[arg(short = 'B', long = "skip-blank", action = ArgAction::SetTrue)]
     skip_blank: bool,
 
+    /// Skip chip ID verification before read/write/erase
+    #[arg(long = "skip-device-id", action = ArgAction::SetTrue)]
+    skip_device_id: bool,
+
     /// Disable write protection before operation
     #[arg(short = 'u', long = "protect-off", alias = "unprotect", action = ArgAction::SetTrue)]
     protect_off: bool,

@@ -135,8 +135,12 @@ pub fn read_chip(
     path: &Path,
     page: u8,
     format: &str,
+    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -197,6 +201,7 @@ pub fn read_chip(
 ///
 /// `progress` is an optional callback invoked after each block with
 /// `(bytes_done, total_bytes)`. Pass `None` to disable.
+#[allow(clippy::too_many_arguments)]
 pub fn write_chip(
     handle: &mut MiniproHandle,
     path: &Path,
@@ -204,8 +209,12 @@ pub fn write_chip(
     format: &str,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
+    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -318,14 +327,19 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
 /// Same as [`write_chip`] but takes an in-memory buffer instead of a file path.
 /// The buffer is padded with the device's blank value or truncated to match the
 /// selected memory page size.
+#[allow(clippy::too_many_arguments)]
 pub fn write_chip_bytes(
     handle: &mut MiniproHandle,
     mut buf: Vec<u8>,
     page: u8,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
+    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -437,8 +451,12 @@ pub fn verify_chip(
     path: &Path,
     page: u8,
     format: &str,
+    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -505,8 +523,12 @@ pub fn verify_chip_bytes(
     handle: &mut MiniproHandle,
     mut expected: Vec<u8>,
     page: u8,
+    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let size = match page {
         0x00 => device.code_memory_size as usize,
@@ -604,7 +626,10 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
 }
 
 /// Erase the chip.
-pub fn erase_chip(handle: &mut MiniproHandle) -> Result<()> {
+pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<()> {
+    if check_device_id {
+        check_chip_id(handle)?;
+    }
     let device = handle.device()?.clone();
     let num_fuses = device
         .config
