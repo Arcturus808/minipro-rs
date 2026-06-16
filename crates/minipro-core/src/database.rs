@@ -910,7 +910,14 @@ fn parse_ic(
                             continue;
                         }
 
-                        if let Some(dev) = build_device(e, matched, &current_manufacturer, model, is_logic, configs)? {
+                        if let Some(dev) = build_device(
+                            e,
+                            matched,
+                            &current_manufacturer,
+                            model,
+                            is_logic,
+                            configs,
+                        )? {
                             result = Some(dev);
                             break;
                         }
