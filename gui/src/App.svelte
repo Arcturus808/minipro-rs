@@ -40,10 +40,17 @@
   let skipErase = $state(false);
   let skipVerify = $state(false);
   let skipBlank = $state(false);
+  let showAdvanced = $state(false);
+  let overrideVpp = $state("");
+  let overrideVcc = $state("");
+  let overrideVdd = $state("");
   let icspMode = $state("zif");
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
+
+  const VPP_OPTIONS = ["9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5", "15.0", "16.0", "17.0", "18.0", "21.0"];
+  const VCC_OPTIONS = ["3.3", "4.0", "4.5", "5.0", "6.0", "6.3", "6.5", "7.0"];
 
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
@@ -242,6 +249,9 @@
       skip_erase: skipErase,
       skip_verify: skipVerify,
       skip_blank: skipBlank,
+      vpp: overrideVpp || null,
+      vcc: overrideVcc || null,
+      vdd: overrideVdd || null,
       icsp_mode: icspMode,
       page,
       format,
@@ -251,6 +261,7 @@
 
   function selectOp(op: "read" | "write" | "verify" | "erase" | "blank_check" | "chip_id" | "logic_test" | "config") {
     activeOperation.set(op);
+    showAdvanced = false;
     switch (op) {
       case "read":
         page = "code";
@@ -261,6 +272,7 @@
         format = "auto";
         skipErase = false;
         skipVerify = false;
+        skipBlank = false;
         sizeMismatch = "error";
         break;
       case "verify":
@@ -659,59 +671,102 @@
                 Reset defaults
               </button>
             </div>
-            <div class="grid grid-cols-2 gap-3 mb-3">
+            <div class="space-y-2 mb-3">
+              <!-- Row 1: Format, Page, Size diff -->
               {#if $activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify"}
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="w-16 opacity-60">Page:</span>
-                  <select class="select text-sm flex-1" bind:value={page}>
-                    <option value="code">Code</option>
-                    <option value="data">Data</option>
-                    <option value="user">User</option>
-                  </select>
-                </div>
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="w-16 opacity-60">Format:</span>
-                  <select class="select text-sm flex-1" bind:value={format}>
-                    <option value="auto">Auto</option>
-                    <option value="bin">Binary</option>
-                    <option value="ihex">Intel HEX</option>
-                    <option value="srec">SREC</option>
-                    <option value="jedec">JEDEC</option>
-                  </select>
+                <div class="flex flex-wrap items-center gap-3 text-sm">
+                  <div class="flex items-center gap-2">
+                    <span class="opacity-60">Format:</span>
+                    <select class="select text-sm" bind:value={format}>
+                      <option value="auto">Auto</option>
+                      <option value="bin">Binary</option>
+                      <option value="ihex">Intel HEX</option>
+                      <option value="srec">SREC</option>
+                      <option value="jedec">JEDEC</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="opacity-60">Page:</span>
+                    <select class="select text-sm" bind:value={page}>
+                      <option value="code">Code</option>
+                      <option value="data">Data</option>
+                      <option value="user">User</option>
+                    </select>
+                  </div>
+                  {#if $activeOperation === "write" || $activeOperation === "verify"}
+                    <div class="flex items-center gap-2">
+                      <span class="opacity-60">Size diff:</span>
+                      <select class="select text-sm" bind:value={sizeMismatch}>
+                        <option value="error">Error</option>
+                        <option value="warn">Warn</option>
+                        <option value="ignore">Ignore</option>
+                      </select>
+                    </div>
+                  {/if}
                 </div>
               {/if}
+              <!-- Row 2: Advanced toggle + checkboxes -->
               {#if $activeOperation === "write"}
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="w-16 opacity-60">Size diff:</span>
-                  <select class="select text-sm flex-1" bind:value={sizeMismatch}>
-                    <option value="error">Error</option>
-                    <option value="warn">Warn</option>
-                    <option value="ignore">Ignore</option>
-                  </select>
-                </div>
-                <div class="flex items-center gap-4 ml-6 flex-wrap">
-                  <label class="flex items-center gap-2 text-sm">
+                <div class="flex flex-wrap items-center gap-3 text-sm">
+                  <button
+                    class="text-xs opacity-70 hover:opacity-100 underline transition-opacity"
+                    onclick={() => showAdvanced = !showAdvanced}
+                    type="button"
+                  >
+                    {showAdvanced ? "▲ Hide Advanced" : "▼ Advanced"}
+                  </button>
+                  <label class="flex items-center gap-2">
                     <input type="checkbox" class="checkbox" bind:checked={skipErase} />
                     Skip erase
                   </label>
-                  <label class="flex items-center gap-2 text-sm">
+                  <label class="flex items-center gap-2">
                     <input type="checkbox" class="checkbox" bind:checked={skipVerify} />
                     Skip verify
                   </label>
-                  <label class="flex items-center gap-2 text-sm" title="Skip writing pages that are all blank (0xFF)">
+                  <label class="flex items-center gap-2" title="Skip writing pages that are all blank (0xFF)">
                     <input type="checkbox" class="checkbox" bind:checked={skipBlank} />
                     Skip blank
                   </label>
                 </div>
-              {:else if $activeOperation === "verify"}
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="w-16 opacity-60">Size diff:</span>
-                  <select class="select text-sm flex-1" bind:value={sizeMismatch}>
-                    <option value="error">Error</option>
-                    <option value="warn">Warn</option>
-                    <option value="ignore">Ignore</option>
-                  </select>
-                </div>
+                <!-- Expanded: Voltage overrides -->
+                {#if showAdvanced}
+                  <div class="flex flex-wrap items-center gap-3 text-sm bg-surface-100-900 rounded-md p-2">
+                    <div class="flex items-center gap-2">
+                      <span class="opacity-60">VPP:</span>
+                      <select class="select text-xs" bind:value={overrideVpp}>
+                        <option value="">Default ({$selectedDevice?.voltages?.vpp ?? "—"}V)</option>
+                        {#each VPP_OPTIONS as v}
+                          <option value={v}>{v}V</option>
+                        {/each}
+                      </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="opacity-60">VCC:</span>
+                      <select class="select text-xs" bind:value={overrideVcc}>
+                        <option value="">Default ({$selectedDevice?.voltages?.vcc ?? "—"}V)</option>
+                        {#each VCC_OPTIONS as v}
+                          <option value={v}>{v}V</option>
+                        {/each}
+                      </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="opacity-60">VDD:</span>
+                      <select class="select text-xs" bind:value={overrideVdd}>
+                        <option value="">Default ({$selectedDevice?.voltages?.vdd ?? "—"}V)</option>
+                        {#each VCC_OPTIONS as v}
+                          <option value={v}>{v}V</option>
+                        {/each}
+                      </select>
+                    </div>
+                    <button
+                      class="text-xs opacity-60 hover:opacity-100 underline"
+                      onclick={() => { overrideVpp = ""; overrideVcc = ""; overrideVdd = ""; }}
+                      type="button"
+                    >
+                      Reset voltages
+                    </button>
+                  </div>
+                {/if}
               {/if}
               {#if $activeOperation === "erase" || $activeOperation === "blank_check" || $activeOperation === "chip_id"}
                 <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>

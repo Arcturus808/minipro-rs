@@ -15,6 +15,9 @@ export interface OperationOptions {
   skip_erase: boolean;
   skip_verify: boolean;
   skip_blank: boolean;
+  vpp: string | null;
+  vcc: string | null;
+  vdd: string | null;
   icsp_mode: "zif" | "icsp" | "icsp_no_vcc";
   page: string;
   format: string;

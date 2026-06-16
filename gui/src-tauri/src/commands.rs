@@ -143,6 +143,12 @@ pub struct OperationOptions {
     pub skip_verify: bool,
     #[serde(default)]
     pub skip_blank: bool,
+    #[serde(default)]
+    pub vpp: Option<String>,
+    #[serde(default)]
+    pub vcc: Option<String>,
+    #[serde(default)]
+    pub vdd: Option<String>,
     #[serde(default = "default_icsp_mode")]
     pub icsp_mode: String,
     #[serde(default = "default_page")]
@@ -157,6 +163,43 @@ fn default_icsp_mode() -> String { "zif".into() }
 fn default_page() -> String { "code".into() }
 fn default_format() -> String { "auto".into() }
 fn default_size_mismatch() -> String { "error".into() }
+
+/// Apply voltage overrides from GUI options to a device.
+fn apply_voltage_overrides(device: &mut Device, options: &OperationOptions) -> Result<(), String> {
+    // VPP voltage table (index 0..15 → volts), from tl866iiplus.c
+    static VPP_TABLE: &[&str] = &[
+        "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
+        "15.5", "16.0", "16.5", "17.0", "18.0",
+    ];
+    // VCC / VDD voltage table (index 0..15 → volts), from tl866iiplus.c
+    static VCC_TABLE: &[&str] = &[
+        "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
+        "6.3", "6.5", "7.0",
+    ];
+
+    if let Some(ref v) = options.vpp {
+        let idx = VPP_TABLE
+            .iter()
+            .position(|&t| t == v)
+            .ok_or_else(|| format!("invalid vpp voltage '{v}'; valid values: {}", VPP_TABLE.join(", ")))?;
+        device.voltages.vpp = idx as u8;
+    }
+    if let Some(ref v) = options.vdd {
+        let idx = VCC_TABLE
+            .iter()
+            .position(|&t| t == v)
+            .ok_or_else(|| format!("invalid vdd voltage '{v}'; valid values: {}", VCC_TABLE.join(", ")))?;
+        device.voltages.vdd = idx as u8;
+    }
+    if let Some(ref v) = options.vcc {
+        let idx = VCC_TABLE
+            .iter()
+            .position(|&t| t == v)
+            .ok_or_else(|| format!("invalid vcc voltage '{v}'; valid values: {}", VCC_TABLE.join(", ")))?;
+        device.voltages.vcc = idx as u8;
+    }
+    Ok(())
+}
 
 // ── Helper: resolve or reuse database paths ─────────────────────────────────
 
@@ -661,7 +704,10 @@ pub async fn do_write(
 
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
-        let device = state_task.get_device()?;
+        let device_arc = state_task.get_device()?;
+        let mut device = (*device_arc).clone();
+        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        let device = Arc::new(device);
         let page = parse_page(&options_clone.page)?;
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
         let op_name = "write".to_string();
@@ -765,7 +811,10 @@ pub async fn do_write_bytes(
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
         let mut handle = state_task.take_handle()?;
-        let device = state_task.get_device()?;
+        let device_arc = state_task.get_device()?;
+        let mut device = (*device_arc).clone();
+        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        let device = Arc::new(device);
         let page = parse_page(&options_clone.page)?;
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
         let op_name = "write".to_string();
