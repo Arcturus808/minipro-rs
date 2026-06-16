@@ -29,11 +29,14 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Write chip directly from hex viewer buffer** — when hex viewer has data, Write operation shows "Write from Hex Buffer" + "Write from File" buttons
 - [x] Hex viewer: keyboard arrow key navigation (Left/Right/Up/Down)
 - [x] Hex viewer: auto-scroll to keep selected byte visible during navigation
+- [x] Hex viewer: go-to-offset navigation (Ctrl+G)
+- [x] File format support: Intel HEX, SREC, JEDEC — backend parsers, CLI, and GUI all supported. Hex viewer Save dialog with auto-detection from extension.
+- [x] **Skip blank pages** — CLI `--skip-blank` / `-B` flag and GUI checkbox. Skips writing pages that are all blank (0xFF), reducing flash wear and write time.
+- [x] **GUI voltage overrides** — collapsible Advanced section in Write panel with VPP, VCC, VDD dropdowns. Shows chip defaults from infoic.xml. Includes "Reset voltages" button.
+- [x] **Version badge in app header** — shows `v{x.y.z}` next to MINIPRO-RS title, reading from package.json at build time.
 
 ## Near-term
 
-- [x] Hex viewer: go-to-offset navigation (Ctrl+G) — completed
-- [x] File format support: Intel HEX, SREC, JEDEC — backend parsers and CLI support are complete; GUI operations panel supports all formats. Hex viewer Save dialog now supports all formats with auto-detection from extension.
 - [ ] Batch / queue operations (write + verify)
 
 ## Backlog
