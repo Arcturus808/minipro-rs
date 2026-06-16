@@ -27,9 +27,9 @@ export interface DeviceInfo {
   pin_count: number;
   package_type: string;
   voltages: {
-    vpp: number;
-    vdd: number;
-    vcc: number;
+    vpp: string;
+    vdd: string;
+    vcc: string;
   };
   code_memory_size: number;
   data_memory_size: number;

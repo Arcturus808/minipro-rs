@@ -98,17 +98,25 @@ pub struct DeviceInfoDto {
 
 #[derive(Serialize)]
 pub struct VoltagesDto {
-    vpp: u8,
-    vdd: u8,
-    vcc: u8,
+    vpp: String,
+    vdd: String,
+    vcc: String,
 }
 
 impl From<&Voltages> for VoltagesDto {
     fn from(v: &Voltages) -> Self {
+        static VPP_TABLE: &[&str] = &[
+            "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
+            "15.5", "16.0", "16.5", "17.0", "18.0",
+        ];
+        static VCC_TABLE: &[&str] = &[
+            "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
+            "6.3", "6.5", "7.0",
+        ];
         Self {
-            vpp: v.vpp,
-            vdd: v.vdd,
-            vcc: v.vcc,
+            vpp: VPP_TABLE.get(v.vpp as usize).unwrap_or(&"?").to_string(),
+            vdd: VCC_TABLE.get(v.vdd as usize).unwrap_or(&"?").to_string(),
+            vcc: VCC_TABLE.get(v.vcc as usize).unwrap_or(&"?").to_string(),
         }
     }
 }

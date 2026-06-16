@@ -674,7 +674,7 @@
             <div class="space-y-2 mb-3">
               <!-- Row 1: Format, Page, Size diff -->
               {#if $activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify"}
-                <div class="flex flex-wrap items-center gap-3 text-sm">
+                <div class="flex flex-wrap items-center gap-6 text-sm">
                   <div class="flex items-center gap-2">
                     <span class="opacity-60">Format:</span>
                     <select class="select text-sm" bind:value={format}>
@@ -695,7 +695,7 @@
                   </div>
                   {#if $activeOperation === "write" || $activeOperation === "verify"}
                     <div class="flex items-center gap-2">
-                      <span class="opacity-60">Size diff:</span>
+                      <span class="opacity-60 whitespace-nowrap">Size diff:</span>
                       <select class="select text-sm" bind:value={sizeMismatch}>
                         <option value="error">Error</option>
                         <option value="warn">Warn</option>
@@ -705,16 +705,9 @@
                   {/if}
                 </div>
               {/if}
-              <!-- Row 2: Advanced toggle + checkboxes -->
+              <!-- Row 2: Checkboxes + Advanced toggle -->
               {#if $activeOperation === "write"}
-                <div class="flex flex-wrap items-center gap-3 text-sm">
-                  <button
-                    class="text-xs opacity-70 hover:opacity-100 underline transition-opacity"
-                    onclick={() => showAdvanced = !showAdvanced}
-                    type="button"
-                  >
-                    {showAdvanced ? "▲ Hide Advanced" : "▼ Advanced"}
-                  </button>
+                <div class="flex flex-wrap items-center gap-6 text-sm">
                   <label class="flex items-center gap-2">
                     <input type="checkbox" class="checkbox" bind:checked={skipErase} />
                     Skip erase
@@ -727,10 +720,18 @@
                     <input type="checkbox" class="checkbox" bind:checked={skipBlank} />
                     Skip blank
                   </label>
+                  <span class="w-px h-4 bg-surface-300-700 mx-2"></span>
+                  <button
+                    class="text-xs opacity-70 hover:opacity-100 underline transition-opacity"
+                    onclick={() => showAdvanced = !showAdvanced}
+                    type="button"
+                  >
+                    {showAdvanced ? "▲ Hide Advanced" : "▼ Advanced"}
+                  </button>
                 </div>
                 <!-- Expanded: Voltage overrides -->
                 {#if showAdvanced}
-                  <div class="flex flex-wrap items-center gap-3 text-sm bg-surface-100-900 rounded-md p-2">
+                  <div class="flex flex-wrap items-center gap-6 text-sm bg-surface-100-900 rounded-md p-2">
                     <div class="flex items-center gap-2">
                       <span class="opacity-60">VPP:</span>
                       <select class="select text-xs" bind:value={overrideVpp}>
