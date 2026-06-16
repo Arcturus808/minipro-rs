@@ -174,7 +174,7 @@ rpm:
       printf '%s\n' \
         'Name:           minipro' \
         "Version:        ${VERSION}" \
-        'Release:        1%{?dist}' \
+        'Release:        1' \
         'Summary:        Open-source programmer for XGecu TL866xx/T48/T56/T76' \
         'License:        GPL-3.0-or-later' \
         'BuildArch:      x86_64' \
@@ -275,7 +275,7 @@ release:
         --assets-link "{\"name\":\"minipro-completions\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz\"}" \
         --assets-link "{\"name\":\"minipro-deb\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_amd64.deb\"}" \
         --assets-link "{\"name\":\"minipro-rpm\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-${VERSION}-1.x86_64.rpm\"}" \
-        --assets-link "{\"name\":\"minipro-gui-msi\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/MINIPRO-RS_${TAG_VERSION}_x64_en-US.msi\"}" \
+        --assets-link "{\"name\":\"minipro-gui-msi\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/MINIPRO-RS-GUI_${TAG_VERSION}_x64_en-US.msi\"}" \
         || echo "Release already exists or another error occurred"
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
