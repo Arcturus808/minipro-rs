@@ -8,6 +8,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Arcturus808/minipro-rs)](https://github.com/Arcturus808/minipro-rs/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.77%2B-orange.svg)](https://www.rust-lang.org)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Arcturus808)
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
 
