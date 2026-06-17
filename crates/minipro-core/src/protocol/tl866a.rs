@@ -243,10 +243,12 @@ impl Protocol for Tl866aProtocol {
         // [4..6] address (24-bit LE)
         put_le(&mut msg[4..], ds.address, 3);
         trace!(
-            "read_block: cmd=0x{:02x} addr={:#x} len={}",
+            "TL866A read_block: cmd=0x{:02x} protocol_id={} addr={:#x} len={} block_count={}",
             cmd,
+            msg[1],
             ds.address,
-            ds.data.len()
+            ds.data.len(),
+            ds.block_count
         );
         usb.msg_send(&msg)?;
         // TL866A sends all payload data on EP 0x81 (command IN endpoint) in
@@ -259,7 +261,7 @@ impl Protocol for Tl866aProtocol {
             let take = chunk.len().min(ds.data.len() - buf.len());
             buf.extend_from_slice(&chunk[..take]);
         }
-        trace!("read_block: received {} bytes", buf.len());
+        trace!("TL866A read_block: received {} bytes", buf.len());
         let len = ds.data.len();
         ds.data.copy_from_slice(&buf[..len]);
         Ok(())

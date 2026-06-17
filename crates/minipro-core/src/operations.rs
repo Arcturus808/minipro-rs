@@ -596,6 +596,11 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
         size
     };
 
+    info!(
+        "blank_check: device={} size={} blank=0x{:02x} read_buffer_size={} read_size={}",
+        device.name, size, blank, device.read_buffer_size, read_size
+    );
+
     let total_blocks = if read_size > 0 {
         size.div_ceil(read_size)
     } else {
@@ -604,6 +609,10 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     let mut offset = 0usize;
     while offset < size {
         let block = read_size.min(size - offset);
+        info!(
+            "blank_check: reading block offset={} block={} total_blocks={}",
+            offset, block, total_blocks
+        );
         let mut ds = DataSet {
             data: vec![0u8; block],
             address: offset as u32,
