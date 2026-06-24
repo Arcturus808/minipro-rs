@@ -1173,9 +1173,11 @@ fn get_attr_str(e: &BytesStart, key: &[u8]) -> Option<String> {
 
 fn get_attr_u32(e: &BytesStart, key: &[u8]) -> Option<u32> {
     let s = get_attr_str(e, key)?;
-    u32::from_str_radix(s.trim_start_matches("0x"), 16)
-        .or_else(|_| s.parse::<u32>())
-        .ok()
+    if s.starts_with("0x") || s.starts_with("0X") {
+        u32::from_str_radix(&s[2..], 16).ok()
+    } else {
+        s.parse::<u32>().ok()
+    }
 }
 
 fn id_bytes_count(chip_id: u32) -> u8 {

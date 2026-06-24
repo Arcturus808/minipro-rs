@@ -2,17 +2,45 @@
   import { invoke } from "@tauri-apps/api/core";
   import { programmer, refreshProgrammer } from "../stores/device";
   import { logs } from "../stores/logs";
+  import { doFirmwareUpdate } from "../stores/operations";
+  import { pickOpenFile, confirmDialog } from "../file-dialog";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
-    "Tl866iiPlus",
+    "TL866II+",
     "T48",
     "T56",
+    "T76",
+  ]);
+
+  const FIRMWARE_UPDATE_SUPPORTED = new Set([
+    "TL866A",
+    "TL866CS",
+    "TL866II+",
+    "T48",
     "T76",
   ]);
 
   $: hardwareCheckSupported = $programmer
     ? HARDWARE_CHECK_SUPPORTED.has($programmer.model)
     : false;
+
+  $: firmwareUpdateSupported = $programmer
+    ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model)
+    : false;
+
+  async function updateFirmware() {
+    const path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
+    if (!path) return;
+    const fileName = path.split(/[\\/]/).pop() ?? path;
+    const confirmed = await confirmDialog(
+      "Firmware Update",
+      `This will erase and reflash your programmer's firmware.\nDo not disconnect the device during the update.\n\nSelected file: ${fileName}\n\nProceed?`,
+      "warning",
+    );
+    if (!confirmed) return;
+    await doFirmwareUpdate(path);
+    await refreshProgrammer();
+  }
 
   async function checkOvc() {
     try {
@@ -56,6 +84,11 @@
       <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
     {:else}
       <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Hardware Check</button>
+    {/if}
+    {#if firmwareUpdateSupported}
+      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={updateFirmware} disabled={!$programmer}>Firmware Update</button>
+    {:else}
+      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Firmware Update</button>
     {/if}
     <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not yet implemented">Pin Test (unsupported)</button>
   </div>

@@ -228,6 +228,37 @@ Adding `select-none` to the root app container blocked selection everywhere incl
 ### `verify_chip` panic when file smaller than device
 `verify_chip` read the reference file but did not pad it to device size. When auto-verify ran after a write with a smaller file, `expected[offset..]` panicked at offsets beyond the file length. Fixed by resizing the expected buffer to `size` with blank_value padding, matching `write_chip` behavior.
 
+## Terminal Rendering (TerminalLog.svelte)
+
+The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.
+
+### Rules
+
+1. **Use `<pre>` with `white-space: pre`** — HTML collapses whitespace by default. Without `pre`, leading spaces and column alignment are destroyed.
+
+2. **Build content as a single HTML string** — With `white-space: pre`, any whitespace in Svelte template source between elements (newlines, indentation) is rendered literally. Use `{@html htmlContent}` where `htmlContent` is built in JS via `.join('\n')`, not `{#each}` with separate `<div>` elements.
+
+3. **Flush `{@html}` against the container tag** — No newlines or comments between `>` and `{@html}`:
+   ```svelte
+   <!-- BAD — whitespace leaks into output -->
+   <pre>
+     {@html content}
+   </pre>
+
+   <!-- GOOD — no whitespace -->
+   <pre>{@html content}</pre>
+   ```
+
+4. **Use inline styles for ANSI colors** — Convert `\x1b[0;91m` (red) to `<span style="color:#ef4444;">` and `\x1b[0m` to `</span>`. Tailwind classes may not apply inside `<pre>` due to CSS scoping.
+
+5. **Don't use `.trim()` on multi-line strings** — `String.trim()` strips leading spaces from the first line, breaking alignment. Use `.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0)` instead.
+
+### Rust format specifiers
+
+- `{:<3}` = left-align in 3-char field (`"1  "`)
+- `{:-3}` = fill with `-`, right-aligned (NOT left-align!) (`"  1"`)
+- Always use `<` for left-align, `>` for right-align in Rust format strings.
+
 ## Release Versioning
 
 ### Keep GUI and CLI versions in sync

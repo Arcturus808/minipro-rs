@@ -19,7 +19,7 @@ use crate::{
         tl866iiplus::{get_system_info, Tl866iiPlusProtocol, MIN_FIRMWARE},
         Protocol,
     },
-    usb::{open_programmer, UsbDevice},
+    usb::{open_programmer, wait_for_disconnect, wait_for_reconnect, UsbDevice},
 };
 
 /// Top-level programmer session.
@@ -127,6 +127,42 @@ impl MiniproHandle {
         self.device
             .as_deref()
             .ok_or_else(|| MiniproError::Protocol("no device selected".into()))
+    }
+
+    /// Reopen the programmer after a disconnect (e.g., bootloader switch).
+    ///
+    /// Waits up to 20 seconds for disconnect and 20 seconds for reconnect.
+    /// Skips the bootloader-mode rejection so the handle can be used in
+    /// bootloader mode for firmware updates.
+    pub fn reconnect(&mut self, allow_bootloader: bool) -> Result<()> {
+        let pid = self.usb.pid();
+        let _old = std::mem::take(&mut self.usb);
+        wait_for_disconnect(pid, 20_000)?;
+        wait_for_reconnect(pid, 20_000)?;
+
+        let (usb, initial_model) = open_programmer()?;
+        let sys_info = if initial_model == ProgrammerModel::Tl866a {
+            tl866a::get_system_info(&usb)?
+        } else {
+            get_system_info(&usb)?
+        };
+
+        if !allow_bootloader && sys_info.status == ProgrammerStatus::Bootloader {
+            return Err(MiniproError::BootloaderMode);
+        }
+
+        self.info = ProgrammerInfo {
+            model: sys_info.model,
+            status: sys_info.status,
+            firmware: sys_info.firmware,
+            firmware_str: sys_info.firmware_str,
+            device_code: sys_info.device_code,
+            serial_number: sys_info.serial_number,
+            hardware_version: sys_info.hardware_version,
+        };
+        self.usb = usb;
+        // Protocol object doesn't need to change; it's model-specific
+        Ok(())
     }
 
     /// Display programmer info in the format expected by `minipro -I`.

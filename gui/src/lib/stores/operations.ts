@@ -259,13 +259,21 @@ export async function doChipId(icspMode: string = "zif"): Promise<ChipIdResult |
 export async function doLogicTest(icspMode: string = "zif") {
   await runOp("Logic test", async () => {
     const result = await invoke<string>("do_logic_test", { icspMode });
-    if (result.trim()) {
-      // Print each line of the test result table to the terminal
-      for (const line of result.trim().split("\n")) {
+    const lines = result.split("\n").map(l => l.trimEnd()).filter(l => l.length > 0);
+    for (const line of lines) {
+      if (line.startsWith("[ERROR]")) {
+        deferLog("error", line.slice(7).trim());
+      } else {
         deferLog("info", line);
       }
     }
     deferLog("info", "Logic test completed");
+  });
+}
+
+export async function doFirmwareUpdate(path: string) {
+  await runOp("Firmware update", async () => {
+    await invoke("do_firmware_update", { path });
   });
 }
 

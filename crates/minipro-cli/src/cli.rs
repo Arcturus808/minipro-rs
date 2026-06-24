@@ -152,7 +152,7 @@ struct Cli {
     #[arg(long = "logicic-out", alias = "logicic_out", value_name = "FILE")]
     logicic_out: Option<PathBuf>,
 
-    /// Update programmer firmware from binary file (UpdateII.dat / updateT76.dat)
+    /// Update programmer firmware from binary file (update.dat / UpdateII.dat / updateT76.dat)
     #[arg(short = 'F', long = "firmware-update", alias = "update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,
 

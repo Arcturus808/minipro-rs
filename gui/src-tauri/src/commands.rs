@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
-    operations::{blank_check, check_chip_id, erase_chip, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_chip_calibration, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -1233,8 +1233,14 @@ pub async fn do_logic_test(icspMode: String, state: State<'_, Arc<AppState>>) ->
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let mut output = Vec::new();
-            logic_ic_test(&mut handle, &mut output).map_err(|e| e.to_string())?;
-            let text = String::from_utf8_lossy(&output).into_owned();
+            let test_result = logic_ic_test(&mut handle, &mut output);
+            let mut text = String::from_utf8_lossy(&output).into_owned();
+            if let Err(ref e) = test_result {
+                if !text.is_empty() && !text.ends_with('\n') {
+                    text.push('\n');
+                }
+                text.push_str(&format!("[ERROR] {}", e));
+            }
             Ok::<String, String>(text)
         })();
 
@@ -1587,6 +1593,66 @@ pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<Hardw
         Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
         Err(_) => Err("Operation timed out".into()),
     }
+}
+
+/// Update programmer firmware from an update.dat / updateII.dat / updateT76.dat file.
+#[tauri::command]
+pub async fn do_firmware_update(
+    path: String,
+    state: State<'_, Arc<AppState>>,
+    window: tauri::Window,
+) -> Result<(), String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+    let _guard = scopeguard::guard((), |_| state_clone.release());
+
+    let fw_data = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path).map_err(|e| format!("cannot read firmware file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))??;
+
+    let window_clone = window.clone();
+    let updated_info = {
+        let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
+        let handle = guard.as_mut().ok_or("No programmer connected")?;
+        let mut output = Vec::new();
+        let result = firmware_update(handle, &fw_data, &mut output, Some(&mut |done, total| {
+            let _ = window_clone.emit(
+                "progress",
+                ProgressPayload {
+                    done,
+                    total,
+                    operation: "firmware_update".to_string(),
+                },
+            );
+        }));
+        let text = String::from_utf8_lossy(&output).into_owned();
+        if !text.is_empty() {
+            // Emit each line as a separate log entry
+            for line in text.lines() {
+                if !line.is_empty() {
+                    let _ = window_clone.emit(
+                        "app-log",
+                        serde_json::json!({ "level": "info", "message": line }),
+                    );
+                }
+            }
+        }
+        result.map_err(|e| e.to_string())?;
+        handle.info.clone()
+    };
+
+    // Programmer reconnects in bootloader then normal mode during update.
+    // Refresh our cached info so the UI shows the new firmware version.
+    {
+        let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        *guard = Some(updated_info);
+    }
+
+    Ok(())
 }
 
 /// Trim trailing blank bytes from a buffer.

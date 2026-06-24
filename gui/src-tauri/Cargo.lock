@@ -1957,6 +1957,7 @@ dependencies = [
  "base64 0.22.1",
  "log",
  "minipro-core",
+ "scopeguard",
  "serde",
  "serde_json",
  "tauri",

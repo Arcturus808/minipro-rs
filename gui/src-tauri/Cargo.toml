@@ -1,6 +1,6 @@
 [package]
 name = "minipro-gui"
-version = "0.2.7"
+version = "0.3.0"
 description = "GUI front-end for minipro-rs chip programmer"
 authors = ["minipro-rs contributors"]
 license = "GPL-3.0-or-later"
@@ -31,3 +31,4 @@ minipro-core = { path = "../../crates/minipro-core" }
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 base64 = "0.22"
 tempfile = "3"
+scopeguard = "1"

@@ -160,10 +160,10 @@ cargo build --release
 
 | Programmer | Read | Write | Erase | Verify | Chip ID | Fuses | JEDEC | Logic Test | Pin Check | Firmware Update | Hardware Test |
 |------------|------|-------|-------|--------|---------|-------|-------|------------|-----------|-----------------|---------------|
-| **TL866A / TL866CS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ | ❌² | ✅¹ | ✅ |
+| **TL866A / TL866CS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌² | ✅¹ | ❌⁵ |
 | **TL866II+** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
 | **T48** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
-| **T56** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌³ | ✅¹ | ✅¹ |
+| **T56** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌⁵ | ❌³ | ❌⁴ | ✅¹ |
 | **T76** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
 
 **Legend:**
@@ -171,6 +171,8 @@ cargo build --release
 - ✅¹ **Implemented, untested** — full protocol implementation exists but has not been validated with real hardware yet. Expected to work.
 - ❌² **Hardware limitation** — the TL866A/CS firmware does not support the pull-up/pull-down pin contact check commands.
 - ❌³ **Not supported** — the T56 uses a different FPGA-based command set with no known equivalent pin contact check mechanism.
+- ❌⁴ **Not implemented** — the T56 firmware update protocol has not been reverse-engineered.
+- ❌⁵ **Unknown** — support status unclear; not yet verified against official XGecu software.
 
 > **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry), NAND (parallel + SPI-NAND), eMMC, and parallel NOR BEGIN extension are implemented and ready for hardware testing. See [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 

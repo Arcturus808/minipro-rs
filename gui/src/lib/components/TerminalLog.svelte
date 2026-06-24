@@ -1,7 +1,7 @@
 <script lang="ts">
   import { logs, logText } from "../stores/logs";
 
-  let scrollContainer: HTMLDivElement;
+  let scrollContainer: HTMLPreElement;
   let wasAtBottom = true;
 
   function onScroll() {
@@ -10,10 +10,39 @@
     wasAtBottom = scrollHeight - scrollTop - clientHeight < 20;
   }
 
-  $: if ($logs.length > 0 && scrollContainer && wasAtBottom) {
-    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  $effect(() => {
+    if ($logs.length > 0 && scrollContainer && wasAtBottom) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  });
+
+  // Convert ANSI escape codes to inline HTML <span> tags.
+  function ansiToHtml(text: string): string {
+    return text
+      .replace(/\x1b\[0;91m/g, '<span style="color:#ef4444;">')
+      .replace(/\x1b\[0m/g, '</span>')
+      .replace(/\x1b\[[0-9;]*m/g, '');
   }
 
+  // Build the entire terminal as a single HTML string with \n line breaks.
+  // Using <pre> + \n avoids per-line <div> whitespace issues.
+  function renderAll(entries: { level: string; message: string }[]): string {
+    return entries
+      .map((entry) => {
+        const color =
+          entry.level === 'error'
+            ? 'var(--color-error-500)'
+            : entry.level === 'warn'
+              ? 'var(--color-warning-500)'
+              : 'var(--color-success-500)';
+        const prefix = `[${entry.level.toUpperCase()}]`;
+        const body = ansiToHtml(entry.message);
+        return `<span style="color:${color}">${prefix}</span> ${body}`;
+      })
+      .join('\n');
+  }
+
+  let htmlContent = $derived(renderAll($logs));
 </script>
 
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
@@ -43,12 +72,10 @@
       </button>
     </div>
   </header>
-  <div bind:this={scrollContainer} onscroll={onScroll} class="flex-1 overflow-auto p-2 terminal-log select-text">
-    {#each $logs as entry}
-      <div class="py-px">
-        <span class="level-{entry.level}">[{entry.level.toUpperCase()}]</span>
-        <span>{entry.message}</span>
-      </div>
-    {/each}
-  </div>
+  <pre
+    bind:this={scrollContainer}
+    onscroll={onScroll}
+    class="flex-1 overflow-auto p-2 select-text m-0"
+    style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;white-space:pre;"
+  >{@html htmlContent}</pre>
 </div>

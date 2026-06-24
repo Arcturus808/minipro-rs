@@ -25,7 +25,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Draggable Panels** | Done | Resize Device Selector, Hex Viewer, and Terminal with mouse drag; widths persist |
 | **Layout Reset** | Done | One-click restore of panel widths, font size, and window position in Settings |
 | **Hack Font** | Done | Open-source Hack monospace font bundled for hex viewer |
-| **Firmware Update** | Planned | TL866A/CS `update.dat` decryption + flashing (algorithm known, pending implementation) |
+| **Firmware Update** | Done | TL866A/CS `update.dat` decryption + flashing via CLI (`-F`) and GUI Diagnostics panel |
 
 ## Screenshots
 
@@ -247,7 +247,7 @@ A **Reset layout & font size** button in Settings restores all of the above to f
 - [x] Phase 2 — Hex viewer + file I/O + device search
 - [x] Phase 3 — Diagnostics (overcurrent, hardware check, programmer details)
 - [x] Phase 3.5 — Two-step operations, context-aware options, ComboSearch with favorites
-- [ ] Phase 4 — Firmware update (TL866A/CS `update.dat` decryption)
+- [x] Phase 4 — Firmware update (TL866A/CS `update.dat` decryption)
 - [ ] Phase 5 — Pin test integration
 
 *(Phases 3, 3.5, and 5 were completed out of order.)*

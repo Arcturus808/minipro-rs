@@ -152,7 +152,7 @@ fn run() -> Result<()> {
             fw_path,
             fw_data.len()
         );
-        firmware_update(&mut handle, &fw_data)?;
+        firmware_update(&mut handle, &fw_data, &mut std::io::stderr(), None)?;
         return Ok(());
     }
 
@@ -916,11 +916,7 @@ Firmware update files can be obtained from the manufacturer's website:
 .P
 For the TL866A/CS, use the "update.dat" file.
 .P
-For the TL866II+, use the "updateII.dat" file.
-.P
-For the T48, use the "UpdateT48.dat" file.
-.P
-For the T56, use the "updateT56.dat" file.
+For the TL866II+ and T48, use the "UpdateII.dat" file.
 .P
 For the T76, use the "updateT76.dat" file.
 

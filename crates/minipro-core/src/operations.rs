@@ -11,11 +11,11 @@ use std::{
 use log::info;
 
 use crate::{
-    device::{ChipType, DataOrg, Device},
+    device::{ChipType, DataOrg, Device, ProgrammerModel},
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::DataSet,
+    protocol::{tl866a, DataSet},
 };
 
 /// Compute the effective read/write block size for a device.
@@ -979,10 +979,21 @@ pub fn logic_ic_test(handle: &mut MiniproHandle, out: &mut dyn std::io::Write) -
 /// Flash new firmware from a binary image file.
 ///
 /// Supported formats:
+///  - TL866A/CS: `update.dat`
 ///  - TL866II+/T48: `UpdateII.dat`
 ///  - T76: `updateT76.dat`
-pub fn firmware_update(handle: &mut MiniproHandle, firmware_data: &[u8]) -> Result<()> {
-    handle.protocol.firmware_update(&handle.usb, firmware_data)
+pub fn firmware_update(
+    handle: &mut MiniproHandle,
+    firmware_data: &[u8],
+    out: &mut dyn std::io::Write,
+    progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
+    match handle.info.model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
+            tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)
+        }
+        _ => handle.protocol.firmware_update(&handle.usb, firmware_data),
+    }
 }
 
 /// Auto-detect an SPI flash chip by reading its JEDEC ID.

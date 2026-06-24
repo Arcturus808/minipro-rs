@@ -66,10 +66,62 @@ fn classify(info: &DeviceInfo) -> Option<ProgrammerModel> {
 }
 
 /// A claimed USB interface ready for transfers.
+#[derive(Default)]
 pub struct UsbDevice {
-    interface: Interface,
+    interface: Option<Interface>,
     /// The USB PID, used to select T76-specific payload endpoints.
     pid: u16,
+}
+
+impl UsbDevice {
+    /// Return the USB product ID of this device.
+    pub fn pid(&self) -> u16 {
+        self.pid
+    }
+
+    fn iface(&self) -> Result<&Interface> {
+        self.interface
+            .as_ref()
+            .ok_or_else(|| MiniproError::Protocol("USB device not open".into()))
+    }
+}
+
+/// Poll USB until the programmer with the given PID disappears.
+/// Returns `Ok(())` when disconnected or `Err` on timeout.
+pub fn wait_for_disconnect(pid: u16, timeout_ms: u64) -> Result<()> {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_millis() < timeout_ms as u128 {
+        let devices = nusb::list_devices().map_err(MiniproError::Usb)?;
+        let found = devices
+            .filter(|d| classify(d).is_some() && d.product_id() == pid)
+            .count();
+        if found == 0 {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(MiniproError::Protocol(
+        "Timed out waiting for programmer to disconnect".into(),
+    ))
+}
+
+/// Poll USB until the programmer with the given PID reappears.
+/// Returns `Ok(())` when reconnected or `Err` on timeout.
+pub fn wait_for_reconnect(pid: u16, timeout_ms: u64) -> Result<()> {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_millis() < timeout_ms as u128 {
+        let devices = nusb::list_devices().map_err(MiniproError::Usb)?;
+        let found = devices
+            .filter(|d| classify(d).is_some() && d.product_id() == pid)
+            .count();
+        if found > 0 {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(MiniproError::Protocol(
+        "Timed out waiting for programmer to reconnect".into(),
+    ))
 }
 
 /// Open the first connected programmer.
@@ -105,7 +157,13 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
                     e
                 ))
             })?;
-            Ok((UsbDevice { interface, pid }, model))
+            Ok((
+                UsbDevice {
+                    interface: Some(interface),
+                    pid,
+                },
+                model,
+            ))
         }
         _ => Err(MiniproError::MultipleProgrammersFound),
     }
@@ -121,7 +179,7 @@ impl UsbDevice {
         let len = buf.len().min(64);
         data[..len].copy_from_slice(&buf[..len]);
         trace!("msg_send: cmd=0x{:02x} buf={:02x?}", data[0], &data[..len]);
-        let completion = pollster::block_on(self.interface.bulk_out(CMD_EP_OUT, data));
+        let completion = pollster::block_on(self.iface()?.bulk_out(CMD_EP_OUT, data));
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -141,7 +199,7 @@ impl UsbDevice {
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
         trace!("msg_recv: waiting for {size} bytes on EP 0x81");
         let completion =
-            pollster::block_on(self.interface.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
+            pollster::block_on(self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -193,7 +251,7 @@ impl UsbDevice {
         if self.pid == T76_PID {
             trace!("  -> T76 path: bulk_in(EP 0x82, {length})");
             let c = pollster::block_on(
-                self.interface
+                self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
             trace!(
@@ -209,7 +267,7 @@ impl UsbDevice {
         // Small reads: single EP2 transfer
         if length < 64 {
             trace!("  -> small path: bulk_in(EP 0x82, 64)");
-            let c = pollster::block_on(self.interface.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
+            let c = pollster::block_on(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
                 c.data.len(),
@@ -223,7 +281,7 @@ impl UsbDevice {
         if length == 64 || length <= limit || limit == 0 {
             trace!("  -> single-EP2 path: bulk_in(EP 0x82, {length})");
             let c = pollster::block_on(
-                self.interface
+                self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
             );
             trace!(
@@ -239,10 +297,7 @@ impl UsbDevice {
         // Large reads: interleaved EP2 + EP3, then de-interleave
         let half = length / 2;
         trace!("  -> dual-EP path: bulk_in(EP 0x82, {half})");
-        let c2 = pollster::block_on(
-            self.interface
-                .bulk_in(DATA_EP2_IN, RequestBuffer::new(half)),
-        );
+        let c2 = pollster::block_on(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(half)));
         trace!(
             "  <- EP 0x82 complete: {} bytes, status={:?}",
             c2.data.len(),
@@ -251,10 +306,7 @@ impl UsbDevice {
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         trace!("  -> dual-EP path: bulk_in(EP 0x83, {half})");
-        let c3 = pollster::block_on(
-            self.interface
-                .bulk_in(DATA_EP3_IN, RequestBuffer::new(half)),
-        );
+        let c3 = pollster::block_on(self.iface()?.bulk_in(DATA_EP3_IN, RequestBuffer::new(half)));
         trace!(
             "  <- EP 0x83 complete: {} bytes, status={:?}",
             c3.data.len(),
@@ -274,7 +326,7 @@ impl UsbDevice {
             data.len(),
             &data[..data.len().min(16)]
         );
-        let c = pollster::block_on(self.interface.bulk_out(ep, data));
+        let c = pollster::block_on(self.iface()?.bulk_out(ep, data));
         c.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())

@@ -16,7 +16,7 @@
     </div>
     {#if $progress}
       <div class="text-xs opacity-60 mt-1 text-right">
-        {$progress.done.toLocaleString()} / {$progress.total.toLocaleString()} bytes
+        {$progress.done.toLocaleString()} / {$progress.total.toLocaleString()}{$progress.operation === "firmware_update" ? " blocks" : " bytes"}
       </div>
     {/if}
   </div>

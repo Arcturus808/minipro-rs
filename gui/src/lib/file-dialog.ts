@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save, ask } from "@tauri-apps/plugin-dialog";
 
 export async function pickOpenFile(title: string, defaultPath?: string | null): Promise<string | null> {
   const path = await open({
@@ -9,6 +9,18 @@ export async function pickOpenFile(title: string, defaultPath?: string | null): 
     defaultPath: defaultPath ?? undefined,
   });
   return path ?? null;
+}
+
+/**
+ * Show a native confirmation dialog with Yes/No buttons.
+ * Returns true if the user clicked "Yes".
+ */
+export async function confirmDialog(
+  title: string,
+  message: string,
+  kind: "info" | "warning" | "error" = "warning",
+): Promise<boolean> {
+  return await ask(message, { title, kind });
 }
 
 export async function pickSaveFile(title: string, defaultPath?: string | null, filters?: { name: string; extensions: string[] }[]): Promise<string | null> {

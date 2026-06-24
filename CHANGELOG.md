@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-24
+
+### Added
+
+- **TL866A/CS firmware update** — CLI `minipro -F update.dat` and GUI Diagnostics panel now support flashing stock firmware on TL866A and TL866CS programmers. The `update.dat` file is decrypted (simple XOR cipher), CRC-verified, and flashed via the built-in bootloader. GUI includes confirmation dialog and progress bar
+- **TL866A/CS logic IC test** — `-T` / `--logic-test` now works on TL866A and TL866CS using the bit-bang algorithm (commands 0xD0–0xD5) from upstream `minipro`. Validated with 7408 (MM74HC08N) on real hardware
+- **GUI Firmware Update button** — new "Firmware Update" button in the Programmer Diagnostics panel, with a file picker for `update.dat` / `UpdateII.dat` / `updateT76.dat`. Includes confirmation dialog warning before flashing. T56 is not supported (firmware update protocol not yet reverse-engineered)
+- **GUI firmware update progress** — progress bar shows block count during firmware flashing, with status messages in the terminal log
+
+### Fixed
+
+- **XML attribute parsing** — `get_attr_u32` no longer interprets decimal values as hex. This fixes logic IC `pins="14"` being parsed as 20 (0x14), which caused VCC/GND misconfiguration and logic test failures
+- **Logic test header alignment** — pin number column headers now align with data rows. Rust format specifier `{:-3}` was incorrectly used instead of `{:<3}` for left-alignment, causing right-aligned pin numbers and a 2-character offset
+- **GUI terminal whitespace preservation** — terminal output now uses `<pre>` with `white-space: pre` and builds content as a single HTML string to prevent Svelte template whitespace from leaking into rendered output
+- **GUI terminal ANSI color rendering** — ANSI escape codes (`\x1b[0;91m` for red, `\x1b[0m` for reset) are now converted to inline HTML `<span>` tags so error markers appear in color instead of showing raw escape codes
+- **TL866A firmware version display** — diagnostics panel and CLI now show the correct format (e.g., "2.72" instead of "00.2.72")
+
 ## [0.2.7] - 2026-06-16
 
 ### Added
