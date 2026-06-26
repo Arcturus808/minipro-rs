@@ -204,12 +204,12 @@ pub fn format_diff_report(result: &DiffResult, erase_value: u8) -> String {
         out.push_str("\nFiles match (ignoring trailing padding).\n");
     } else if s.diff_count == 0 {
         out.push_str(&format!(
-            "\nNo byte differences in compared region, but {} anomalous tail region(s) detected.\n",
+            "\nNo byte diffs in compared region, but {} anomalous tail region(s) detected.\n",
             s.anomalous_tail
         ));
     } else {
         out.push_str(&format!(
-            "\n{} byte difference(s) across {} region(s)\n",
+            "\n{} byte diff(s) across {} region(s)\n",
             s.diff_count, s.diff_regions
         ));
         out.push('\n');

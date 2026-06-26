@@ -468,7 +468,7 @@
         logs.info(`Compare: Files match (ignoring trailing padding) — ${refPath}`);
       } else {
         const s = result.summary;
-        let msg = `Compare: ${s.diff_count} byte difference(s) across ${s.diff_regions} region(s)`;
+        let msg = `Compare: ${s.diff_count} byte diff${s.diff_count === 1 ? '' : 's'} across ${s.diff_regions} region${s.diff_regions === 1 ? '' : 's'}`;
         if (s.anomalous_tail > 0) {
           msg += ` · WARNING: ${s.anomalous_tail} anomalous tail region(s) detected`;
         }
@@ -574,9 +574,9 @@
             {#if diffResult.summary.is_equal}
               Compare: Files match (ignoring trailing padding)
             {:else if diffResult.summary.diff_count > 0}
-              Compare: {diffResult.summary.diff_count} difference{diffResult.summary.diff_count === 1 ? '' : 's'} across {diffResult.summary.diff_regions} region{diffResult.summary.diff_regions === 1 ? '' : 's'}
+              Compare: {diffResult.summary.diff_count} diff{diffResult.summary.diff_count === 1 ? '' : 's'} across {diffResult.summary.diff_regions} region{diffResult.summary.diff_regions === 1 ? '' : 's'}
             {:else}
-              Compare: No byte differences, but {diffResult.summary.anomalous_tail} anomalous tail region(s)
+              Compare: No byte diffs, but {diffResult.summary.anomalous_tail} anomalous tail region(s)
             {/if}
           </div>
         {/if}
@@ -688,7 +688,7 @@
             style="font-size: 13px;"
             onclick={startCompare}
             disabled={diffComparing}
-            title="Compare hex buffer against a reference file (F3 to navigate differences)"
+            title="Compare hex buffer against a reference file (F3 to navigate diffs)"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h8m-8 5h8M3 5l4 4-4 4M21 5l-4 4 4 4" />
@@ -701,7 +701,7 @@
               class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
               style="font-size: 13px;"
               onclick={() => navigateDiff("prev")}
-              title="Previous difference (Shift+F3)"
+              title="Previous diff (Shift+F3)"
             >↑ Prev</button>
             <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center;">
               {diffNavIndex + 1}/{diffResult.diffs.length}
@@ -710,7 +710,7 @@
               class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
               style="font-size: 13px;"
               onclick={() => navigateDiff("next")}
-              title="Next difference (F3)"
+              title="Next diff (F3)"
             >Next ↓</button>
           {/if}
           <button
