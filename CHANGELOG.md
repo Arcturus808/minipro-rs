@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Smart firmware diff** — CLI `minipro --diff fileA fileB [--erase-value 0xFF]` compares two firmware files with byte-aligned diff and three-way tail classification (padding vs anomalous). Exit code 0 on match, 1 on mismatch. GUI hex viewer "Compare" button highlights differing bytes in red, padding in gray, anomalous tail in amber, with next/prev navigation (F3/Shift+F3) and anomalous-tail warning banner
+
 ## [0.3.0] - 2026-06-24
 
 ### Added

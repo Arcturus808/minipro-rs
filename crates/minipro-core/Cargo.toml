@@ -13,9 +13,9 @@ crc         = "3"
 pollster    = "0.3"
 flate2      = "1"
 base64      = "0.22"
+serde       = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-serde.workspace      = true
 serde_json.workspace = true
 
 [[test]]
