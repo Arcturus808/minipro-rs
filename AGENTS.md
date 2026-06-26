@@ -198,7 +198,7 @@ gui/
         device.ts              — connected programmer + IC database
         settings.ts            — persisted app preferences (includes panel widths)
       components/
-        HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear
+        HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list
         DiagnosticsPanel.svelte  — overcurrent, calibration, pin test

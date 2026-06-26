@@ -40,6 +40,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
 - **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
+- **Smart firmware diff** — compare the hex viewer buffer against a reference file with a single click. Byte-aligned comparison with three-way tail classification: differing bytes highlighted in red, trailing erase-value padding shown in gray (ignored), and anomalous non-padding data beyond the shorter buffer flagged in amber with a warning banner. Navigate between diffs with Prev/Next buttons or F3/Shift+F3. CLI: `minipro --diff fileA fileB [--erase-value 0xFF]`
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
 - **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
