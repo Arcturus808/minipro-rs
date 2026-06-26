@@ -118,3 +118,11 @@ This is a living list of features and improvements planned for minipro-rs.
     - Error highlighting must be prominent (red cells, summary banner)
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
+
+- [ ] **Entropy indicator in hex viewer** — per-row Shannon entropy bar to visually identify data regions
+  - Lightweight version: small colored bar (green=low, yellow=medium, red=high) in the gutter next to each 16-byte hex row
+  - No separate graph or heatmap — just a visual annotation on existing rows
+  - Useful for RE/forensic work: spot where executable code ends and encrypted/compressed data begins, or where padding starts
+  - Implementation: Shannon entropy over each 16-byte row in Rust, returned alongside hex data or computed on-demand. ~30 lines of Rust, small Svelte change
+  - Priority: low — niche within a niche. Users doing serious RE work would export the dump and use binwalk/radare2/010 Editor. Better tools already exist for full entropy analysis
+  - Status: Backlog. Implement only if RE use case grows
