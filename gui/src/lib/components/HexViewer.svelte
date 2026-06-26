@@ -521,6 +521,11 @@
   function getDiffCellStyle(offset: number): string {
     if (!diffResult) return "";
     if (diffOffsets.has(offset)) {
+      // Highlight the currently-navigated diff byte more prominently
+      const isCurrent = diffResult.diffs.length > 0 && diffResult.diffs[diffNavIndex]?.offset === offset;
+      if (isCurrent) {
+        return "background: #dc2626; color: #ffffff; font-weight: 700; border-radius: 2px; box-shadow: 0 0 0 2px #fbbf24;";
+      }
       return "background: #fee2e2; color: #991b1b; font-weight: 600; border-radius: 2px;";
     }
     const tm = tailMap();
