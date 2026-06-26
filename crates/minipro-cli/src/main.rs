@@ -145,6 +145,10 @@ fn run() -> Result<()> {
 
     // ── Firmware update (no device / begin_transaction needed) ────────────────
     if let Some(ref fw_path) = cli.firmware_update {
+        eprintln!(
+            "WARNING: Firmware update is experimental and has not been validated on real hardware."
+        );
+        eprintln!("Do NOT disconnect the device during the update. Use at your own risk.");
         let fw_data = std::fs::read(fw_path)
             .with_context(|| format!("cannot read firmware file {:?}", fw_path))?;
         eprintln!(

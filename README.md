@@ -176,6 +176,8 @@ cargo build --release
 
 > **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry), NAND (parallel + SPI-NAND), eMMC, and parallel NOR BEGIN extension are implemented and ready for hardware testing. See [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
+> **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism.
+
 ---
 
 ## macOS support

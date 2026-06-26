@@ -33,8 +33,8 @@
     if (!path) return;
     const fileName = path.split(/[\\/]/).pop() ?? path;
     const confirmed = await confirmDialog(
-      "Firmware Update",
-      `This will erase and reflash your programmer's firmware.\nDo not disconnect the device during the update.\n\nSelected file: ${fileName}\n\nProceed?`,
+      "Firmware Update — EXPERIMENTAL",
+      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}\n\nProceed at your own risk?`,
       "warning",
     );
     if (!confirmed) return;
