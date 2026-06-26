@@ -236,4 +236,11 @@ struct Cli {
     /// Use 0x00 for EEPROM/NAND that erase to zero.
     #[arg(long = "erase-value", value_name = "BYTE", default_value = "0xFF")]
     erase_value: String,
+
+    /// Batch mode: program multiple identical chips with the same firmware.
+    /// After each successful write + verify, prompt to insert the next chip.
+    /// Use with -w FILE. Requires -p DEVICE.
+    /// Optional count: --batch 50 programs up to 50 chips.
+    #[arg(long = "batch", num_args = 0..=1, default_missing_value = "0")]
+    batch: Option<usize>,
 }

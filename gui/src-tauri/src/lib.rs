@@ -106,6 +106,7 @@ pub fn run() {
             commands::open_folder,
             commands::file_exists,
             commands::do_write,
+            commands::do_batch_write_chip,
             commands::do_write_bytes,
             commands::do_verify,
             commands::do_erase,

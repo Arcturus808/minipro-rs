@@ -43,10 +43,38 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Manufacturer column in search results** — each device search result shows the manufacturer name parsed from `infoic.xml`, making it easy to distinguish similar part numbers from different vendors.
 - [x] **Chip ID byte-order normalization** — fixes false mismatch errors on devices (e.g., SPI flash like PM25LV010) where different programmer protocols pack JEDEC ID bytes at different positions in the response word.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
+- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for future serial number injection. See detailed spec below in Near-term.
 
 ## Near-term
 
-- [ ] Batch / queue operations (write + verify)
+- [x] **Batch / queue operations** — program multiple identical chips with the same firmware image
+  - **Scope (initial):** same device, same file, repeated writes with verify. Covers 90%+ of batch use cases (classroom sets, bootloader burning, small production runs).
+  - **Architecture designed for serial injection:** the batch loop includes a "patch buffer before write" hook where auto-incrementing serial numbers will plug in later, without restructuring the core logic.
+  - **Implementation plan:**
+    1. **CLI batch mode** — `minipro -p DEVICE -w file.bin --batch [--count N]`
+       - Writes firmware, verifies, prints "Chip 1/N: PASS", waits for keypress (Enter to continue, Ctrl+C to abort)
+       - If `--count` omitted, runs indefinitely until user aborts
+       - Prints summary at end: total programmed, passes, failures
+       - Core logic in `minipro-core::operations::batch_write` — reusable by GUI
+       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for future serial injection)
+    2. **GUI batch mode** — "Batch Mode" toggle in operations panel
+       - When enabled, Start button becomes "Start Batch"
+       - After each successful write+verify, shows "Next Chip" button and progress counter ("3/50 completed")
+       - Batch summary panel: pass/fail count, elapsed time, export log option
+       - Reuses `batch_write` from `minipro-core` via Tauri command
+    3. **Serial number injection (future, separate from initial batch):**
+       - `--serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
+       - Patches buffer at target address before each write, increments after each successful write
+       - GUI: collapsible "Serial Number" section in batch options
+       - Device-specific: user specifies address manually (different chips store serials in different locations)
+       - May include checksum byte option
+       - Implemented as the "patch buffer before write" hook in `batch_write`
+  - **Design decisions:**
+    - Batch without serial numbers first: useful on its own, simpler to validate
+    - Serial injection as optional layer: adds device-specific complexity (address, format, endianness, checksums) — better as a separate iteration
+    - CLI first, then GUI: CLI is a linear loop with no UI paradigm change; GUI needs batch state management and "Next Chip" flow
+    - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
+  - Status: Ready to implement. Starting with CLI batch mode.
 
 ## Backlog
 

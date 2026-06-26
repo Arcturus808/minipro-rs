@@ -35,6 +35,16 @@
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
+  import {
+    batchState,
+    batchModeEnabled,
+    batchActive,
+    batchWaiting,
+    startBatch,
+    nextChip,
+    retryChip,
+    stopBatch,
+  } from "./lib/stores/batch";
 
   let themeValue: "system" | "dark" | "light" = $state("system");
 
@@ -51,6 +61,7 @@
   let page = $state("code");
   let format = $state("auto");
   let sizeMismatch = $state("error");
+  let batchCount = $state(""); // empty = unlimited
 
   const VPP_OPTIONS = ["9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5", "15.0", "16.0", "17.0", "18.0", "21.0"];
   const VCC_OPTIONS = ["3.3", "4.0", "4.5", "5.0", "6.0", "6.3", "6.5", "7.0"];
@@ -344,8 +355,13 @@
     const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-      await doWrite(path, getOptions());
-      logChipIdCheck();
+      if ($batchModeEnabled) {
+        const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) || null : null;
+        await startBatch(path, getOptions(), count);
+      } else {
+        await doWrite(path, getOptions());
+        logChipIdCheck();
+      }
     }
   }
 
@@ -930,6 +946,73 @@
               {/if}
             </div>
 
+            <!-- Batch mode toggle (write only) -->
+            {#if $activeOperation === "write" && !$batchActive}
+              <div class="flex items-center gap-3 py-2 px-3 rounded-lg bg-surface-100-900 border border-surface-200-800">
+                <label class="flex items-center gap-2 cursor-pointer text-sm">
+                  <input type="checkbox" bind:checked={$batchModeEnabled} class="accent-primary-600" />
+                  <span>Batch Mode</span>
+                </label>
+                {#if $batchModeEnabled}
+                  <input
+                    type="text"
+                    bind:value={batchCount}
+                    placeholder="unlimited"
+                    class="w-24 px-2 py-1 text-sm rounded border border-surface-200-800 bg-transparent"
+                    title="Number of chips to program (empty = unlimited)"
+                  />
+                  <span class="text-xs opacity-50">chips</span>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Batch progress panel -->
+            {#if $batchActive}
+              <div class="flex flex-col gap-3 p-4 rounded-lg bg-surface-100-900 border-2 border-primary-500">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-semibold">
+                    Batch: Chip {$batchState.chipNumber}{$batchState.total ? ` / ${$batchState.total}` : ""}
+                  </span>
+                  <span class="text-xs opacity-60">
+                    {$batchState.passed} passed · {$batchState.failed} failed
+                  </span>
+                </div>
+                {#if $batchState.lastError}
+                  <div class="text-xs text-red-500 bg-red-100 dark:bg-red-900/20 rounded px-2 py-1">
+                    Last error: {$batchState.lastError}
+                  </div>
+                {/if}
+                {#if $batchWaiting}
+                  <div class="flex gap-2">
+                    {#if $batchState.lastError}
+                      <button
+                        class="flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-all"
+                        onclick={retryChip}
+                      >
+                        Retry Chip
+                      </button>
+                    {/if}
+                    <button
+                      class="flex-1 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-all"
+                      onclick={nextChip}
+                    >
+                      {#if $batchState.lastError}Skip & Next{:else}Next Chip{/if}
+                    </button>
+                    <button
+                      class="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all"
+                      onclick={stopBatch}
+                    >
+                      Stop Batch
+                    </button>
+                  </div>
+                {:else}
+                  <div class="text-sm opacity-60 text-center py-2">
+                    Programming chip {$batchState.chipNumber}...
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             <!-- Start button -->
             <div class="flex flex-col gap-2">
               {#if opFileHint && !($activeOperation === "write" && hasHexData)}
@@ -943,7 +1026,7 @@
                   <button
                     class="px-6 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-40"
                     onclick={onWriteFromHex}
-                    disabled={$isRunning || !$selectedDevice}
+                    disabled={$isRunning || !$selectedDevice || $batchActive}
                   >
                     <span>Write from Hex Buffer</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -953,7 +1036,7 @@
                   <button
                     class="px-6 py-2 rounded-lg bg-surface-200-800 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-surface-300-700 transition-all disabled:opacity-40"
                     onclick={onWriteFromFile}
-                    disabled={$isRunning || !$selectedDevice}
+                    disabled={$isRunning || !$selectedDevice || $batchActive}
                   >
                     <span>Write from File</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
