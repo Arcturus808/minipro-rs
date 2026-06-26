@@ -1947,6 +1947,7 @@ dependencies = [
  "nusb",
  "pollster",
  "quick-xml 0.37.5",
+ "serde",
  "thiserror 2.0.18",
 ]
 

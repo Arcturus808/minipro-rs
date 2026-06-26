@@ -114,6 +114,7 @@ pub fn run() {
             commands::do_logic_test,
             commands::do_firmware_update,
             commands::read_file_bytes,
+            commands::do_smart_diff,
             commands::check_database,
             commands::check_overcurrent,
             commands::read_calibration,

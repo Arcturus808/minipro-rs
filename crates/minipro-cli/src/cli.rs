@@ -225,4 +225,15 @@ struct Cli {
     /// Set the I2C slave address (T76 only), e.g. 0xA0. Equivalent to -o address=<hex>.
     #[arg(long = "address", value_name = "HEX")]
     address: Option<String>,
+
+    /// Compare two firmware files (byte-aligned diff with trailing-padding handling).
+    /// Pass two file paths: --diff fileA.bin fileB.bin
+    /// No programmer hardware required.
+    #[arg(long = "diff", num_args = 2, value_names = ["FILE_A", "FILE_B"])]
+    diff: Option<Vec<PathBuf>>,
+
+    /// Erase value for --diff padding detection (default: 0xFF).
+    /// Use 0x00 for EEPROM/NAND that erase to zero.
+    #[arg(long = "erase-value", value_name = "BYTE", default_value = "0xFF")]
+    erase_value: String,
 }

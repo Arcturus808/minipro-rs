@@ -44,6 +44,18 @@ fn main() -> ExitCode {
     }
 }
 
+/// Parse an erase-value string: accepts "0xFF", "0x00", "255", "0", etc.
+fn parse_erase_value(s: &str) -> Result<u8> {
+    let s = s.trim();
+    let val = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u8::from_str_radix(hex, 16)
+    } else {
+        s.parse::<u8>()
+    }
+    .map_err(|e| anyhow::anyhow!("invalid erase-value '{s}': {e}"))?;
+    Ok(val)
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -122,6 +134,31 @@ fn run() -> Result<()> {
             println!("  {model}");
         }
         return Ok(());
+    }
+
+    // ── Diff two firmware files (no USB needed) ──────────────────────────────
+    if let Some(ref diff_files) = cli.diff {
+        let files = diff_files;
+        let file_a = &files[0];
+        let file_b = &files[1];
+
+        // Parse erase value (hex or decimal)
+        let erase_value = parse_erase_value(&cli.erase_value)?;
+
+        // Read both files as raw binary (no format parsing — diff compares bytes)
+        let buf_a = std::fs::read(file_a).with_context(|| format!("cannot read {:?}", file_a))?;
+        let buf_b = std::fs::read(file_b).with_context(|| format!("cannot read {:?}", file_b))?;
+
+        let result = minipro_core::smart_diff(&buf_a, &buf_b, erase_value);
+        let report = minipro_core::format_diff_report(&result, erase_value);
+        print!("{report}");
+
+        return if result.summary.is_equal {
+            Ok(())
+        } else {
+            // Exit code 1 on mismatch (like diff(1))
+            Err(anyhow::anyhow!("files differ"))
+        };
     }
 
     // ── Operations that need USB ──────────────────────────────────────────────

@@ -32,6 +32,7 @@
 
 pub mod database;
 pub mod device;
+pub mod diff;
 pub mod error;
 pub mod format;
 pub mod handle;
@@ -48,6 +49,9 @@ pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,
     FuseField, FuseType, GalConfig, PackageDetails, ProgrammerInfo, ProgrammerModel,
     ProgrammerStatus, Voltages,
+};
+pub use diff::{
+    format_diff_report, smart_diff, DiffEntry, DiffResult, DiffSummary, TailKind, TailRegion,
 };
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;

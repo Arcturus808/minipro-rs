@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits } from "../stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
-  import { pickSaveFile, getIterativeSavePath } from "../file-dialog";
+  import { pickSaveFile, pickOpenFile, getIterativeSavePath } from "../file-dialog";
   import { get } from "svelte/store";
+  import { invoke } from "@tauri-apps/api/core";
+  import { logs } from "../stores/logs";
 
   const ROW_SIZE = 16;
   const BUFFER_ROWS = 5;
@@ -24,6 +26,37 @@
   let showGotoDialog = $state(false);
   let gotoValue = $state("");
   let gotoInputRef = $state<HTMLInputElement | null>(null);
+
+  // ── Diff mode state ────────────────────────────────────────────────────────
+  interface DiffEntry { offset: number; value_a: number; value_b: number; }
+  interface TailRegion { start: number; end: number; kind: "Padding" | "Anomalous"; longer_side: string; }
+  interface DiffSummary {
+    diff_count: number; diff_regions: number; size_a: number; size_b: number;
+    padding_tail: number; anomalous_tail: number; is_equal: boolean;
+  }
+  interface DiffResult { diffs: DiffEntry[]; tails: TailRegion[]; summary: DiffSummary; }
+
+  let diffResult = $state<DiffResult | null>(null);
+  let diffRefPath = $state<string | null>(null);
+  let diffNavIndex = $state(0); // current position in diff list for navigation
+  let diffComparing = $state(false);
+
+  // Set of differing offsets for quick lookup during rendering
+  let diffOffsets = $derived(new Set(diffResult?.diffs.map(d => d.offset) ?? []));
+  // Tail region info for rendering: map offset → kind
+  let tailMap = $derived(() => {
+    const m = new Map<number, "Padding" | "Anomalous">();
+    if (!diffResult) return m;
+    for (const t of diffResult.tails) {
+      for (let i = t.start; i < t.end; i++) {
+        m.set(i, t.kind);
+      }
+    }
+    return m;
+  });
+
+  // Determine the effective size for rendering (may be longer than hexMeta.data if reference is longer)
+  let diffRenderSize = $derived(diffResult ? Math.max($hexMeta?.data?.length ?? 0, diffResult.summary.size_b) : ($hexMeta?.data?.length ?? 0));
 
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
@@ -116,7 +149,7 @@
     }
   }
 
-  let totalRows = $derived($hexMeta?.data ? Math.ceil($hexMeta.data.length / ROW_SIZE) : 0);
+  let totalRows = $derived(Math.ceil(diffRenderSize / ROW_SIZE));
   let startRow = $derived(Math.max(0, Math.floor(scrollTop / rowHeight) - BUFFER_ROWS));
   let endRow = $derived(Math.min(totalRows, Math.ceil((scrollTop + containerHeight) / rowHeight) + BUFFER_ROWS));
   let visibleRows = $derived(Array.from({ length: endRow - startRow }, (_, i) => startRow + i));
@@ -386,6 +419,133 @@
       return () => document.removeEventListener("keydown", handleEditKeydown);
     }
   });
+
+  // ── Diff mode helpers ──────────────────────────────────────────────────────
+
+  function uint8ArrayToBase64(data: Uint8Array): string {
+    const CHUNK_SIZE = 0x8000;
+    let result = "";
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.subarray(i, i + CHUNK_SIZE);
+      result += String.fromCharCode(...chunk);
+    }
+    return btoa(result);
+  }
+
+  async function startCompare() {
+    const data = getHexData();
+    if (!data || data.length === 0) {
+      logs.error("No data in hex viewer to compare");
+      return;
+    }
+
+    const refPath = await pickOpenFile(
+      "Select reference file to compare",
+      get(settings).defaultDirectory ?? undefined
+    );
+    if (!refPath) return;
+
+    diffComparing = true;
+    try {
+      // Commit any pending edits before comparing
+      if (get(hexEdits).size > 0) {
+        applyHexEdits();
+      }
+      const freshData = getHexData();
+      if (!freshData) return;
+
+      const base64Data = uint8ArrayToBase64(freshData);
+      const result = await invoke<DiffResult>("do_smart_diff", {
+        base64Data,
+        referencePath: refPath,
+        eraseValue: 0xFF,
+      });
+      diffResult = result;
+      diffRefPath = refPath;
+      diffNavIndex = 0;
+
+      if (result.summary.is_equal) {
+        logs.info(`Compare: Files match (ignoring trailing padding) — ${refPath}`);
+      } else {
+        const s = result.summary;
+        let msg = `Compare: ${s.diff_count} byte difference(s) across ${s.diff_regions} region(s)`;
+        if (s.anomalous_tail > 0) {
+          msg += ` · WARNING: ${s.anomalous_tail} anomalous tail region(s) detected`;
+        }
+        logs.info(msg);
+      }
+    } catch (e) {
+      logs.error(`Compare failed: ${e}`);
+      diffResult = null;
+      diffRefPath = null;
+    } finally {
+      diffComparing = false;
+    }
+  }
+
+  function clearCompare() {
+    diffResult = null;
+    diffRefPath = null;
+    diffNavIndex = 0;
+  }
+
+  function navigateDiff(direction: "next" | "prev") {
+    if (!diffResult || diffResult.diffs.length === 0) return;
+    const n = diffResult.diffs.length;
+    if (direction === "next") {
+      diffNavIndex = (diffNavIndex + 1) % n;
+    } else {
+      diffNavIndex = (diffNavIndex - 1 + n) % n;
+    }
+    const targetOffset = diffResult.diffs[diffNavIndex].offset;
+    scrollToOffset(targetOffset);
+  }
+
+  // Global keydown for diff navigation (F3 / Shift+F3)
+  function handleDiffKeydown(e: KeyboardEvent) {
+    if (!diffResult) return;
+    if (e.key === "F3" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      navigateDiff(e.shiftKey ? "prev" : "next");
+    }
+  }
+
+  $effect(() => {
+    if (diffResult) {
+      document.addEventListener("keydown", handleDiffKeydown);
+      return () => document.removeEventListener("keydown", handleDiffKeydown);
+    }
+  });
+
+  // Get diff cell style for a given offset
+  function getDiffCellStyle(offset: number): string {
+    if (!diffResult) return "";
+    if (diffOffsets.has(offset)) {
+      return "background: #fee2e2; color: #991b1b; font-weight: 600; border-radius: 2px;";
+    }
+    const tm = tailMap();
+    const tailKind = tm.get(offset);
+    if (tailKind === "Anomalous") {
+      return "background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 2px;";
+    }
+    if (tailKind === "Padding") {
+      return "background: #f3f4f6; color: #9ca3af; border-radius: 2px;";
+    }
+    return "";
+  }
+
+  // Get byte value for rendering — in diff mode, bytes beyond the chip buffer
+  // (from the reference file) show as the reference value
+  function getRenderByte(offset: number): number {
+    const dataLen = $hexMeta?.data?.length ?? 0;
+    if (offset < dataLen) {
+      return getByte(offset);
+    }
+    // Beyond chip data — this is from the reference file's tail
+    // We don't have the reference bytes in the frontend, so show 0xFF or 0x00
+    // The tail coloring already indicates this is padding or anomalous
+    return 0xFF;
+  }
 </script>
 
 <div class="hex-viewer-container" style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
@@ -402,6 +562,17 @@
         {#if editCount > 0}
           <span style="font-size: 12px; color: #f59e0b; margin-left: 8px; font-weight: 500;">
             {editCount} edit{editCount === 1 ? '' : 's'} pending
+          </span>
+        {/if}
+        {#if diffResult}
+          <span style="font-size: 12px; margin-left: 8px; font-weight: 500; color: {diffResult.summary.is_equal ? '#16a34a' : '#dc2626'};">
+            {#if diffResult.summary.is_equal}
+              · Compare: Files match (ignoring trailing padding)
+            {:else if diffResult.summary.diff_count > 0}
+              · Compare: {diffResult.summary.diff_count} difference{diffResult.summary.diff_count === 1 ? '' : 's'} across {diffResult.summary.diff_regions} region{diffResult.summary.diff_regions === 1 ? '' : 's'}
+            {:else}
+              · Compare: No byte differences, but {diffResult.summary.anomalous_tail} anomalous tail region(s)
+            {/if}
           </span>
         {/if}
       {/if}
@@ -502,13 +673,65 @@
         <button
           class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
           style="font-size: 13px;"
-          onclick={() => { savedPath = null; clearHexEdits(); clearHexBuffer(); }}
+          onclick={() => { savedPath = null; clearHexEdits(); clearHexBuffer(); clearCompare(); }}
         >
           Clear
         </button>
+        {#if !diffResult}
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5"
+            style="font-size: 13px;"
+            onclick={startCompare}
+            disabled={diffComparing}
+            title="Compare hex buffer against a reference file (F3 to navigate differences)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h8m-8 5h8M3 5l4 4-4 4M21 5l-4 4 4 4" />
+            </svg>
+            {diffComparing ? "Comparing..." : "Compare"}
+          </button>
+        {:else}
+          {#if diffResult.diffs.length > 0}
+            <button
+              class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+              style="font-size: 13px;"
+              onclick={() => navigateDiff("prev")}
+              title="Previous difference (Shift+F3)"
+            >↑ Prev</button>
+            <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center;">
+              {diffNavIndex + 1}/{diffResult.diffs.length}
+            </span>
+            <button
+              class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+              style="font-size: 13px;"
+              onclick={() => navigateDiff("next")}
+              title="Next difference (F3)"
+            >Next ↓</button>
+          {/if}
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+            style="font-size: 13px; color: #dc2626;"
+            onclick={clearCompare}
+            title="Clear comparison"
+          >✕ Clear Compare</button>
+        {/if}
       {/if}
     </div>
   </div>
+  {#if diffResult && diffResult.summary.anomalous_tail > 0}
+    <div style="padding: 6px 12px; background: #fef3c7; border-bottom: 1px solid #f59e0b; font-size: 12px; color: #92400e; display: flex; align-items: center; gap: 8px;">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <span>
+        <strong>WARNING:</strong> Reference file has non-padding data beyond the buffer length —
+        possible truncated read, wrong chip selected, or leftover data from previous programming.
+        {#each diffResult.tails.filter(t => t.kind === "Anomalous") as tail}
+          <br>Tail [0x{tail.start.toString(16).toUpperCase()}..0x{tail.end.toString(16).toUpperCase()}] in buffer {tail.longer_side}
+        {/each}
+      </span>
+    </div>
+  {/if}
   {#if showGotoDialog}
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
       onclick={(e) => { if (e.target === e.currentTarget) closeGotoDialog(); }}
@@ -566,7 +789,7 @@
         <div style="height: {topPadding}px;"></div>
         {#each visibleRows as rowIdx (rowIdx)}
           {@const offset = rowIdx * ROW_SIZE}
-          {@const end = Math.min(offset + ROW_SIZE, $hexMeta.data.length)}
+          {@const end = Math.min(offset + ROW_SIZE, diffRenderSize)}
           {@const len = end - offset}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
             <span style="width: 9ch; margin-right: 1.5ch; opacity: 0.55; flex-shrink: 0;">{formatOffset(offset)}</span>
@@ -575,7 +798,8 @@
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
                 {@const isEditingAscii = editingOffset === byteOffset && editingMode === "ascii"}
                 {@const edited = isEdited(byteOffset)}
-                {@const byteVal = getByte(byteOffset)}
+                {@const byteVal = getRenderByte(byteOffset)}
+                {@const diffStyle = getDiffCellStyle(byteOffset)}
                 {#if isEditingHex}
                   <input
                     type="text"
@@ -588,7 +812,7 @@
                 {:else}
                   <span
                     class="hex-cell"
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset)}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{formatHex(byteVal)}</span>
@@ -603,7 +827,8 @@
                 {@const edited = isEdited(byteOffset)}
                 {@const isEditingAscii = editingOffset === byteOffset && editingMode === "ascii"}
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
-                {@const byteVal = getByte(byteOffset)}
+                {@const byteVal = getRenderByte(byteOffset)}
+                {@const diffStyle = getDiffCellStyle(byteOffset)}
                 {#if isEditingAscii}
                   <input
                     type="text"
@@ -615,7 +840,7 @@
                   />
                 {:else}
                   <span
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : ''}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onclick={() => startEdit(byteOffset, "ascii")}
                     title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{toAscii(byteVal)}</span>

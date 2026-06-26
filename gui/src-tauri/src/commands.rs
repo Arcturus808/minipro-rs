@@ -1691,6 +1691,46 @@ pub async fn read_file_bytes(path: String, target_size: Option<u32>, blank_value
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
+/// Compare a base64-encoded buffer (the hex viewer's current data) against a
+/// reference file on disk. Returns a structured `DiffResult` as JSON.
+///
+/// The reference file is read as raw binary (no format parsing). For text
+/// formats (.hex, .srec, .jed), the file is parsed and trimmed of trailing
+/// blank bytes, matching `read_file_bytes` behavior.
+#[tauri::command]
+pub async fn do_smart_diff(
+    base64Data: String,
+    referencePath: String,
+    eraseValue: Option<u8>,
+) -> Result<minipro_core::DiffResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let buf_a = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &base64Data,
+        )
+        .map_err(|e| format!("Invalid base64 data: {}", e))?;
+
+        let p = Path::new(&referencePath);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let is_text_format = matches!(ext.to_lowercase().as_str(), "hex" | "srec" | "mot" | "jed");
+
+        let buf_b = if is_text_format {
+            let blank = eraseValue.unwrap_or(0xFF);
+            let size = 65536usize;
+            let buf = read_file(p, "auto", size, blank)
+                .map_err(|e| format!("Cannot parse reference file: {}", e))?;
+            trim_trailing_blanks(buf, blank)
+        } else {
+            std::fs::read(p).map_err(|e| format!("Cannot read reference file: {}", e))?
+        };
+
+        let erase = eraseValue.unwrap_or(0xFF);
+        Ok(minipro_core::smart_diff(&buf_a, &buf_b, erase))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
 /// Return the dynamic window size that would be computed for the primary monitor.
 #[tauri::command]
 pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32), String> {
