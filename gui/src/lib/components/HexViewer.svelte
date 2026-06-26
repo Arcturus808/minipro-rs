@@ -699,23 +699,23 @@
           {#if diffResult.diffs.length > 0}
             <button
               class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-              style="font-size: 13px;"
+              style="font-size: 13px; white-space: nowrap;"
               onclick={() => navigateDiff("prev")}
               title="Previous diff (Shift+F3)"
             >↑ Prev</button>
-            <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center;">
+            <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center; white-space: nowrap;">
               {diffNavIndex + 1}/{diffResult.diffs.length}
             </span>
             <button
               class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-              style="font-size: 13px;"
+              style="font-size: 13px; white-space: nowrap;"
               onclick={() => navigateDiff("next")}
               title="Next diff (F3)"
             >Next ↓</button>
           {/if}
           <button
             class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-            style="font-size: 13px; color: #dc2626;"
+            style="font-size: 13px; color: #dc2626; white-space: nowrap;"
             onclick={clearCompare}
             title="Clear comparison"
           >✕ Clear Compare</button>
