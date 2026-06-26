@@ -555,30 +555,30 @@
 
 <div class="hex-viewer-container" style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
   <div style="padding: 8px 12px; border-bottom: 1px solid #ccc; display: flex; align-items: center; justify-content: space-between;">
-    <div>
-      <span style="font-size: 14px; font-weight: 600;">Hex Viewer</span>
+    <div style="min-width: 0;">
+      <div style="font-size: 14px; font-weight: 600;">Hex Viewer</div>
       {#if $hexMeta}
-        <span style="font-size: 12px; opacity: 0.6; margin-left: 8px;">
+        <div style="font-size: 12px; opacity: 0.6; margin-top: 2px;">
           {$hexMeta.size.toLocaleString()} bytes
           {#if $hexMeta.crc32 !== null}
             · CRC-32: {$hexMeta.crc32.toString(16).padStart(8, '0').toUpperCase()}
           {/if}
-        </span>
+        </div>
         {#if editCount > 0}
-          <span style="font-size: 12px; color: #f59e0b; margin-left: 8px; font-weight: 500;">
+          <div style="font-size: 12px; color: #f59e0b; margin-top: 2px; font-weight: 500;">
             {editCount} edit{editCount === 1 ? '' : 's'} pending
-          </span>
+          </div>
         {/if}
         {#if diffResult}
-          <span style="font-size: 12px; margin-left: 8px; font-weight: 500; color: {diffResult.summary.is_equal ? '#16a34a' : '#dc2626'};">
+          <div style="font-size: 12px; margin-top: 2px; font-weight: 500; color: {diffResult.summary.is_equal ? '#16a34a' : '#dc2626'};">
             {#if diffResult.summary.is_equal}
-              · Compare: Files match (ignoring trailing padding)
+              Compare: Files match (ignoring trailing padding)
             {:else if diffResult.summary.diff_count > 0}
-              · Compare: {diffResult.summary.diff_count} difference{diffResult.summary.diff_count === 1 ? '' : 's'} across {diffResult.summary.diff_regions} region{diffResult.summary.diff_regions === 1 ? '' : 's'}
+              Compare: {diffResult.summary.diff_count} difference{diffResult.summary.diff_count === 1 ? '' : 's'} across {diffResult.summary.diff_regions} region{diffResult.summary.diff_regions === 1 ? '' : 's'}
             {:else}
-              · Compare: No byte differences, but {diffResult.summary.anomalous_tail} anomalous tail region(s)
+              Compare: No byte differences, but {diffResult.summary.anomalous_tail} anomalous tail region(s)
             {/if}
-          </span>
+          </div>
         {/if}
       {/if}
     </div>
