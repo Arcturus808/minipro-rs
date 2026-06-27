@@ -60,8 +60,8 @@ pub trait Protocol: Send + Sync {
     /// Defaults to `device.code_memory_size`.  T76Protocol overrides this
     /// for eMMC, where the database value is a placeholder (0x200) and the
     /// real capacity is detected at runtime from EXT_CSD.
-    fn effective_code_size(&self, device: &Device) -> u32 {
-        device.code_memory_size
+    fn effective_code_size(&self, device: &Device) -> u64 {
+        device.code_memory_size as u64
     }
 
     /// Read one block of memory into `ds.data`.

@@ -638,7 +638,7 @@ impl Protocol for T76Protocol {
         usb.msg_send(&msg)
     }
 
-    fn effective_code_size(&self, device: &Device) -> u32 {
+    fn effective_code_size(&self, device: &Device) -> u64 {
         // For eMMC, the database code_memory_size is a placeholder (0x200).
         // Return the capacity detected from EXT_CSD (or T76_EMMC_SIZE_MB)
         // during begin_transaction.  Fall back to the database value if
@@ -646,10 +646,10 @@ impl Protocol for T76Protocol {
         if device.protocol_id == 0x31 {
             let cap = self.emmc_capacity.load(Ordering::Relaxed);
             if cap > 0 {
-                return cap as u32;
+                return cap;
             }
         }
-        device.code_memory_size
+        device.code_memory_size as u64
     }
 
     fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()> {
