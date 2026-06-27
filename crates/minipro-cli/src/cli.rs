@@ -243,4 +243,33 @@ struct Cli {
     /// Optional count: --batch 50 programs up to 50 chips.
     #[arg(long = "batch", num_args = 0..=1, default_missing_value = "0")]
     batch: Option<usize>,
+
+    /// Serial number start value (use with --batch). Hex (0x...) or decimal.
+    /// e.g. --serial-start 0x0001
+    #[arg(long = "serial-start", value_name = "VALUE")]
+    serial_start: Option<String>,
+
+    /// Target address for serial number in chip memory (hex). e.g. --serial-addr 0x1FF0
+    #[arg(long = "serial-addr", value_name = "OFFSET")]
+    serial_addr: Option<String>,
+
+    /// Serial number byte width: 1, 2, 4, or 8 (default: 4).
+    #[arg(long = "serial-width", value_name = "N", default_value = "4")]
+    serial_width: usize,
+
+    /// Serial number format: bin, ascii, or bcd (default: bin).
+    #[arg(long = "serial-format", value_name = "FORMAT", default_value = "bin")]
+    serial_format: String,
+
+    /// Serial number byte order: little or big (default: little). Binary format only.
+    #[arg(long = "serial-endian", value_name = "ENDIAN", default_value = "little")]
+    serial_endian: String,
+
+    /// Serial number increment per chip (default: 1).
+    #[arg(long = "serial-step", value_name = "N", default_value = "1")]
+    serial_step: u64,
+
+    /// Serial number checksum: none, xor, or crc8 (default: none).
+    #[arg(long = "serial-checksum", value_name = "TYPE", default_value = "none")]
+    serial_checksum: String,
 }
