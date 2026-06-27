@@ -842,6 +842,127 @@ pub async fn do_write(
     }
 }
 
+/// Write file to chip memory — single chip within a batch run.
+/// Same as `do_write` but emits batch-specific log messages with the chip number.
+/// The frontend manages the batch loop and calls this once per chip.
+#[tauri::command]
+pub async fn do_batch_write_chip(
+    path: String,
+    chipNumber: u32,
+    options: OperationOptions,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<OpStatsDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let path_clone = path.clone();
+    let options_clone = options.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device_arc = state_task.get_device()?;
+        let mut device = (*device_arc).clone();
+        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        let device = Arc::new(device);
+        let page = parse_page(&options_clone.page)?;
+        let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
+        let op_name = format!("write (chip {})", chipNumber);
+
+        emit_log(&window_clone, "info", &format!("── Chip {} ──", chipNumber));
+
+        let result = (|| {
+            handle.icsp = options_clone.icsp_mode != "zif";
+            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
+
+            if !options_clone.skip_erase {
+                emit_log(&window_clone, "info", &format!("Chip {}: erasing...", chipNumber));
+                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                handle.end_transaction().map_err(|e| e.to_string())?;
+                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            }
+
+            let stats = write_chip(
+                &mut handle,
+                Path::new(&path_clone),
+                page,
+                &options_clone.format,
+                size_mismatch,
+                options_clone.skip_blank,
+                false,
+                Some(&mut |done, total| {
+                    let _ = window_clone.emit(
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: op_name.clone(),
+                        },
+                    );
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+
+            if !options_clone.skip_verify {
+                let verify_window = window_clone.clone();
+                let _ = verify_chip(
+                    &mut handle,
+                    Path::new(&path_clone),
+                    page,
+                    &options_clone.format,
+                    false,
+                    Some(&mut |done, total| {
+                        let _ = verify_window.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: format!("verify (chip {})", chipNumber),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+
+            emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
+            Ok::<OpStats, String>(stats)
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(stats)) => Ok(stats.into()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
 /// Write the hex buffer (base64-encoded) to the chip.
 #[tauri::command]
 pub async fn do_write_bytes(

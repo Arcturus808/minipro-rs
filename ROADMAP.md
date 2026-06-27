@@ -43,10 +43,102 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Manufacturer column in search results** — each device search result shows the manufacturer name parsed from `infoic.xml`, making it easy to distinguish similar part numbers from different vendors.
 - [x] **Chip ID byte-order normalization** — fixes false mismatch errors on devices (e.g., SPI flash like PM25LV010) where different programmer protocols pack JEDEC ID bytes at different positions in the response word.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
+- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for future serial number injection. See detailed spec below in Near-term.
 
 ## Near-term
 
-- [ ] Batch / queue operations (write + verify)
+- [x] **Batch / queue operations** — program multiple identical chips with the same firmware image
+  - **Scope (initial):** same device, same file, repeated writes with verify. Covers 90%+ of batch use cases (classroom sets, bootloader burning, small production runs).
+  - **Architecture designed for serial injection:** the batch loop includes a "patch buffer before write" hook where auto-incrementing serial numbers will plug in later, without restructuring the core logic.
+  - **Implementation plan:**
+    1. **CLI batch mode** — `minipro -p DEVICE -w file.bin --batch [--count N]`
+       - Writes firmware, verifies, prints "Chip 1/N: PASS", waits for keypress (Enter to continue, Ctrl+C to abort)
+       - If `--count` omitted, runs indefinitely until user aborts
+       - Prints summary at end: total programmed, passes, failures
+       - Core logic in `minipro-core::operations::batch_write` — reusable by GUI
+       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for future serial injection)
+    2. **GUI batch mode** — "Batch Mode" toggle in operations panel
+       - When enabled, Start button becomes "Start Batch"
+       - After each successful write+verify, shows "Next Chip" button and progress counter ("3/50 completed")
+       - Batch summary panel: pass/fail count, elapsed time, export log option
+       - Reuses `batch_write` from `minipro-core` via Tauri command
+    3. **Serial number injection (future, separate from initial batch):**
+       - `--serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
+       - Patches buffer at target address before each write, increments after each successful write
+       - GUI: collapsible "Serial Number" section in batch options
+       - Device-specific: user specifies address manually (different chips store serials in different locations)
+       - May include checksum byte option
+       - Implemented as the "patch buffer before write" hook in `batch_write`
+  - **Design decisions:**
+    - Batch without serial numbers first: useful on its own, simpler to validate
+    - Serial injection as optional layer: adds device-specific complexity (address, format, endianness, checksums) — better as a separate iteration
+    - CLI first, then GUI: CLI is a linear loop with no UI paradigm change; GUI needs batch state management and "Next Chip" flow
+    - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
+  - Status: CLI and GUI batch mode implemented. Serial number injection is the next step.
+
+- [ ] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
+  - **Problem:** Embedded products need unique serial numbers stored at a known address in flash/EEPROM. Without automation, the user must manually edit the firmware file between each chip — tedious and error-prone.
+  - **Use case:** Manufacturer programming 1000 identical boards. Each chip gets the same firmware but a different serial number at a fixed address (e.g., `0x1FF0`).
+  - **Architecture:** Plugs into the existing `on_patch_buffer` hook in `batch_write`. The buffer is re-read from the file before each chip, so the patch is always applied to a fresh copy — no need to undo the previous serial.
+  - **Configuration:**
+    - `--serial-start <VALUE>` — starting serial number (hex or decimal, e.g., `0x0001` or `1`)
+    - `--serial-addr <OFFSET>` — target address in the chip's memory (hex, e.g., `0x1FF0`)
+    - `--serial-width <N>` — byte width: 1, 2, 4, or 8 (default: 4)
+    - `--serial-format <FORMAT>` — `bin` (raw binary), `ascii` (zero-padded decimal string), `bcd` (binary-coded decimal). Default: `bin`
+    - `--serial-endian <ENDIAN>` — `little` or `big` (default: `little`). Only applies to `bin` format.
+    - `--serial-step <N>` — increment per chip (default: 1). Allows skipping numbers (e.g., step=10 for batch-labeled units).
+    - `--serial-checksum <TYPE>` — optional: `crc8`, `xor`, or `none` (default: `none`). Appends a checksum byte after the serial.
+  - **CLI usage:**
+    ```
+    minipro -p AT28C256 -w firmware.bin --batch 50 \
+      --serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 \
+      --serial-format bin --serial-endian little
+    ```
+    Output per chip: `Chip 1/50: PASS (serial 0x0001)`
+  - **GUI usage:**
+    - Collapsible "Serial Number" section in the batch options panel (only visible when Batch Mode is on)
+    - Fields: Start, Address, Width (dropdown), Format (dropdown), Endian (dropdown), Step
+    - Preview: shows "Chip 1: 0x0001 → bytes 01 00 00 00 at 0x1FF0" so user can verify before starting
+    - Per-chip log shows the serial that was written
+  - **Implementation plan:**
+    1. **Core: `SerialConfig` struct and `patch_serial()` function in `minipro-core::batch`**
+       - `SerialConfig` holds start, addr, width, format, endian, step, checksum type
+       - `patch_serial(buf: &mut [u8], config: &SerialConfig, chip_number: usize)` writes the serial bytes at the configured address
+       - Serial value for chip N = `start + (N-1) * step`
+       - Format conversions:
+         - `bin`: write value as N bytes in selected endianness
+         - `ascii`: format as zero-padded decimal string (width = number of digits, not bytes), null-terminated
+         - `bcd`: pack each decimal digit as 4-bit nibble
+       - Checksum (if enabled): compute over serial bytes, append at `addr + width`
+       - Bounds check: error if `addr + width + checksum_len > buf.len()`
+    2. **CLI: add `--serial-*` flags, wire into `on_patch_buffer` callback**
+       - Validate serial config before starting batch
+       - Print serial value in per-chip output
+    3. **GUI: add `do_batch_write_chip_serial` Tauri command**
+       - Takes `SerialConfig` as additional parameter
+       - Patches buffer before write (frontend can't patch directly since it doesn't have the file bytes — backend reads and patches)
+       - Alternative: frontend computes serial bytes and passes them via `serialBytes: number[]` parameter, backend writes them at the address. This keeps the patch logic in the frontend store where the batch state lives.
+       - Preferred: backend handles patching via `SerialConfig` — keeps serial logic in Rust, testable, consistent with CLI
+    4. **GUI: Serial Number section in batch panel**
+       - Collapsible section, only visible when Batch Mode is on
+       - Input fields + live preview of first 3 serial values
+    5. **Tests: unit tests for `patch_serial()`**
+       - Binary little-endian, binary big-endian, ASCII, BCD
+       - Checksum types (crc8, xor)
+       - Bounds checking (address out of range)
+       - Multi-chip sequence (verify increment + step)
+  - **Design decisions:**
+    - Serial config is optional — batch works without it (already implemented)
+    - Address is user-specified, not database-driven: different products store serials at different locations, even on the same chip type. No reliable way to auto-detect.
+    - ASCII format uses decimal, not hex: matches typical product labeling (SN00001, not SN0x0001)
+    - Checksum is optional and simple: CRC8 or XOR covers most use cases without over-engineering
+    - Serial increments on chip number, not on success: if a chip fails and is retried, it gets the same serial (not the next one). This prevents serial gaps from failed chips.
+  - **Edge cases to handle:**
+    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), warn and wrap or stop
+    - Address + width beyond buffer: error before starting the batch
+    - ASCII format with width > buffer space at address: error
+    - Verify after write: the verify step uses the original file, not the patched buffer. Need to verify against the patched buffer instead, or skip verify for the serial region. **Decision: verify against patched buffer** — the `do_batch_write_chip` command should patch before both write and verify.
+  - Status: Planning complete. Ready to implement after batch mode is merged.
 
 ## Backlog
 

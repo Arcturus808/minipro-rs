@@ -378,6 +378,86 @@ fn do_operations(
 
     // ── Write ─────────────────────────────────────────────────────────────────
     if let Some(ref path) = cli.write {
+        // ── Batch mode ───────────────────────────────────────────────────────
+        if let Some(batch_count) = cli.batch {
+            if page == PageType::Config || page == PageType::Calibration {
+                anyhow::bail!("batch mode is not supported for config/calibration pages");
+            }
+
+            let count = if batch_count == 0 {
+                None
+            } else {
+                Some(batch_count)
+            };
+
+            let size_mismatch = if cli.size_ignore {
+                SizeMismatch::Ignore
+            } else if cli.size_warn {
+                SizeMismatch::Warn
+            } else {
+                SizeMismatch::Error
+            };
+
+            let config = minipro_core::BatchConfig {
+                path: path.clone(),
+                page: proto_page,
+                format: cli.format.clone(),
+                size_mismatch,
+                skip_blank: cli.skip_blank,
+                check_device_id: !cli.skip_device_id,
+                erase: !cli.no_erase,
+                verify: !cli.no_verify,
+                count,
+            };
+
+            let mut callbacks = minipro_core::BatchCallbacks {
+                on_progress: None,
+                on_chip_complete: None,
+                on_ready: Some(&mut |chip_num: usize| -> bool {
+                    eprint!(
+                        "\nInsert chip {} and press Enter (Ctrl+C to abort)... ",
+                        chip_num
+                    );
+                    let mut line = String::new();
+                    match std::io::stdin().read_line(&mut line) {
+                        Ok(0) => false, // EOF — abort
+                        Ok(_) => true,
+                        Err(_) => false,
+                    }
+                }),
+                on_patch_buffer: None,
+            };
+
+            eprintln!(
+                "Batch mode: programming {} chip(s) with {}",
+                count
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "unlimited".into()),
+                path.display()
+            );
+
+            let summary = minipro_core::batch_write(handle, &config, &mut callbacks)?;
+
+            eprintln!("\n{}", "─".repeat(40));
+            eprintln!(
+                "Batch complete: {} programmed, {} passed, {} failed{}",
+                summary.total,
+                summary.passed,
+                summary.failed,
+                if summary.aborted { " (aborted)" } else { "" }
+            );
+
+            for r in &summary.results {
+                if r.success {
+                    eprintln!("  Chip {}: PASS", r.chip_number);
+                } else if let Some(ref err) = r.error {
+                    eprintln!("  Chip {}: FAIL — {}", r.chip_number, err);
+                }
+            }
+
+            return Ok(());
+        }
+
         if page == PageType::Config {
             let text = std::fs::read_to_string(path)
                 .with_context(|| format!("cannot read config file {:?}", path))?;
