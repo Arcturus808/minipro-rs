@@ -136,7 +136,15 @@ async function runOp(
     return result;
   } catch (e) {
     const elapsed = Date.now() - start;
-    deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${e}`);
+    const errMsg = String(e);
+    deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${errMsg}`);
+    // If the error looks USB-related, advise the user to replug
+    const usbKeywords = ["STALL", "NoDevice", "LIBUSB_ERROR_NO_DEVICE",
+      "LIBUSB_ERROR_IO", "LIBUSB_ERROR_PIPE", "DeviceNotFound",
+      "endpoint", "USB error", "No programmer connected", "No programmer found"];
+    if (usbKeywords.some((kw) => errMsg.includes(kw))) {
+      deferLog("warn", "  Try unplugging and replugging the programmer, then click the connection button to reconnect.");
+    }
     // If the programmer was unplugged mid-operation, sync the badge state
     await refreshProgrammer();
   } finally {

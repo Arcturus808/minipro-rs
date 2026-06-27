@@ -115,6 +115,13 @@ async function programCurrentChip() {
       waitingForNext: true,
     }));
     logs.error(`Chip ${state.chipNumber}: FAIL — ${e}`);
+    const errMsg = String(e);
+    const usbKeywords = ["STALL", "NoDevice", "LIBUSB_ERROR_NO_DEVICE",
+      "LIBUSB_ERROR_IO", "LIBUSB_ERROR_PIPE", "DeviceNotFound",
+      "endpoint", "USB error", "No programmer connected", "No programmer found"];
+    if (usbKeywords.some((kw) => errMsg.includes(kw))) {
+      logs.warn("  Try unplugging and replugging the programmer, then click the connection button to reconnect.");
+    }
     await refreshProgrammer();
   }
 }
