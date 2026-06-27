@@ -998,14 +998,28 @@
                     <span>Serial Number Injection</span>
                   </label>
                   {#if serialEnabled}
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                      <label class="flex flex-col gap-1">
-                        <span class="opacity-60">Start value</span>
-                        <input type="text" bind:value={serialStart} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x0001" />
-                      </label>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                      <!-- Row 1: Where and what -->
                       <label class="flex flex-col gap-1">
                         <span class="opacity-60">Address (hex, required)</span>
                         <input type="text" bind:value={serialAddr} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x????" />
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Start value</span>
+                        <input type="text" bind:value={serialStart} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="1" />
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Step</span>
+                        <input type="text" bind:value={serialStep} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="1" />
+                      </label>
+                      <!-- Row 2: How to encode -->
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Format</span>
+                        <select bind:value={serialFormat} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
+                          <option value="bin">Binary</option>
+                          <option value="ascii">ASCII</option>
+                          <option value="bcd">BCD</option>
+                        </select>
                       </label>
                       <label class="flex flex-col gap-1">
                         <span class="opacity-60">Width (bytes)</span>
@@ -1017,25 +1031,14 @@
                         </select>
                       </label>
                       <label class="flex flex-col gap-1">
-                        <span class="opacity-60">Format</span>
-                        <select bind:value={serialFormat} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
-                          <option value="bin">Binary</option>
-                          <option value="ascii">ASCII</option>
-                          <option value="bcd">BCD</option>
-                        </select>
-                      </label>
-                      <label class="flex flex-col gap-1">
                         <span class="opacity-60">Endian</span>
                         <select bind:value={serialEndian} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
                           <option value="little">Little</option>
                           <option value="big">Big</option>
                         </select>
                       </label>
-                      <label class="flex flex-col gap-1">
-                        <span class="opacity-60">Step</span>
-                        <input type="text" bind:value={serialStep} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="1" />
-                      </label>
-                      <label class="flex flex-col gap-1 col-span-2">
+                      <!-- Row 3: Optional -->
+                      <label class="flex flex-col gap-1 col-span-3">
                         <span class="opacity-60">Checksum</span>
                         <select bind:value={serialChecksum} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
                           <option value="none">None</option>
