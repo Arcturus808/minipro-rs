@@ -4,6 +4,16 @@ import { logs } from "./logs";
 import { refreshProgrammer } from "./device";
 import type { OperationOptions } from "./operations";
 
+export interface SerialConfig {
+  start: number;
+  address: number;
+  width: number;
+  format: "bin" | "ascii" | "bcd";
+  endian: "little" | "big";
+  step: number;
+  checksum: "none" | "xor" | "crc8";
+}
+
 export interface BatchState {
   active: boolean;       // true when a batch run is in progress
   chipNumber: number;    // current chip (1-based)
@@ -14,6 +24,7 @@ export interface BatchState {
   waitingForNext: boolean; // true after a chip completes, waiting for user to click "Next Chip"
   filePath: string | null; // firmware file path for the batch
   options: OperationOptions | null;
+  serialConfig: SerialConfig | null;
 }
 
 const initialState: BatchState = {
@@ -26,6 +37,7 @@ const initialState: BatchState = {
   waitingForNext: false,
   filePath: null,
   options: null,
+  serialConfig: null,
 };
 
 export const batchState = writable<BatchState>(initialState);
@@ -41,6 +53,7 @@ export async function startBatch(
   filePath: string,
   options: OperationOptions,
   count: number | null,
+  serialConfig: SerialConfig | null,
 ) {
   batchState.set({
     active: true,
@@ -52,11 +65,18 @@ export async function startBatch(
     waitingForNext: false,
     filePath,
     options,
+    serialConfig,
   });
 
-  logs.info(
-    `Batch started: programming ${count ?? "unlimited"} chip(s) with ${filePath}`,
-  );
+  if (serialConfig) {
+    logs.info(
+      `Batch started: programming ${count ?? "unlimited"} chip(s) with ${filePath}, serial start=${serialConfig.start} addr=0x${serialConfig.address.toString(16).toUpperCase()}`,
+    );
+  } else {
+    logs.info(
+      `Batch started: programming ${count ?? "unlimited"} chip(s) with ${filePath}`,
+    );
+  }
 
   await programCurrentChip();
 }
@@ -73,6 +93,7 @@ async function programCurrentChip() {
       path: state.filePath,
       chipNumber: state.chipNumber,
       options: state.options,
+      serialConfig: state.serialConfig,
     });
 
     batchState.update((s) => ({
