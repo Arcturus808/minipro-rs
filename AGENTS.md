@@ -194,7 +194,7 @@ gui/
       stores/
         hex.ts                 — file data, loading state
         operations.ts          — chip read/write/verify/erase/blank-check/chip-id/logic-test/config
-        batch.ts               — batch programming state (chip counter, pass/fail, Next Chip flow)
+        batch.ts               — batch programming state (chip counter, pass/fail, Next Chip flow, serial number injection config)
         logs.ts                — terminal log entries
         device.ts              — connected programmer + IC database
         settings.ts            — persisted app preferences (includes panel widths)

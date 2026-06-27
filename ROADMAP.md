@@ -43,7 +43,7 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Manufacturer column in search results** — each device search result shows the manufacturer name parsed from `infoic.xml`, making it easy to distinguish similar part numbers from different vendors.
 - [x] **Chip ID byte-order normalization** — fixes false mismatch errors on devices (e.g., SPI flash like PM25LV010) where different programmer protocols pack JEDEC ID bytes at different positions in the response word.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
-- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for future serial number injection. See detailed spec below in Near-term.
+- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for serial number injection. See detailed spec below in Near-term.
 - [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Near-term.
 
 ## Near-term
@@ -57,14 +57,14 @@ This is a living list of features and improvements planned for minipro-rs.
        - If `--count` omitted, runs indefinitely until user aborts
        - Prints summary at end: total programmed, passes, failures
        - Core logic in `minipro-core::operations::batch_write` — reusable by GUI
-       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for future serial injection)
+       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for serial injection)
     2. **GUI batch mode** — "Batch Mode" toggle in operations panel
        - When enabled, Start button becomes "Start Batch"
        - After each successful write+verify, shows "Next Chip" button and progress counter ("3/50 completed")
        - Batch summary panel: pass/fail count, elapsed time, export log option
        - Reuses `batch_write` from `minipro-core` via Tauri command
-    3. **Serial number injection (future, separate from initial batch):**
-       - `--serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
+    3. **Serial number injection (implemented):**
+       - `--serial-start 1 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
        - Patches buffer at target address before each write, increments after each successful write
        - GUI: collapsible "Serial Number" section in batch options
        - Device-specific: user specifies address manually (different chips store serials in different locations)
@@ -115,14 +115,15 @@ This is a living list of features and improvements planned for minipro-rs.
     2. **CLI: add `--serial-*` flags, wire into `on_patch_buffer` callback**
        - Validate serial config before starting batch
        - Print serial value in per-chip output
-    3. **GUI: add `do_batch_write_chip_serial` Tauri command**
-       - Takes `SerialConfig` as additional parameter
-       - Patches buffer before write (frontend can't patch directly since it doesn't have the file bytes — backend reads and patches)
-       - Alternative: frontend computes serial bytes and passes them via `serialBytes: number[]` parameter, backend writes them at the address. This keeps the patch logic in the frontend store where the batch state lives.
-       - Preferred: backend handles patching via `SerialConfig` — keeps serial logic in Rust, testable, consistent with CLI
+    3. **GUI: add `serialConfig` parameter to `do_batch_write_chip` Tauri command**
+       - Takes optional `SerialConfigDto` as additional parameter
+       - When present, backend reads file into buffer, patches with `patch_serial()`, then uses `write_chip_bytes` + `verify_chip_bytes` (not file-based versions)
+       - Keeps serial logic in Rust, testable, consistent with CLI
     4. **GUI: Serial Number section in batch panel**
        - Collapsible section, only visible when Batch Mode is on
-       - Input fields + live preview of first 3 serial values
+       - 3-column field layout: Address | Start | Step / Format | Width | Endian / Checksum
+       - Live preview shows serial range: "Chip 1 of 10: serial 1 → 10, 4 bytes at 0x1FF0" (bounded) or "Chip 1 (unlimited): serial 1, 2, 3, ..." (unlimited)
+       - Validation: rejects empty address or invalid start value before starting batch
     5. **Tests: unit tests for `patch_serial()`**
        - Binary little-endian, binary big-endian, ASCII, BCD
        - Checksum types (crc8, xor)
@@ -134,11 +135,13 @@ This is a living list of features and improvements planned for minipro-rs.
     - ASCII format uses decimal, not hex: matches typical product labeling (SN00001, not SN0x0001)
     - Checksum is optional and simple: CRC8 or XOR covers most use cases without over-engineering
     - Serial increments on chip number, not on success: if a chip fails and is retried, it gets the same serial (not the next one). This prevents serial gaps from failed chips.
-  - **Edge cases to handle:**
-    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), warn and wrap or stop
-    - Address + width beyond buffer: error before starting the batch
-    - ASCII format with width > buffer space at address: error
-    - Verify after write: the verify step uses the original file, not the patched buffer. Need to verify against the patched buffer instead, or skip verify for the serial region. **Decision: verify against patched buffer** — the `do_batch_write_chip` command should patch before both write and verify.
+    - GUI defaults: decimal start (1), empty address (required field), to match typical user expectations
+  - **Edge cases handled:**
+    - Address + width beyond buffer: `patch_serial()` validates and errors before writing
+    - ASCII format with width > buffer space at address: caught by bounds validation
+    - Verify after write: uses `verify_chip_bytes` against the patched buffer, not the original file
+  - **Edge cases not yet handled:**
+    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), the upper bytes are silently truncated by the integer-to-bytes conversion. Future improvement: warn or stop before starting the batch.
   - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
 
 ## Backlog
@@ -184,9 +187,10 @@ This is a living list of features and improvements planned for minipro-rs.
     - Configurable erase value over hardcoded 0xFF: NOR erases to 0xFF, some EEPROM/NAND erase to 0x00; device database already has `blank_value`
   - Status: Ready to implement when prioritized.
 
-- [ ] Auto SN_NUM — production programming with auto-incrementing serial numbers
-  - Requires: production-mode UI (start value, step, target address), buffer injection, auto-increment on successful write
-  - Priority: low — factory/production feature, most hobbyist users don't need it
+- [x] Auto SN_NUM — production programming with auto-incrementing serial numbers
+  - Implemented as `--serial-*` CLI flags and GUI "Serial Number" section in batch mode
+  - Supports: start value, step, target address, width (1-8 bytes), format (bin/ascii/bcd), endian (little/big), optional checksum (XOR/CRC-8)
+  - See completed entry above and detailed spec in Near-term section
 
 - [ ] **Manual trim/pad to size** — let advanced users resize firmware files before saving
   - Trim trailing `0xFF` bytes to reduce a read-back (8192 bytes) to actual code size (1936 bytes)
