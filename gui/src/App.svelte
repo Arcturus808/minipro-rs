@@ -966,8 +966,8 @@
               </div>
             {/if}
 
-            <!-- Batch progress panel -->
-            {#if $batchActive}
+            <!-- Batch progress panel (write only) -->
+            {#if $batchActive && $activeOperation === "write"}
               <div class="flex flex-col gap-3 p-4 rounded-lg bg-surface-100-900 border-2 border-primary-500">
                 <div class="flex items-center justify-between">
                   <span class="text-sm font-semibold">
