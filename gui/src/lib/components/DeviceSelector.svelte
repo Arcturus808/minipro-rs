@@ -3,7 +3,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
   import { selectedDevice } from "../stores/device";
-  import ComboSearch from "./ComboSearch.svelte";
 
   interface SearchResult {
     name: string;
@@ -94,7 +93,7 @@
   });
 
   async function onSearch() {
-    // Immediate search (Search button or Enter from ComboSearch).
+    // Immediate search (Enter key bypasses the debounce).
     if (debounceTimer) clearTimeout(debounceTimer);
     await doSearch(searchQuery);
   }
@@ -143,18 +142,13 @@
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
   <header class="p-3 border-b border-surface-200-800">
     <h3 class="text-sm font-semibold mb-2">Device Selector</h3>
-    <div class="flex gap-2">
-      <div class="flex-1">
-        <ComboSearch
-          bind:value={searchQuery}
-          placeholder="Search devices..."
-          storageKey="minipro_device_search_history"
-          onselect={() => onSearch()}
-          onsubmit={() => onSearch()}
-        />
-      </div>
-      <button class="btn preset-filled-primary text-sm px-3" onclick={onSearch}>Search</button>
-    </div>
+    <input
+      type="text"
+      bind:value={searchQuery}
+      placeholder="Search devices..."
+      class="w-full rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-surface-950-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      onkeydown={(e) => { if (e.key === 'Enter') onSearch(); }}
+    />
   </header>
 
   <div class="flex-1 overflow-auto p-2">
