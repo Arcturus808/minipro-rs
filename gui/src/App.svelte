@@ -62,6 +62,15 @@
   let format = $state("auto");
   let sizeMismatch = $state("error");
   let batchCount = $state(""); // empty = unlimited
+  // Serial number config for batch mode
+  let serialEnabled = $state(false);
+  let serialStart = $state("1");
+  let serialAddr = $state("");
+  let serialWidth = $state("4");
+  let serialFormat = $state("bin");
+  let serialEndian = $state("little");
+  let serialStep = $state("1");
+  let serialChecksum = $state("none");
 
   const VPP_OPTIONS = ["9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5", "15.0", "16.0", "17.0", "18.0", "21.0"];
   const VCC_OPTIONS = ["3.3", "4.0", "4.5", "5.0", "6.0", "6.3", "6.5", "7.0"];
@@ -84,6 +93,24 @@
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
+  // Serial preview string — shows batch scope and serial range
+  let serialPreview = $derived.by(() => {
+    const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
+    if (isNaN(startVal)) return "";
+    const stepVal = parseInt(serialStep, 10) || 1;
+    const widthVal = parseInt(serialWidth, 10) || 4;
+    const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) : null;
+    const addrLabel = serialAddr.trim() || "0x????";
+    const fmtLabel = serialFormat === "ascii" ? "ASCII" : serialFormat === "bcd" ? "BCD" : `${widthVal} bytes`;
+    if (count && count > 0) {
+      const lastVal = startVal + (count - 1) * stepVal;
+      return `Chip 1 of ${count}: serial ${startVal} → ${lastVal}, ${fmtLabel} at ${addrLabel}`;
+    } else {
+      const v2 = startVal + stepVal;
+      const v3 = startVal + stepVal * 2;
+      return `Chip 1 (unlimited): serial ${startVal}, ${v2}, ${v3}, ... ${fmtLabel} at ${addrLabel}`;
+    }
+  });
   // Custom start button label per operation
   let startButtonLabel = $derived(
     $activeOperation === "config" ? "Read Config from Chip" :
@@ -357,7 +384,28 @@
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       if ($batchModeEnabled) {
         const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) || null : null;
-        await startBatch(path, getOptions(), count);
+        let serialConfig = null;
+        if (serialEnabled) {
+          if (!serialAddr.trim()) {
+            logs.error("Serial number injection enabled but address is empty. Enter a target address (e.g., 0x1FF0) or disable serial injection.");
+            return;
+          }
+          const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
+          if (isNaN(startVal)) {
+            logs.error("Serial number injection enabled but start value is invalid. Enter a number (e.g., 1 or 0x0001) or disable serial injection.");
+            return;
+          }
+          serialConfig = {
+            start: startVal,
+            address: parseInt(serialAddr, serialAddr.startsWith("0x") ? 16 : 10),
+            width: parseInt(serialWidth, 10),
+            format: serialFormat,
+            endian: serialEndian,
+            step: parseInt(serialStep, 10),
+            checksum: serialChecksum,
+          };
+        }
+        await startBatch(path, getOptions(), count, serialConfig);
       } else {
         await doWrite(path, getOptions());
         logChipIdCheck();
@@ -964,6 +1012,71 @@
                   <span class="text-xs opacity-50">chips</span>
                 {/if}
               </div>
+
+              <!-- Serial number config (only when batch mode is on) -->
+              {#if $batchModeEnabled}
+                <div class="flex flex-col gap-2 py-2 px-3 rounded-lg bg-surface-100-900 border border-surface-200-800">
+                  <label class="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="checkbox" bind:checked={serialEnabled} class="accent-primary-600" />
+                    <span>Serial Number Injection</span>
+                  </label>
+                  {#if serialEnabled}
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                      <!-- Row 1: Where and what -->
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Address (hex, required)</span>
+                        <input type="text" bind:value={serialAddr} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x????" />
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Start value</span>
+                        <input type="text" bind:value={serialStart} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="1" />
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Step</span>
+                        <input type="text" bind:value={serialStep} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="1" />
+                      </label>
+                      <!-- Row 2: How to encode -->
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Format</span>
+                        <select bind:value={serialFormat} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
+                          <option value="bin">Binary</option>
+                          <option value="ascii">ASCII</option>
+                          <option value="bcd">BCD</option>
+                        </select>
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Width (bytes)</span>
+                        <select bind:value={serialWidth} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="4">4</option>
+                          <option value="8">8</option>
+                        </select>
+                      </label>
+                      <label class="flex flex-col gap-1">
+                        <span class="opacity-60">Endian</span>
+                        <select bind:value={serialEndian} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
+                          <option value="little">Little</option>
+                          <option value="big">Big</option>
+                        </select>
+                      </label>
+                      <!-- Row 3: Optional -->
+                      <label class="flex flex-col gap-1 col-span-3">
+                        <span class="opacity-60">Checksum</span>
+                        <select bind:value={serialChecksum} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent">
+                          <option value="none">None</option>
+                          <option value="xor">XOR</option>
+                          <option value="crc8">CRC-8</option>
+                        </select>
+                      </label>
+                    </div>
+                    <!-- Live preview -->
+                    <div class="text-xs opacity-50 font-mono mt-1">
+                      {serialPreview}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {/if}
 
             <!-- Batch progress panel (write only) -->

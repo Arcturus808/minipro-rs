@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use minipro_core::{
+    batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
     operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
@@ -33,6 +34,33 @@ fn emit_log(window: &Window, level: &str, message: &str) {
 }
 
 // ── Data transfer objects ───────────────────────────────────────────────────
+
+/// Serial number configuration for batch programming (sent from frontend).
+#[derive(Deserialize, Clone, Debug)]
+pub struct SerialConfigDto {
+    pub start: u64,
+    pub address: usize,
+    pub width: usize,
+    pub format: String,
+    pub endian: String,
+    pub step: u64,
+    pub checksum: String,
+}
+
+impl TryFrom<&SerialConfigDto> for SerialConfig {
+    type Error = String;
+    fn try_from(dto: &SerialConfigDto) -> Result<Self, Self::Error> {
+        Ok(SerialConfig {
+            start: dto.start,
+            address: dto.address,
+            width: dto.width,
+            format: SerialFormat::parse(&dto.format).map_err(|e| e.to_string())?,
+            endian: SerialEndian::parse(&dto.endian).map_err(|e| e.to_string())?,
+            step: dto.step,
+            checksum: SerialChecksum::parse(&dto.checksum).map_err(|e| e.to_string())?,
+        })
+    }
+}
 
 #[derive(Serialize)]
 pub struct ProgrammerInfoDto {
@@ -845,11 +873,14 @@ pub async fn do_write(
 /// Write file to chip memory — single chip within a batch run.
 /// Same as `do_write` but emits batch-specific log messages with the chip number.
 /// The frontend manages the batch loop and calls this once per chip.
+/// If `serialConfig` is provided, the firmware is read into a buffer, patched
+/// with the serial number, and written/verified via the bytes-based path.
 #[tauri::command]
 pub async fn do_batch_write_chip(
     path: String,
     chipNumber: u32,
     options: OperationOptions,
+    serialConfig: Option<SerialConfigDto>,
     window: Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<OpStatsDto, String> {
@@ -862,6 +893,7 @@ pub async fn do_batch_write_chip(
     let window_clone = window.clone();
     let path_clone = path.clone();
     let options_clone = options.clone();
+    let serial_dto = serialConfig.clone();
 
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
@@ -874,6 +906,13 @@ pub async fn do_batch_write_chip(
         let op_name = format!("write (chip {})", chipNumber);
 
         emit_log(&window_clone, "info", &format!("── Chip {} ──", chipNumber));
+
+        // Parse serial config if provided
+        let serial_cfg = if let Some(ref dto) = serial_dto {
+            Some(SerialConfig::try_from(dto)?)
+        } else {
+            None
+        };
 
         let result = (|| {
             handle.icsp = options_clone.icsp_mode != "zif";
@@ -895,9 +934,80 @@ pub async fn do_batch_write_chip(
                 emit_log(&window_clone, "info", &format!("Chip {}: erasing...", chipNumber));
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             }
 
+            // ── If serial injection: read file, patch, write bytes, verify bytes ──
+            if let Some(ref sc) = serial_cfg {
+                let dev = handle.device().map_err(|e| e.to_string())?;
+                let size = match page {
+                    0x00 => dev.code_memory_size as usize,
+                    0x01 => dev.data_memory_size as usize,
+                    _ => dev.code_memory_size as usize,
+                };
+                let mut buf = read_file(
+                    Path::new(&path_clone),
+                    &options_clone.format,
+                    size,
+                    dev.blank_value as u8,
+                )
+                .map_err(|e| e.to_string())?;
+
+                let serial_value = sc.value_for_chip(chipNumber as usize);
+                patch_serial(&mut buf, sc, chipNumber as usize).map_err(|e| e.to_string())?;
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: serial = 0x{:0>width$X}", chipNumber, serial_value, width = sc.width * 2),
+                );
+
+                let write_window = window_clone.clone();
+                let stats = write_chip_bytes(
+                    &mut handle,
+                    buf.clone(),
+                    page,
+                    size_mismatch,
+                    options_clone.skip_blank,
+                    false,
+                    Some(&mut |done, total| {
+                        let _ = write_window.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: op_name.clone(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
+
+                if !options_clone.skip_verify {
+                    let verify_window = window_clone.clone();
+                    let _ = verify_chip_bytes(
+                        &mut handle,
+                        buf,
+                        page,
+                        false,
+                        Some(&mut |done, total| {
+                            let _ = verify_window.emit(
+                                "progress",
+                                ProgressPayload {
+                                    done,
+                                    total,
+                                    operation: format!("verify (chip {})", chipNumber),
+                                },
+                            );
+                        }),
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
+
+                emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
+                return Ok::<OpStats, String>(stats);
+            }
+
+            // ── No serial injection: use file-based write + verify (original path) ──
             let stats = write_chip(
                 &mut handle,
                 Path::new(&path_clone),

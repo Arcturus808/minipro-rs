@@ -56,6 +56,28 @@ fn parse_erase_value(s: &str) -> Result<u8> {
     Ok(val)
 }
 
+/// Parse a u64 from decimal or hex (0x-prefixed).
+fn parse_u64(s: &str) -> Result<u64> {
+    let s = s.trim();
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u64::from_str_radix(hex, 16)
+    } else {
+        s.parse::<u64>()
+    }
+    .map_err(|e| anyhow::anyhow!("invalid value '{s}': {e}"))
+}
+
+/// Parse a usize from decimal or hex (0x-prefixed).
+fn parse_usize(s: &str) -> Result<usize> {
+    let s = s.trim();
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        usize::from_str_radix(hex, 16)
+    } else {
+        s.parse::<usize>()
+    }
+    .map_err(|e| anyhow::anyhow!("invalid value '{s}': {e}"))
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -410,6 +432,34 @@ fn do_operations(
                 count,
             };
 
+            // ── Parse serial number config (if --serial-start is given) ──────
+            let serial_cfg = if let Some(ref start_str) = cli.serial_start {
+                let start = parse_u64(start_str)
+                    .with_context(|| format!("invalid --serial-start value '{start_str}'"))?;
+                let addr_str = cli.serial_addr.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("--serial-addr is required when --serial-start is given")
+                })?;
+                let address = parse_usize(addr_str)
+                    .with_context(|| format!("invalid --serial-addr value '{addr_str}'"))?;
+                let cfg = minipro_core::SerialConfig {
+                    start,
+                    address,
+                    width: cli.serial_width,
+                    format: minipro_core::SerialFormat::parse(&cli.serial_format)?,
+                    endian: minipro_core::SerialEndian::parse(&cli.serial_endian)?,
+                    step: cli.serial_step,
+                    checksum: minipro_core::SerialChecksum::parse(&cli.serial_checksum)?,
+                };
+                eprintln!(
+                    "Serial: start={}, addr=0x{:X}, width={}, format={:?}, step={}",
+                    cfg.start, cfg.address, cfg.width, cfg.format, cfg.step
+                );
+                Some(cfg)
+            } else {
+                None
+            };
+
+            let serial_cfg_ref = serial_cfg.as_ref();
             let mut callbacks = minipro_core::BatchCallbacks {
                 on_progress: None,
                 on_chip_complete: None,
@@ -425,7 +475,28 @@ fn do_operations(
                         Err(_) => false,
                     }
                 }),
-                on_patch_buffer: None,
+                on_patch_buffer: if serial_cfg_ref.is_some() {
+                    Some(&mut |chip_num: usize, buf: &mut Vec<u8>| {
+                        if let Some(sc) = serial_cfg_ref {
+                            let value = sc.value_for_chip(chip_num);
+                            match minipro_core::patch_serial(buf, sc, chip_num) {
+                                Ok(()) => {
+                                    eprintln!(
+                                        "  Chip {}: serial = 0x{:0>width$X}",
+                                        chip_num,
+                                        value,
+                                        width = sc.width * 2
+                                    );
+                                }
+                                Err(e) => {
+                                    eprintln!("  Chip {}: serial patch failed: {}", chip_num, e);
+                                }
+                            }
+                        }
+                    })
+                } else {
+                    None
+                },
             };
 
             eprintln!(

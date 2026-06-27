@@ -2,15 +2,242 @@
 //!
 //! The batch loop handles: erase → write → verify for each chip, with callbacks
 //! for progress reporting, "ready for next chip" prompting, and buffer patching
-//! (for future serial number injection).
+//! (for serial number injection).
 
 use std::path::Path;
 
 use crate::{
     error::{MiniproError, Result},
     handle::MiniproHandle,
-    operations::{erase_chip, verify_chip, SizeMismatch},
+    operations::{erase_chip, verify_chip_bytes, SizeMismatch},
 };
+
+// ── Serial number injection ─────────────────────────────────────────────────
+
+/// Serial number byte format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialFormat {
+    /// Raw binary in selected endianness.
+    Bin,
+    /// Zero-padded ASCII decimal string (e.g., "00001\0").
+    Ascii,
+    /// Binary-coded decimal (each digit as a 4-bit nibble).
+    Bcd,
+}
+
+impl SerialFormat {
+    /// Parse from a string.
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "bin" => Ok(Self::Bin),
+            "ascii" => Ok(Self::Ascii),
+            "bcd" => Ok(Self::Bcd),
+            _ => Err(MiniproError::FileFormat(format!(
+                "unknown serial format '{s}'; expected bin, ascii, or bcd"
+            ))),
+        }
+    }
+}
+
+/// Byte order for binary serial format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialEndian {
+    Little,
+    Big,
+}
+
+impl SerialEndian {
+    /// Parse from a string.
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "little" | "le" => Ok(Self::Little),
+            "big" | "be" => Ok(Self::Big),
+            _ => Err(MiniproError::FileFormat(format!(
+                "unknown endian '{s}'; expected little or big"
+            ))),
+        }
+    }
+}
+
+/// Optional checksum appended after the serial bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialChecksum {
+    /// No checksum.
+    None,
+    /// XOR of all serial bytes.
+    Xor,
+    /// CRC-8 (polynomial 0x07, init 0x00).
+    Crc8,
+}
+
+impl SerialChecksum {
+    /// Parse from a string.
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "none" => Ok(Self::None),
+            "xor" => Ok(Self::Xor),
+            "crc8" => Ok(Self::Crc8),
+            _ => Err(MiniproError::FileFormat(format!(
+                "unknown checksum '{s}'; expected none, xor, or crc8"
+            ))),
+        }
+    }
+}
+
+/// Configuration for serial number injection during batch programming.
+#[derive(Debug, Clone)]
+pub struct SerialConfig {
+    /// Starting serial value.
+    pub start: u64,
+    /// Target address in the chip's memory (byte offset).
+    pub address: usize,
+    /// Byte width: 1, 2, 4, or 8.
+    pub width: usize,
+    /// Format: binary, ASCII, or BCD.
+    pub format: SerialFormat,
+    /// Byte order (binary format only).
+    pub endian: SerialEndian,
+    /// Increment per chip.
+    pub step: u64,
+    /// Optional checksum appended after the serial bytes.
+    pub checksum: SerialChecksum,
+}
+
+impl SerialConfig {
+    /// Returns the serial value for the given 1-based chip number.
+    /// Chip 1 gets `start`, chip 2 gets `start + step`, etc.
+    pub fn value_for_chip(&self, chip_number: usize) -> u64 {
+        self.start + (chip_number as u64 - 1) * self.step
+    }
+
+    /// Returns the number of bytes the serial occupies (including checksum).
+    pub fn total_len(&self) -> usize {
+        let serial_len = match self.format {
+            SerialFormat::Bin => self.width,
+            SerialFormat::Ascii => self.width + 1, // +1 for null terminator
+            SerialFormat::Bcd => self.width.div_ceil(2), // 2 digits per byte
+        };
+        let checksum_len = match self.checksum {
+            SerialChecksum::None => 0,
+            _ => 1,
+        };
+        serial_len + checksum_len
+    }
+
+    /// Validate that the serial fits within the buffer at the configured address.
+    pub fn validate(&self, buf_len: usize) -> Result<()> {
+        if self.width == 0 || self.width > 8 {
+            return Err(MiniproError::FileFormat(format!(
+                "serial width must be 1-8, got {}",
+                self.width
+            )));
+        }
+        let end = self.address + self.total_len();
+        if end > buf_len {
+            return Err(MiniproError::FileFormat(format!(
+                "serial at address 0x{:X} needs {} bytes, but buffer is only {} bytes (needs {} more)",
+                self.address,
+                self.total_len(),
+                buf_len,
+                end - buf_len
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Patch a buffer with the serial number for the given chip.
+///
+/// Writes the serial value at `config.address` in the format specified.
+/// If a checksum is configured, it is appended immediately after the serial bytes.
+pub fn patch_serial(buf: &mut [u8], config: &SerialConfig, chip_number: usize) -> Result<()> {
+    config.validate(buf.len())?;
+    let value = config.value_for_chip(chip_number);
+    let addr = config.address;
+
+    // ── Write serial bytes ──────────────────────────────────────────────────
+    let serial_len = match config.format {
+        SerialFormat::Bin => {
+            let bytes = match config.width {
+                1 => vec![value as u8],
+                2 => match config.endian {
+                    SerialEndian::Little => (value as u16).to_le_bytes().to_vec(),
+                    SerialEndian::Big => (value as u16).to_be_bytes().to_vec(),
+                },
+                4 => match config.endian {
+                    SerialEndian::Little => (value as u32).to_le_bytes().to_vec(),
+                    SerialEndian::Big => (value as u32).to_be_bytes().to_vec(),
+                },
+                8 => match config.endian {
+                    SerialEndian::Little => value.to_le_bytes().to_vec(),
+                    SerialEndian::Big => value.to_be_bytes().to_vec(),
+                },
+                _ => unreachable!("validated above"),
+            };
+            buf[addr..addr + bytes.len()].copy_from_slice(&bytes);
+            bytes.len()
+        }
+        SerialFormat::Ascii => {
+            // Format as zero-padded decimal string with `width` digits + null terminator
+            let s = format!("{:0>width$}", value, width = config.width);
+            let ascii_bytes = s.as_bytes();
+            buf[addr..addr + ascii_bytes.len()].copy_from_slice(ascii_bytes);
+            buf[addr + ascii_bytes.len()] = 0; // null terminator
+            ascii_bytes.len() + 1
+        }
+        SerialFormat::Bcd => {
+            // Each decimal digit becomes a 4-bit nibble, packed 2 per byte.
+            let s = format!("{:0>width$}", value, width = config.width);
+            let nibbles: Vec<u8> = s.bytes().map(|b| b - b'0').collect();
+            let byte_len = nibbles.len().div_ceil(2);
+            for i in 0..byte_len {
+                let hi = nibbles[i * 2];
+                let lo = if i * 2 + 1 < nibbles.len() {
+                    nibbles[i * 2 + 1]
+                } else {
+                    0xF // pad last nibble with 0xF if odd number of digits
+                };
+                buf[addr + i] = (hi << 4) | lo;
+            }
+            byte_len
+        }
+    };
+
+    // ── Write checksum (if enabled) ─────────────────────────────────────────
+    match config.checksum {
+        SerialChecksum::None => {}
+        SerialChecksum::Xor => {
+            let cksum = buf[addr..addr + serial_len]
+                .iter()
+                .fold(0u8, |acc, &b| acc ^ b);
+            buf[addr + serial_len] = cksum;
+        }
+        SerialChecksum::Crc8 => {
+            let cksum = crc8(&buf[addr..addr + serial_len]);
+            buf[addr + serial_len] = cksum;
+        }
+    }
+
+    Ok(())
+}
+
+/// Compute CRC-8 with polynomial 0x07, init 0x00 (standard CRC-8).
+fn crc8(data: &[u8]) -> u8 {
+    let mut crc: u8 = 0;
+    for &byte in data {
+        crc ^= byte;
+        for _ in 0..8 {
+            if crc & 0x80 != 0 {
+                crc = (crc << 1) ^ 0x07;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    crc
+}
+
+// ── Batch types ─────────────────────────────────────────────────────────────
 
 /// Result of a single chip within a batch run.
 #[derive(Debug, Clone)]
@@ -218,7 +445,13 @@ fn batch_write_single(
         on_progress(chip_num, config.count, "write");
     }
 
-    // Use write_chip_bytes since we already have the buffer in memory
+    // Use write_chip_bytes since we already have the buffer in memory.
+    // Clone first so we can verify against the same patched buffer afterwards.
+    let verify_buf = if config.verify {
+        Some(buf.clone())
+    } else {
+        None
+    };
     crate::operations::write_chip_bytes(
         handle,
         std::mem::take(buf),
@@ -243,15 +476,209 @@ fn batch_write_single(
         handle.end_transaction()?;
         handle.begin_transaction(device_arc)?;
 
-        verify_chip(
+        // Use verify_chip_bytes to verify against the patched buffer,
+        // not the original file (which lacks the serial number).
+        verify_chip_bytes(
             handle,
-            &config.path,
+            verify_buf.unwrap(),
             config.page,
-            &config.format,
             config.check_device_id,
             None,
         )?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_config(start: u64, addr: usize, width: usize) -> SerialConfig {
+        SerialConfig {
+            start,
+            address: addr,
+            width,
+            format: SerialFormat::Bin,
+            endian: SerialEndian::Little,
+            step: 1,
+            checksum: SerialChecksum::None,
+        }
+    }
+
+    #[test]
+    fn test_bin_little_endian_4bytes() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0x0001, 0, 4);
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..4], &[0x01, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn test_bin_big_endian_4bytes() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(0x0001, 0, 4);
+        cfg.endian = SerialEndian::Big;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..4], &[0x00, 0x00, 0x00, 0x01]);
+    }
+
+    #[test]
+    fn test_bin_2bytes() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0xABCD, 0, 2);
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..2], &[0xCD, 0xAB]);
+    }
+
+    #[test]
+    fn test_bin_1byte() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0x42, 0, 1);
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(buf[0], 0x42);
+    }
+
+    #[test]
+    fn test_bin_8bytes() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0x0102030405060708, 0, 8);
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(
+            &buf[0..8],
+            &[0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01]
+        );
+    }
+
+    #[test]
+    fn test_ascii_format() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(1, 0, 5);
+        cfg.format = SerialFormat::Ascii;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..6], b"00001\0");
+    }
+
+    #[test]
+    fn test_ascii_format_large_number() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(12345, 0, 5);
+        cfg.format = SerialFormat::Ascii;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..6], b"12345\0");
+    }
+
+    #[test]
+    fn test_bcd_format() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(12345, 0, 5);
+        cfg.format = SerialFormat::Bcd;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // 5 digits → 3 bytes: 0x12, 0x34, 0x5F
+        assert_eq!(&buf[0..3], &[0x12, 0x34, 0x5F]);
+    }
+
+    #[test]
+    fn test_bcd_format_even_digits() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(42, 0, 4);
+        cfg.format = SerialFormat::Bcd;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // 4 digits → 2 bytes: 0x00, 0x42
+        assert_eq!(&buf[0..2], &[0x00, 0x42]);
+    }
+
+    #[test]
+    fn test_increment_step() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0x0100, 0, 2);
+
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..2], &[0x00, 0x01]);
+
+        patch_serial(&mut buf, &cfg, 2).unwrap();
+        assert_eq!(&buf[0..2], &[0x01, 0x01]);
+
+        patch_serial(&mut buf, &cfg, 3).unwrap();
+        assert_eq!(&buf[0..2], &[0x02, 0x01]);
+    }
+
+    #[test]
+    fn test_custom_step() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(0x0001, 0, 4);
+        cfg.step = 10;
+
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(&buf[0..4], &[0x01, 0x00, 0x00, 0x00]);
+
+        patch_serial(&mut buf, &cfg, 2).unwrap();
+        assert_eq!(&buf[0..4], &[0x0B, 0x00, 0x00, 0x00]);
+
+        patch_serial(&mut buf, &cfg, 3).unwrap();
+        assert_eq!(&buf[0..4], &[0x15, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn test_xor_checksum() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(0x0102, 0, 2);
+        cfg.checksum = SerialChecksum::Xor;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // serial bytes: 0x02, 0x01 → XOR = 0x03
+        assert_eq!(&buf[0..3], &[0x02, 0x01, 0x03]);
+    }
+
+    #[test]
+    fn test_crc8_checksum() {
+        let mut buf = vec![0u8; 16];
+        let mut cfg = make_config(0x0001, 0, 2);
+        cfg.checksum = SerialChecksum::Crc8;
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        let expected = crc8(&[0x01, 0x00]);
+        assert_eq!(&buf[0..3], &[0x01, 0x00, expected]);
+    }
+
+    #[test]
+    fn test_address_offset() {
+        let mut buf = vec![0u8; 32];
+        let cfg = make_config(0xAB, 0x10, 1);
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        assert_eq!(buf[0x10], 0xAB);
+        assert_eq!(buf[0], 0x00);
+    }
+
+    #[test]
+    fn test_bounds_check_overflow() {
+        let mut buf = vec![0u8; 8];
+        let cfg = make_config(0x0001, 6, 4);
+        let result = patch_serial(&mut buf, &cfg, 1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_width_validation() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(1, 0, 16);
+        let result = patch_serial(&mut buf, &cfg, 1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_value_for_chip() {
+        let cfg = make_config(100, 0, 4);
+        assert_eq!(cfg.value_for_chip(1), 100);
+        assert_eq!(cfg.value_for_chip(2), 101);
+        assert_eq!(cfg.value_for_chip(10), 109);
+    }
+
+    #[test]
+    fn test_value_for_chip_with_step() {
+        let mut cfg = make_config(0, 0, 4);
+        cfg.step = 5;
+        assert_eq!(cfg.value_for_chip(1), 0);
+        assert_eq!(cfg.value_for_chip(2), 5);
+        assert_eq!(cfg.value_for_chip(3), 10);
+        assert_eq!(cfg.value_for_chip(11), 50);
+    }
 }
