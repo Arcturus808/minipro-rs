@@ -9,7 +9,7 @@ use log::info;
 
 use crate::{
     database::DatabasePaths,
-    device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
+    device::{ChipType, Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
     error::{MiniproError, Result},
     protocol::{
         t48::T48Protocol,
@@ -111,7 +111,22 @@ impl MiniproHandle {
         info!("Device: {}", device.name);
         self.protocol
             .begin_transaction(&self.usb, &device, self.icsp)?;
-        self.device = Some(device);
+        self.device = Some(device.clone());
+
+        // Overcurrent safety check: poll the status register after the
+        // FPGA is initialized.  NAND and eMMC skip this (a zeroed 0x39
+        // header deselects the chip); they handle OVC per-block instead.
+        let is_nand = device.chip_type == ChipType::Nand as u32;
+        let is_emmc = device.chip_type == ChipType::Emmc as u32;
+        if !is_nand && !is_emmc {
+            let (status, ovc) = self.protocol.get_ovc_status(&self.usb)?;
+            if ovc != 0 || status.error != 0 {
+                return Err(MiniproError::Overcurrent {
+                    address: status.address,
+                });
+            }
+        }
+
         Ok(())
     }
 
