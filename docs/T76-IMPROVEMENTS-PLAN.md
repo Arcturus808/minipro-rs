@@ -149,9 +149,11 @@ Additionally, the branch adds support for:
 3. ✅ **eMMC bring-up queries** — Added `t76_emmc_bring_up()` which drains three ID query responses (0x21/CID, 0x05/READID, 0x06/user-id) before the CMD6 SWITCH partition select. Without these, the USB stream desyncs.
 
 **Deferred (need hardware validation)**:
-- ⏳ eMMC capacity auto-detection from EXT_CSD (520-byte read with short-packet trick — fragile, needs testing)
 - ⏳ eMMC partition selection (`--partition` CLI flag for BOOT1/BOOT2/RPMB)
-- ⏳ `T76_EMMC_SIZE_MB` env var override (depends on capacity detection)
+
+**Implemented**:
+- ✅ eMMC capacity auto-detection from EXT_CSD (see Phase 7 below)
+- ✅ `T76_EMMC_SIZE_MB` env var override
 
 **Left as-is**:
 - `thread_local` eMMC block tracking — works in practice, low risk
@@ -159,7 +161,26 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 7: Testing
+### Phase 7: eMMC EXT_CSD capacity auto-detection — ✅ COMPLETE
+**Status**: eMMC capacity is now detected at runtime from EXT_CSD, or via `T76_EMMC_SIZE_MB` env var override.
+
+**What was wrong**: All eMMC database entries have `code_memory_size="0x200"` (512 bytes), a placeholder. The real capacity must be read from the chip's EXT_CSD register at runtime. Without this, read/write/erase operations used the wrong block count and would read/write/erase nothing.
+
+**Changes**:
+1. ✅ **`t76_emmc_bring_up()` reads EXT_CSD** — sends opcode 0x08, receives 520 bytes (8-byte header + 512-byte EXT_CSD). USER capacity = `SEC_COUNT[212] * 512`. Falls back to 4 MiB if SEC_COUNT is 0.
+2. ✅ **`T76_EMMC_SIZE_MB` env var** — when set (value in MiB), skips both the EXT_CSD read and the heavier adapter init (0x24 e0). Uses the env var value directly. Matches Matt Brown's lighter path for known-size chips.
+3. ✅ **`Protocol::effective_code_size()` trait method** — defaults to `device.code_memory_size`; T76Protocol overrides it for eMMC to return the detected capacity. Operations layer (read/write/verify/blank-check) and GUI commands.rs use this instead of the database placeholder.
+4. ✅ **eMMC erase uses detected capacity** — the erase loop now iterates over `detected_capacity / 512` sectors instead of `0x200 / 512 = 1` sector.
+5. ✅ **Adapter init conditional** — `t76_emmc_adapter_init()` is only called when `T76_EMMC_SIZE_MB` is NOT set (the full adapter init is needed for the 0x08 EXT_CSD read to return data).
+
+**Limitations**:
+- Only USER partition capacity is detected. BOOT1/BOOT2/RPMB sizes (from `BOOT_SIZE_MULT[226]` and `RPMB_SIZE_MULT[168]`) are not yet used since partition selection is not implemented.
+- The 520-byte EXT_CSD read uses a "short packet" trick to terminate the USB transfer at the exact length. This is fragile and needs hardware validation.
+- The io_init geometry constants (0x200, 0x20, 0x80, etc.) are from one chip capture (KLM8G1GEAC). May not generalize.
+
+---
+
+### Phase 8: Testing
 **Goal**: Validate all chip classes on real T76 hardware.
 
 | Chip Class | Test Chips | Operations |

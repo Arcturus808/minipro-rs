@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Serial overflow detection** — `patch_serial()` errors if the value exceeds the width's max (e.g., 0xFFFF for 2-byte) instead of silently truncating. CLI checks before batch start. GUI shows live red warning and blocks start
 - **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
 - **USB reconnect hints** — connection button tooltip advises replugging on USB errors. Operation and batch error messages detect USB-related failures and append replug advice. Helps with Windows USB Selective Suspend, Linux USB autosuspend, and macOS sleep power management
+- **T76 eMMC EXT_CSD capacity auto-detection** — eMMC database entries have `code_memory_size=0x200` (placeholder). Real capacity is now detected at runtime from EXT_CSD (`SEC_COUNT[212] * 512`). `T76_EMMC_SIZE_MB` env var overrides detection (MiB). New `Protocol::effective_code_size()` trait method returns detected capacity for eMMC; operations layer and GUI use it for read/write/verify/erase size calculations
 
 ### Fixed
 
