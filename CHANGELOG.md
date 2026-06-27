@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Smart firmware diff** — CLI `minipro --diff fileA fileB [--erase-value 0xFF]` compares two firmware files with byte-aligned diff and three-way tail classification (padding vs anomalous). Exit code 0 on match, 1 on mismatch. GUI hex viewer "Compare" button highlights differing bytes in red, padding in gray, anomalous tail in amber, with next/prev navigation (F3/Shift+F3) and anomalous-tail warning banner
 - **Batch / queue operations** — CLI `minipro -p DEVICE -w file.bin --batch [N]` programs multiple identical chips with the same firmware. After each successful write + verify, prompts to insert the next chip. Optional count limits the run. GUI "Batch Mode" toggle in write panel with "Next Chip" / "Retry" / "Stop Batch" buttons and live pass/fail counter. Architecture includes buffer patching hook for future auto-incrementing serial number injection
+- **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming. CLI: `--serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 --serial-format bin --serial-endian little --serial-step 1 --serial-checksum none`. Supports binary (little/big endian), ASCII (zero-padded decimal), and BCD formats. Optional XOR or CRC-8 checksum. GUI: collapsible "Serial Number" section in batch options with live preview. Verify checks against the patched buffer, not the original file
 
 ## [0.3.0] - 2026-06-24
 

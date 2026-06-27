@@ -44,6 +44,7 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Chip ID byte-order normalization** — fixes false mismatch errors on devices (e.g., SPI flash like PM25LV010) where different programmer protocols pack JEDEC ID bytes at different positions in the response word.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
 - [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for future serial number injection. See detailed spec below in Near-term.
+- [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Near-term.
 
 ## Near-term
 
@@ -76,7 +77,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
   - Status: CLI and GUI batch mode implemented. Serial number injection is the next step.
 
-- [ ] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
+- [x] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
   - **Problem:** Embedded products need unique serial numbers stored at a known address in flash/EEPROM. Without automation, the user must manually edit the firmware file between each chip — tedious and error-prone.
   - **Use case:** Manufacturer programming 1000 identical boards. Each chip gets the same firmware but a different serial number at a fixed address (e.g., `0x1FF0`).
   - **Architecture:** Plugs into the existing `on_patch_buffer` hook in `batch_write`. The buffer is re-read from the file before each chip, so the patch is always applied to a fresh copy — no need to undo the previous serial.
