@@ -561,7 +561,9 @@
             logs.warn(msg);
           }
         }}
-        title="Click to detect programmer"
+        title={$programmer
+          ? "Programmer connected. If operations fail with USB errors, try unplugging and replugging the device, then click here to reconnect."
+          : "No programmer detected. Try unplugging and replugging the device, then click here to reconnect."}
       >
         {#if $programmer}
           <span class="badge bg-emerald-600 text-white text-xs flex items-center gap-1">
