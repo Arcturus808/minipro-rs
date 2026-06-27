@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-27
+
 ### Added
 
 - **Smart firmware diff** — CLI `minipro --diff fileA fileB [--erase-value 0xFF]` compares two firmware files with byte-aligned diff and three-way tail classification (padding vs anomalous). Exit code 0 on match, 1 on mismatch. GUI hex viewer "Compare" button highlights differing bytes in red, padding in gray, anomalous tail in amber, with next/prev navigation (F3/Shift+F3) and anomalous-tail warning banner
@@ -18,12 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
 - **USB reconnect hints** — connection button tooltip advises replugging on USB errors. Operation and batch error messages detect USB-related failures and append replug advice. Helps with Windows USB Selective Suspend, Linux USB autosuspend, and macOS sleep power management
 - **T76 eMMC EXT_CSD capacity auto-detection** — eMMC database entries have `code_memory_size=0x200` (placeholder). Real capacity is now detected at runtime from EXT_CSD (`SEC_COUNT[212] * 512`). `T76_EMMC_SIZE_MB` env var overrides detection (MiB). New `Protocol::effective_code_size()` trait method returns detected capacity for eMMC; operations layer and GUI use it for read/write/verify/erase size calculations
+- **Live device search** — device selector now searches as you type with 200ms debounce. Race-condition guard discards stale responses. 2-character minimum query length. Replaces the old ComboSearch dropdown (search history + query favorites) with a cleaner single-input UX
+- **Device favorites** — star icon on each search result toggles favorite status (persisted to localStorage). Favorites are pinned in a collapsible section at the top of the results panel, always visible regardless of the current search query. Collapse state is persisted. Clicking the star does not select the device — star and selection are independent actions
+- **CI version consistency check** — GitHub Actions release workflow now verifies all four version fields (root Cargo.toml, gui Cargo.toml, tauri.conf.json, package.json) match the git tag before any builds start. Fails fast with clear error if any file is out of sync
 
 ### Fixed
 
 - **T76/T56 overcurrent safety check** — `begin_transaction()` now polls `get_ovc_status()` after FPGA initialization and aborts on overcurrent before any chip operation begins. NAND and eMMC skip this (zeroed 0x39 deselects them). Applies to all programmer models
 - **T76/T56 bitstream upload caching** — FPGA bitstream (~775KB) is now uploaded only once per session instead of on every `begin_transaction` call. For batch operations programming N chips, this eliminates N-1 redundant uploads (1500+ USB packets each). T76 also skips NAND/eMMC adapter init on subsequent calls
 - **T76 eMMC bring-up queries** — added ID query drain (0x21/CID, 0x05/READID, 0x06/user-id) before CMD6 SWITCH partition select. Without these, firmware responses sit in the USB buffer and desync the next transfer. Matches Matt Brown's t76-improvements branch
+- **T76 `effective_code_size` truncation** — trait method now returns `u64` instead of `u32`, preventing capacity truncation for eMMC chips larger than 4GiB
+- **T76 `self.device` state on OVC failure** — device was set before the overcurrent check, leaving incorrect state on abort. Now set only after the check passes
+- **T76 bitstream flag set without upload** — `bitstream_uploaded` flag was set even when the upload was skipped. Now only set after a successful upload
+- **Hex viewer header crowding** — header metadata split into two rows to prevent wrapping when the toolbar grows. "Erase" label relabeled to "Fill byte" with descriptive options. Fill byte dropdown moved before the Trim/Pad actions
 
 ## [0.3.0] - 2026-06-24
 
