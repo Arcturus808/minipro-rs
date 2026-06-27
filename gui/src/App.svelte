@@ -93,6 +93,32 @@
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
+  // Serial overflow detection — returns error message if any chip in the batch overflows
+  let serialOverflow = $derived.by(() => {
+    if (!serialEnabled) return null;
+    const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
+    if (isNaN(startVal)) return null;
+    const stepVal = parseInt(serialStep, 10) || 1;
+    const widthVal = parseInt(serialWidth, 10) || 4;
+    if (serialFormat !== "bin") return null; // only binary format has overflow
+    const maxVal = widthVal === 1 ? 0xFF : widthVal === 2 ? 0xFFFF : widthVal === 4 ? 0xFFFFFFFF : Number.MAX_SAFE_INTEGER;
+    const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) : null;
+    if (count && count > 0) {
+      const lastVal = startVal + (count - 1) * stepVal;
+      if (lastVal > maxVal) {
+        return `Overflow: chip ${count} serial 0x${lastVal.toString(16).toUpperCase()} exceeds ${widthVal}-byte max 0x${maxVal.toString(16).toUpperCase()}`;
+      }
+    } else {
+      // Unlimited — find first chip that overflows
+      for (let chip = 1; chip <= 100000; chip++) {
+        const val = startVal + (chip - 1) * stepVal;
+        if (val > maxVal) {
+          return `Overflow: chip ${chip} serial 0x${val.toString(16).toUpperCase()} exceeds ${widthVal}-byte max 0x${maxVal.toString(16).toUpperCase()}`;
+        }
+      }
+    }
+    return null;
+  });
   // Serial preview string — shows batch scope and serial range
   let serialPreview = $derived.by(() => {
     const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
@@ -393,6 +419,10 @@
           const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
           if (isNaN(startVal)) {
             logs.error("Serial number injection enabled but start value is invalid. Enter a number (e.g., 1 or 0x0001) or disable serial injection.");
+            return;
+          }
+          if (serialOverflow) {
+            logs.error(serialOverflow + " — reduce count, lower start, increase width, or decrease step.");
             return;
           }
           serialConfig = {
@@ -1076,6 +1106,11 @@
                     <div class="text-xs opacity-50 font-mono mt-1">
                       {serialPreview}
                     </div>
+                    {#if serialOverflow}
+                      <div class="text-xs text-red-600 dark:text-red-400 font-medium mt-1">
+                        ⚠ {serialOverflow}
+                      </div>
+                    {/if}
                   {/if}
                 </div>
               {/if}

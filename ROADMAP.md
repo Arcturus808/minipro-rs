@@ -140,8 +140,9 @@ This is a living list of features and improvements planned for minipro-rs.
     - Address + width beyond buffer: `patch_serial()` validates and errors before writing
     - ASCII format with width > buffer space at address: caught by bounds validation
     - Verify after write: uses `verify_chip_bytes` against the patched buffer, not the original file
+    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), `patch_serial()` returns an error. CLI checks via `check_overflow()` before starting the batch. GUI shows a red warning in the serial panel and blocks batch start.
   - **Edge cases not yet handled:**
-    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), the upper bytes are silently truncated by the integer-to-bytes conversion. Future improvement: warn or stop before starting the batch.
+    - None known.
   - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
 
 ## Backlog
