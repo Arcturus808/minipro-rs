@@ -14,6 +14,7 @@ use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Minimum firmware version for the T56.
 pub const MIN_FIRMWARE_T56: u32 = 0x149; // 1.73
@@ -66,11 +67,15 @@ const T56_WRITE_LOCK: u8 = CMD_WRITE_LOCK;
 const OVC_RESP_LEN: usize = 32;
 const OVC_FLAG_IDX: usize = 12;
 
-pub struct T56Protocol;
+pub struct T56Protocol {
+    bitstream_uploaded: AtomicBool,
+}
 
 impl T56Protocol {
     pub fn new() -> Self {
-        Self
+        Self {
+            bitstream_uploaded: AtomicBool::new(false),
+        }
     }
 }
 
@@ -165,11 +170,16 @@ pub(super) fn build_begin_msg(device: &Device, icsp: bool) -> [u8; 64] {
 impl Protocol for T56Protocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
         // 1. Upload FPGA algorithm bitstream if the device provides one.
-        if let Some(ref algo) = device.algorithm {
-            if !algo.bitstream.is_empty() {
-                eprintln!("Using T56 {} algorithm..", algo.name);
-                upload_bitstream(usb, &algo.bitstream)?;
+        //    Skip the upload if we already sent it in this session — the
+        //    FPGA retains its configuration across end/begin cycles.
+        if !self.bitstream_uploaded.load(Ordering::Relaxed) {
+            if let Some(ref algo) = device.algorithm {
+                if !algo.bitstream.is_empty() {
+                    eprintln!("Using T56 {} algorithm..", algo.name);
+                    upload_bitstream(usb, &algo.bitstream)?;
+                }
             }
+            self.bitstream_uploaded.store(true, Ordering::Relaxed);
         }
 
         // 2. Send the begin_transaction command (unless the device uses a

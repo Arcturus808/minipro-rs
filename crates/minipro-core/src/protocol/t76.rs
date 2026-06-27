@@ -16,6 +16,7 @@ use super::t56::build_begin_msg;
 use super::tl866iiplus::logic_ic_test_tl866;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     device::Device,
@@ -103,11 +104,15 @@ const T76_WRITE_LOCK: u8 = CMD_WRITE_LOCK;
 const OVC_RESP_LEN: usize = 32;
 const OVC_FLAG_IDX: usize = 12;
 
-pub struct T76Protocol;
+pub struct T76Protocol {
+    bitstream_uploaded: AtomicBool,
+}
 
 impl T76Protocol {
     pub fn new() -> Self {
-        Self
+        Self {
+            bitstream_uploaded: AtomicBool::new(false),
+        }
     }
 }
 
@@ -354,20 +359,26 @@ impl Protocol for T76Protocol {
         let is_nand = device.protocol_id == 0x2d;
         let is_emmc = device.protocol_id == 0x31;
 
-        // 1. NAND / eMMC: energize/init the socket adapter before the first bitstream.
-        if is_nand {
-            t76_adapter_init(usb)?;
-        }
-        if is_emmc {
-            t76_emmc_adapter_init(usb)?;
-        }
-
-        // 2. Upload FPGA algorithm bitstream.
-        if let Some(ref algo) = device.algorithm {
-            if !algo.bitstream.is_empty() {
-                eprintln!("Using T76 {} algorithm..", algo.name);
-                upload_bitstream_t76(usb, &algo.bitstream, is_nand)?;
+        // 1. NAND / eMMC: energize/init the socket adapter before the first
+        //    bitstream.  Skipped on subsequent calls — the adapter stays
+        //    powered and the FPGA retains its bitstream across end/begin
+        //    cycles (matching the C minipro `bitstream_uploaded` flag).
+        if !self.bitstream_uploaded.load(Ordering::Relaxed) {
+            if is_nand {
+                t76_adapter_init(usb)?;
             }
+            if is_emmc {
+                t76_emmc_adapter_init(usb)?;
+            }
+
+            // 2. Upload FPGA algorithm bitstream.
+            if let Some(ref algo) = device.algorithm {
+                if !algo.bitstream.is_empty() {
+                    eprintln!("Using T76 {} algorithm..", algo.name);
+                    upload_bitstream_t76(usb, &algo.bitstream, is_nand)?;
+                }
+            }
+            self.bitstream_uploaded.store(true, Ordering::Relaxed);
         }
 
         // 3. Send begin_transaction (custom bit-bang deferred to Phase 4).
