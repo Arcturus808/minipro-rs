@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData } from "../stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData, trimTrailing, padToSize } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
@@ -14,6 +14,11 @@
   let fontSize = $state($settings.hexViewerFontSize);
   let rowHeight = $derived(fontSize + 9);
   let savedPath = $state<string | null>(null);
+
+  // Trim/Pad panel state
+  let showTrimPad = $state(false);
+  let padTargetSize = $state("");
+  let eraseValue = $state(0xFF);
 
   // Hex editing state
   let editingOffset = $state<number | null>(null);
@@ -682,6 +687,78 @@
         >
           Clear
         </button>
+        {#if $hexMeta?.data}
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+            style="font-size: 13px;"
+            onclick={() => showTrimPad = !showTrimPad}
+            title="Trim trailing padding or pad to a specific size"
+          >
+            Trim/Pad
+          </button>
+        {/if}
+        {#if showTrimPad && $hexMeta?.data}
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
+            <button
+              class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              onclick={() => {
+                const result = trimTrailing(eraseValue);
+                if (result !== null) {
+                  logs.info(`Trimmed trailing 0x${eraseValue.toString(16).toUpperCase()} bytes → ${result} bytes`);
+                  savedPath = null;
+                } else {
+                  logs.info("No trailing erase-value bytes to trim");
+                }
+              }}
+              title="Remove trailing bytes equal to the erase value"
+            >
+              Trim
+            </button>
+            <input
+              type="text"
+              bind:value={padTargetSize}
+              placeholder="size"
+              class="w-20 px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono"
+              style="font-size: 13px;"
+              onkeydown={(e) => { if (e.key === "Enter") (document.getElementById("pad-btn") as HTMLButtonElement)?.click(); }}
+            />
+            <button
+              id="pad-btn"
+              class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              onclick={() => {
+                const ts = parseInt(padTargetSize, padTargetSize.startsWith("0x") ? 16 : 10);
+                if (isNaN(ts) || ts <= 0) {
+                  logs.error("Invalid pad target size");
+                  return;
+                }
+                const result = padToSize(ts, eraseValue);
+                if (result !== null) {
+                  logs.info(`Padded to ${result} bytes with 0x${eraseValue.toString(16).toUpperCase()}`);
+                  savedPath = null;
+                } else {
+                  logs.info(`Buffer is already ${$hexMeta!.size} bytes — no padding needed`);
+                }
+              }}
+              title="Pad buffer to the specified size with erase value"
+            >
+              Pad
+            </button>
+            <label class="flex items-center gap-1" title="Erase value to trim/pad with">
+              <span class="opacity-60">Erase:</span>
+              <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
+                <option value={0xFF}>0xFF</option>
+                <option value={0x00}>0x00</option>
+              </select>
+            </label>
+            <button
+              class="opacity-50 hover:opacity-100 transition-opacity"
+              onclick={() => showTrimPad = false}
+              title="Close trim/pad panel"
+            >
+              ✕
+            </button>
+          </div>
+        {/if}
         {#if !diffResult}
           <button
             class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5"

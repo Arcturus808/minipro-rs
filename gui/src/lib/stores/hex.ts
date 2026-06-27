@@ -129,3 +129,42 @@ export function getHexByte(offset: number): number | null {
   if (edits.has(offset)) return edits.get(offset)!;
   return meta.data[offset] ?? null;
 }
+
+// ── Trim / Pad ───────────────────────────────────────────────────────────────
+
+/** Trim trailing erase-value bytes from the buffer.
+ *  Removes consecutive trailing bytes equal to `eraseValue` (default 0xFF).
+ *  Keeps at least 1 byte. Returns the new size, or null if nothing to trim. */
+export function trimTrailing(eraseValue: number = 0xFF): number | null {
+  const meta = get(hexMeta);
+  if (!meta || !meta.data || meta.data.length === 0) return null;
+
+  const data = meta.data;
+  let end = data.length;
+  while (end > 1 && data[end - 1] === eraseValue) {
+    end--;
+  }
+
+  if (end === data.length) return null; // nothing to trim
+
+  const trimmed = data.slice(0, end);
+  setHexData(trimmed, meta.path);
+  return end;
+}
+
+/** Pad the buffer to `targetSize` with `eraseValue` (default 0xFF).
+ *  If the buffer is already larger, does nothing and returns null.
+ *  Returns the new size, or null if no change was needed. */
+export function padToSize(targetSize: number, eraseValue: number = 0xFF): number | null {
+  const meta = get(hexMeta);
+  if (!meta || !meta.data) return null;
+
+  if (targetSize <= meta.data.length) return null;
+
+  const padded = new Uint8Array(targetSize);
+  padded.set(meta.data, 0);
+  padded.fill(eraseValue, meta.data.length);
+
+  setHexData(padded, meta.path);
+  return targetSize;
+}
