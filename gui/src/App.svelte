@@ -93,6 +93,24 @@
 
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
+  // Serial preview string — shows batch scope and serial range
+  let serialPreview = $derived.by(() => {
+    const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
+    if (isNaN(startVal)) return "";
+    const stepVal = parseInt(serialStep, 10) || 1;
+    const widthVal = parseInt(serialWidth, 10) || 4;
+    const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) : null;
+    const addrLabel = serialAddr.trim() || "0x????";
+    const fmtLabel = serialFormat === "ascii" ? "ASCII" : serialFormat === "bcd" ? "BCD" : `${widthVal} bytes`;
+    if (count && count > 0) {
+      const lastVal = startVal + (count - 1) * stepVal;
+      return `Chip 1 of ${count}: serial ${startVal} → ${lastVal}, ${fmtLabel} at ${addrLabel}`;
+    } else {
+      const v2 = startVal + stepVal;
+      const v3 = startVal + stepVal * 2;
+      return `Chip 1 (unlimited): serial ${startVal}, ${v2}, ${v3}, ... ${fmtLabel} at ${addrLabel}`;
+    }
+  });
   // Custom start button label per operation
   let startButtonLabel = $derived(
     $activeOperation === "config" ? "Read Config from Chip" :
@@ -1049,7 +1067,7 @@
                     </div>
                     <!-- Live preview -->
                     <div class="text-xs opacity-50 font-mono mt-1">
-                      Chip 1: {serialStart} → {serialFormat === "ascii" ? `"${serialStart.padStart(parseInt(serialWidth), "0")}"` : `${serialWidth} bytes at ${serialAddr}`}
+                      {serialPreview}
                     </div>
                   {/if}
                 </div>
