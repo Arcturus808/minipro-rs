@@ -142,10 +142,11 @@ pub fn read_chip(
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
-        0x00 => device.code_memory_size as usize,
+        0x00 => code_size,
         0x01 => device.data_memory_size as usize,
-        _ => device.code_memory_size as usize,
+        _ => code_size,
     };
 
     let read_size = if device.read_buffer_size > 0 {
@@ -216,10 +217,11 @@ pub fn write_chip(
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
-        0x00 => device.code_memory_size as usize,
+        0x00 => code_size,
         0x01 => device.data_memory_size as usize,
-        _ => device.code_memory_size as usize,
+        _ => code_size,
     };
 
     let mut buf = read_file(path, format, size, device.blank_value as u8)?;
@@ -341,10 +343,11 @@ pub fn write_chip_bytes(
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
-        0x00 => device.code_memory_size as usize,
+        0x00 => code_size,
         0x01 => device.data_memory_size as usize,
-        _ => device.code_memory_size as usize,
+        _ => code_size,
     };
 
     // Size mismatch check.
@@ -458,10 +461,11 @@ pub fn verify_chip(
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
-        0x00 => device.code_memory_size as usize,
+        0x00 => code_size,
         0x01 => device.data_memory_size as usize,
-        _ => device.code_memory_size as usize,
+        _ => code_size,
     };
     let mut expected = read_file(path, format, size, device.blank_value as u8)?;
     // Pad or truncate the reference file to match the device size.
@@ -530,10 +534,11 @@ pub fn verify_chip_bytes(
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
-        0x00 => device.code_memory_size as usize,
+        0x00 => code_size,
         0x01 => device.data_memory_size as usize,
-        _ => device.code_memory_size as usize,
+        _ => code_size,
     };
     expected.resize(size, device.blank_value as u8);
     info!("Verifying {} bytes...", size);
@@ -587,7 +592,7 @@ pub fn verify_chip_bytes(
 /// Blank-check the chip.
 pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
-    let size = device.code_memory_size as usize;
+    let size = handle.protocol.effective_code_size(&device) as usize;
     let blank = device.blank_value as u8;
 
     let read_size = if device.read_buffer_size > 0 {

@@ -55,6 +55,15 @@ pub trait Protocol: Send + Sync {
     /// Send the end-transaction command.
     fn end_transaction(&self, usb: &UsbDevice) -> Result<()>;
 
+    /// Return the effective code-memory size in bytes.
+    ///
+    /// Defaults to `device.code_memory_size`.  T76Protocol overrides this
+    /// for eMMC, where the database value is a placeholder (0x200) and the
+    /// real capacity is detected at runtime from EXT_CSD.
+    fn effective_code_size(&self, device: &Device) -> u32 {
+        device.code_memory_size
+    }
+
     /// Read one block of memory into `ds.data`.
     fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()>;
 

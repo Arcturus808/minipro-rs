@@ -16,7 +16,7 @@ use super::t56::build_begin_msg;
 use super::tl866iiplus::logic_ic_test_tl866;
 use super::{DataSet, JedecSet, OvcStatus, Protocol};
 use std::cell::Cell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::{
     device::Device,
@@ -106,12 +106,16 @@ const OVC_FLAG_IDX: usize = 12;
 
 pub struct T76Protocol {
     bitstream_uploaded: AtomicBool,
+    /// Detected eMMC capacity in bytes (from EXT_CSD or T76_EMMC_SIZE_MB).
+    /// Zero means "not an eMMC session" or "detection not yet run".
+    emmc_capacity: AtomicU64,
 }
 
 impl T76Protocol {
     pub fn new() -> Self {
         Self {
             bitstream_uploaded: AtomicBool::new(false),
+            emmc_capacity: AtomicU64::new(0),
         }
     }
 }
@@ -352,13 +356,21 @@ fn t76_emmc_io_init(init: &mut [u8; 40], opcode: u8, lba: u32, blocks: u32) {
     put_le32(&mut init[32..36], 0x01);
 }
 
-/// eMMC session bring-up: drain ID queries, then switch to USER partition.
+/// eMMC session bring-up: drain ID queries, detect capacity, switch to
+/// USER partition.
 ///
 /// Reconstructed from XGPro's eMMC READ capture (pcaps/xgpro-3.pcapng):
 /// after BEGIN_TRANS the vendor sends three short ID queries whose
-/// responses must be drained from EP81, then a CMD6 SWITCH to the
-/// target partition.  Skipping the queries desyncs the USB stream.
-fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<()> {
+/// responses must be drained from EP81, then reads EXT_CSD for capacity,
+/// then a CMD6 SWITCH to the target partition.  Skipping the queries
+/// desyncs the USB stream.
+///
+/// If `T76_EMMC_SIZE_MB` is set, the EXT_CSD read is skipped and the
+/// env var value (MiB) is used instead.  This also means the heavier
+/// adapter init was skipped (see `begin_transaction`).
+///
+/// Returns the detected capacity in bytes.
+fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
     // Drain ID query responses: device-ID/CID (0x21, 32 bytes),
     // READID (0x05, 32 bytes), user-id/status (0x06, 24 bytes).
     const QUERIES: [(u8, usize); 3] = [(0x21, 32), (0x05, 32), (0x06, 24)];
@@ -369,10 +381,51 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<()> {
         let _ = usb.msg_recv(resp_len)?;
     }
 
+    // Capacity detection.  With a T76_EMMC_SIZE_MB override, use it
+    // directly (MiB) and skip the EXT_CSD read.  Otherwise read EXT_CSD
+    // via opcode 0x08 (enabled by the adapter init in begin_transaction):
+    // the 512-byte reply is an 8-byte header + EXT_CSD, so EXT_CSD[N]
+    // is at buf[8+N].  USER capacity = SEC_COUNT[212] * 512.
+    let capacity = if let Ok(sz) = std::env::var("T76_EMMC_SIZE_MB") {
+        let mb: u64 = sz.trim().parse().unwrap_or(0);
+        let cap = if mb > 0 {
+            mb * 1024 * 1024
+        } else {
+            4 * 1024 * 1024
+        };
+        eprintln!("eMMC capacity: {} MiB (T76_EMMC_SIZE_MB)", cap >> 20);
+        cap
+    } else {
+        // The device returns exactly 520 bytes (a 512-byte full packet
+        // + an 8-byte short packet).  Request 520 so the short packet
+        // terminates the transfer at the exact length — requesting 512
+        // overflows (the 8 won't fit) and 1024 over-waits.
+        let cmd = [0x08u8, 0x48, 0x00, 0x02, 0, 0, 0, 0];
+        usb.msg_send(&cmd)?;
+        let ext = usb.read_payload(520)?;
+        if ext.len() < 224 {
+            return Err(MiniproError::Protocol(format!(
+                "EXT_CSD response too short: {} bytes (need >= 224)",
+                ext.len()
+            )));
+        }
+        // EXT_CSD[212] = SEC_COUNT (4 bytes LE) → at buf[220..224]
+        let sec = u32::from_le_bytes([ext[220], ext[221], ext[222], ext[223]]);
+        let cap = if sec > 0 {
+            (sec as u64) * 512
+        } else {
+            // SEC_COUNT == 0 is invalid; fall back to 4 MiB
+            eprintln!("eMMC: SEC_COUNT is 0, falling back to 4 MiB");
+            4 * 1024 * 1024
+        };
+        eprintln!("eMMC capacity: {} MiB (EXT_CSD)", cap >> 20);
+        cap
+    };
+
     // Switch to USER partition (CMD6 SWITCH, default).
     t76_emmc_cmd27(usb, EMMC_OP_SWITCH, EMMC_PART_USER)?;
 
-    Ok(())
+    Ok(capacity)
 }
 
 // ── Protocol implementation ───────────────────────────────────────────────────
@@ -386,11 +439,16 @@ impl Protocol for T76Protocol {
         //    bitstream.  Skipped on subsequent calls — the adapter stays
         //    powered and the FPGA retains its bitstream across end/begin
         //    cycles (matching the C minipro `bitstream_uploaded` flag).
+        //
+        //    For eMMC, the full adapter init (0x24 e0) is only needed when
+        //    auto-sizing from EXT_CSD.  With a T76_EMMC_SIZE_MB override we
+        //    keep the lighter path that's already validated for read/program.
+        let emmc_size_override = is_emmc && std::env::var("T76_EMMC_SIZE_MB").is_ok();
         if !self.bitstream_uploaded.load(Ordering::Relaxed) {
             if is_nand {
                 t76_adapter_init(usb)?;
             }
-            if is_emmc {
+            if is_emmc && !emmc_size_override {
                 t76_emmc_adapter_init(usb)?;
             }
 
@@ -561,13 +619,14 @@ impl Protocol for T76Protocol {
             usb.msg_send(&pre)?;
         }
 
-        // 5. eMMC: drain ID queries, then switch to the active partition
-        //    (default USER).  The firmware sends response data on EP81 that
-        //    the host must consume; skipping the queries desyncs the USB
-        //    stream.  The partition must be selected before any
-        //    read/write/erase.
+        // 5. eMMC: drain ID queries, detect capacity (EXT_CSD or env var),
+        //    then switch to the active partition (default USER).  The
+        //    firmware sends response data on EP81 that the host must
+        //    consume; skipping the queries desyncs the USB stream.  The
+        //    partition must be selected before any read/write/erase.
         if is_emmc {
-            t76_emmc_bring_up(usb)?;
+            let cap = t76_emmc_bring_up(usb)?;
+            self.emmc_capacity.store(cap, Ordering::Relaxed);
         }
 
         Ok(())
@@ -577,6 +636,20 @@ impl Protocol for T76Protocol {
         let mut msg = [0u8; 8];
         msg[0] = CMD_END_TRANS;
         usb.msg_send(&msg)
+    }
+
+    fn effective_code_size(&self, device: &Device) -> u32 {
+        // For eMMC, the database code_memory_size is a placeholder (0x200).
+        // Return the capacity detected from EXT_CSD (or T76_EMMC_SIZE_MB)
+        // during begin_transaction.  Fall back to the database value if
+        // detection hasn't run yet (capacity == 0).
+        if device.protocol_id == 0x31 {
+            let cap = self.emmc_capacity.load(Ordering::Relaxed);
+            if cap > 0 {
+                return cap as u32;
+            }
+        }
+        device.code_memory_size
     }
 
     fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()> {
@@ -930,7 +1003,14 @@ impl Protocol for T76Protocol {
         // eMMC erase (protocol_id 0x31).
         if device.protocol_id == 0x31 {
             const POLL: [u8; 8] = [0x27, 0x4d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00];
-            let total = (device.code_memory_size as u64) / 512;
+            // Use detected capacity (from EXT_CSD or T76_EMMC_SIZE_MB)
+            // instead of the database placeholder (0x200).
+            let capacity = self.emmc_capacity.load(Ordering::Relaxed);
+            let total = if capacity > 0 {
+                capacity / 512
+            } else {
+                (device.code_memory_size as u64) / 512
+            };
             if total == 0 {
                 return Ok(());
             }

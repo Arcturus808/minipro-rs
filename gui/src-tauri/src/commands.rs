@@ -502,10 +502,11 @@ pub async fn do_read(
         );
 
         let result = (|| {
+            let code_size = handle.protocol.effective_code_size(&device) as usize;
             let size = match page {
-                0x00 => device.code_memory_size as usize,
+                0x00 => code_size,
                 0x01 => device.data_memory_size as usize,
-                _ => device.code_memory_size as usize,
+                _ => code_size,
             };
             if size == 0 {
                 return Err(format!(
@@ -599,10 +600,11 @@ pub async fn read_chip_to_bytes(
         let op_name = "read".to_string();
 
         let result = (|| {
+            let code_size = handle.protocol.effective_code_size(&device) as usize;
             let size = match page {
-                0x00 => device.code_memory_size as usize,
+                0x00 => code_size,
                 0x01 => device.data_memory_size as usize,
-                _ => device.code_memory_size as usize,
+                _ => code_size,
             };
             if size == 0 {
                 return Err(format!(
@@ -940,10 +942,11 @@ pub async fn do_batch_write_chip(
             // ── If serial injection: read file, patch, write bytes, verify bytes ──
             if let Some(ref sc) = serial_cfg {
                 let dev = handle.device().map_err(|e| e.to_string())?;
+                let code_size = handle.protocol.effective_code_size(dev) as usize;
                 let size = match page {
-                    0x00 => dev.code_memory_size as usize,
+                    0x00 => code_size,
                     0x01 => dev.data_memory_size as usize,
-                    _ => dev.code_memory_size as usize,
+                    _ => code_size,
                 };
                 let mut buf = read_file(
                     Path::new(&path_clone),
