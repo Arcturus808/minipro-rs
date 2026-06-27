@@ -64,8 +64,8 @@
   let batchCount = $state(""); // empty = unlimited
   // Serial number config for batch mode
   let serialEnabled = $state(false);
-  let serialStart = $state("0x0001");
-  let serialAddr = $state("0x1FF0");
+  let serialStart = $state("1");
+  let serialAddr = $state("");
   let serialWidth = $state("4");
   let serialFormat = $state("bin");
   let serialEndian = $state("little");
@@ -366,15 +366,22 @@
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
       if ($batchModeEnabled) {
         const count = batchCount.trim() ? parseInt(batchCount.trim(), 10) || null : null;
-        const serialConfig = serialEnabled ? {
-          start: parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10),
-          address: parseInt(serialAddr, serialAddr.startsWith("0x") ? 16 : 10),
-          width: parseInt(serialWidth, 10),
-          format: serialFormat,
-          endian: serialEndian,
-          step: parseInt(serialStep, 10),
-          checksum: serialChecksum,
-        } : null;
+        let serialConfig = null;
+        if (serialEnabled) {
+          if (!serialAddr.trim()) {
+            logs.error("Serial number injection enabled but address is empty. Enter a target address (e.g., 0x1FF0) or disable serial injection.");
+            return;
+          }
+          serialConfig = {
+            start: parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10),
+            address: parseInt(serialAddr, serialAddr.startsWith("0x") ? 16 : 10),
+            width: parseInt(serialWidth, 10),
+            format: serialFormat,
+            endian: serialEndian,
+            step: parseInt(serialStep, 10),
+            checksum: serialChecksum,
+          };
+        }
         await startBatch(path, getOptions(), count, serialConfig);
       } else {
         await doWrite(path, getOptions());
@@ -997,8 +1004,8 @@
                         <input type="text" bind:value={serialStart} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x0001" />
                       </label>
                       <label class="flex flex-col gap-1">
-                        <span class="opacity-60">Address (hex)</span>
-                        <input type="text" bind:value={serialAddr} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x1FF0" />
+                        <span class="opacity-60">Address (hex, required)</span>
+                        <input type="text" bind:value={serialAddr} class="px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono" placeholder="0x????" />
                       </label>
                       <label class="flex flex-col gap-1">
                         <span class="opacity-60">Width (bytes)</span>
