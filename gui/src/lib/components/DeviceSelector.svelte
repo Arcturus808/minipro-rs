@@ -3,7 +3,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
   import { selectedDevice } from "../stores/device";
-  import ComboSearch from "./ComboSearch.svelte";
 
   interface SearchResult {
     name: string;
@@ -19,13 +18,87 @@
   const PAGE_SIZE = 12;
   let store: Store | null = null;
 
-  async function onSearch() {
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
+  // Live search: debounce + race-condition guard.
+  // A monotonic counter tags each request; only the latest response is kept.
+  let searchSeq = 0;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Device favorites — a set of device names persisted to localStorage.
+  const FAVORITES_KEY = "minipro_device_favorites";
+
+  function loadFavorites(): Set<string> {
+    try {
+      const raw = localStorage.getItem(FAVORITES_KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  let favorites = $state<Set<string>>(loadFavorites());
+
+  $effect(() => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+  });
+
+  function isFavorite(name: string): boolean {
+    return favorites.has(name);
+  }
+
+  function toggleFavorite(name: string) {
+    const next = new Set(favorites);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    favorites = next;
+  }
+
+  // Favorites section collapse state — persisted to localStorage.
+  const FAV_COLLAPSED_KEY = "minipro_device_favorites_collapsed";
+
+  function loadFavCollapsed(): boolean {
+    return localStorage.getItem(FAV_COLLAPSED_KEY) === "true";
+  }
+
+  let favoritesCollapsed = $state<boolean>(loadFavCollapsed());
+
+  $effect(() => {
+    localStorage.setItem(FAV_COLLAPSED_KEY, String(favoritesCollapsed));
+  });
+
+  // Favorite device names (sorted) for the pinned favorites section.
+  let favoriteItems = $derived(
+    Array.from(favorites).sort((a, b) => a.localeCompare(b))
+  );
+
+  async function doSearch(query: string) {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      results = [];
+      page = 0;
+      return;
+    }
+    const seq = ++searchSeq;
+    const r = await invoke<SearchResult[]>("search_devices", { query: trimmed });
+    // Discard stale responses (user typed more characters since this request).
+    if (seq !== searchSeq) return;
+    results = r;
     page = 0;
     selectedName = null;
     selectedInfo = null;
-    results = await invoke<SearchResult[]>("search_devices", { query: trimmed });
+  }
+
+  // Debounced live search: fires 200ms after the user stops typing.
+  $effect(() => {
+    const query = searchQuery;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => doSearch(query), 200);
+    return () => { if (debounceTimer) clearTimeout(debounceTimer); };
+  });
+
+  async function onSearch() {
+    // Immediate search (Enter key bypasses the debounce).
+    if (debounceTimer) clearTimeout(debounceTimer);
+    await doSearch(searchQuery);
   }
 
   function goPrev() { if (page > 0) page--; }
@@ -72,23 +145,84 @@
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
   <header class="p-3 border-b border-surface-200-800">
     <h3 class="text-sm font-semibold mb-2">Device Selector</h3>
-    <div class="flex gap-2">
-      <div class="flex-1">
-        <ComboSearch
-          bind:value={searchQuery}
-          placeholder="Search devices..."
-          storageKey="minipro_device_search_history"
-          onselect={() => onSearch()}
-          onsubmit={() => onSearch()}
-        />
-      </div>
-      <button class="btn preset-filled-primary text-sm px-3" onclick={onSearch}>Search</button>
-    </div>
+    <input
+      type="text"
+      bind:value={searchQuery}
+      placeholder="Search devices..."
+      class="w-full rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-surface-950-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      onkeydown={(e) => { if (e.key === 'Enter') onSearch(); }}
+    />
   </header>
 
   <div class="flex-1 overflow-auto p-2">
+    {#snippet starRow(name: string, manufacturer?: string)}
+      <div
+        class={`w-full text-left py-2 px-3 transition-colors flex items-center gap-2 ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
+        role="button"
+        tabindex="0"
+        onclick={() => onSelect(name)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(name); } }}
+      >
+        <button
+          class="shrink-0 rounded p-0.5 hover:bg-surface-200-800"
+          onclick={(e) => { e.stopPropagation(); toggleFavorite(name); }}
+          aria-label={isFavorite(name) ? 'Unfavorite' : 'Favorite'}
+          title={isFavorite(name) ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <svg
+            class="h-4 w-4 transition-colors"
+            class:fill-yellow-400={isFavorite(name)}
+            class:text-yellow-400={isFavorite(name)}
+            class:fill-transparent={!isFavorite(name)}
+            class:text-gray-400={!isFavorite(name)}
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+            />
+          </svg>
+        </button>
+        <span class={`text-sm flex-1 ${selectedName === name ? 'font-semibold' : ''}`}>{name}</span>
+        {#if manufacturer}
+          <span class="text-xs opacity-60 truncate max-w-[120px]">{manufacturer}</span>
+        {/if}
+      </div>
+    {/snippet}
+
+    {#if favoriteItems.length > 0}
+      <div class="mb-2">
+        <button
+          class="w-full flex items-center gap-1 text-xs font-semibold opacity-70 uppercase tracking-wide py-1 px-1 hover:opacity-100 transition-opacity"
+          onclick={() => favoritesCollapsed = !favoritesCollapsed}
+          aria-expanded={!favoritesCollapsed}
+        >
+          <svg class="h-3 w-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style={favoritesCollapsed ? '' : 'transform: rotate(90deg)'}>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          Favorites ({favoriteItems.length})
+        </button>
+        {#if !favoritesCollapsed}
+          <ul class="divide-y divide-surface-200-800">
+            {#each favoriteItems as name}
+              <li>{@render starRow(name)}</li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/if}
+
     {#if results.length === 0}
-      <p class="text-sm opacity-50 text-center py-8">No devices found. Enter a search term.</p>
+      {#if searchQuery.trim().length > 0 && searchQuery.trim().length < 2}
+        <p class="text-sm opacity-50 text-center py-8">Keep typing...</p>
+      {:else if searchQuery.trim().length >= 2}
+        <p class="text-sm opacity-50 text-center py-8">No results found.</p>
+      {:else if favoriteItems.length === 0}
+        <p class="text-sm opacity-50 text-center py-8">Start typing to search devices...</p>
+      {/if}
     {:else}
       <div class="text-xs opacity-60 mb-1 flex justify-between items-center">
         <span>{results.length} total</span>
@@ -107,17 +241,7 @@
       </div>
       <ul class="divide-y divide-surface-200-800">
         {#each displayItems as item}
-          <li>
-            <button
-              class={`w-full text-left py-2 px-3 transition-colors ${selectedName === item.name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
-              onclick={() => onSelect(item.name)}
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class={`text-sm ${selectedName === item.name ? 'font-semibold' : ''}`}>{item.name}</span>
-                <span class="text-xs opacity-60 truncate max-w-[120px]">{item.manufacturer}</span>
-              </div>
-            </button>
-          </li>
+          <li>{@render starRow(item.name, item.manufacturer)}</li>
         {/each}
       </ul>
       {#if viewMode === "paginated" && results.length > PAGE_SIZE}
