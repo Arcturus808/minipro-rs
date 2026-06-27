@@ -45,6 +45,8 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
 - [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for serial number injection. See detailed spec below in Near-term.
 - [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Near-term.
+- [x] **Serial overflow detection** — `patch_serial()` checks if the value exceeds the width's max and returns an error instead of silently truncating. CLI checks before batch start. GUI shows live warning and blocks start.
+- [x] **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing erase-value bytes; Pad extends to a target size with erase value. Supports 0xFF (NOR) and 0x00 (EEPROM/NAND) erase values.
 
 ## Near-term
 
@@ -193,11 +195,15 @@ This is a living list of features and improvements planned for minipro-rs.
   - Supports: start value, step, target address, width (1-8 bytes), format (bin/ascii/bcd), endian (little/big), optional checksum (XOR/CRC-8)
   - See completed entry above and detailed spec in Near-term section
 
-- [ ] **Manual trim/pad to size** — let advanced users resize firmware files before saving
-  - Trim trailing `0xFF` bytes to reduce a read-back (8192 bytes) to actual code size (1936 bytes)
-  - Pad with `0xFF` to a specific size (e.g., exact device memory size) for tools that require full-size files
+- [x] **Manual trim/pad to size** — let advanced users resize firmware files before saving
+  - Trim trailing erase-value bytes to reduce a read-back (8192 bytes) to actual code size (1936 bytes)
+  - Pad with erase-value to a specific size (e.g., exact device memory size) for tools that require full-size files
   - Useful when exporting to other tools, version control, or creating "canonical" firmware files
-  - Could be a right-click menu in the hex viewer or a Save dialog option
+  - Implemented as a "Trim/Pad" button in the hex viewer toolbar with inline panel:
+    - **Trim** — removes trailing bytes equal to the erase value (0xFF or 0x00)
+    - **Pad** — enter target size, pads with erase value to that size
+    - Erase value dropdown (0xFF / 0x00) covers NOR flash and EEPROM/NAND
+  - Core functions in `hex.ts`: `trimTrailing()` and `padToSize()`
 
 - [ ] **ASCII insert mode in hex editor** — type characters to insert new bytes (shift existing data right)
   - Current behavior: overtype mode (typing replaces existing bytes, file size stays fixed)
