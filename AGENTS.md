@@ -280,9 +280,16 @@ All version numbers in the repo must match for any given release:
 
 **When bumping for a release:**
 1. Update all four version fields above
-2. Commit with message like `chore(release): bump version to X.Y.Z`
-3. Create/push the tag `vX.Y.Z`
-4. Let CI build and release everything consistently
+2. Add a `## [X.Y.Z]` section to `CHANGELOG.md` (CI extracts this for release notes)
+3. Run `cargo generate-lockfile` and stage `Cargo.lock` + `gui/src-tauri/Cargo.lock`
+4. Commit with message like `chore(release): bump version to X.Y.Z`
+5. Create the tag `vX.Y.Z`
+6. Push the commit and the tag: `git push && git push origin vX.Y.Z`
+7. Let CI build and release everything consistently
+
+**CI version verification:** The GitHub Actions release workflow has a `verify-versions` job that runs before any builds. It checks that all four version fields match the tag name. If any file is out of sync, the build fails immediately with a clear error message. This prevents releasing a binary with a stale version badge or mismatched installer filename.
+
+**Rebuild the GUI after bumping:** The version badge in the GUI reads from `gui/package.json` at Vite build time. If you bump `package.json` but only run `cargo build --release` (without `cargo tauri build`), the stale embedded frontend persists. Always run `cargo tauri build` after any frontend or version change.
 
 ---
 
