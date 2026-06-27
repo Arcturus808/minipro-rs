@@ -559,6 +559,7 @@
 </script>
 
 <div class="hex-viewer-container" style="border: 1px solid #ccc; display: flex; flex-direction: column; height: 100%;">
+  <!-- Row 1: Title + metadata (left), font size + reset (right) -->
   <div style="padding: 8px 12px; border-bottom: 1px solid #ccc; display: flex; align-items: center; justify-content: space-between;">
     <div style="min-width: 0; flex-shrink: 1;">
       <div style="font-size: 14px; font-weight: 600;">Hex Viewer</div>
@@ -587,7 +588,7 @@
         {/if}
       {/if}
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-shrink-0">
       {#if $hexMeta}
         <select
           class="text-xs opacity-60 hover:opacity-100 bg-transparent border border-surface-200-800 rounded px-1 py-0.5"
@@ -611,195 +612,200 @@
             Reset
           </button>
         {/if}
-        {#if editCount > 0}
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5 text-amber-600 font-medium"
-            style="font-size: 13px;"
-            onclick={() => { applyHexEdits(); savedPath = null; }}
-            title="Apply pending edits to the buffer"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            Apply
-          </button>
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-            style="font-size: 13px;"
-            onclick={() => clearHexEdits()}
-            title="Discard all pending edits"
-          >
-            Reset
-          </button>
-        {/if}
-        <button
-          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
-          onclick={async () => {
-            const dir = get(settings).defaultDirectory ?? "";
-            const dev = get(selectedDevice);
-            const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
-            const defaultName = `${devName}.bin`;
-            const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
-            const iterativePath = await getIterativeSavePath(defaultPath);
-            let path = await pickSaveFile(
-              "Save chip dump as",
-              iterativePath,
-              [
-                { name: "Binary", extensions: ["bin"] },
-                { name: "Intel HEX", extensions: ["hex"] },
-                { name: "Motorola SREC", extensions: ["srec", "mot"] },
-                { name: "JEDEC", extensions: ["jed"] },
-              ]
-            );
-            if (path) {
-              if (!path.includes(".")) {
-                path += ".bin";
-              }
-              const ext = path.split(".").pop()?.toLowerCase() ?? "bin";
-              const format = ext === "hex" ? "ihex" : ext === "srec" || ext === "mot" ? "srec" : ext === "jed" ? "jedec" : "bin";
-              await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-              await saveBufferToFile(path, format, dev?.name);
-              savedPath = path;
-            }
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-          </svg>
-          Save
-        </button>
-        {#if savedPath}
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
-            onclick={() => savedPath && openFolder(savedPath)}
-            title="Open folder in Explorer"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-            </svg>
-            Open
-          </button>
-        {/if}
-        <button
-          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-          style="font-size: 13px;"
-          onclick={() => { savedPath = null; clearHexEdits(); clearHexBuffer(); clearCompare(); }}
-        >
-          Clear
-        </button>
-        {#if $hexMeta?.data}
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-            style="font-size: 13px;"
-            onclick={() => showTrimPad = !showTrimPad}
-            title="Trim trailing padding or pad to a specific size"
-          >
-            Trim/Pad
-          </button>
-        {/if}
-        {#if showTrimPad && $hexMeta?.data}
-          <div class="flex items-center gap-2 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
-            <button
-              class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-              onclick={() => {
-                const result = trimTrailing(eraseValue);
-                if (result !== null) {
-                  logs.info(`Trimmed trailing 0x${eraseValue.toString(16).toUpperCase()} bytes → ${result} bytes`);
-                  savedPath = null;
-                } else {
-                  logs.info("No trailing erase-value bytes to trim");
-                }
-              }}
-              title="Remove trailing bytes equal to the erase value"
-            >
-              Trim
-            </button>
-            <input
-              type="text"
-              bind:value={padTargetSize}
-              placeholder="size"
-              class="w-20 px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono"
-              style="font-size: 13px;"
-              onkeydown={(e) => { if (e.key === "Enter") (document.getElementById("pad-btn") as HTMLButtonElement)?.click(); }}
-            />
-            <button
-              id="pad-btn"
-              class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-              onclick={() => {
-                const ts = parseInt(padTargetSize, padTargetSize.startsWith("0x") ? 16 : 10);
-                if (isNaN(ts) || ts <= 0) {
-                  logs.error("Invalid pad target size");
-                  return;
-                }
-                const result = padToSize(ts, eraseValue);
-                if (result !== null) {
-                  logs.info(`Padded to ${result} bytes with 0x${eraseValue.toString(16).toUpperCase()}`);
-                  savedPath = null;
-                } else {
-                  logs.info(`Buffer is already ${$hexMeta!.size} bytes — no padding needed`);
-                }
-              }}
-              title="Pad buffer to the specified size with erase value"
-            >
-              Pad
-            </button>
-            <label class="flex items-center gap-1" title="Erase value to trim/pad with">
-              <span class="opacity-60">Erase:</span>
-              <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
-                <option value={0xFF}>0xFF</option>
-                <option value={0x00}>0x00</option>
-              </select>
-            </label>
-            <button
-              class="opacity-50 hover:opacity-100 transition-opacity"
-              onclick={() => showTrimPad = false}
-              title="Close trim/pad panel"
-            >
-              ✕
-            </button>
-          </div>
-        {/if}
-        {#if !diffResult}
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5"
-            style="font-size: 13px;"
-            onclick={startCompare}
-            disabled={diffComparing}
-            title="Compare hex buffer against a reference file (F3 to navigate diffs)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h8m-8 5h8M3 5l4 4-4 4M21 5l-4 4 4 4" />
-            </svg>
-            {diffComparing ? "Comparing..." : "Compare"}
-          </button>
-        {:else}
-          {#if diffResult.diffs.length > 0}
-            <button
-              class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-              style="font-size: 13px; white-space: nowrap;"
-              onclick={() => navigateDiff("prev")}
-              title="Previous diff (Shift+F3)"
-            >↑ Prev</button>
-            <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center; white-space: nowrap;">
-              {diffNavIndex + 1}/{diffResult.diffs.length}
-            </span>
-            <button
-              class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-              style="font-size: 13px; white-space: nowrap;"
-              onclick={() => navigateDiff("next")}
-              title="Next diff (F3)"
-            >Next ↓</button>
-          {/if}
-          <button
-            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
-            style="font-size: 13px; color: #dc2626; white-space: nowrap;"
-            onclick={clearCompare}
-            title="Clear comparison"
-          >✕ Clear Compare</button>
-        {/if}
       {/if}
     </div>
   </div>
+  <!-- Row 2: Action buttons (wraps naturally if too wide) -->
+  {#if $hexMeta}
+    <div class="flex items-center gap-2 flex-wrap" style="padding: 6px 12px; border-bottom: 1px solid #ccc;">
+      {#if editCount > 0}
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5 text-amber-600 font-medium"
+          style="font-size: 13px;"
+          onclick={() => { applyHexEdits(); savedPath = null; }}
+          title="Apply pending edits to the buffer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Apply
+        </button>
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px;"
+          onclick={() => clearHexEdits()}
+          title="Discard all pending edits"
+        >
+          Reset
+        </button>
+      {/if}
+      <button
+        class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
+        onclick={async () => {
+          const dir = get(settings).defaultDirectory ?? "";
+          const dev = get(selectedDevice);
+          const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
+          const defaultName = `${devName}.bin`;
+          const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
+          const iterativePath = await getIterativeSavePath(defaultPath);
+          let path = await pickSaveFile(
+            "Save chip dump as",
+            iterativePath,
+            [
+              { name: "Binary", extensions: ["bin"] },
+              { name: "Intel HEX", extensions: ["hex"] },
+              { name: "Motorola SREC", extensions: ["srec", "mot"] },
+              { name: "JEDEC", extensions: ["jed"] },
+            ]
+          );
+          if (path) {
+            if (!path.includes(".")) {
+              path += ".bin";
+            }
+            const ext = path.split(".").pop()?.toLowerCase() ?? "bin";
+            const format = ext === "hex" ? "ihex" : ext === "srec" || ext === "mot" ? "srec" : ext === "jed" ? "jedec" : "bin";
+            await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+            await saveBufferToFile(path, format, dev?.name);
+            savedPath = path;
+          }
+        }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+        </svg>
+        Save
+      </button>
+      {#if savedPath}
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
+          onclick={() => savedPath && openFolder(savedPath)}
+          title="Open folder in Explorer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+          </svg>
+          Open
+        </button>
+      {/if}
+      <button
+        class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+        style="font-size: 13px;"
+        onclick={() => { savedPath = null; clearHexEdits(); clearHexBuffer(); clearCompare(); }}
+      >
+        Clear
+      </button>
+      {#if $hexMeta?.data}
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px;"
+          onclick={() => showTrimPad = !showTrimPad}
+          title="Trim trailing padding or pad to a specific size"
+        >
+          Trim/Pad
+        </button>
+      {/if}
+      {#if showTrimPad && $hexMeta?.data}
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
+          <button
+            class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+            onclick={() => {
+              const result = trimTrailing(eraseValue);
+              if (result !== null) {
+                logs.info(`Trimmed trailing 0x${eraseValue.toString(16).toUpperCase()} bytes → ${result} bytes`);
+                savedPath = null;
+              } else {
+                logs.info("No trailing erase-value bytes to trim");
+              }
+            }}
+            title="Remove trailing bytes equal to the erase value"
+          >
+            Trim
+          </button>
+          <input
+            type="text"
+            bind:value={padTargetSize}
+            placeholder="size"
+            class="w-20 px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono"
+            style="font-size: 13px;"
+            onkeydown={(e) => { if (e.key === "Enter") (document.getElementById("pad-btn") as HTMLButtonElement)?.click(); }}
+          />
+          <button
+            id="pad-btn"
+            class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+            onclick={() => {
+              const ts = parseInt(padTargetSize, padTargetSize.startsWith("0x") ? 16 : 10);
+              if (isNaN(ts) || ts <= 0) {
+                logs.error("Invalid pad target size");
+                return;
+              }
+              const result = padToSize(ts, eraseValue);
+              if (result !== null) {
+                logs.info(`Padded to ${result} bytes with 0x${eraseValue.toString(16).toUpperCase()}`);
+                savedPath = null;
+              } else {
+                logs.info(`Buffer is already ${$hexMeta!.size} bytes — no padding needed`);
+              }
+            }}
+            title="Pad buffer to the specified size with erase value"
+          >
+            Pad
+          </button>
+          <label class="flex items-center gap-1" title="Erase value to trim/pad with">
+            <span class="opacity-60">Erase:</span>
+            <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
+              <option value={0xFF}>0xFF</option>
+              <option value={0x00}>0x00</option>
+            </select>
+          </label>
+          <button
+            class="opacity-50 hover:opacity-100 transition-opacity"
+            onclick={() => showTrimPad = false}
+            title="Close trim/pad panel"
+          >
+            ✕
+          </button>
+        </div>
+      {/if}
+      {#if !diffResult}
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5"
+          style="font-size: 13px;"
+          onclick={startCompare}
+          disabled={diffComparing}
+          title="Compare hex buffer against a reference file (F3 to navigate diffs)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h8m-8 5h8M3 5l4 4-4 4M21 5l-4 4 4 4" />
+          </svg>
+          {diffComparing ? "Comparing..." : "Compare"}
+        </button>
+      {:else}
+        {#if diffResult.diffs.length > 0}
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+            style="font-size: 13px; white-space: nowrap;"
+            onclick={() => navigateDiff("prev")}
+            title="Previous diff (Shift+F3)"
+          >↑ Prev</button>
+          <span style="font-size: 12px; opacity: 0.6; min-width: 60px; text-align: center; white-space: nowrap;">
+            {diffNavIndex + 1}/{diffResult.diffs.length}
+          </span>
+          <button
+            class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+            style="font-size: 13px; white-space: nowrap;"
+            onclick={() => navigateDiff("next")}
+            title="Next diff (F3)"
+          >Next ↓</button>
+        {/if}
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px; color: #dc2626; white-space: nowrap;"
+          onclick={clearCompare}
+          title="Clear comparison"
+        >✕ Clear Compare</button>
+      {/if}
+    </div>
+  {/if}
   {#if diffResult && diffResult.summary.anomalous_tail > 0}
     <div style="padding: 6px 12px; background: #fef3c7; border-bottom: 1px solid #f59e0b; font-size: 12px; color: #92400e; display: flex; align-items: center; gap: 8px;">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
