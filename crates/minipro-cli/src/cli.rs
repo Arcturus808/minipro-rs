@@ -245,7 +245,7 @@ struct Cli {
     batch: Option<usize>,
 
     /// Serial number start value (use with --batch). Hex (0x...) or decimal.
-    /// e.g. --serial-start 0x0001
+    /// e.g. --serial-start 1 or --serial-start 0x0001
     #[arg(long = "serial-start", value_name = "VALUE")]
     serial_start: Option<String>,
 

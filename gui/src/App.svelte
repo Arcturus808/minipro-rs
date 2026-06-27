@@ -390,8 +390,13 @@
             logs.error("Serial number injection enabled but address is empty. Enter a target address (e.g., 0x1FF0) or disable serial injection.");
             return;
           }
+          const startVal = parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10);
+          if (isNaN(startVal)) {
+            logs.error("Serial number injection enabled but start value is invalid. Enter a number (e.g., 1 or 0x0001) or disable serial injection.");
+            return;
+          }
           serialConfig = {
-            start: parseInt(serialStart, serialStart.startsWith("0x") ? 16 : 10),
+            start: startVal,
             address: parseInt(serialAddr, serialAddr.startsWith("0x") ? 16 : 10),
             width: parseInt(serialWidth, 10),
             format: serialFormat,
