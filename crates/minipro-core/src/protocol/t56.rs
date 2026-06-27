@@ -177,9 +177,9 @@ impl Protocol for T56Protocol {
                 if !algo.bitstream.is_empty() {
                     eprintln!("Using T56 {} algorithm..", algo.name);
                     upload_bitstream(usb, &algo.bitstream)?;
+                    self.bitstream_uploaded.store(true, Ordering::Relaxed);
                 }
             }
-            self.bitstream_uploaded.store(true, Ordering::Relaxed);
         }
 
         // 2. Send the begin_transaction command (unless the device uses a

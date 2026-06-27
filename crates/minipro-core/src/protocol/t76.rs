@@ -399,9 +399,9 @@ impl Protocol for T76Protocol {
                 if !algo.bitstream.is_empty() {
                     eprintln!("Using T76 {} algorithm..", algo.name);
                     upload_bitstream_t76(usb, &algo.bitstream, is_nand)?;
+                    self.bitstream_uploaded.store(true, Ordering::Relaxed);
                 }
             }
-            self.bitstream_uploaded.store(true, Ordering::Relaxed);
         }
 
         // 3. Send begin_transaction (custom bit-bang deferred to Phase 4).

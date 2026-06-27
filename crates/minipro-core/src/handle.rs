@@ -111,7 +111,6 @@ impl MiniproHandle {
         info!("Device: {}", device.name);
         self.protocol
             .begin_transaction(&self.usb, &device, self.icsp)?;
-        self.device = Some(device.clone());
 
         // Overcurrent safety check: poll the status register after the
         // FPGA is initialized.  NAND and eMMC skip this (a zeroed 0x39
@@ -127,6 +126,7 @@ impl MiniproHandle {
             }
         }
 
+        self.device = Some(device);
         Ok(())
     }
 
