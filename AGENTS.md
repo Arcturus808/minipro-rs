@@ -284,8 +284,19 @@ All version numbers in the repo must match for any given release:
 3. Run `cargo generate-lockfile` and stage `Cargo.lock` + `gui/src-tauri/Cargo.lock`
 4. Commit with message like `chore(release): bump version to X.Y.Z`
 5. Create the tag `vX.Y.Z`
-6. Push the commit and the tag: `git push && git push origin vX.Y.Z`
-7. Let CI build and release everything consistently
+6. Push the commit and tag to `origin` (GitLab). The GitLab push mirror replicates branches and tags to GitHub automatically, but with a delay (seconds to minutes).
+7. If GitHub Actions doesn't trigger within a few minutes, push the tag directly: `git push github vX.Y.Z`
+8. Let CI build and release everything consistently
+
+**Git remotes — GitLab is primary, GitHub is a push mirror:**
+
+The repo has multiple remotes. `origin` is GitLab (primary). GitLab has a push mirror to GitHub (`github` remote). Both branches and tags mirror automatically, but the mirror has latency — it is not instant. If you need GitHub Actions to trigger immediately (e.g., for a release), push the tag directly to `github` instead of waiting for the mirror:
+
+```bash
+git push origin main          # GitLab (mirrors to GitHub with delay)
+git push origin vX.Y.Z        # GitLab (mirrors to GitHub with delay)
+git push github vX.Y.Z        # Immediate — triggers GitHub Actions right away
+```
 
 **CI version verification:** The GitHub Actions release workflow has a `verify-versions` job that runs before any builds. It checks that all four version fields match the tag name. If any file is out of sync, the build fails immediately with a clear error message. This prevents releasing a binary with a stale version badge or mismatched installer filename.
 
