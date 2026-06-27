@@ -43,7 +43,10 @@ pub mod usb;
 
 // Re-export the most commonly used types so callers can write
 // `use minipro_core::MiniproHandle` etc.
-pub use batch::{batch_write, BatchCallbacks, BatchChipResult, BatchConfig, BatchSummary};
+pub use batch::{
+    batch_write, patch_serial, BatchCallbacks, BatchChipResult, BatchConfig, BatchSummary,
+    SerialChecksum, SerialConfig, SerialEndian, SerialFormat,
+};
 pub use database::{
     find_device, find_device_any, list_devices, list_devices_for_model, DatabasePaths,
 };
