@@ -75,7 +75,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Serial injection as optional layer: adds device-specific complexity (address, format, endianness, checksums) — better as a separate iteration
     - CLI first, then GUI: CLI is a linear loop with no UI paradigm change; GUI needs batch state management and "Next Chip" flow
     - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
-  - Status: CLI and GUI batch mode implemented. Serial number injection is the next step.
+  - Status: CLI and GUI batch mode implemented. Serial number injection implemented (see below).
 
 - [x] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
   - **Problem:** Embedded products need unique serial numbers stored at a known address in flash/EEPROM. Without automation, the user must manually edit the firmware file between each chip — tedious and error-prone.
@@ -139,7 +139,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Address + width beyond buffer: error before starting the batch
     - ASCII format with width > buffer space at address: error
     - Verify after write: the verify step uses the original file, not the patched buffer. Need to verify against the patched buffer instead, or skip verify for the serial region. **Decision: verify against patched buffer** — the `do_batch_write_chip` command should patch before both write and verify.
-  - Status: Planning complete. Ready to implement after batch mode is merged.
+  - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
 
 ## Backlog
 
