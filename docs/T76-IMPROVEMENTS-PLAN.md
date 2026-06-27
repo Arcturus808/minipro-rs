@@ -140,7 +140,26 @@ Additionally, the branch adds support for:
 
 ---
 
-### Phase 6: Testing
+### Phase 6: Review fixes (Matt Brown comparison) — ✅ COMPLETE
+**Status**: Three issues found by comparing against Matt Brown's t76-improvements branch have been fixed.
+
+**Fixes applied**:
+1. ✅ **OVC safety check in `begin_transaction`** — `MiniproHandle::begin_transaction()` now polls `get_ovc_status()` after the FPGA is initialized. NAND and eMMC skip this (zeroed 0x39 deselects the chip). Applies to all programmer models, not just T76.
+2. ✅ **Bitstream upload caching** — `T56Protocol` and `T76Protocol` now use `AtomicBool` to skip re-uploading the ~775KB FPGA bitstream on subsequent `begin_transaction` calls. For batch operations, this eliminates N-1 redundant uploads (1500+ USB packets each). T76 also skips NAND/eMMC adapter init on subsequent calls.
+3. ✅ **eMMC bring-up queries** — Added `t76_emmc_bring_up()` which drains three ID query responses (0x21/CID, 0x05/READID, 0x06/user-id) before the CMD6 SWITCH partition select. Without these, the USB stream desyncs.
+
+**Deferred (need hardware validation)**:
+- ⏳ eMMC capacity auto-detection from EXT_CSD (520-byte read with short-packet trick — fragile, needs testing)
+- ⏳ eMMC partition selection (`--partition` CLI flag for BOOT1/BOOT2/RPMB)
+- ⏳ `T76_EMMC_SIZE_MB` env var override (depends on capacity detection)
+
+**Left as-is**:
+- `thread_local` eMMC block tracking — works in practice, low risk
+- `eprintln!` logging — cross-cutting refactor, not T76-specific
+
+---
+
+### Phase 7: Testing
 **Goal**: Validate all chip classes on real T76 hardware.
 
 | Chip Class | Test Chips | Operations |
