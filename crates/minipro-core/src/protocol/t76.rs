@@ -352,6 +352,29 @@ fn t76_emmc_io_init(init: &mut [u8; 40], opcode: u8, lba: u32, blocks: u32) {
     put_le32(&mut init[32..36], 0x01);
 }
 
+/// eMMC session bring-up: drain ID queries, then switch to USER partition.
+///
+/// Reconstructed from XGPro's eMMC READ capture (pcaps/xgpro-3.pcapng):
+/// after BEGIN_TRANS the vendor sends three short ID queries whose
+/// responses must be drained from EP81, then a CMD6 SWITCH to the
+/// target partition.  Skipping the queries desyncs the USB stream.
+fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<()> {
+    // Drain ID query responses: device-ID/CID (0x21, 32 bytes),
+    // READID (0x05, 32 bytes), user-id/status (0x06, 24 bytes).
+    const QUERIES: [(u8, usize); 3] = [(0x21, 32), (0x05, 32), (0x06, 24)];
+    for &(opcode, resp_len) in &QUERIES {
+        let mut cmd = [0u8; 8];
+        cmd[0] = opcode;
+        usb.msg_send(&cmd)?;
+        let _ = usb.msg_recv(resp_len)?;
+    }
+
+    // Switch to USER partition (CMD6 SWITCH, default).
+    t76_emmc_cmd27(usb, EMMC_OP_SWITCH, EMMC_PART_USER)?;
+
+    Ok(())
+}
+
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T76Protocol {
@@ -538,10 +561,13 @@ impl Protocol for T76Protocol {
             usb.msg_send(&pre)?;
         }
 
-        // 5. eMMC: switch to the active partition (default USER).
-        //    The partition must be selected before any read/write/erase.
+        // 5. eMMC: drain ID queries, then switch to the active partition
+        //    (default USER).  The firmware sends response data on EP81 that
+        //    the host must consume; skipping the queries desyncs the USB
+        //    stream.  The partition must be selected before any
+        //    read/write/erase.
         if is_emmc {
-            t76_emmc_cmd27(usb, EMMC_OP_SWITCH, EMMC_PART_USER)?;
+            t76_emmc_bring_up(usb)?;
         }
 
         Ok(())
