@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
 - **USB reconnect hints** — connection button tooltip advises replugging on USB errors. Operation and batch error messages detect USB-related failures and append replug advice. Helps with Windows USB Selective Suspend, Linux USB autosuspend, and macOS sleep power management
 
+### Fixed
+
+- **T76/T56 overcurrent safety check** — `begin_transaction()` now polls `get_ovc_status()` after FPGA initialization and aborts on overcurrent before any chip operation begins. NAND and eMMC skip this (zeroed 0x39 deselects them). Applies to all programmer models
+- **T76/T56 bitstream upload caching** — FPGA bitstream (~775KB) is now uploaded only once per session instead of on every `begin_transaction` call. For batch operations programming N chips, this eliminates N-1 redundant uploads (1500+ USB packets each). T76 also skips NAND/eMMC adapter init on subsequent calls
+- **T76 eMMC bring-up queries** — added ID query drain (0x21/CID, 0x05/READID, 0x06/user-id) before CMD6 SWITCH partition select. Without these, firmware responses sit in the USB buffer and desync the next transfer. Matches Matt Brown's t76-improvements branch
+
 ## [0.3.0] - 2026-06-24
 
 ### Added
