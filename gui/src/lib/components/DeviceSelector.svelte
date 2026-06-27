@@ -19,13 +19,40 @@
   const PAGE_SIZE = 12;
   let store: Store | null = null;
 
-  async function onSearch() {
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
+  // Live search: debounce + race-condition guard.
+  // A monotonic counter tags each request; only the latest response is kept.
+  let searchSeq = 0;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function doSearch(query: string) {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      results = [];
+      page = 0;
+      return;
+    }
+    const seq = ++searchSeq;
+    const r = await invoke<SearchResult[]>("search_devices", { query: trimmed });
+    // Discard stale responses (user typed more characters since this request).
+    if (seq !== searchSeq) return;
+    results = r;
     page = 0;
     selectedName = null;
     selectedInfo = null;
-    results = await invoke<SearchResult[]>("search_devices", { query: trimmed });
+  }
+
+  // Debounced live search: fires 200ms after the user stops typing.
+  $effect(() => {
+    const query = searchQuery;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => doSearch(query), 200);
+    return () => { if (debounceTimer) clearTimeout(debounceTimer); };
+  });
+
+  async function onSearch() {
+    // Immediate search (Search button or Enter from ComboSearch).
+    if (debounceTimer) clearTimeout(debounceTimer);
+    await doSearch(searchQuery);
   }
 
   function goPrev() { if (page > 0) page--; }
@@ -88,7 +115,11 @@
 
   <div class="flex-1 overflow-auto p-2">
     {#if results.length === 0}
-      <p class="text-sm opacity-50 text-center py-8">No devices found. Enter a search term.</p>
+      <p class="text-sm opacity-50 text-center py-8">
+        {searchQuery.trim().length > 0 && searchQuery.trim().length < 2
+          ? "Keep typing..."
+          : "Start typing to search devices..."}
+      </p>
     {:else}
       <div class="text-xs opacity-60 mb-1 flex justify-between items-center">
         <span>{results.length} total</span>
