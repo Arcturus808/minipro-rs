@@ -342,6 +342,13 @@ fn t76_emmc_timing(usb: &UsbDevice, device: &Device, post: bool) -> Result<()> {
 ///
 /// The firmware then streams (read) / accepts (program) `blocks` × 64 KiB
 /// on EP82 / EP05.
+///
+/// **CAVEAT**: The fixed param words (0x200, 0x20, 0x80, 0x20, 0x04, 0x01)
+/// are from a single XGPro capture of a KLM8G1GEAC eMMC. They may not
+/// generalize to other eMMC chips. If reads return garbage or writes fail
+/// on a different chip, these constants are the prime suspect. The vendor
+/// likely derives them from EXT_CSD fields (bus width, timing mode, etc.)
+/// but the mapping has not been reverse-engineered.
 fn t76_emmc_io_init(init: &mut [u8; 40], opcode: u8, lba: u32, blocks: u32) {
     init.fill(0);
     init[0] = opcode;
