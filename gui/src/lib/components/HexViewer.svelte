@@ -706,6 +706,13 @@
       {/if}
       {#if showTrimPad && $hexMeta?.data}
         <div class="flex items-center gap-3 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
+          <label class="flex items-center gap-1" title="Byte value used for trimming and padding">
+            <span class="opacity-60">Fill byte:</span>
+            <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
+              <option value={0xFF}>0xFF (NOR flash)</option>
+              <option value={0x00}>0x00 (EEPROM/NAND)</option>
+            </select>
+          </label>
           <button
             class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
             onclick={() => {
@@ -753,13 +760,6 @@
               Pad
             </button>
           </div>
-          <label class="flex items-center gap-1" title="Byte value used for trimming and padding">
-            <span class="opacity-60">Fill byte:</span>
-            <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
-              <option value={0xFF}>0xFF (NOR flash)</option>
-              <option value={0x00}>0x00 (EEPROM/NAND)</option>
-            </select>
-          </label>
           <button
             class="opacity-50 hover:opacity-100 transition-opacity"
             onclick={() => showTrimPad = false}
