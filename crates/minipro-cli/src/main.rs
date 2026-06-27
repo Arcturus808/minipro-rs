@@ -454,6 +454,15 @@ fn do_operations(
                     "Serial: start={}, addr=0x{:X}, width={}, format={:?}, step={}",
                     cfg.start, cfg.address, cfg.width, cfg.format, cfg.step
                 );
+
+                // Check for serial overflow before starting the batch
+                if let Some((chip, value)) = cfg.check_overflow(count) {
+                    return Err(anyhow::anyhow!(
+                        "serial overflow: chip {} value 0x{:X} exceeds {}-byte max 0x{:X} — reduce count, lower start, increase width, or decrease step",
+                        chip, value, cfg.width, cfg.max_value()
+                    ));
+                }
+
                 Some(cfg)
             } else {
                 None

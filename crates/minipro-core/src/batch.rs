@@ -110,6 +110,17 @@ impl SerialConfig {
         self.start + (chip_number as u64 - 1) * self.step
     }
 
+    /// Returns the maximum value that fits in the configured width.
+    pub fn max_value(&self) -> u64 {
+        match self.width {
+            1 => u8::MAX as u64,
+            2 => u16::MAX as u64,
+            4 => u32::MAX as u64,
+            8 => u64::MAX,
+            _ => 0,
+        }
+    }
+
     /// Returns the number of bytes the serial occupies (including checksum).
     pub fn total_len(&self) -> usize {
         let serial_len = match self.format {
@@ -144,6 +155,24 @@ impl SerialConfig {
         }
         Ok(())
     }
+
+    /// Check if any chip in a batch of `count` chips would overflow the width.
+    /// Returns the first chip number that overflows, or None if all fit.
+    /// Pass `None` for count to check an unlimited batch (checks first 100000 chips).
+    pub fn check_overflow(&self, count: Option<usize>) -> Option<(usize, u64)> {
+        if self.format != SerialFormat::Bin {
+            return None; // ASCII and BCD formats don't have the same overflow semantics
+        }
+        let max = self.max_value();
+        let chips_to_check = count.unwrap_or(100_000);
+        for chip in 1..=chips_to_check {
+            let value = self.value_for_chip(chip);
+            if value > max {
+                return Some((chip, value));
+            }
+        }
+        None
+    }
 }
 
 /// Patch a buffer with the serial number for the given chip.
@@ -153,6 +182,18 @@ impl SerialConfig {
 pub fn patch_serial(buf: &mut [u8], config: &SerialConfig, chip_number: usize) -> Result<()> {
     config.validate(buf.len())?;
     let value = config.value_for_chip(chip_number);
+
+    // Check for serial overflow — value exceeds what the width can hold
+    if config.format == SerialFormat::Bin && value > config.max_value() {
+        return Err(MiniproError::FileFormat(format!(
+            "serial overflow: chip {} value 0x{:X} exceeds {}-byte max 0x{:X}",
+            chip_number,
+            value,
+            config.width,
+            config.max_value()
+        )));
+    }
+
     let addr = config.address;
 
     // ── Write serial bytes ──────────────────────────────────────────────────
@@ -680,5 +721,106 @@ mod tests {
         assert_eq!(cfg.value_for_chip(2), 5);
         assert_eq!(cfg.value_for_chip(3), 10);
         assert_eq!(cfg.value_for_chip(11), 50);
+    }
+
+    #[test]
+    fn test_max_value() {
+        assert_eq!(make_config(0, 0, 1).max_value(), 0xFF);
+        assert_eq!(make_config(0, 0, 2).max_value(), 0xFFFF);
+        assert_eq!(make_config(0, 0, 4).max_value(), 0xFFFF_FFFF);
+        assert_eq!(make_config(0, 0, 8).max_value(), u64::MAX);
+    }
+
+    #[test]
+    fn test_overflow_1byte() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0xFF, 0, 1);
+        // Chip 1: 0xFF — fits
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // Chip 2: 0x100 — overflows 1 byte
+        let result = patch_serial(&mut buf, &cfg, 2);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("overflow"));
+        assert!(err.contains("chip 2"));
+    }
+
+    #[test]
+    fn test_overflow_2bytes() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0xFFFF, 0, 2);
+        // Chip 1: 0xFFFF — fits
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // Chip 2: 0x10000 — overflows 2 bytes
+        let result = patch_serial(&mut buf, &cfg, 2);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("overflow"));
+    }
+
+    #[test]
+    fn test_overflow_4bytes() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0xFFFF_FFFF, 0, 4);
+        // Chip 1: 0xFFFFFFFF — fits
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        // Chip 2: 0x100000000 — overflows 4 bytes
+        let result = patch_serial(&mut buf, &cfg, 2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_overflow_at_boundary() {
+        let mut buf = vec![0u8; 16];
+        let cfg = make_config(0xFE, 0, 1);
+        // Chip 1: 0xFE, Chip 2: 0xFF — both fit
+        patch_serial(&mut buf, &cfg, 1).unwrap();
+        patch_serial(&mut buf, &cfg, 2).unwrap();
+        // Chip 3: 0x100 — overflows
+        let result = patch_serial(&mut buf, &cfg, 3);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_check_overflow_bounded() {
+        let cfg = make_config(0xFE, 0, 1); // max 0xFF, step 1
+                                           // 2 chips: 0xFE, 0xFF — no overflow
+        assert_eq!(cfg.check_overflow(Some(2)), None);
+        // 3 chips: 0xFE, 0xFF, 0x100 — overflow at chip 3
+        let result = cfg.check_overflow(Some(3));
+        assert_eq!(result, Some((3, 0x100)));
+    }
+
+    #[test]
+    fn test_check_overflow_with_step() {
+        let mut cfg = make_config(0, 0, 2); // max 0xFFFF
+        cfg.step = 10000;
+        // Chip 1: 0, Chip 2: 10000, ..., Chip 7: 60000, Chip 8: 70000 > 65535
+        let result = cfg.check_overflow(Some(10));
+        assert_eq!(result, Some((8, 70000)));
+    }
+
+    #[test]
+    fn test_check_overflow_unlimited() {
+        let cfg = make_config(0xFF, 0, 1); // max 0xFF, step 1
+                                           // Unlimited: chip 2 overflows
+        let result = cfg.check_overflow(None);
+        assert_eq!(result, Some((2, 0x100)));
+    }
+
+    #[test]
+    fn test_check_overflow_ascii_no_overflow() {
+        let mut cfg = make_config(99999, 0, 5);
+        cfg.format = SerialFormat::Ascii;
+        // ASCII format doesn't have binary overflow semantics
+        assert_eq!(cfg.check_overflow(Some(100)), None);
+    }
+
+    #[test]
+    fn test_check_overflow_8bytes_no_overflow() {
+        let cfg = make_config(0, 0, 8); // max u64::MAX
+                                        // Even with huge step, won't overflow 8 bytes in 100000 chips
+        let mut cfg = cfg;
+        cfg.step = 1000;
+        assert_eq!(cfg.check_overflow(Some(100_000)), None);
     }
 }
