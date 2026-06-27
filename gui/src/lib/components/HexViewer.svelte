@@ -705,7 +705,7 @@
         </button>
       {/if}
       {#if showTrimPad && $hexMeta?.data}
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
+        <div class="flex items-center gap-3 px-3 py-1.5 rounded border border-surface-200-800 bg-surface-100-900" style="font-size: 13px;">
           <button
             class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
             onclick={() => {
@@ -714,47 +714,50 @@
                 logs.info(`Trimmed trailing 0x${eraseValue.toString(16).toUpperCase()} bytes → ${result} bytes`);
                 savedPath = null;
               } else {
-                logs.info("No trailing erase-value bytes to trim");
+                logs.info("No trailing fill bytes to trim");
               }
             }}
-            title="Remove trailing bytes equal to the erase value"
+            title="Remove trailing bytes equal to the fill byte"
           >
-            Trim
+            Trim trailing
           </button>
-          <input
-            type="text"
-            bind:value={padTargetSize}
-            placeholder="size"
-            class="w-20 px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono"
-            style="font-size: 13px;"
-            onkeydown={(e) => { if (e.key === "Enter") (document.getElementById("pad-btn") as HTMLButtonElement)?.click(); }}
-          />
-          <button
-            id="pad-btn"
-            class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-            onclick={() => {
-              const ts = parseInt(padTargetSize, padTargetSize.startsWith("0x") ? 16 : 10);
-              if (isNaN(ts) || ts <= 0) {
-                logs.error("Invalid pad target size");
-                return;
-              }
-              const result = padToSize(ts, eraseValue);
-              if (result !== null) {
-                logs.info(`Padded to ${result} bytes with 0x${eraseValue.toString(16).toUpperCase()}`);
-                savedPath = null;
-              } else {
-                logs.info(`Buffer is already ${$hexMeta!.size} bytes — no padding needed`);
-              }
-            }}
-            title="Pad buffer to the specified size with erase value"
-          >
-            Pad
-          </button>
-          <label class="flex items-center gap-1" title="Erase value to trim/pad with">
-            <span class="opacity-60">Erase:</span>
+          <div class="flex items-center gap-1">
+            <span class="opacity-60">Pad to:</span>
+            <input
+              type="text"
+              bind:value={padTargetSize}
+              placeholder="size"
+              class="w-20 px-2 py-1 rounded border border-surface-200-800 bg-transparent font-mono"
+              style="font-size: 13px;"
+              onkeydown={(e) => { if (e.key === "Enter") (document.getElementById("pad-btn") as HTMLButtonElement)?.click(); }}
+            />
+            <button
+              id="pad-btn"
+              class="px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              onclick={() => {
+                const ts = parseInt(padTargetSize, padTargetSize.startsWith("0x") ? 16 : 10);
+                if (isNaN(ts) || ts <= 0) {
+                  logs.error("Invalid pad target size");
+                  return;
+                }
+                const result = padToSize(ts, eraseValue);
+                if (result !== null) {
+                  logs.info(`Padded to ${result} bytes with 0x${eraseValue.toString(16).toUpperCase()}`);
+                  savedPath = null;
+                } else {
+                  logs.info(`Buffer is already ${$hexMeta!.size} bytes — no padding needed`);
+                }
+              }}
+              title="Pad buffer to the specified size with fill byte"
+            >
+              Pad
+            </button>
+          </div>
+          <label class="flex items-center gap-1" title="Byte value used for trimming and padding">
+            <span class="opacity-60">Fill byte:</span>
             <select bind:value={eraseValue} class="px-1 py-1 rounded border border-surface-200-800 bg-transparent" style="font-size: 13px;">
-              <option value={0xFF}>0xFF</option>
-              <option value={0x00}>0x00</option>
+              <option value={0xFF}>0xFF (NOR flash)</option>
+              <option value={0x00}>0x00 (EEPROM/NAND)</option>
             </select>
           </label>
           <button
