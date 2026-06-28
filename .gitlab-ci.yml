@@ -274,6 +274,7 @@ release:
         echo ''
         echo '- **Linux**: `.deb` (Debian/Ubuntu)'
         echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
+        echo '- **macOS**: Download `.dmg` (GUI) and CLI binary from GitHub Releases (linked below under "Other")'
         echo ''
         echo '## CLI Binaries'
         echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
@@ -286,10 +287,12 @@ release:
         --description "$(cat /tmp/release_notes.md)" \
         --assets-link "{\"name\":\"minipro-cli-linux-x86_64\",\"url\":\"${CI_JOB_URL}/artifacts/raw/target/release/minipro\"}" \
         --assets-link "{\"name\":\"minipro-cli-windows-x86_64\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/minipro-cli-windows-x86_64.exe\"}" \
+        --assets-link "{\"name\":\"minipro-cli-macos-aarch64\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/minipro-cli-macos-aarch64\"}" \
         --assets-link "{\"name\":\"minipro-completions\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-completions-${CI_COMMIT_SHORT_SHA}.tar.gz\"}" \
         --assets-link "{\"name\":\"minipro-deb\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro_${VERSION}_amd64.deb\"}" \
         --assets-link "{\"name\":\"minipro-rpm\",\"url\":\"${CI_JOB_URL}/artifacts/raw/minipro-${VERSION}-1.x86_64.rpm\"}" \
         --assets-link "{\"name\":\"minipro-gui-msi\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/MINIPRO-RS-GUI_${TAG_VERSION}_x64_en-US.msi\"}" \
+        --assets-link "{\"name\":\"minipro-gui-dmg (macOS)\",\"url\":\"https://github.com/Arcturus808/minipro-rs/releases/download/${CI_COMMIT_TAG}/MINIPRO-RS-GUI_${TAG_VERSION}_aarch64.dmg\"}" \
         || echo "Release already exists or another error occurred"
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
