@@ -289,11 +289,12 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                 total_blocks,
             };
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
-            // The TL866A firmware writes the EEPROM asynchronously and uses the
-            // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
-            // NAND and eMMC now support OVC status with repacked headers.
-            // For other chip types, the standard zeroed 0x39 is used.
-            {
+            // Per-block OVC/verify check. T76 doesn't support calling
+            // get_ovc_status during read/write loops — the T76 write_block
+            // sends its own 0x39 commit internally, and an extra 0x39 would
+            // desync the USB stream. (Matches C minipro: "T76 doesn't support
+            // calling get_ovc_status while read/write".)
+            if handle.info.model != ProgrammerModel::T76 {
                 let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {
@@ -408,8 +409,9 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                 total_blocks,
             };
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
-            // OVC check after each block. NAND/eMMC now use repacked headers.
-            {
+            // Per-block OVC/verify check. T76 doesn't support calling
+            // get_ovc_status during read/write loops (see write_chip above).
+            if handle.info.model != ProgrammerModel::T76 {
                 let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {

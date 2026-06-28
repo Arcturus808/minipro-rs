@@ -494,7 +494,7 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 4 * 1024 * 1024
             }
         };
-        eprintln!("eMMC capacity: {} KiB (EXT_CSD)", cap >> 10);
+        eprintln!("eMMC capacity: {} MiB (EXT_CSD)", cap >> 20);
         cap
     };
 
