@@ -149,6 +149,114 @@ This is a living list of features and improvements planned for minipro-rs.
 
 ## Backlog
 
+- [ ] **Protocol parity with original minipro + Matt Brown's t76 branch**
+
+  The README states "Full feature parity with the C minipro 0.7.x" as a goal.
+  This section tracks every known gap against that goal. Gaps are organized
+  by priority — critical (blocks core functionality) first.
+
+  ### Critical — blocks T56/T76 operations
+
+  - [ ] **Algorithm XML parser** — the `Database` struct has infrastructure
+    for `algorithm.xml` (path resolution, `Algorithm` struct, `device.algorithm`
+    field), but no XML parser exists. Every device gets `algorithm: None`.
+    Without parsing algorithm.xml, T56/T76 cannot upload FPGA bitstreams and
+    most operations fail even when the user supplies the file. The original
+    C minipro includes `dump-alg-minipro.bash` to extract algorithms from
+    XGPro and build the XML. We need: (1) an XML parser for algorithm.xml,
+    (2) populate `device.algorithm` with bitstream data, (3) verify the
+    protocol layer uploads it correctly.
+    **Impact:** T56/T76 are effectively non-functional for FPGA-based chips
+    without this. This is the single biggest blocker for protocol parity.
+
+  - [ ] **T56/T76 ZIF pin control and voltage control** — `set_zif_direction`,
+    `set_zif_state`, `get_zif_state`, and `set_voltages` are not implemented
+    for T56 or T76. They use the default trait impl which returns
+    `UnsupportedOperation`. The TL866II+ has full implementations. The T56
+    and T76 use FPGA-based command sets that differ from the TL866II+, so
+    these need protocol-specific implementations.
+    **Impact:** Pin contact checks, voltage overrides, and any operation
+    that requires ZIF pin configuration will fail on T56/T76.
+
+  ### High — known gaps vs Matt Brown's t76 branch
+
+  - [ ] **eMMC partition selection** — constants exist for BOOT1, BOOT2, and
+    RPMB partitions (`_EMMC_PART_BOOT1`, `_EMMC_PART_BOOT2`, `_EMMC_PART_RPMB`)
+    but only USER partition is used. No CLI flag or API to select partitions.
+    Matt Brown's branch has `--partition` support. We need: (1) CLI
+    `--partition user|boot1|boot2|rpmb` flag, (2) GUI partition selector,
+    (3) parse `BOOT_SIZE_MULT` / `RPMB_SIZE_MULT` from EXT_CSD for partition
+    sizes, (4) wire partition selection into the CMD6 SWITCH call.
+    **Impact:** eMMC boot partition programming (common for bootloader
+    flashing) is impossible.
+
+  - [ ] **T76 adapter ID validation** — `t76_adapter_detect` and
+    `t76_adapter_compat_check` are not implemented. The original C branch
+    detects which adapter is connected and verifies compatibility with the
+    selected chip. We skip this entirely.
+    **Impact:** User can select a chip that requires an adapter they haven't
+    connected, leading to confusing protocol errors instead of a clear
+    "wrong adapter" message.
+
+  - [ ] **T76 OVC status for NAND/eMMC** — TODO comment in `t76.rs` (line 1107):
+    the vendor repacks `msg[1..7]` with chip-parameter header for NAND/eMMC
+    OVC checks. We currently skip OVC for NAND/eMMC. When `Device` is added
+    to the `get_ovc_status` trait method, we should mirror vendor behavior.
+    **Impact:** No overcurrent protection for NAND/eMMC operations.
+
+  ### Medium — missing features from original minipro
+
+  - [ ] **T56 firmware update** — returns `UnsupportedOperation`. The T56
+    firmware update protocol has not been reverse-engineered. TL866A/CS,
+    TL866II+, T48, and T76 all have working firmware update implementations.
+    **Impact:** T56 users cannot update firmware through minipro-rs.
+
+  - [ ] **Database refresh** — our `infoic.xml` is from XGPro V12.90/V12.91.
+    XGPro V13.19 adds 2,028 new T76 chips and updates others. This is a
+    mechanical data update (replace the XML file), no code change needed.
+    **Impact:** 2,028 T76 chips missing from the device list.
+
+  - [ ] **Parallel NOR programming (T76)** — READ and ERASE work, PROGRAM is
+    non-functional. The vendor uses a per-command descriptor that hasn't been
+    reverse-engineered. This is a shared limitation with the upstream C
+    minipro — Matt Brown's branch also doesn't have it working.
+    **Impact:** Parallel NOR flash chips can be read and erased but not
+    written. Niche use case (parallel NOR is uncommon).
+
+  ### Low — niche or deferred
+
+  - [ ] **VGA/HDMI chip support** — `ChipType::Vga` (0x08) exists as an enum
+    variant but has no protocol implementation. The database may contain VGA
+    entries. Either implement or explicitly document as unsupported and
+    filter from search results.
+    **Impact:** Unknown — need to check if database has VGA entries that
+    users could select and then get confusing errors.
+
+  - [ ] **T76 eMMC io_init hardcoded constants** — the 40-byte region init
+    uses hardcoded geometry constants from a KLM8G1GEAC capture. These may
+    not generalize to other eMMC chips. Needs parameterization from device
+    database or EXT_CSD fields.
+    **Impact:** eMMC operations may fail on non-KLM8G1GEAC chips.
+
+  - [ ] **T76 eMMC bring-up query response lengths** — response lengths
+    (32B, 32B, 24B) are from a single chip capture and may not generalize.
+    **Impact:** eMMC init may desync on other chips.
+
+  ### Hardware validation (separate from code parity)
+
+  These items are not code gaps — the code is written to match the C source
+  but has never been tested on real hardware. Validation requires physical
+  T56/T76 devices and chips.
+
+  - [ ] T76 SPI NOR (8-pin and 16-pin) — read/erase/program
+  - [ ] T76 SPI-NAND — read/erase/program
+  - [ ] T76 parallel NAND — read/erase/program
+  - [ ] T76 eMMC USER partition — read/erase/program
+  - [ ] T76 parallel NOR — read/erase (program known broken)
+  - [ ] T56 all chip classes — read/erase/program
+  - [ ] T76 firmware update
+  - [ ] T76 logic IC test (two-pass with bitstream reload)
+
 - [x] **Smart firmware diff** — compare firmware files or chip dumps with intelligent trailing-padding handling
   - **Problem:** Minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical. Naive "strip trailing 0xFF and compare" is insufficient because it silently ignores cases where the reference has real data beyond the dump length (truncated read, wrong chip selected) or where the dump has non-erased data beyond the reference (leftover from previous programming — forensically interesting).
   - **Algorithm: byte-aligned, three-way tail classification (not LCS)**

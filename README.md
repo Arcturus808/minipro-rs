@@ -99,7 +99,7 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ## Goals
 
-- Full feature parity with the C `minipro` 0.7.x
+- Full feature parity with the C `minipro` 0.7.x (in progress — see [ROADMAP.md](ROADMAP.md) for remaining protocol gaps)
 - **Native Windows 11 support** — no Cygwin, no MSYS2, no WSL, no `libusb` DLL; builds and runs with only `rustup` + `cargo`
 - Cross-platform (Linux, macOS, Windows) without requiring a separately installed `libusb`
 - Idiomatic Rust: strong types, `Result`-based error handling, no unsafe except at the USB boundary
