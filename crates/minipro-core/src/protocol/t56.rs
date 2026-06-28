@@ -50,6 +50,18 @@ const CMD_UNLOCK_TSOP48: u8 = 0x38;
 const CMD_REQUEST_STATUS: u8 = 0x39;
 const CMD_HARDWARE_CHECK: u8 = 0x3C;
 
+// Bootloader-mode commands (same opcodes, different meaning in bootloader)
+const T56_SWITCH: u8 = 0x3D; // Switch to bootloader (with magic)
+const T56_BTLDR_ERASE: u8 = 0x3C; // Erase flash (bootloader mode)
+const T56_BTLDR_WRITE: u8 = 0x3B; // Write flash block (bootloader mode)
+const T56_BTLDR_MAGIC: u32 = 0xA578_B986; // Bootloader entry magic
+
+// Firmware update file format
+const T56_UPDATE_FILE_VERSION: u32 = 0x5600_0000; // (version & 0xFFFF0000) must equal this
+const T56_UPDATE_VERS_MASK: u32 = 0xFFFF_0000;
+const T56_BLOCK_SIZE: usize = 0x814; // 2068 bytes per firmware block
+const T56_BLOCK_MSG_SIZE: usize = 8 + T56_BLOCK_SIZE; // 0x81c = 2076
+
 // Memory page types (must match operations.rs constants)
 const MP_CODE: u8 = 0x00;
 const MP_DATA: u8 = 0x01;
@@ -427,10 +439,179 @@ impl Protocol for T56Protocol {
     }
 
     fn firmware_update(&self, _usb: &UsbDevice, _firmware: &[u8]) -> Result<()> {
+        // T56 firmware update requires USB reconnect (switch to bootloader
+        // and back), so it's handled in operations.rs via
+        // firmware_update_t56 which takes &mut MiniproHandle.
         Err(MiniproError::UnsupportedOperation)
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {
         self.end_transaction(usb)
     }
+}
+
+// ── T56 Firmware update ───────────────────────────────────────────────────────
+
+/// XGECU reset command (used to switch between normal and bootloader modes).
+const XGECU_RESET: u8 = 0x3F;
+
+/// Parse and flash an updateT56.dat firmware image.
+///
+/// File layout (from t56.c `t56_firmware_update`):
+/// ```text
+/// [0..4]    version (LE32)   (version & 0xFFFF0000) must equal 0x56000000
+/// [4..8]    CRC32 of data blocks (LE32)
+/// [8..12]   unknown
+/// [12..16]  block count N (LE32)
+/// [16 .. 16+N*0x814]  N blocks of 2068 bytes each
+/// Total size = N*0x814 + 16
+/// ```
+///
+/// Protocol:
+/// 1. If in normal mode: send switch-to-bootloader command (0x3D + magic),
+///    then reset (0x3F) and reconnect.
+/// 2. Erase flash (0x3C in bootloader mode).
+/// 3. Write each block (0x3B, 0x81c bytes per message).
+/// 4. Reset back to normal mode (0x3F) and reconnect.
+pub fn firmware_update_t56(
+    handle: &mut crate::handle::MiniproHandle,
+    dat: &[u8],
+    out: &mut dyn std::io::Write,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
+    use crate::device::ProgrammerStatus;
+    use crc::{Crc, CRC_32_ISO_HDLC};
+    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
+    // ── Parse header ─────────────────────────────────────────────────────────
+    if dat.len() < 16 {
+        return Err(MiniproError::FileFormat("updateT56.dat too short".into()));
+    }
+    let version = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let file_crc = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
+    let n_blocks = u32::from_le_bytes([dat[12], dat[13], dat[14], dat[15]]) as usize;
+
+    if version & T56_UPDATE_VERS_MASK != T56_UPDATE_FILE_VERSION {
+        return Err(MiniproError::FileFormat(format!(
+            "Unsupported T56 firmware version {:#010x}",
+            version
+        )));
+    }
+    let expected = n_blocks * T56_BLOCK_SIZE + 16;
+    if dat.len() != expected {
+        return Err(MiniproError::FileFormat(format!(
+            "updateT56.dat wrong size: got {}, expected {}",
+            dat.len(),
+            expected
+        )));
+    }
+
+    // ── CRC check ────────────────────────────────────────────────────────────
+    // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
+    let mut digest = CRC32.digest_with_initial(0xFFFF_FFFF);
+    digest.update(&dat[16..]);
+    let computed = digest.finalize();
+    if computed != file_crc {
+        return Err(MiniproError::AlgorithmCrc);
+    }
+
+    let fw_minor = version & 0xFFFF;
+    writeln!(
+        out,
+        "Firmware image OK ({} blocks, version 03.{:02}.{:02}).",
+        n_blocks,
+        (fw_minor >> 8) & 0xFF,
+        fw_minor & 0xFF
+    )
+    .ok();
+
+    // ── Switch to bootloader if necessary ────────────────────────────────────
+    if handle.info.status == ProgrammerStatus::Normal {
+        write!(out, "Switching to bootloader... ").ok();
+        {
+            let mut msg = [0u8; 8];
+            msg[0] = T56_SWITCH;
+            msg[4..8].copy_from_slice(&T56_BTLDR_MAGIC.to_le_bytes());
+            handle.usb.msg_send(&msg)?;
+            let resp = handle.usb.msg_recv(32)?;
+            if resp.first().copied().unwrap_or(1) != 0 {
+                return Err(MiniproError::Protocol(
+                    "T56 bootloader switch failed".into(),
+                ));
+            }
+        }
+        // Reset and reconnect in bootloader mode.
+        {
+            let mut msg = [0u8; 8];
+            msg[0] = XGECU_RESET;
+            handle.usb.msg_send(&msg)?;
+        }
+        handle.reconnect(true)?;
+        if handle.info.status != ProgrammerStatus::Bootloader {
+            return Err(MiniproError::Protocol(
+                "T56 did not enter bootloader mode".into(),
+            ));
+        }
+        writeln!(out, "OK").ok();
+    }
+
+    // ── Erase ────────────────────────────────────────────────────────────────
+    write!(out, "Erasing... ").ok();
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = T56_BTLDR_ERASE;
+        handle.usb.msg_send(&msg)?;
+        let resp = handle.usb.msg_recv(32)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T56 bootloader erase failed".into()));
+        }
+    }
+    writeln!(out, "OK").ok();
+
+    // ── Flash blocks ─────────────────────────────────────────────────────────
+    write!(out, "Reflashing... ").ok();
+    for b in 0..n_blocks {
+        let blk_off = 16 + b * T56_BLOCK_SIZE;
+        let blk = &dat[blk_off..blk_off + T56_BLOCK_SIZE];
+
+        // Block write: 0x81c (= 8 header + 0x814 data) bytes total
+        let mut msg = vec![0u8; T56_BLOCK_MSG_SIZE];
+        msg[0] = T56_BTLDR_WRITE;
+        msg[1] = 0; // data block
+        msg[2] = 0x14; // Data Length LSB (0x0814)
+        msg[3] = 0x08; // Data Length MSB
+        msg[8..8 + T56_BLOCK_SIZE].copy_from_slice(blk);
+        handle.usb.msg_send_large(&msg)?;
+
+        let resp = handle.usb.msg_recv(32)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol(format!(
+                "T56 block {} write failed",
+                b
+            )));
+        }
+
+        if let Some(ref mut cb) = progress {
+            cb(b + 1, n_blocks);
+        }
+    }
+    writeln!(out, "100%").ok();
+
+    // ── Reset back to normal mode ────────────────────────────────────────────
+    write!(out, "Resetting device... ").ok();
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = XGECU_RESET;
+        handle.usb.msg_send(&msg)?;
+    }
+    handle.reconnect(false)?;
+    if handle.info.status != ProgrammerStatus::Normal {
+        return Err(MiniproError::Protocol(
+            "T56 did not return to normal mode after firmware update".into(),
+        ));
+    }
+    writeln!(out, "OK").ok();
+
+    writeln!(out, "Firmware update completed successfully.").ok();
+    Ok(())
 }

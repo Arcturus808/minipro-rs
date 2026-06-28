@@ -15,7 +15,7 @@ use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::{tl866a, DataSet},
+    protocol::{t56, tl866a, DataSet},
 };
 
 /// Compute the effective read/write block size for a device.
@@ -997,6 +997,7 @@ pub fn firmware_update(
         ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
             tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)
         }
+        ProgrammerModel::T56 => t56::firmware_update_t56(handle, firmware_data, out, progress),
         _ => handle.protocol.firmware_update(&handle.usb, firmware_data),
     }
 }
