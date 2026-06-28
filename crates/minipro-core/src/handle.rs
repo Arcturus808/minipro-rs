@@ -109,6 +109,43 @@ impl MiniproHandle {
     /// Set the active chip device and send `begin_transaction` to the hardware.
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
         info!("Device: {}", device.name);
+
+        // T56/T76: look up the FPGA algorithm bitstream if not already
+        // populated and algorithm.xml is available.  The protocol layer
+        // checks `device.algorithm` during begin_transaction to upload the
+        // bitstream.  Without this, FPGA-based operations fail silently.
+        let device = if device.algorithm.is_none()
+            && crate::algorithm::needs_algorithm(&device, self.info.model)
+        {
+            if let Some(ref paths) = self.db_paths {
+                if let Some(ref algo_path) = paths.algorithms {
+                    match crate::algorithm::get_algorithm(
+                        &device,
+                        self.info.model,
+                        self.icsp,
+                        crate::algorithm::V_3V3,
+                        algo_path,
+                    ) {
+                        Ok(algo) => {
+                            let mut d = (*device).clone();
+                            d.algorithm = Some(algo);
+                            Arc::new(d)
+                        }
+                        Err(e) => {
+                            log::warn!("Algorithm lookup failed for {}: {}", device.name, e);
+                            device
+                        }
+                    }
+                } else {
+                    device
+                }
+            } else {
+                device
+            }
+        } else {
+            device
+        };
+
         self.protocol
             .begin_transaction(&self.usb, &device, self.icsp)?;
 

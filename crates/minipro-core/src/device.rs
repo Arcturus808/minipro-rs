@@ -335,7 +335,7 @@ pub struct Algorithm {
 
 /// Full description of a programmable device, derived from infoic.xml or
 /// logicic.xml.  Mirrors `device_t` in the C implementation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Device {
     pub name: String,
     pub manufacturer: String,
