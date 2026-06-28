@@ -263,23 +263,28 @@ This is a living list of features and improvements planned for minipro-rs.
   - [ ] **Database refresh** — our `infoic.xml` is from XGPro V12.90/V12.91.
     XGPro V13.19 adds 2,028 new T76 chips and updates others. This is a
     mechanical data update (replace the XML file), no code change needed.
+    Note: both the mainline C minipro and Matt Brown's t76-improvements
+    branch also use V12.90/V12.91 — the V13.19 refresh hasn't been done in
+    any public minipro fork. Requires downloading XGPro V13.19 and running
+    `dump-alg-minipro.bash` to extract the updated database.
     **Impact:** 2,028 T76 chips missing from the device list.
 
   - [ ] **Parallel NOR programming (T76)** — READ and ERASE work, PROGRAM is
     non-functional. The vendor uses a per-command descriptor that hasn't been
-    reverse-engineered. This is a shared limitation with the upstream C
-    minipro — Matt Brown's branch also doesn't have it working.
+    reverse-engineered. Confirmed as a shared limitation: Matt Brown's
+    t76-improvements branch also states "parallel-NOR *program* (0x11) is
+    still non-functional (needs its own per-command descriptor); read and
+    erase work." Requires a vendor write capture to reverse engineer.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
 
   ### Low — niche or deferred
 
-  - [ ] **VGA/HDMI chip support** — `ChipType::Vga` (0x08) exists as an enum
-    variant but has no protocol implementation. The database may contain VGA
-    entries. Either implement or explicitly document as unsupported and
-    filter from search results.
-    **Impact:** Unknown — need to check if database has VGA entries that
-    users could select and then get confusing errors.
+  - [x] **VGA/HDMI chip support** — NOT APPLICABLE. Investigated: the
+    database (both ours and Matt Brown's) contains zero type="8" (VGA/HDMI)
+    entries. The type is defined in the XML comment but unused. `ChipType::Vga`
+    exists as an enum variant for completeness but no device can ever be
+    selected with this type. No filtering or protocol implementation needed.
 
   - [ ] **T76 eMMC io_init hardcoded constants** — the 40-byte region init
     uses hardcoded geometry constants from a KLM8G1GEAC capture. These may
