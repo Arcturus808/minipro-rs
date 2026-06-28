@@ -206,9 +206,15 @@ This is a living list of features and improvements planned for minipro-rs.
 
   ### Medium — missing features from original minipro
 
-  - [ ] **T56 firmware update** — returns `UnsupportedOperation`. The T56
-    firmware update protocol has not been reverse-engineered. TL866A/CS,
-    TL866II+, T48, and T76 all have working firmware update implementations.
+  - [ ] **T56 firmware update** — returns `UnsupportedOperation`. The
+    original C minipro has a full `t56_firmware_update()` implementation
+    using `T56_SWITCH` (0x3D), `T56_BOOTLOADER_ERASE` (0x3C), and
+    `T56_BOOTLOADER_WRITE` (0x3B) — the same opcodes we already have
+    defined as constants. This is a straightforward port, not reverse
+    engineering. The C code handles: file version/CRC validation, bootloader
+    magic switch, erase, block-by-block reflash (0x814-byte blocks), and
+    reset back to normal mode. TL866A/CS, TL866II+, T48, and T76 all have
+    working firmware update implementations in minipro-rs.
     **Impact:** T56 users cannot update firmware through minipro-rs.
 
   - [ ] **Database refresh** — our `infoic.xml` is from XGPro V12.90/V12.91.
