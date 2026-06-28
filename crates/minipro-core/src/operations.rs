@@ -291,12 +291,10 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
             // The TL866A firmware writes the EEPROM asynchronously and uses the
             // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
-            // NAND and eMMC handle their own per-block status internally (0x39
-            // commit in write_block); a zeroed 0x39 deselects them.
-            if device.chip_type != ChipType::Nand as u32
-                && device.chip_type != ChipType::Emmc as u32
+            // NAND and eMMC now support OVC status with repacked headers.
+            // For other chip types, the standard zeroed 0x39 is used.
             {
-                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {
                         address: wstatus.address,
@@ -410,11 +408,9 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                 total_blocks,
             };
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
-            // NAND and eMMC handle their own per-block status internally.
-            if device.chip_type != ChipType::Nand as u32
-                && device.chip_type != ChipType::Emmc as u32
+            // OVC check after each block. NAND/eMMC now use repacked headers.
             {
-                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {
                         address: wstatus.address,
@@ -791,14 +787,13 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
 
 /// Check over-current and return `true` if an OVC event occurred.
 pub fn check_ovc(handle: &mut MiniproHandle) -> Result<bool> {
-    // NAND and eMMC: get_ovc_status with a zeroed header deselects the chip.
-    // Skip the poll; per-block status is handled internally by write_block.
-    if let Some(ref device) = handle.device {
-        if device.chip_type == ChipType::Nand as u32 || device.chip_type == ChipType::Emmc as u32 {
-            return Ok(false);
-        }
-    }
-    let (status, flag) = handle.protocol.get_ovc_status(&handle.usb)?;
+    // OVC status is now supported for all chip types including NAND/eMMC
+    // (T76 repacks the chip-parameter header into the 0x39 request).
+    let device = handle
+        .device
+        .as_deref()
+        .ok_or_else(|| MiniproError::Protocol("no device selected".into()))?;
+    let (status, flag) = handle.protocol.get_ovc_status(&handle.usb, device)?;
     if flag != 0 || status.error != 0 {
         return Err(MiniproError::Overcurrent {
             address: status.address,

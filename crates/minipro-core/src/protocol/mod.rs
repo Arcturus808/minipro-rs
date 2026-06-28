@@ -129,7 +129,11 @@ pub trait Protocol: Send + Sync {
     fn protect_on(&self, usb: &UsbDevice) -> Result<()>;
 
     /// Query over-current status. Returns `(ovc_status, ovc_flag)`.
-    fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)>;
+    ///
+    /// `device` is provided because some protocols (T76 NAND/eMMC) need to
+    /// repack the chip-parameter header into the status request to avoid
+    /// deselecting the chip.
+    fn get_ovc_status(&self, usb: &UsbDevice, device: &Device) -> Result<(OvcStatus, u8)>;
 
     /// Unlock TSOP48 adapter.
     fn unlock_tsop48(&self, usb: &UsbDevice) -> Result<u8> {

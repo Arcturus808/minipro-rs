@@ -1171,13 +1171,25 @@ impl Protocol for T76Protocol {
         usb.msg_send(&msg)
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, device: &Device) -> Result<(OvcStatus, u8)> {
         let mut msg = [0u8; 8];
         msg[0] = CMD_REQUEST_STATUS;
-        // TODO: For NAND and eMMC the vendor repacks msg[1..7] with the
-        // chip-parameter header; a zeroed msg deselects the NAND. The
-        // operations layer currently skips this call for NAND; when we add
-        // Device to this trait method we should mirror the vendor behaviour.
+        // For NAND and eMMC the vendor reuses the BEGIN buffer for the 0x39
+        // status poll, leaving the chip-parameter header in msg[1..7]
+        // (e.g. 39 2d 00 00 06 00 a0 70). A zeroed 0x39 appears to leave the
+        // NAND deselected so the following READID/read returns 0xFF. Mirror
+        // the vendor by repacking the same header for NAND/eMMC.
+        let is_nand = device.protocol_id == 0x2d;
+        let is_emmc = device.protocol_id == 0x31;
+        if is_nand || is_emmc {
+            msg[1] = device.protocol_id;
+            msg[2] = device.variant as u8;
+            // msg[3] = icsp (not available here; vendor uses handle->cmdopts->icsp)
+            msg[4] = (device.voltages.raw & 0xFF) as u8;
+            msg[5] = ((device.voltages.raw >> 8) & 0xFF) as u8;
+            msg[6] = device.chip_info as u8;
+            msg[7] = device.pin_map as u8;
+        }
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(OVC_RESP_LEN)?;
         if resp.len() < OVC_RESP_LEN {

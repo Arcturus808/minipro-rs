@@ -225,29 +225,31 @@ This is a living list of features and improvements planned for minipro-rs.
 
   ### High — known gaps vs Matt Brown's t76 branch
 
-  - [ ] **eMMC partition selection** — constants exist for BOOT1, BOOT2, and
-    RPMB partitions (`_EMMC_PART_BOOT1`, `_EMMC_PART_BOOT2`, `_EMMC_PART_RPMB`)
-    but only USER partition is used. No CLI flag or API to select partitions.
-    Matt Brown's branch has `--partition` support. We need: (1) CLI
-    `--partition user|boot1|boot2|rpmb` flag, (2) GUI partition selector,
-    (3) parse `BOOT_SIZE_MULT` / `RPMB_SIZE_MULT` from EXT_CSD for partition
-    sizes, (4) wire partition selection into the CMD6 SWITCH call.
-    **Impact:** eMMC boot partition programming (common for bootloader
-    flashing) is impossible.
+  - [x] **eMMC partition selection** — DONE (protocol-parity branch).
+    Implemented via `T76_EMMC_PARTITION` env var (user|boot1|boot2|rpmb).
+    Uses CMD6 SWITCH to set EXT_CSD[179] PARTITION_CONFIG. Capacity
+    detection now uses the correct EXT_CSD field per partition:
+    USER: SEC_COUNT[212], BOOT: BOOT_SIZE_MULT[226], RPMB:
+    RPMB_SIZE_MULT[168].
 
-  - [ ] **T76 adapter ID validation** — `t76_adapter_detect` and
-    `t76_adapter_compat_check` are not implemented. The original C branch
-    detects which adapter is connected and verifies compatibility with the
-    selected chip. We skip this entirely.
+  - [ ] **T76 adapter ID validation** — DEFERRED. The mainline C minipro
+    does NOT implement adapter ID validation for T76. The `t76_adapter_init`
+    sends a READ_ID command (0x24, 0xe4) but discards the response. The
+    referenced "Matt Brown branch" cannot be found publicly. Implementing
+    this would require reverse-engineering the adapter ID response format
+    from XGPro captures with different adapters.
     **Impact:** User can select a chip that requires an adapter they haven't
     connected, leading to confusing protocol errors instead of a clear
     "wrong adapter" message.
 
-  - [ ] **T76 OVC status for NAND/eMMC** — TODO comment in `t76.rs` (line 1107):
-    the vendor repacks `msg[1..7]` with chip-parameter header for NAND/eMMC
-    OVC checks. We currently skip OVC for NAND/eMMC. When `Device` is added
-    to the `get_ovc_status` trait method, we should mirror vendor behavior.
-    **Impact:** No overcurrent protection for NAND/eMMC operations.
+  - [x] **T76 OVC status for NAND/eMMC** — DONE (protocol-parity branch).
+    The `get_ovc_status` trait method now takes `&Device`. For NAND/eMMC
+    (protocol_id 0x2d/0x31), the T76 implementation repacks the chip-
+    parameter header (protocol_id, variant, voltages, chip_info, pin_map)
+    into `msg[1..7]` of the 0x39 status request, mirroring the vendor
+    behavior. A zeroed 0x39 deselects the NAND; the repacked header keeps
+    it selected. OVC checks are now enabled for NAND/eMMC in
+    `begin_transaction`, per-block write, and `check_ovc`.
 
   ### Medium — missing features from original minipro
 
