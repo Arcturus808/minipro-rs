@@ -155,6 +155,52 @@ This is a living list of features and improvements planned for minipro-rs.
   This section tracks every known gap against that goal. Gaps are organized
   by priority — critical (blocks core functionality) first.
 
+  ### Execution Plan
+
+  **Branch strategy:** Work on a `protocol-parity` feature branch. GitLab CI
+  only runs on `main`, tags, and manual web triggers — feature branch pushes
+  are free. GitHub only triggers on tags. Push freely to the feature branch
+  with zero compute cost on either side.
+
+  **Workflow:**
+  1. Create `protocol-parity` from `main`
+  2. Work through gaps in priority order, one commit per gap
+  3. Push to the feature branch freely (no CI cost)
+  4. Run `cargo fmt`, `cargo clippy`, `cargo test` locally before merging
+  5. Merge to `main` with `[skip ci]` to avoid a CI run, OR let CI run once
+     if validation is needed
+  6. Tag a release only when everything is stable
+
+  **Order of attack:**
+
+  | # | Item | Complexity | Status |
+  |---|------|------------|--------|
+  | 1 | Algorithm XML parser | High | Pending |
+  | 2 | T56 firmware update (port from C) | Low | Pending |
+  | 3 | T56/T76 ZIF pin control + voltage | Medium | Pending |
+  | 4 | eMMC partition selection | Medium | Pending |
+  | 5 | T76 adapter ID validation | Medium | Pending |
+  | 6 | T76 OVC for NAND/eMMC | Low-Medium | Pending |
+  | 7 | Database refresh (V12.91 → V13.19) | Low | Pending |
+  | 8 | Parallel NOR programming | Unknown | Pending |
+  | 9 | VGA/HDMI investigation | Low | Pending |
+
+  **Rationale:** Algorithm XML parser first (unblocks all T56/T76 FPGA ops).
+  T56 firmware update second (quick port, confidence builder). ZIF/voltage
+  third (other features depend on it). eMMC partitions fourth (well-specified
+  gap). Remaining items follow in decreasing impact.
+
+  **Deferred (require hardware):**
+  - Hardware validation of all T56/T76 chip classes
+  - eMMC io_init hardcoded constants (need hardware to test fixes)
+  - eMMC bring-up query response lengths (need hardware to validate)
+
+  **Compute cost conservation:**
+  - Feature branch pushes: free on both GitLab and GitHub
+  - Local builds/tests: free
+  - Merge to main with `[skip ci]`: free
+  - Only cost: final release tag (one pipeline + one Actions run)
+
   ### Critical — blocks T56/T76 operations
 
   - [ ] **Algorithm XML parser** — the `Database` struct has infrastructure
