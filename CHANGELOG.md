@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-27
+
+### Fixed
+
+- **Programmer serial number display** — control characters (e.g., ETX `0x03`) were not stripped from the serial number and device code strings returned by the programmer. Only null bytes were trimmed, but some programmers pad unused bytes with other control characters. Now all ASCII control characters (0x00–0x1F, 0x7F) are stripped. Affects both CLI and GUI display
+
 ## [0.4.0] - 2026-06-27
 
 ### Added
