@@ -204,7 +204,7 @@ impl Protocol for Tl866aProtocol {
         // previous operation (e.g. power-on inrush after a transaction reset).
         // We call it here too, but don't fail on OVC since some adapter/chip
         // combinations produce a transient flag at power-up that self-clears.
-        match self.get_ovc_status(usb) {
+        match self.get_ovc_status(usb, device) {
             Ok((_, ovc)) => {
                 if ovc != 0 {
                     trace!(
@@ -420,7 +420,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, _device: &Device) -> Result<(OvcStatus, u8)> {
         let pid = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         let var = self.variant_lo.load(std::sync::atomic::Ordering::Relaxed);
         usb.msg_send(&[CMD_GET_STATUS, pid, var, 0, 0])?;

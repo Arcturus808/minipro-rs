@@ -72,10 +72,31 @@ const CMD_EMMC_SEND_CMD: u8 = 0x27; // eMMC CMD tunnel
 const EMMC_OP_SWITCH: u8 = 0x46; // CMD6 SWITCH (partition select)
 const EMMC_OP_PROGRAM_SETUP: u8 = 0x50; // program setup
 const _EMMC_OP_STATUS_POLL: u8 = 0x4D; // erase-status poll
+
+// CMD6 SWITCH arguments for EXT_CSD[179] PARTITION_CONFIG.
+// Access mode: 0x02 = clear bits (USER), 0x01 = set bits (BOOT/RPMB).
+// Index: 0xB3 = EXT_CSD byte 179.
+// Value: PARTITION_ACCESS bits [2:0] (0x01=boot1, 0x02=boot2, 0x03=rpmb).
+// For USER: clear bits 0x07 → PARTITION_ACCESS=0 (back to user partition).
 const EMMC_PART_USER: u32 = 0x02B3_0700;
-const _EMMC_PART_BOOT1: u32 = 0x01B3_0100;
-const _EMMC_PART_BOOT2: u32 = 0x01B3_0200;
-const _EMMC_PART_RPMB: u32 = 0x01B3_0300;
+const EMMC_PART_BOOT1: u32 = 0x01B3_0100;
+const EMMC_PART_BOOT2: u32 = 0x01B3_0200;
+const EMMC_PART_RPMB: u32 = 0x01B3_0300;
+
+/// eMMC partition selection, controlled by `T76_EMMC_PARTITION` env var.
+/// Values: "user" (default), "boot1", "boot2", "rpmb".
+fn emmc_partition_from_env() -> u32 {
+    match std::env::var("T76_EMMC_PARTITION")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "boot1" => EMMC_PART_BOOT1,
+        "boot2" => EMMC_PART_BOOT2,
+        "rpmb" => EMMC_PART_RPMB,
+        _ => EMMC_PART_USER,
+    }
+}
 
 // T76 bitstream sub-commands
 const T76_BEGIN_BS: u8 = 0x00;
@@ -392,7 +413,13 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
     // directly (MiB) and skip the EXT_CSD read.  Otherwise read EXT_CSD
     // via opcode 0x08 (enabled by the adapter init in begin_transaction):
     // the 512-byte reply is an 8-byte header + EXT_CSD, so EXT_CSD[N]
-    // is at buf[8+N].  USER capacity = SEC_COUNT[212] * 512.
+    // is at buf[8+N].
+    //
+    // Capacity field depends on the selected partition:
+    //   USER:  SEC_COUNT at EXT_CSD[212] (4 bytes LE) × 512
+    //   BOOT1/BOOT2: BOOT_SIZE_MULT at EXT_CSD[226] (1 byte) × 128KB
+    //   RPMB:  RPMB_SIZE_MULT at EXT_CSD[168] (1 byte) × 128KB
+    let partition = emmc_partition_from_env();
     let capacity = if let Ok(sz) = std::env::var("T76_EMMC_SIZE_MB") {
         let mb: u64 = sz.trim().parse().unwrap_or(0);
         let cap = if mb > 0 {
@@ -416,21 +443,64 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 ext.len()
             )));
         }
-        // EXT_CSD[212] = SEC_COUNT (4 bytes LE) → at buf[220..224]
-        let sec = u32::from_le_bytes([ext[220], ext[221], ext[222], ext[223]]);
-        let cap = if sec > 0 {
-            (sec as u64) * 512
-        } else {
-            // SEC_COUNT == 0 is invalid; fall back to 4 MiB
-            eprintln!("eMMC: SEC_COUNT is 0, falling back to 4 MiB");
-            4 * 1024 * 1024
+
+        let cap = match partition {
+            EMMC_PART_USER => {
+                // EXT_CSD[212] = SEC_COUNT (4 bytes LE) → at buf[220..224]
+                let sec = u32::from_le_bytes([ext[220], ext[221], ext[222], ext[223]]);
+                if sec > 0 {
+                    (sec as u64) * 512
+                } else {
+                    eprintln!("eMMC: SEC_COUNT is 0, falling back to 4 MiB");
+                    4 * 1024 * 1024
+                }
+            }
+            EMMC_PART_BOOT1 | EMMC_PART_BOOT2 => {
+                // EXT_CSD[226] = BOOT_SIZE_MULT → at buf[234]
+                // Boot partition size = 128KB × BOOT_SIZE_MULT
+                if ext.len() < 235 {
+                    eprintln!("eMMC: EXT_CSD too short for BOOT_SIZE_MULT, using 4 MiB");
+                    4 * 1024 * 1024
+                } else {
+                    let mult = ext[234] as u64;
+                    let cap = mult * 128 * 1024;
+                    if cap == 0 {
+                        eprintln!("eMMC: BOOT_SIZE_MULT is 0, using 4 MiB");
+                        4 * 1024 * 1024
+                    } else {
+                        cap
+                    }
+                }
+            }
+            EMMC_PART_RPMB => {
+                // EXT_CSD[168] = RPMB_SIZE_MULT → at buf[176]
+                // RPMB partition size = 128KB × RPMB_SIZE_MULT
+                if ext.len() < 177 {
+                    eprintln!("eMMC: EXT_CSD too short for RPMB_SIZE_MULT, using 4 MiB");
+                    4 * 1024 * 1024
+                } else {
+                    let mult = ext[176] as u64;
+                    let cap = mult * 128 * 1024;
+                    if cap == 0 {
+                        eprintln!("eMMC: RPMB_SIZE_MULT is 0, using 4 MiB");
+                        4 * 1024 * 1024
+                    } else {
+                        cap
+                    }
+                }
+            }
+            _ => {
+                eprintln!("eMMC: unknown partition, using 4 MiB");
+                4 * 1024 * 1024
+            }
         };
         eprintln!("eMMC capacity: {} MiB (EXT_CSD)", cap >> 20);
         cap
     };
 
-    // Switch to USER partition (CMD6 SWITCH, default).
-    t76_emmc_cmd27(usb, EMMC_OP_SWITCH, EMMC_PART_USER)?;
+    // Switch to the selected partition (CMD6 SWITCH).
+    // Default is USER; override with T76_EMMC_PARTITION=boot1|boot2|rpmb.
+    t76_emmc_cmd27(usb, EMMC_OP_SWITCH, partition)?;
 
     Ok(capacity)
 }
@@ -1101,13 +1171,25 @@ impl Protocol for T76Protocol {
         usb.msg_send(&msg)
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, device: &Device) -> Result<(OvcStatus, u8)> {
         let mut msg = [0u8; 8];
         msg[0] = CMD_REQUEST_STATUS;
-        // TODO: For NAND and eMMC the vendor repacks msg[1..7] with the
-        // chip-parameter header; a zeroed msg deselects the NAND. The
-        // operations layer currently skips this call for NAND; when we add
-        // Device to this trait method we should mirror the vendor behaviour.
+        // For NAND and eMMC the vendor reuses the BEGIN buffer for the 0x39
+        // status poll, leaving the chip-parameter header in msg[1..7]
+        // (e.g. 39 2d 00 00 06 00 a0 70). A zeroed 0x39 appears to leave the
+        // NAND deselected so the following READID/read returns 0xFF. Mirror
+        // the vendor by repacking the same header for NAND/eMMC.
+        let is_nand = device.protocol_id == 0x2d;
+        let is_emmc = device.protocol_id == 0x31;
+        if is_nand || is_emmc {
+            msg[1] = device.protocol_id;
+            msg[2] = device.variant as u8;
+            // msg[3] = icsp (not available here; vendor uses handle->cmdopts->icsp)
+            msg[4] = (device.voltages.raw & 0xFF) as u8;
+            msg[5] = ((device.voltages.raw >> 8) & 0xFF) as u8;
+            msg[6] = device.chip_info as u8;
+            msg[7] = device.pin_map as u8;
+        }
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(OVC_RESP_LEN)?;
         if resp.len() < OVC_RESP_LEN {

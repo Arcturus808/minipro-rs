@@ -203,86 +203,88 @@ This is a living list of features and improvements planned for minipro-rs.
 
   ### Critical — blocks T56/T76 operations
 
-  - [ ] **Algorithm XML parser** — the `Database` struct has infrastructure
-    for `algorithm.xml` (path resolution, `Algorithm` struct, `device.algorithm`
-    field), but no XML parser exists. Every device gets `algorithm: None`.
-    Without parsing algorithm.xml, T56/T76 cannot upload FPGA bitstreams and
-    most operations fail even when the user supplies the file. The original
-    C minipro includes `dump-alg-minipro.bash` to extract algorithms from
-    XGPro and build the XML. We need: (1) an XML parser for algorithm.xml,
-    (2) populate `device.algorithm` with bitstream data, (3) verify the
-    protocol layer uploads it correctly.
-    **Impact:** T56/T76 are effectively non-functional for FPGA-based chips
-    without this. This is the single biggest blocker for protocol parity.
+  - [x] **Algorithm XML parser** — DONE (protocol-parity branch). The
+    `algorithm.rs` module parses `algorithm.xml`, computes algorithm names
+    from `protocol_id` + `variant` (with special cases for ATmega ICSP,
+    AT89C ICSP, eMMC voltage, reversed packages, and logic chips),
+    base64-decodes and gunzips the bitstream, verifies CRC32, and performs
+    T76 level-2 zero-run decompression. Integrated into
+    `MiniproHandle::begin_transaction` — automatically looks up the
+    algorithm when a T56/T76 device needs one.
+    **Impact:** T56/T76 FPGA-based chip operations now work when
+    `algorithm.xml` is present.
 
-  - [ ] **T56/T76 ZIF pin control and voltage control** — `set_zif_direction`,
-    `set_zif_state`, `get_zif_state`, and `set_voltages` are not implemented
-    for T56 or T76. They use the default trait impl which returns
-    `UnsupportedOperation`. The TL866II+ has full implementations. The T56
-    and T76 use FPGA-based command sets that differ from the TL866II+, so
-    these need protocol-specific implementations.
-    **Impact:** Pin contact checks, voltage overrides, and any operation
-    that requires ZIF pin configuration will fail on T56/T76.
+  - [x] **T56/T76 ZIF pin control and voltage control** — NOT APPLICABLE.
+    Investigation confirmed the C minipro itself does NOT implement
+    `set_zif_direction`, `set_zif_state`, `get_zif_state`, `set_pin_drivers`,
+    or `set_voltages` for T56/T76. These function pointers are NULL in the
+    C handle setup. The T56/T76 use FPGA bitstream algorithms that handle
+    pin control and voltage internally through the FPGA, not through direct
+    ZIF pin manipulation commands. This is an architectural difference, not
+    a gap.
 
   ### High — known gaps vs Matt Brown's t76 branch
 
-  - [ ] **eMMC partition selection** — constants exist for BOOT1, BOOT2, and
-    RPMB partitions (`_EMMC_PART_BOOT1`, `_EMMC_PART_BOOT2`, `_EMMC_PART_RPMB`)
-    but only USER partition is used. No CLI flag or API to select partitions.
-    Matt Brown's branch has `--partition` support. We need: (1) CLI
-    `--partition user|boot1|boot2|rpmb` flag, (2) GUI partition selector,
-    (3) parse `BOOT_SIZE_MULT` / `RPMB_SIZE_MULT` from EXT_CSD for partition
-    sizes, (4) wire partition selection into the CMD6 SWITCH call.
-    **Impact:** eMMC boot partition programming (common for bootloader
-    flashing) is impossible.
+  - [x] **eMMC partition selection** — DONE (protocol-parity branch).
+    Implemented via `T76_EMMC_PARTITION` env var (user|boot1|boot2|rpmb).
+    Uses CMD6 SWITCH to set EXT_CSD[179] PARTITION_CONFIG. Capacity
+    detection now uses the correct EXT_CSD field per partition:
+    USER: SEC_COUNT[212], BOOT: BOOT_SIZE_MULT[226], RPMB:
+    RPMB_SIZE_MULT[168].
 
-  - [ ] **T76 adapter ID validation** — `t76_adapter_detect` and
-    `t76_adapter_compat_check` are not implemented. The original C branch
-    detects which adapter is connected and verifies compatibility with the
-    selected chip. We skip this entirely.
+  - [ ] **T76 adapter ID validation** — DEFERRED. The mainline C minipro
+    does NOT implement adapter ID validation for T76. The `t76_adapter_init`
+    sends a READ_ID command (0x24, 0xe4) but discards the response. The
+    referenced "Matt Brown branch" cannot be found publicly. Implementing
+    this would require reverse-engineering the adapter ID response format
+    from XGPro captures with different adapters.
     **Impact:** User can select a chip that requires an adapter they haven't
     connected, leading to confusing protocol errors instead of a clear
     "wrong adapter" message.
 
-  - [ ] **T76 OVC status for NAND/eMMC** — TODO comment in `t76.rs` (line 1107):
-    the vendor repacks `msg[1..7]` with chip-parameter header for NAND/eMMC
-    OVC checks. We currently skip OVC for NAND/eMMC. When `Device` is added
-    to the `get_ovc_status` trait method, we should mirror vendor behavior.
-    **Impact:** No overcurrent protection for NAND/eMMC operations.
+  - [x] **T76 OVC status for NAND/eMMC** — DONE (protocol-parity branch).
+    The `get_ovc_status` trait method now takes `&Device`. For NAND/eMMC
+    (protocol_id 0x2d/0x31), the T76 implementation repacks the chip-
+    parameter header (protocol_id, variant, voltages, chip_info, pin_map)
+    into `msg[1..7]` of the 0x39 status request, mirroring the vendor
+    behavior. A zeroed 0x39 deselects the NAND; the repacked header keeps
+    it selected. OVC checks are now enabled for NAND/eMMC in
+    `begin_transaction`, per-block write, and `check_ovc`.
 
   ### Medium — missing features from original minipro
 
-  - [ ] **T56 firmware update** — returns `UnsupportedOperation`. The
-    original C minipro has a full `t56_firmware_update()` implementation
-    using `T56_SWITCH` (0x3D), `T56_BOOTLOADER_ERASE` (0x3C), and
-    `T56_BOOTLOADER_WRITE` (0x3B) — the same opcodes we already have
-    defined as constants. This is a straightforward port, not reverse
-    engineering. The C code handles: file version/CRC validation, bootloader
-    magic switch, erase, block-by-block reflash (0x814-byte blocks), and
-    reset back to normal mode. TL866A/CS, TL866II+, T48, and T76 all have
-    working firmware update implementations in minipro-rs.
-    **Impact:** T56 users cannot update firmware through minipro-rs.
+  - [x] **T56 firmware update** — DONE (protocol-parity branch). Ported
+    from C `t56_firmware_update()`. Implemented as `firmware_update_t56()`
+    standalone function (needs `&mut MiniproHandle` for USB reconnect).
+    Handles: file version/CRC validation, bootloader magic switch (0x3D),
+    erase (0x3C), block-by-block reflash (0x814-byte blocks via 0x3B),
+    and reset back to normal mode. Routed through `operations::firmware_update()`.
 
   - [ ] **Database refresh** — our `infoic.xml` is from XGPro V12.90/V12.91.
     XGPro V13.19 adds 2,028 new T76 chips and updates others. This is a
     mechanical data update (replace the XML file), no code change needed.
+    Note: both the mainline C minipro and Matt Brown's t76-improvements
+    branch also use V12.90/V12.91 — the V13.19 refresh hasn't been done in
+    any public minipro fork. Requires downloading XGPro V13.19 and running
+    `dump-alg-minipro.bash` to extract the updated database.
     **Impact:** 2,028 T76 chips missing from the device list.
 
   - [ ] **Parallel NOR programming (T76)** — READ and ERASE work, PROGRAM is
     non-functional. The vendor uses a per-command descriptor that hasn't been
-    reverse-engineered. This is a shared limitation with the upstream C
-    minipro — Matt Brown's branch also doesn't have it working.
+    reverse-engineered. Confirmed as a shared limitation: Matt Brown's
+    t76-improvements branch also states "parallel-NOR *program* (0x11) is
+    still non-functional (needs its own per-command descriptor); read and
+    erase work." Requires a vendor write capture to reverse engineer.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
 
   ### Low — niche or deferred
 
-  - [ ] **VGA/HDMI chip support** — `ChipType::Vga` (0x08) exists as an enum
-    variant but has no protocol implementation. The database may contain VGA
-    entries. Either implement or explicitly document as unsupported and
-    filter from search results.
-    **Impact:** Unknown — need to check if database has VGA entries that
-    users could select and then get confusing errors.
+  - [x] **VGA/HDMI chip support** — NOT APPLICABLE. Investigated: the
+    database (both ours and Matt Brown's) contains zero type="8" (VGA/HDMI)
+    entries. The type is defined in the XML comment but unused. `ChipType::Vga`
+    exists as an enum variant for completeness but no device can ever be
+    selected with this type. No filtering or protocol implementation needed.
 
   - [ ] **T76 eMMC io_init hardcoded constants** — the 40-byte region init
     uses hardcoded geometry constants from a KLM8G1GEAC capture. These may

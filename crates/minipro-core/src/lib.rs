@@ -30,6 +30,7 @@
 //! Wrap USB calls in `tokio::task::spawn_blocking` to avoid blocking Tauri's
 //! async executor.  See the project README for a worked example.
 
+pub mod algorithm;
 pub mod batch;
 pub mod database;
 pub mod device;

@@ -15,7 +15,7 @@ use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::{tl866a, DataSet},
+    protocol::{t56, tl866a, DataSet},
 };
 
 /// Compute the effective read/write block size for a device.
@@ -289,14 +289,13 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                 total_blocks,
             };
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
-            // The TL866A firmware writes the EEPROM asynchronously and uses the
-            // GET_STATUS (0xFE) poll to wait for each write cycle to complete.
-            // NAND and eMMC handle their own per-block status internally (0x39
-            // commit in write_block); a zeroed 0x39 deselects them.
-            if device.chip_type != ChipType::Nand as u32
-                && device.chip_type != ChipType::Emmc as u32
-            {
-                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+            // Per-block OVC/verify check. T76 doesn't support calling
+            // get_ovc_status during read/write loops — the T76 write_block
+            // sends its own 0x39 commit internally, and an extra 0x39 would
+            // desync the USB stream. (Matches C minipro: "T76 doesn't support
+            // calling get_ovc_status while read/write".)
+            if handle.info.model != ProgrammerModel::T76 {
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {
                         address: wstatus.address,
@@ -410,11 +409,10 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                 total_blocks,
             };
             handle.protocol.write_block(&handle.usb, &device, &ds)?;
-            // NAND and eMMC handle their own per-block status internally.
-            if device.chip_type != ChipType::Nand as u32
-                && device.chip_type != ChipType::Emmc as u32
-            {
-                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb)?;
+            // Per-block OVC/verify check. T76 doesn't support calling
+            // get_ovc_status during read/write loops (see write_chip above).
+            if handle.info.model != ProgrammerModel::T76 {
+                let (wstatus, ovc) = handle.protocol.get_ovc_status(&handle.usb, &device)?;
                 if ovc != 0 {
                     return Err(MiniproError::Overcurrent {
                         address: wstatus.address,
@@ -791,14 +789,13 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
 
 /// Check over-current and return `true` if an OVC event occurred.
 pub fn check_ovc(handle: &mut MiniproHandle) -> Result<bool> {
-    // NAND and eMMC: get_ovc_status with a zeroed header deselects the chip.
-    // Skip the poll; per-block status is handled internally by write_block.
-    if let Some(ref device) = handle.device {
-        if device.chip_type == ChipType::Nand as u32 || device.chip_type == ChipType::Emmc as u32 {
-            return Ok(false);
-        }
-    }
-    let (status, flag) = handle.protocol.get_ovc_status(&handle.usb)?;
+    // OVC status is now supported for all chip types including NAND/eMMC
+    // (T76 repacks the chip-parameter header into the 0x39 request).
+    let device = handle
+        .device
+        .as_deref()
+        .ok_or_else(|| MiniproError::Protocol("no device selected".into()))?;
+    let (status, flag) = handle.protocol.get_ovc_status(&handle.usb, device)?;
     if flag != 0 || status.error != 0 {
         return Err(MiniproError::Overcurrent {
             address: status.address,
@@ -997,6 +994,7 @@ pub fn firmware_update(
         ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
             tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)
         }
+        ProgrammerModel::T56 => t56::firmware_update_t56(handle, firmware_data, out, progress),
         _ => handle.protocol.firmware_update(&handle.usb, firmware_data),
     }
 }

@@ -9,7 +9,7 @@ use log::info;
 
 use crate::{
     database::DatabasePaths,
-    device::{ChipType, Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
+    device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
     error::{MiniproError, Result},
     protocol::{
         t48::T48Protocol,
@@ -109,16 +109,51 @@ impl MiniproHandle {
     /// Set the active chip device and send `begin_transaction` to the hardware.
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
         info!("Device: {}", device.name);
+
+        // T56/T76: look up the FPGA algorithm bitstream if not already
+        // populated and algorithm.xml is available.  The protocol layer
+        // checks `device.algorithm` during begin_transaction to upload the
+        // bitstream.  Without this, FPGA-based operations fail silently.
+        let device = if device.algorithm.is_none()
+            && crate::algorithm::needs_algorithm(&device, self.info.model)
+        {
+            if let Some(ref paths) = self.db_paths {
+                if let Some(ref algo_path) = paths.algorithms {
+                    match crate::algorithm::get_algorithm(
+                        &device,
+                        self.info.model,
+                        self.icsp,
+                        crate::algorithm::V_3V3,
+                        algo_path,
+                    ) {
+                        Ok(algo) => {
+                            let mut d = (*device).clone();
+                            d.algorithm = Some(algo);
+                            Arc::new(d)
+                        }
+                        Err(e) => {
+                            log::warn!("Algorithm lookup failed for {}: {}", device.name, e);
+                            device
+                        }
+                    }
+                } else {
+                    device
+                }
+            } else {
+                device
+            }
+        } else {
+            device
+        };
+
         self.protocol
             .begin_transaction(&self.usb, &device, self.icsp)?;
 
         // Overcurrent safety check: poll the status register after the
-        // FPGA is initialized.  NAND and eMMC skip this (a zeroed 0x39
-        // header deselects the chip); they handle OVC per-block instead.
-        let is_nand = device.chip_type == ChipType::Nand as u32;
-        let is_emmc = device.chip_type == ChipType::Emmc as u32;
-        if !is_nand && !is_emmc {
-            let (status, ovc) = self.protocol.get_ovc_status(&self.usb)?;
+        // FPGA is initialized. All chip types now support this — T76
+        // NAND/eMMC repack the chip-parameter header into the 0x39 request.
+        {
+            let (status, ovc) = self.protocol.get_ovc_status(&self.usb, &device)?;
             if ovc != 0 || status.error != 0 {
                 return Err(MiniproError::Overcurrent {
                     address: status.address,

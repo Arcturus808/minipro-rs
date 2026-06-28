@@ -394,7 +394,7 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, _device: &Device) -> Result<(OvcStatus, u8)> {
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_REQUEST_STATUS;
         usb.msg_send(&pkt)?;
