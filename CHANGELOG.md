@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-27
+
 ### Added
 
 - **Algorithm XML parser for T56/T76** — parses `algorithm.xml` to load FPGA bitstream algorithms required by T56/T76 programmers. Computes algorithm names from `protocol_id` + `variant` (with special cases for ATmega ICSP, AT89C ICSP, eMMC voltage, reversed packages, and logic chips), base64-decodes and gunzips bitstreams, verifies CRC32, and performs T76 level-2 zero-run decompression. Integrated into `MiniproHandle::begin_transaction` — automatically looks up the algorithm when a T56/T76 device needs one
