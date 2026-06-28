@@ -143,10 +143,10 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::
     };
 
     let device_code = String::from_utf8_lossy(&resp[8..16])
-        .trim_end_matches('\0')
+        .trim_end_matches(|c: char| c.is_control())
         .to_string();
     let serial_number = String::from_utf8_lossy(&resp[16..40])
-        .trim_end_matches('\0')
+        .trim_end_matches(|c: char| c.is_control())
         .to_string();
     // TL866A/CS firmware: raw major.minor (upstream C minipro formats as "major.minor:02")
     let firmware_str = format!("{}.{:02}", fw_major, fw_minor);
