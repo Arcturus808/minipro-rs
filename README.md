@@ -14,6 +14,8 @@ A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) �
 
 > **Status:** CI/CD pipeline fully operational — clippy, fmt, tests, Linux/Windows release builds, and all package jobs (`.deb`, `.rpm`, `.msi`, shell completions) passing on every commit. macOS builds are available via [GitHub Actions](https://github.com/Arcturus808/minipro-rs/releases) (see [macOS support](#macos-support)).
 
+> **Bug reports & hardware test results:** [open an issue on GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/issues) · [GitHub mirror](https://github.com/Arcturus808/minipro-rs/issues)
+
 ---
 
 ## GUI — MINIPRO-RS (Tauri + Svelte)
