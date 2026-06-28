@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Algorithm XML parser for T56/T76** — parses `algorithm.xml` to load FPGA bitstream algorithms required by T56/T76 programmers. Computes algorithm names from `protocol_id` + `variant` (with special cases for ATmega ICSP, AT89C ICSP, eMMC voltage, reversed packages, and logic chips), base64-decodes and gunzips bitstreams, verifies CRC32, and performs T76 level-2 zero-run decompression. Integrated into `MiniproHandle::begin_transaction` — automatically looks up the algorithm when a T56/T76 device needs one
+- **T56 firmware update** — ported from C `minipro` `t56_firmware_update()`. Handles file version/CRC validation, bootloader magic switch, erase, block-by-block reflash (0x814-byte blocks), and reset back to normal mode. Routed through `operations::firmware_update()`
+- **eMMC partition selection for T76** — `T76_EMMC_PARTITION` env var selects eMMC hardware partitions: `user` (default), `boot1`, `boot2`, `rpmb`. Uses CMD6 SWITCH to set EXT_CSD[179] PARTITION_CONFIG. Capacity detection uses the correct EXT_CSD field per partition: SEC_COUNT[212] for USER, BOOT_SIZE_MULT[226] for BOOT, RPMB_SIZE_MULT[168] for RPMB
+- **T76 OVC status for NAND/eMMC** — `Protocol::get_ovc_status` now takes `&Device` parameter. T76 implementation repacks chip-parameter header (protocol_id, variant, voltages, chip_info, pin_map) into the 0x39 status request for NAND/eMMC, mirroring vendor behavior. A zeroed 0x39 deselects the NAND; the repacked header keeps it selected. OVC checks enabled in `begin_transaction` and `check_ovc`
+
 ## [0.4.1] - 2026-06-27
 
 ### Fixed
