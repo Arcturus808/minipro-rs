@@ -1536,7 +1536,8 @@ pub async fn check_overcurrent(state: State<'_, Arc<AppState>>) -> Result<Overcu
         std::time::Duration::from_secs(5),
         tokio::task::spawn_blocking(move || {
             let handle = state_task.take_handle()?;
-            let result = handle.protocol.get_ovc_status(&handle.usb).map_err(|e| e.to_string());
+            let device = state_task.get_device()?;
+            let result = handle.protocol.get_ovc_status(&handle.usb, &device).map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);
