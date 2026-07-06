@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-05
+
+### Fixed
+
+- **Linux `.deb`/`.rpm` packages now include chip database files** — `infoic.xml` and `logicic.xml` are installed to `/usr/share/minipro-rs/`. Previously, the packages contained only the binary, and the CLI would fail to find the database unless the C `minipro` was also installed.
+- **Database search path now checks `minipro-rs` directory first** — `DatabasePaths::resolve` tries `/usr/share/minipro-rs/` (Linux) or `%PROGRAMDATA%\minipro-rs\` (Windows) before falling back to the C `minipro`'s `/usr/share/minipro/` or `%PROGRAMDATA%\minipro\`. This allows side-by-side installation without package manager conflicts while still finding existing database files from the C version.
+- **README corrected** — data directory paths were documented as `%APPDATA%\minipro-rs\` (wrong env var, didn't match code). Now correctly says `%PROGRAMDATA%\minipro-rs\`.
+
 ## [0.5.0] - 2026-06-27
 
 ### Added
