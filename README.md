@@ -210,8 +210,9 @@ Run `minipro --help` for the full list of options.
 >
 > To enable full T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
 > 1. The directory containing the `minipro` executable
-> 2. The system data directory (`/usr/share/minipro-rs/` on Linux, `%APPDATA%\minipro-rs\` on Windows)
-> 3. The current working directory
+> 2. The current working directory
+> 3. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)
+> 4. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
 >
 > The CLI also accepts `--algorithms PATH` to specify the file directly.
 

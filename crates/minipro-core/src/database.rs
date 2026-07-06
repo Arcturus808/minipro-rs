@@ -51,9 +51,10 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///  1. Path override provided by the caller (e.g. `--infoic-path`).
 ///  2. `MINIPRO_HOME` environment variable.
 ///  3. Current working directory.
-///  4. Platform data directory:
-///     - Unix: `{SHARE_INSTDIR}/` (compile-time or `/usr/share/minipro/`)
-///     - Windows: `%PROGRAMDATA%\minipro\`
+///  4. Directory containing the running executable.
+///  5. Platform data directory (minipro-rs first, then minipro as fallback):
+///     - Unix: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
+///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
 pub struct DatabasePaths {
     pub infoic: PathBuf,
     pub logicic: PathBuf,
@@ -109,22 +110,31 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
         }
     }
 
-    // 4. Platform data directory
+    // 4. Platform data directory — try minipro-rs first, then fall back to
+    //    the C minipro's directory so users with the C version installed
+    //    don't need to duplicate the XML files.
     #[cfg(target_os = "windows")]
     {
         if let Ok(appdata) = std::env::var("PROGRAMDATA") {
-            let p = PathBuf::from(appdata).join("minipro").join(filename);
-            if p.exists() {
-                return Ok(p);
+            for subdir in ["minipro-rs", "minipro"] {
+                let p = PathBuf::from(&appdata).join(subdir).join(filename);
+                if p.exists() {
+                    return Ok(p);
+                }
             }
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let share_dir = option_env!("SHARE_INSTDIR").unwrap_or("/usr/share/minipro");
+        let share_dir = option_env!("SHARE_INSTDIR").unwrap_or("/usr/share/minipro-rs");
         let p = PathBuf::from(share_dir).join(filename);
         if p.exists() {
             return Ok(p);
+        }
+        // Fall back to C minipro's data directory.
+        let fallback = PathBuf::from("/usr/share/minipro").join(filename);
+        if fallback.exists() {
+            return Ok(fallback);
         }
     }
 
