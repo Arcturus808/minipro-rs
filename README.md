@@ -36,33 +36,44 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 ### Features
 
+**Core operations:**
+- Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
+- **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
+- **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
+- **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `--skip-device-id` CLI flag and GUI checkbox to bypass
+- **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
+
+**Hex viewer & analysis:**
+- **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
+- **Smart firmware diff** — compare the hex viewer buffer against a reference file with a single click. Byte-aligned comparison with three-way tail classification: differing bytes highlighted in red, trailing erase-value padding shown in gray (ignored), and anomalous non-padding data beyond the shorter buffer flagged in amber with a warning banner. Navigate between diffs with Prev/Next buttons or F3/Shift+F3. CLI: `minipro --diff fileA fileB [--erase-value 0xFF]`
+- **Manual trim/pad** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
+
+**Batch programming:**
+- **Batch programming** — program multiple identical chips with the same firmware image. CLI: `minipro -p DEVICE -w file.bin --batch [N]` prompts to insert the next chip after each successful write + verify. GUI: "Batch Mode" toggle in the write panel with "Next Chip" / "Retry" / "Stop Batch" buttons and live pass/fail counter
+- **Auto-incrementing serial numbers** — inject a unique serial number into each chip during batch programming. CLI: `--serial-start 1 --serial-addr 0x1FF0 --serial-width 4 --serial-format bin --serial-endian little --serial-step 1 --serial-checksum none`. Supports binary (little/big endian), ASCII (zero-padded decimal), and BCD formats with optional XOR or CRC-8 checksum. GUI: collapsible "Serial Number" section in batch options with live preview showing serial range
+- **Serial overflow detection** — errors if the serial value exceeds the width's max (e.g., 0xFFFF for 2-byte) instead of silently truncating. CLI checks before batch start; GUI shows live warning and blocks start
+
+**MCU support:**
+- **Fuse and lock-bit editor** (Config tab): auto-populated from database defaults when a device is selected; read/write MCU configuration bytes with checkbox UI and direct hex input; fuses and lock bits displayed side-by-side
+- **OSCCAL calibration preservation**: for PIC microcontrollers with `osccal_save=1`, the factory RC oscillator calibration word is automatically saved before erase and restored afterward, preventing clock accuracy loss
+
+**Safety features:**
+- **Lock-bit protection safeguards**: warns before read/write when lock bits indicate protection is active
+- **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
+- **No-chip-ID warning**: yellow banner when the selected device lacks chip ID support, reminding user to verify correct chip insertion
+- **USB reconnect hints** — connection button tooltip and error messages advise replugging on USB-related failures (Windows Selective Suspend, Linux autosuspend, macOS sleep power management)
+
+**UI & usability:**
 - Device search & selection with **live search as you type** (200ms debounce), **device favorites** with star toggle (persisted to localStorage), pinned collapsible favorites section, and **manufacturer name** shown alongside each result
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
-- Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
-- **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
-- **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
-- **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
-- **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
-- **Smart firmware diff** — compare the hex viewer buffer against a reference file with a single click. Byte-aligned comparison with three-way tail classification: differing bytes highlighted in red, trailing erase-value padding shown in gray (ignored), and anomalous non-padding data beyond the shorter buffer flagged in amber with a warning banner. Navigate between diffs with Prev/Next buttons or F3/Shift+F3. CLI: `minipro --diff fileA fileB [--erase-value 0xFF]`
-- **Batch programming** — program multiple identical chips with the same firmware image. CLI: `minipro -p DEVICE -w file.bin --batch [N]` prompts to insert the next chip after each successful write + verify. GUI: "Batch Mode" toggle in the write panel with "Next Chip" / "Retry" / "Stop Batch" buttons and live pass/fail counter. Architecture includes a buffer patching hook for future auto-incrementing serial number injection
-- **Auto-incrementing serial numbers** — inject a unique serial number into each chip during batch programming. CLI: `--serial-start 1 --serial-addr 0x1FF0 --serial-width 4 --serial-format bin --serial-endian little --serial-step 1 --serial-checksum none`. Supports binary (little/big endian), ASCII (zero-padded decimal), and BCD formats with optional XOR or CRC-8 checksum. GUI: collapsible "Serial Number" section in batch options with live preview showing serial range
-- **Serial overflow detection** — errors if the serial value exceeds the width's max (e.g., 0xFFFF for 2-byte) instead of silently truncating. CLI checks before batch start; GUI shows live warning and blocks start
-- **Manual trim/pad** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
-- **USB reconnect hints** — connection button tooltip and error messages advise replugging on USB-related failures (Windows Selective Suspend, Linux autosuspend, macOS sleep power management)
+- Live progress bar with CRC32 verification
+- Terminal-style log panel with **Copy to clipboard** button and drag-select support
+- Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
 - **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
-- Live progress bar with CRC32 verification
-- Terminal-style log panel with **Copy to clipboard** button and drag-select support
-- **Fuse and lock-bit editor** (Config tab): auto-populated from database defaults when a device is selected; read/write MCU configuration bytes with checkbox UI and direct hex input; fuses and lock bits displayed side-by-side
-- **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `--skip-device-id` CLI flag and GUI checkbox to bypass
-- **No-chip-ID warning**: yellow banner when the selected device lacks chip ID support, reminding user to verify correct chip insertion
-- **OSCCAL calibration preservation**: for PIC microcontrollers with `osccal_save=1`, the factory RC oscillator calibration word is automatically saved before erase and restored afterward, preventing clock accuracy loss
-- **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
-- **Lock-bit protection safeguards**: warns before read/write when lock bits indicate protection is active
 - Settings persistence (theme, operation defaults, last directory, hex font size, panel widths)
-- Diagnostics panel (programmer info, overcurrent check, hardware check)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
 
 ### Download
