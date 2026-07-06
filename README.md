@@ -151,6 +151,55 @@ cargo build --release
 
 ---
 
+## CLI usage
+
+```sh
+# Read a chip to a file
+minipro -p AT28C256 -r dump.bin
+
+# Write a file to a chip (auto-erases and auto-verifies by default)
+minipro -p AT28C256 -w firmware.bin
+
+# Erase a chip
+minipro -p AT28C256 -E
+
+# Verify a chip against a file
+minipro -p AT28C256 -m firmware.bin
+
+# Read chip ID
+minipro -p W25Q128 -D
+
+# Blank-check a chip
+minipro -p AT28C256 -b
+
+# List all supported devices
+minipro -l
+
+# Search for a device by name
+minipro -l 25Q
+
+# Batch programming (program N chips with the same firmware)
+minipro -p W25Q128 -w firmware.bin --batch 10
+
+# Write with auto-incrementing serial numbers
+minipro -p AT28C256 -w firmware.bin --batch 10 \
+  --serial-start 1 --serial-addr 0x1FF0 --serial-width 4 \
+  --serial-format bin --serial-endian little --serial-step 1
+
+# Compare two firmware files
+minipro --diff fileA.bin fileB.bin
+
+# Show device info from database (no programmer needed)
+minipro -d AT28C256
+
+# Show connected programmer info
+minipro --info
+```
+
+Run `minipro --help` for the full list of options.
+
+---
+
 ## T56 / T76 FPGA algorithm support
 
 > **Note:** The T56 and T76 programmers require FPGA bitstream algorithms for certain chip families. These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
