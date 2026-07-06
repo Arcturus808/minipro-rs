@@ -334,6 +334,36 @@ git add Cargo.lock gui/src-tauri/Cargo.lock
 
 ---
 
+### CI compute credit conservation
+
+GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unnecessarily.
+
+**GitLab CI runs on:**
+- Every push to `main`
+- Every tag push
+- Manual web triggers
+
+**GitHub Actions runs on:**
+- Tag pushes only
+
+**Rules:**
+- **Do NOT push to `main` for trivial/doc-only changes** without `[skip ci]` in the commit message. This prevents GitLab from running a full pipeline.
+- **Do NOT push tags casually** — each tag triggers both GitLab CI and GitHub Actions release builds. Only tag for actual releases.
+- **Use `[skip ci]`** in commit messages for documentation-only changes, ROADMAP updates, or any change that doesn't affect the build:
+  ```
+  git commit -m "docs: update ROADMAP [skip ci]"
+  ```
+- **Feature branch pushes are free** on both platforms — use feature branches for work-in-progress.
+- **Run all checks locally** before pushing to `main` or tagging:
+  ```bash
+  cargo fmt --all -- --check
+  cargo clippy --all-targets -- -D warnings
+  cargo test --all --locked
+  ```
+- **Batch commits when possible** — one push with multiple commits is one pipeline run. Multiple pushes of one commit each are multiple pipeline runs.
+
+---
+
 ### Commit message rules
 
 - **Do NOT add any AI attribution footers** to commit messages
