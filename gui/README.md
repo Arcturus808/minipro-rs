@@ -94,6 +94,13 @@ gui/
 - [Rust](https://rustup.rs/)
 - [Node.js](https://nodejs.org/) (LTS)
 - Windows: [Zadig](https://zadig.akeo.ie/) to install WinUSB driver (one-time)
+- Linux: system libraries required by Tauri's WebKitGTK renderer and bundler:
+
+  | Distro | Command |
+  |--------|---------|
+  | Debian/Ubuntu | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf file` |
+  | Fedora | `sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel patchelf file` |
+  | Arch | `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf file` |
 
 ### Download
 
