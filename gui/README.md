@@ -91,16 +91,20 @@ gui/
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/)
+- [Rust](https://rustup.rs/) 1.77.2+ (use rustup, not distro packages, on older distros)
 - [Node.js](https://nodejs.org/) (LTS)
 - Windows: [Zadig](https://zadig.akeo.ie/) to install WinUSB driver (one-time)
 - Linux: system libraries required by Tauri's WebKitGTK renderer and bundler:
 
   | Distro | Command |
   |--------|---------|
-  | Debian/Ubuntu | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf file` |
+  | Debian/Ubuntu¹ | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf file` |
   | Fedora | `sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel patchelf file` |
-  | Arch | `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf file` |
+  | Arch² | `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator librsvg patchelf file` |
+  | openSUSE | `sudo zypper in webkit2gtk3-devel gtk3-devel libappindicator3-devel librsvg-devel patchelf file` |
+
+  ¹ Also covers Linux Mint, Pop!_OS, Kali, and Parrot (Debian/Ubuntu-based).
+  ² Also covers Manjaro (Arch-based).
 
 ### Download
 

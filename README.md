@@ -7,7 +7,7 @@
 [![GitLab Pipeline](https://gitlab.com/arcturus8081/minipro-rs/badges/main/pipeline.svg)](https://gitlab.com/arcturus8081/minipro-rs/-/pipelines)
 [![GitHub Release](https://img.shields.io/github/v/release/Arcturus808/minipro-rs)](https://github.com/Arcturus808/minipro-rs/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.77%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Arcturus808)
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
@@ -166,6 +166,8 @@ cargo build --release
 
 ## Linux support
 
+**Rust 1.85+ is required.** Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
+
 The CLI builds with no system dependencies beyond glibc:
 
 ```sh
@@ -180,9 +182,13 @@ The GUI requires Tauri's WebKitGTK system libraries before `cargo tauri build` w
 
 | Distro | Command |
 |--------|---------|
-| Debian/Ubuntu | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf file` |
+| Debian/Ubuntu¹ | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf file` |
 | Fedora | `sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel patchelf file` |
-| Arch | `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf file` |
+| Arch² | `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator librsvg patchelf file` |
+| openSUSE | `sudo zypper in webkit2gtk3-devel gtk3-devel libappindicator3-devel librsvg-devel patchelf file` |
+
+> ¹ Also covers Linux Mint, Pop!_OS, Kali, and Parrot (Debian/Ubuntu-based).
+> ² Also covers Manjaro (Arch-based).
 
 Then build the GUI:
 
