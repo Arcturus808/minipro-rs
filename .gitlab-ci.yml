@@ -64,6 +64,18 @@ clippy:
     - rustup component add clippy
     - cargo clippy --all-targets --all-features -- -D warnings
 
+msrv:
+  stage: check
+  image: rust:1.85
+  cache:
+    key: "cargo-msrv-1.85-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .cargo/registry/
+      - .cargo/git/
+      - target/
+  script:
+    - cargo check --all --locked
+
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 test:linux:

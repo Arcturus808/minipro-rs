@@ -351,7 +351,7 @@ Rust stdlib API stability and Linux package names both drift over time. CI runs 
 - Update the package table in BOTH `README.md` and `gui/README.md` — they must stay in sync
 - Also check `.github/workflows/release.yml` if it installs system packages
 
-**Recommended CI improvement (not yet implemented):** Adding an MSRV check job (`cargo +1.85 check --all`) to CI would catch MSRV regressions before they reach users. This is separate from the existing `verify-versions` job.
+**MSRV check in CI:** The GitLab CI `msrv` job runs `cargo check --all --locked` on `rust:1.85` in the `check` stage, in parallel with `fmt` and `clippy`. This catches stdlib API usage that requires a newer Rust than the declared MSRV. If this job fails, replace the unstable API with an older equivalent (e.g. `x % y == 0` instead of `x.is_multiple_of(y)`).
 
 ---
 
