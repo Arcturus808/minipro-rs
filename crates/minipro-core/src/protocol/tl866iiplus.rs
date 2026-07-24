@@ -142,18 +142,18 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
         });
     }
 
-    let status = match resp[1] {
-        1 => crate::device::ProgrammerStatus::Normal,
-        2 => crate::device::ProgrammerStatus::Bootloader,
-        _ => crate::device::ProgrammerStatus::Normal,
+    let status = if resp[4] == 0 {
+        crate::device::ProgrammerStatus::Bootloader
+    } else {
+        crate::device::ProgrammerStatus::Normal
     };
 
     let fw_minor = resp[4];
     let fw_major = resp[5];
     let firmware = ((fw_major as u32) << 8) | fw_minor as u32;
 
-    let device_version = u16::from_le_bytes([resp[6], resp[7]]);
-    let model = match device_version {
+    let device_type = resp[6];
+    let model = match device_type {
         5 => crate::device::ProgrammerModel::Tl866iiPlus,
         6 => crate::device::ProgrammerModel::T56,
         7 => crate::device::ProgrammerModel::T48,
@@ -164,12 +164,13 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
     let device_code = String::from_utf8_lossy(&resp[8..16])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
-    let serial_number = String::from_utf8_lossy(&resp[16..40])
+    // C code: memcpy(serial_number, msg + 16, 20) — 20 bytes, not 24
+    let serial_number = String::from_utf8_lossy(&resp[16..36])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
     let hardware_version = resp[40];
 
-    let firmware_str = format!("{:02}.{}.{}", fw_major / 10, fw_major % 10, fw_minor);
+    let firmware_str = format!("{:02}.{}.{:02}", hardware_version, fw_major, fw_minor);
 
     Ok(SystemInfo {
         model,

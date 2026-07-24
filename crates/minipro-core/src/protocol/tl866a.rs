@@ -134,22 +134,27 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::
     let fw_minor = resp[4];
     let fw_major = resp[5];
     let firmware = ((fw_major as u32) << 8) | fw_minor as u32;
-    let hardware_version = resp[6];
-    let device_type = resp[7];
+    // TL866A/CS layout differs from TL866II+:
+    //   msg[6]   = device type (1=TL866A, 2=TL866CS)
+    //   msg[7..15]  = device_code (8 bytes)
+    //   msg[15..39] = serial_number (24 bytes)
+    //   msg[39]  = hardware version
+    let device_type = resp[6];
+    let hardware_version = resp[39];
 
     let model = match device_type {
         2 => ProgrammerModel::Tl866cs,
         _ => ProgrammerModel::Tl866a,
     };
 
-    let device_code = String::from_utf8_lossy(&resp[8..16])
+    let device_code = String::from_utf8_lossy(&resp[7..15])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
-    let serial_number = String::from_utf8_lossy(&resp[16..40])
+    let serial_number = String::from_utf8_lossy(&resp[15..39])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
-    // TL866A/CS firmware: raw major.minor (upstream C minipro formats as "major.minor:02")
-    let firmware_str = format!("{}.{:02}", fw_major, fw_minor);
+    // Firmware string format: hw.fw_major.fw_minor (matches upstream C minipro)
+    let firmware_str = format!("{:02}.{}.{:02}", hardware_version, fw_major, fw_minor);
 
     Ok(crate::protocol::tl866iiplus::SystemInfo {
         model,

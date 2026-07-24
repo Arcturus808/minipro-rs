@@ -172,14 +172,21 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
 // ── Transfer primitives ──────────────────────────────────────────────────────
 
 impl UsbDevice {
-    /// Send a command packet.  `buf` must be exactly 64 bytes; it is
-    /// zero-padded to that length if shorter.
+    /// Send a command packet on EP 0x01.
+    ///
+    /// Sends exactly `buf.len()` bytes — no padding. This matches the
+    /// upstream C minipro behaviour, where different commands send
+    /// different sizes (5, 8, 32, 48, 64 bytes). Padding short buffers
+    /// to 64 bytes can cause the firmware to interpret the trailing
+    /// zeros as a new command, desynchronising the protocol.
     pub fn msg_send(&self, buf: &[u8]) -> Result<()> {
-        let mut data = vec![0u8; 64];
-        let len = buf.len().min(64);
-        data[..len].copy_from_slice(&buf[..len]);
-        trace!("msg_send: cmd=0x{:02x} buf={:02x?}", data[0], &data[..len]);
-        let completion = pollster::block_on(self.iface()?.bulk_out(CMD_EP_OUT, data));
+        trace!(
+            "msg_send: cmd=0x{:02x} len={} buf={:02x?}",
+            buf.first().copied().unwrap_or(0),
+            buf.len(),
+            &buf[..buf.len().min(16)]
+        );
+        let completion = pollster::block_on(self.iface()?.bulk_out(CMD_EP_OUT, buf.to_vec()));
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
