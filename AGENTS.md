@@ -334,6 +334,27 @@ git add Cargo.lock gui/src-tauri/Cargo.lock
 
 ---
 
+### Linux cross-distro verification
+
+Rust stdlib API stability and Linux package names both drift over time. CI runs on a single Rust version (`rust:1.93` in GitLab, `stable` in GitHub Actions) and a single Ubuntu version, so it does **not** catch MSRV regressions or stale package names on other distros.
+
+**Before using a Rust stdlib API that was stabilized recently:**
+- Check that the API is stable under the declared MSRV (`rust-version` in `Cargo.toml`, currently 1.85 for CLI/core, 1.77.2 for GUI)
+- CI green on `rust:1.93` does NOT mean it builds on 1.85. A user on Debian Stable discovered `is_multiple_of()` was unstable in 1.85 despite passing CI (see GitLab work item #1)
+- When in doubt, use the older equivalent (e.g. `x % y == 0` instead of `x.is_multiple_of(y)`)
+- Clippy's `manual_is_multiple_of` lint respects `rust-version` — if it flags your `%` usage, the MSRV is probably not set correctly
+
+**Before changing Linux system library dependencies or package install commands:**
+- Verify package names against actual distro package databases — do NOT copy from Tauri docs or other projects, as package names drift (e.g. `libappindicator3-dev` was dropped in Debian Trixie / Ubuntu 24.04, replaced by `libayatana-appindicator3-dev`)
+- Cover at minimum: Debian/Ubuntu (`packages.debian.org` / `packages.ubuntu.com`), Fedora (`packages.fedoraproject.org`), Arch (`archlinux.org/packages`), openSUSE (`software.opensuse.org`)
+- Derived distros follow their upstream: Mint/Pop!_OS/Kali/Parrot → Debian/Ubuntu, Manjaro → Arch
+- Update the package table in BOTH `README.md` and `gui/README.md` — they must stay in sync
+- Also check `.github/workflows/release.yml` if it installs system packages
+
+**Recommended CI improvement (not yet implemented):** Adding an MSRV check job (`cargo +1.85 check --all`) to CI would catch MSRV regressions before they reach users. This is separate from the existing `verify-versions` job.
+
+---
+
 ### CI compute credit conservation
 
 GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unnecessarily.
