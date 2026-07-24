@@ -82,7 +82,7 @@ pub fn write_to<W: Write>(mut w: W, data: &[u8]) -> Result<()> {
 
     while addr < data.len() as u32 {
         // Emit extended linear address record every 64 KiB
-        if addr.is_multiple_of(0x10000) {
+        if addr % 0x10000 == 0 {
             let upper = (addr >> 16) as u16;
             write_record(&mut w, RECORD_EXTALIN, 0, &upper.to_be_bytes())?;
         }
@@ -121,7 +121,7 @@ fn write_record(f: &mut dyn Write, rtype: u8, addr: u16, data: &[u8]) -> Result<
 
 fn decode_hex_line(line: &str) -> Result<Vec<u8>> {
     let hex = &line[1..]; // skip ':'
-    if !hex.len().is_multiple_of(2) {
+    if hex.len() % 2 != 0 {
         return Err(MiniproError::FileFormat("odd-length HEX record".into()));
     }
     let bytes: std::result::Result<Vec<u8>, _> = (0..hex.len())

@@ -1292,7 +1292,7 @@ pub fn tl866a_logic_ic_test(
     out: &mut dyn std::io::Write,
 ) -> Result<()> {
     let pin_count = device.package_details.pin_count as usize;
-    if !pin_count.is_multiple_of(2) {
+    if pin_count % 2 != 0 {
         return Err(MiniproError::Protocol("Invalid pin count!".into()));
     }
 

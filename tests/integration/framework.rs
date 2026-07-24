@@ -184,7 +184,7 @@ pub fn hex_encode(data: &[u8]) -> String {
 }
 
 pub fn hex_decode(s: &str) -> Vec<u8> {
-    assert!(s.len().is_multiple_of(2), "odd-length hex string: {s}");
+    assert!(s.len() % 2 == 0, "odd-length hex string: {s}");
     (0..s.len())
         .step_by(2)
         .map(|i| {

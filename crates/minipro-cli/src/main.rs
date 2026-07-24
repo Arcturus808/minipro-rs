@@ -469,40 +469,42 @@ fn do_operations(
             };
 
             let serial_cfg_ref = serial_cfg.as_ref();
+            let mut on_ready = |chip_num: usize| -> bool {
+                eprint!(
+                    "\nInsert chip {} and press Enter (Ctrl+C to abort)... ",
+                    chip_num
+                );
+                let mut line = String::new();
+                match std::io::stdin().read_line(&mut line) {
+                    Ok(0) => false, // EOF — abort
+                    Ok(_) => true,
+                    Err(_) => false,
+                }
+            };
+            let mut on_patch_buffer = |chip_num: usize, buf: &mut Vec<u8>| {
+                if let Some(sc) = serial_cfg_ref {
+                    let value = sc.value_for_chip(chip_num);
+                    match minipro_core::patch_serial(buf, sc, chip_num) {
+                        Ok(()) => {
+                            eprintln!(
+                                "  Chip {}: serial = 0x{:0>width$X}",
+                                chip_num,
+                                value,
+                                width = sc.width * 2
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("  Chip {}: serial patch failed: {}", chip_num, e);
+                        }
+                    }
+                }
+            };
             let mut callbacks = minipro_core::BatchCallbacks {
                 on_progress: None,
                 on_chip_complete: None,
-                on_ready: Some(&mut |chip_num: usize| -> bool {
-                    eprint!(
-                        "\nInsert chip {} and press Enter (Ctrl+C to abort)... ",
-                        chip_num
-                    );
-                    let mut line = String::new();
-                    match std::io::stdin().read_line(&mut line) {
-                        Ok(0) => false, // EOF — abort
-                        Ok(_) => true,
-                        Err(_) => false,
-                    }
-                }),
+                on_ready: Some(&mut on_ready),
                 on_patch_buffer: if serial_cfg_ref.is_some() {
-                    Some(&mut |chip_num: usize, buf: &mut Vec<u8>| {
-                        if let Some(sc) = serial_cfg_ref {
-                            let value = sc.value_for_chip(chip_num);
-                            match minipro_core::patch_serial(buf, sc, chip_num) {
-                                Ok(()) => {
-                                    eprintln!(
-                                        "  Chip {}: serial = 0x{:0>width$X}",
-                                        chip_num,
-                                        value,
-                                        width = sc.width * 2
-                                    );
-                                }
-                                Err(e) => {
-                                    eprintln!("  Chip {}: serial patch failed: {}", chip_num, e);
-                                }
-                            }
-                        }
-                    })
+                    Some(&mut on_patch_buffer)
                 } else {
                     None
                 },
@@ -780,9 +782,9 @@ fn fmt_bytes(n: u32) -> String {
     if n == 0 {
         return "0 bytes".to_string();
     }
-    if n.is_multiple_of(1024 * 1024) {
+    if n % (1024 * 1024) == 0 {
         format!("{} MB ({} bytes)", n / (1024 * 1024), n)
-    } else if n.is_multiple_of(1024) {
+    } else if n % 1024 == 0 {
         format!("{} KB ({} bytes)", n / 1024, n)
     } else {
         format!("{} bytes", n)
