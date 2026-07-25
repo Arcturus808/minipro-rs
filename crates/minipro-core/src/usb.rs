@@ -236,14 +236,21 @@ impl UsbDevice {
             return self.bulk_out_raw(DATA_EP2_OUT, data.to_vec());
         }
 
-        // Split into two halves for EP2 / EP3 (see usb_nix.c write_payload2)
+        // Split into two halves for EP2 / EP3 (see usb_nix.c write_payload2).
+        // Both transfers must be submitted concurrently — the firmware
+        // expects data on both endpoints simultaneously.
         let (ep2_len, ep3_len) = split_lengths(data.len());
         let ep2_data = data[..ep2_len].to_vec();
         let ep3_data = data[ep2_len..ep2_len + ep3_len].to_vec();
 
-        // Submit both transfers and wait
-        self.bulk_out_raw(DATA_EP2_OUT, ep2_data)?;
-        self.bulk_out_raw(DATA_EP3_OUT, ep3_data)?;
+        let iface = self.iface()?;
+        let f2 = iface.bulk_out(DATA_EP2_OUT, ep2_data);
+        let f3 = iface.bulk_out(DATA_EP3_OUT, ep3_data);
+        let (c2, c3) = pollster::block_on(futures::future::join(f2, f3));
+        c2.status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
+        c3.status
+            .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())
     }
 
@@ -301,10 +308,17 @@ impl UsbDevice {
             return Ok(c.data);
         }
 
-        // Large reads: interleaved EP2 + EP3, then de-interleave
+        // Large reads: interleaved EP2 + EP3, then de-interleave.
+        // Both transfers must be submitted concurrently — the firmware
+        // interleaves data across both endpoints and will block if only
+        // one is being read.  Matches the C payload_transfer() which
+        // submits both URBs then waits for both.
         let half = length / 2;
-        trace!("  -> dual-EP path: bulk_in(EP 0x82, {half})");
-        let c2 = pollster::block_on(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(half)));
+        trace!("  -> dual-EP path: concurrent bulk_in(EP 0x82, {half}) + bulk_in(EP 0x83, {half})");
+        let iface = self.iface()?;
+        let f2 = iface.bulk_in(DATA_EP2_IN, RequestBuffer::new(half));
+        let f3 = iface.bulk_in(DATA_EP3_IN, RequestBuffer::new(half));
+        let (c2, c3) = pollster::block_on(futures::future::join(f2, f3));
         trace!(
             "  <- EP 0x82 complete: {} bytes, status={:?}",
             c2.data.len(),
@@ -312,8 +326,6 @@ impl UsbDevice {
         );
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
-        trace!("  -> dual-EP path: bulk_in(EP 0x83, {half})");
-        let c3 = pollster::block_on(self.iface()?.bulk_in(DATA_EP3_IN, RequestBuffer::new(half)));
         trace!(
             "  <- EP 0x83 complete: {} bytes, status={:?}",
             c3.data.len(),
