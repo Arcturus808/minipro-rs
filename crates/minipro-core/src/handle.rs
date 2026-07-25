@@ -146,6 +146,19 @@ impl MiniproHandle {
             device
         };
 
+        // Pack voltages so that --vcc/--vdd/--vpp overrides are reflected
+        // in the raw value sent to the firmware.  Mirrors `pack_voltages()`
+        // in the upstream C minipro, called before every begin_transaction.
+        let mut device = device;
+        if let Some(matched) = Arc::get_mut(&mut device) {
+            matched.voltages.pack();
+        } else {
+            // Arc has multiple references — clone, pack, and replace.
+            let mut d = (*device).clone();
+            d.voltages.pack();
+            device = Arc::new(d);
+        }
+
         self.protocol
             .begin_transaction(&self.usb, &device, self.icsp)?;
 

@@ -146,6 +146,19 @@ impl Voltages {
             raw,
         }
     }
+
+    /// Repack the low 16 bits of `raw` from the current `vdd`/`vcc`/`vpp`
+    /// field values, preserving the high 16 bits.
+    ///
+    /// Mirrors `pack_voltages()` in the upstream C minipro (`database.c`).
+    /// Called before `begin_transaction` so that `--vcc`/`--vdd`/`--vpp`
+    /// overrides are reflected in the raw value sent to the firmware.
+    pub fn pack(&mut self) {
+        self.raw = (self.raw & 0xffff_0000)
+            | ((self.vdd as u32) << 12)
+            | ((self.vcc as u32) << 8)
+            | self.vpp as u32;
+    }
 }
 
 #[derive(Debug, Clone, Default)]

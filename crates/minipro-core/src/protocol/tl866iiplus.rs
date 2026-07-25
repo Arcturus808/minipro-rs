@@ -24,7 +24,7 @@
 //! | 0x19 | Protect on                   |
 //! | 0x38 | Unlock TSOP48                |
 //! | 0x39 | Request status / OVC check   |
-//! | 0x3C | Hardware check               |
+//! | 0x3C | Bootloader erase             |
 
 use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use crate::{
@@ -56,11 +56,8 @@ const CMD_SET_VCC_VOLTAGE: u8 = 0x1B;
 const CMD_SET_VPP_VOLTAGE: u8 = 0x1C;
 const CMD_LOGIC_IC_TEST: u8 = 0x28;
 const CMD_RESET_PIN_DRV: u8 = 0x2D;
-#[allow(dead_code)]
 const CMD_SET_VCC_PIN: u8 = 0x2E;
-#[allow(dead_code)]
 const CMD_SET_VPP_PIN: u8 = 0x2F;
-#[allow(dead_code)]
 const CMD_SET_GND_PIN: u8 = 0x30;
 const CMD_SET_PULLDOWNS: u8 = 0x31;
 const CMD_SET_PULLUPS: u8 = 0x32;
@@ -72,7 +69,6 @@ const CMD_UNLOCK_TSOP48: u8 = 0x38;
 const CMD_REQUEST_STATUS: u8 = 0x39;
 const CMD_BTLDR_WRITE: u8 = 0x3B;
 const CMD_BTLDR_ERASE: u8 = 0x3C;
-const CMD_HARDWARE_CHECK: u8 = 0x3C; // same byte as BTLDR_ERASE, context-dependent
 const CMD_SWITCH: u8 = 0x3D;
 
 // ZIF bus width (max 40 pins)
@@ -98,6 +94,489 @@ const MP_USER: u8 = 0x02;
 
 // Minimum firmware version expected
 pub const MIN_FIRMWARE: u32 = 0x255; // 4.2.85
+
+// ── Hardware-check pin tables ────────────────────────────────────────────────
+
+/// A ZIF pin descriptor: physical pin number, byte offset within the 48-byte
+/// message, and bitmask within that byte.
+#[derive(Copy, Clone)]
+struct ZifPin {
+    pin: u8,
+    byte: usize,
+    mask: u8,
+}
+
+// 21 VPP pin drivers
+const VPP_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 1,
+        byte: 10,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 11,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 12,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 13,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 5,
+        byte: 14,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 6,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 7,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 8,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 31,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 35,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 9,
+        mask: 0x80,
+    },
+];
+
+// 32 VCC pin drivers
+const VCC_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 1,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 5,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 6,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 7,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 8,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 11,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 12,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 13,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 14,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 15,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 16,
+        byte: 9,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 25,
+        byte: 10,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 26,
+        byte: 10,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 27,
+        byte: 10,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 28,
+        byte: 10,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 29,
+        byte: 10,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 10,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 31,
+        byte: 10,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 10,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 11,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 11,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 35,
+        byte: 11,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 11,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 11,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 11,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 11,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 11,
+        mask: 0x80,
+    },
+];
+
+// 34 GND pin drivers
+const GND_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 1,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 5,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 6,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 7,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 8,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 11,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 12,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 13,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 14,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 15,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 16,
+        byte: 9,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 20,
+        byte: 12,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 21,
+        byte: 13,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 25,
+        byte: 10,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 26,
+        byte: 10,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 27,
+        byte: 10,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 28,
+        byte: 10,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 29,
+        byte: 10,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 10,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 31,
+        byte: 10,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 10,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 11,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 11,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 35,
+        byte: 11,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 11,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 11,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 11,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 11,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 11,
+        mask: 0x80,
+    },
+];
+
+// Indices into the pin tables for the overcurrent-protection tests
+const VPP1: usize = 0; // VPP pin 1
+const VCC1: usize = 0; // VCC pin 1
+const GND1: usize = 0; // GND pin 1
+
+/// Reset pin drivers, set all ZIF pins to input, and configure pull-up
+/// resistors (`pullup` = 0 enables, 1 disables). Matches the C `init_zif`.
+fn init_zif(usb: &UsbDevice, pullup: u8) -> Result<()> {
+    // Reset pin drivers state (8-byte message)
+    let mut msg = [0u8; 48];
+    msg[0] = CMD_RESET_PIN_DRV;
+    usb.msg_send(&msg[..8])?;
+
+    // Set all ZIF pins to input (bytes 8..48 = 0x01)
+    msg[8..48].fill(0x01);
+    msg[0] = CMD_SET_DIR;
+    usb.msg_send(&msg)?;
+
+    // Set pull-up resistors (0 = enable, 1 = disable)
+    msg[8..48].fill(pullup);
+    msg[0] = CMD_SET_PULLUPS;
+    usb.msg_send(&msg)?;
+    Ok(())
+}
 
 pub struct Tl866iiPlusProtocol;
 
@@ -197,34 +676,51 @@ pub struct SystemInfo {
 
 impl Protocol for Tl866iiPlusProtocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
-        // 64-byte begin_transaction packet (from tl866iiplus.md):
-        // [0]  cmd = 0x03
-        // [1]  protocol
-        // [2]  variant
-        // [3]  icsp
-        // [4]  unknown
-        // [5-6] opts1 (voltages / config flags)
-        // [7]  unknown
-        // [8-9]  data_memory_size  (16-bit LE)
-        // [10-11] opts2
-        // [12-13] opts3
-        // [14-15] data_memory2_size
-        // [16-19] code_memory_size (32-bit LE)
-        // [20-39] zeroes
-        // [40-43] package_details
-        // [44-63] zeroes
+        // 64-byte begin_transaction packet (matches upstream C tl866iiplus.c):
+        // [0]     cmd = 0x03
+        // [1]     protocol_id
+        // [2]     variant (low byte)
+        // [3]     icsp
+        // [4..5]  raw_voltages low 16 bits (LE): vpp | (vcc << 8) | (vdd << 12)
+        // [6]     chip_info (low byte)
+        // [7]     pin_map (low byte)
+        // [8..9]  data_memory_size (16-bit LE)
+        // [10..11] page_size (16-bit LE)
+        // [12..13] pulse_delay (16-bit LE)
+        // [14..15] data_memory2_size (16-bit LE)
+        // [16..19] code_memory_size (32-bit LE)
+        // [20]    (raw_voltages >> 16) & 0xff
+        // [21..22] voltage config flags
+        // [40..43] package_details (32-bit LE)
+        // [44..45] read_buffer_size (16-bit LE)
+        // [56..59] raw_flags (32-bit LE)
         let mut pkt = [0u8; 64];
         pkt[0] = CMD_BEGIN_TRANS;
         pkt[1] = device.protocol_id;
         pkt[2] = (device.variant & 0xff) as u8;
         pkt[3] = icsp as u8;
-        // opts1: vpp | vcc encoded
-        let opts1: u16 = ((device.voltages.vcc as u16) << 4) | device.voltages.vpp as u16;
-        le16(&mut pkt[5..7], opts1);
+        le16(&mut pkt[4..6], (device.voltages.raw & 0xffff) as u16);
+        pkt[6] = (device.chip_info & 0xff) as u8;
+        pkt[7] = (device.pin_map & 0xff) as u8;
         le16(&mut pkt[8..10], (device.data_memory_size & 0xffff) as u16);
+        le16(&mut pkt[10..12], (device.page_size & 0xffff) as u16);
+        le16(&mut pkt[12..14], (device.pulse_delay & 0xffff) as u16);
         le16(&mut pkt[14..16], (device.data_memory2_size & 0xffff) as u16);
         le32(&mut pkt[16..20], device.code_memory_size);
+        pkt[20] = ((device.voltages.raw >> 16) & 0xff) as u8;
+        // Voltage config flags from raw_voltages
+        if (device.voltages.raw & 0xf0) == 0xf0 {
+            pkt[22] = (device.voltages.raw & 0xff) as u8;
+        } else {
+            pkt[21] = (device.voltages.raw & 0x0f) as u8;
+            pkt[22] = (device.voltages.raw & 0xf0) as u8;
+        }
+        if device.voltages.raw & 0x8000_0000 != 0 {
+            pkt[22] = ((device.voltages.raw >> 16) & 0x0f) as u8;
+        }
         le32(&mut pkt[40..44], device.package_details.raw);
+        le16(&mut pkt[44..46], device.read_buffer_size);
+        le32(&mut pkt[56..60], device.flags.raw);
         usb.msg_send(&pkt)
     }
 
@@ -425,10 +921,200 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn hardware_check(&self, usb: &UsbDevice) -> Result<()> {
-        let mut pkt = [0u8; 8];
-        pkt[0] = CMD_HARDWARE_CHECK;
-        usb.msg_send(&pkt)?;
-        usb.msg_recv(64)?;
+        let mut msg = [0u8; 48];
+        let mut errors: u32 = 0;
+
+        // Testing 21 VPP pin drivers (no pull-up resistors)
+        init_zif(usb, 1)?;
+
+        for p in VPP_PINS {
+            msg[8..48].fill(0);
+            msg[0] = CMD_SET_VPP_PIN;
+            msg[p.byte] = p.mask;
+            usb.msg_send(&msg)?;
+
+            std::thread::sleep(std::time::Duration::from_micros(5000));
+            msg[0] = CMD_READ_PINS;
+            usb.msg_send(&msg[..8])?;
+            let read_buffer = usb.msg_recv(48)?;
+            if read_buffer[1] != 0 {
+                msg[0] = CMD_RESET_PIN_DRV;
+                usb.msg_send(&msg[..8])?;
+                eprintln!(
+                    "Overcurrent protection detected while testing VPP pin driver {}!\u{07}",
+                    p.pin
+                );
+                return Err(MiniproError::Protocol(format!(
+                    "VPP overcurrent on pin {}",
+                    p.pin
+                )));
+            }
+            if read_buffer[7 + p.pin as usize] == 0 {
+                errors += 1;
+            }
+            eprintln!(
+                "VPP driver pin {} is {}",
+                p.pin,
+                if read_buffer[7 + p.pin as usize] != 0 {
+                    "OK"
+                } else {
+                    "Bad"
+                }
+            );
+        }
+        eprintln!();
+
+        // Testing 32 VCC pin drivers (no pull-up resistors)
+        init_zif(usb, 1)?;
+
+        for p in VCC_PINS {
+            msg[8..48].fill(0);
+            msg[0] = CMD_SET_VCC_PIN;
+            msg[p.byte] = p.mask;
+            usb.msg_send(&msg)?;
+
+            std::thread::sleep(std::time::Duration::from_micros(5000));
+            msg[0] = CMD_READ_PINS;
+            usb.msg_send(&msg[..8])?;
+            let read_buffer = usb.msg_recv(48)?;
+            if read_buffer[1] != 0 {
+                msg[0] = CMD_RESET_PIN_DRV;
+                usb.msg_send(&msg[..8])?;
+                eprintln!(
+                    "Overcurrent protection detected while testing VCC pin driver {}!\u{07}",
+                    p.pin
+                );
+                return Err(MiniproError::Protocol(format!(
+                    "VCC overcurrent on pin {}",
+                    p.pin
+                )));
+            }
+            if read_buffer[7 + p.pin as usize] == 0 {
+                errors += 1;
+            }
+            eprintln!(
+                "VCC driver pin {} is {}",
+                p.pin,
+                if read_buffer[7 + p.pin as usize] != 0 {
+                    "OK"
+                } else {
+                    "Bad"
+                }
+            );
+        }
+        eprintln!();
+
+        // Testing 34 GND pin drivers (active pull-up resistors)
+        init_zif(usb, 0)?;
+
+        for p in GND_PINS {
+            msg[8..48].fill(0);
+            msg[0] = CMD_SET_GND_PIN;
+            msg[p.byte] = p.mask;
+            usb.msg_send(&msg)?;
+
+            std::thread::sleep(std::time::Duration::from_micros(5000));
+            msg[0] = CMD_READ_PINS;
+            usb.msg_send(&msg[..8])?;
+            let read_buffer = usb.msg_recv(48)?;
+            if read_buffer[1] != 0 {
+                msg[0] = CMD_RESET_PIN_DRV;
+                usb.msg_send(&msg[..8])?;
+                eprintln!(
+                    "Overcurrent protection detected while testing GND pin driver {}!\u{07}",
+                    p.pin
+                );
+                return Err(MiniproError::Protocol(format!(
+                    "GND overcurrent on pin {}",
+                    p.pin
+                )));
+            }
+            if read_buffer[7 + p.pin as usize] != 0 {
+                errors += 1;
+            }
+            eprintln!(
+                "GND driver pin {} is {}",
+                p.pin,
+                if read_buffer[7 + p.pin as usize] != 0 {
+                    "Bad"
+                } else {
+                    "OK"
+                }
+            );
+        }
+        eprintln!();
+        eprintln!();
+
+        // Testing VPP overcurrent protection
+        init_zif(usb, 1)?;
+
+        // Set VPP on pin 1
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_VPP_PIN;
+        msg[VPP_PINS[VPP1].byte] = VPP_PINS[VPP1].mask;
+        usb.msg_send(&msg)?;
+        // Set GND also on pin 1
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_GND_PIN;
+        msg[GND_PINS[GND1].byte] = GND_PINS[GND1].mask;
+        usb.msg_send(&msg)?;
+        // Reset pins
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_GND_PIN;
+        usb.msg_send(&msg)?;
+
+        msg[0] = CMD_READ_PINS;
+        usb.msg_send(&msg[..8])?;
+        let read_buffer = usb.msg_recv(48)?;
+        if read_buffer[1] != 0 {
+            eprintln!("VPP overcurrent protection is OK.");
+        } else {
+            eprintln!("VPP overcurrent protection failed!\u{07}");
+            errors += 1;
+        }
+
+        // Testing VCC overcurrent protection
+        init_zif(usb, 1)?;
+
+        // Set VCC voltage to 4.5V
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_VCC_VOLTAGE;
+        msg[8] = 0x01;
+        usb.msg_send(&msg)?;
+        // Set VCC on pin 1
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_VCC_PIN;
+        msg[VCC_PINS[VCC1].byte] = VCC_PINS[VCC1].mask;
+        usb.msg_send(&msg)?;
+        // Set GND also on pin 1
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_GND_PIN;
+        msg[GND_PINS[GND1].byte] = GND_PINS[GND1].mask;
+        usb.msg_send(&msg)?;
+        // Reset pins
+        msg[8..48].fill(0);
+        msg[0] = CMD_SET_GND_PIN;
+        usb.msg_send(&msg)?;
+
+        msg[0] = CMD_READ_PINS;
+        usb.msg_send(&msg[..8])?;
+        let read_buffer = usb.msg_recv(48)?;
+        if read_buffer[1] != 0 {
+            eprintln!("VCC overcurrent protection is OK.");
+        } else {
+            eprintln!("VCC overcurrent protection failed!\u{07}");
+            errors += 1;
+        }
+
+        if errors != 0 {
+            eprintln!("\nHardware test completed with {} error(s).\u{07}", errors);
+        } else {
+            eprintln!("\nHardware test completed successfully!");
+        }
+
+        // Reset pin drivers
+        msg[0] = CMD_RESET_PIN_DRV;
+        usb.msg_send(&msg[..8])?;
         Ok(())
     }
 
