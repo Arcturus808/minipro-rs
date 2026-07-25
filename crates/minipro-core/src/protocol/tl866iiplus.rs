@@ -757,7 +757,7 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = write_cmd(ds);
         // Small writes (< 57 bytes payload): combine header + payload in a
         // single EP1 message (8 + payload <= 64).  Matches C tl866iiplus_write_block.
@@ -768,18 +768,12 @@ impl Protocol for Tl866iiPlusProtocol {
             usb.msg_send(&msg[..8 + ds.data.len()])?;
         } else {
             // Large writes: send 8-byte header on EP1, then payload on EP2/EP3.
+            // Use write_buffer_size as the split limit (matches C write_payload
+            // call with handle->device->write_buffer_size).
             usb.msg_send(&cmd)?;
-            usb.write_payload(&ds.data)?;
+            usb.write_payload_limit(&ds.data, device.write_buffer_size as usize)?;
         }
-        // Read back 64-byte status response
-        let resp = usb.msg_recv(64)?;
-        // Status byte 1 should be 0 on success
-        if resp.len() > 1 && resp[1] != 0 {
-            return Err(MiniproError::Protocol(format!(
-                "write_block status error: {:#04x}",
-                resp[1]
-            )));
-        }
+        // C tl866iiplus_write_block does not read a status response here.
         Ok(())
     }
 
