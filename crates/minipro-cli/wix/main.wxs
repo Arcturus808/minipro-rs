@@ -51,15 +51,18 @@
                 Id='PATH' Name='PATH' Value='[BinDir]'
                 Permanent='no' Part='last' Action='set' System='yes'/>
             </Component>
-          </Directory>
 
-          <Component Id='Database' Guid='*'>
-            <File Id='infoic.xml' Name='infoic.xml'
-              Source='../../../data/infoic.xml'
-              KeyPath='yes'/>
-            <File Id='logicic.xml' Name='logicic.xml'
-              Source='../../../data/logicic.xml'/>
-          </Component>
+            <!-- Database XMLs live alongside the executable so the runtime
+                 search (exe's parent directory) finds them. See
+                 crates/minipro-core/src/database.rs::resolve_one, step 2. -->
+            <Component Id='Database' Guid='*'>
+              <File Id='infoic.xml' Name='infoic.xml'
+                Source='../../../data/infoic.xml'
+                KeyPath='yes'/>
+              <File Id='logicic.xml' Name='logicic.xml'
+                Source='../../../data/logicic.xml'/>
+            </Component>
+          </Directory>
 
         </Directory>
       </Directory>

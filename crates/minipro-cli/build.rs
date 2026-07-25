@@ -117,9 +117,13 @@ Directory containing the
 .I minipro
 executable.
 .IP 3. 4
+Repo
+.B data/
+directory two levels above the executable (dev builds only).
+.IP 4. 4
 .B MINIPRO_HOME
 environment variable.
-.IP 4. 4
+.IP 5. 4
 .B %PROGRAMDATA%\eminipro\e
 (Windows) or
 .B /usr/share/minipro/

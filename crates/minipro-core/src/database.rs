@@ -102,6 +102,19 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
         }
     }
 
+    // 2b. Repo `data/` directory — useful for dev builds where the binary
+    //     lives under target/<profile>/ and the XMLs sit at the repo root.
+    //     No-op for installed binaries: `C:\Program Files\minipro\bin\..\..\data`
+    //     does not exist, so this falls through harmlessly.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join("..").join("..").join("data").join(filename);
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+    }
+
     // 3. MINIPRO_HOME env var
     if let Ok(home) = std::env::var("MINIPRO_HOME") {
         let p = PathBuf::from(home).join(filename);
