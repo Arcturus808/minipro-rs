@@ -347,16 +347,24 @@ fn do_operations(
 
     // ── Logic IC test ─────────────────────────────────────────────────────────
     if cli.logic_test {
-        eprint!("Testing logic IC... ");
         if let Some(ref out_path) = cli.logicic_out {
             let mut f = std::fs::File::create(out_path).with_context(|| {
                 format!("cannot create logicic output file '{}'", out_path.display())
             })?;
             logic_ic_test(handle, &mut f)?;
         } else {
-            logic_ic_test(handle, &mut std::io::stdout())?;
+            // The function prints its own "Logic test successful." or
+            // "Logic test failed: N errors encountered." to stderr.
+            // Suppress the default error handler to avoid a duplicate line.
+            if let Err(e) = logic_ic_test(handle, &mut std::io::stdout()) {
+                if let MiniproError::Protocol(ref msg) = e {
+                    if msg.starts_with("logic test failed") {
+                        std::process::exit(1);
+                    }
+                }
+                return Err(e.into());
+            }
         }
-        eprintln!("PASS.");
         return Ok(());
     }
 

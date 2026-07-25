@@ -1421,24 +1421,25 @@ pub(super) fn logic_ic_test_tl866(
                 _ => false,                    // G, V, C, X, 0, 1 — no comparison
             };
             let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
+            // Match C format: "\e[0;91m%c- " (error) or "\e[0m%c  " (ok)
             if err {
-                write!(out, "\x1b[0;91m{}-\x1b[0m ", ch).ok();
+                write!(out, "\x1b[0;91m{}- ", ch).ok();
                 errors += 1;
             } else {
-                write!(out, "{}  ", ch).ok();
+                write!(out, "\x1b[0m{}  ", ch).ok();
             }
         }
         writeln!(out).ok();
     }
 
     if errors > 0 {
-        eprintln!("Logic test FAILED: {} error(s).", errors);
+        eprintln!("Logic test failed: {} errors encountered.", errors);
         Err(MiniproError::Protocol(format!(
-            "logic test failed: {} error(s)",
+            "logic test failed: {} errors encountered",
             errors
         )))
     } else {
-        eprintln!("Logic test OK.");
+        eprintln!("Logic test successful.");
         Ok(())
     }
 }
