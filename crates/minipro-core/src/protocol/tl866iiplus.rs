@@ -731,7 +731,8 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
-        // 8-byte read command: [cmd, block_count, length_lo, length_hi, addr x4]
+        // 8-byte read command: [cmd, 0, length_lo, length_hi, addr x4]
+        // msg[1] is left 0 (C code zero-initialises msg[64] and never sets [1]).
         let cmd = read_cmd(ds);
         trace!(
             "read_block: page={} addr={:#x} len={} block_count={} cmd={:02x?}",
@@ -742,22 +743,34 @@ impl Protocol for Tl866iiPlusProtocol {
             &cmd
         );
         usb.msg_send(&cmd)?;
-        trace!(
-            "read_block: cmd sent, awaiting {} bytes on EP 0x82",
-            ds.data.len()
-        );
-        // Use single-EP2 read: pass length as both `length` and `limit` so
-        // read_payload_limit takes the `length <= limit` branch (EP2 only).
-        // The dual-EP interleaved path is for MCU flash writes, not SPI reads.
-        ds.data = usb.read_payload_limit(ds.data.len(), ds.data.len())?;
+        // MP_USER (data_memory2) is always read over the command endpoint (EP1).
+        if ds.page_type == MP_USER {
+            ds.data = usb.msg_recv(ds.data.len())?;
+            return Ok(());
+        }
+        // MP_CODE / MP_DATA: use read_payload (limit=64) so that reads > 64
+        // bytes take the dual-EP interleaved path (EP2 + EP3), matching the
+        // C `read_payload(handle, data, size)` call in tl866iiplus_read_block.
+        // Passing limit=length would force single-EP2 and hang on large reads.
+        ds.data = usb.read_payload(ds.data.len())?;
         trace!("read_block: got {} bytes", ds.data.len());
         Ok(())
     }
 
     fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = write_cmd(ds);
-        usb.msg_send(&cmd)?;
-        usb.write_payload(&ds.data)?;
+        // Small writes (< 57 bytes payload): combine header + payload in a
+        // single EP1 message (8 + payload <= 64).  Matches C tl866iiplus_write_block.
+        if ds.data.len() < 57 {
+            let mut msg = [0u8; 64];
+            msg[..8].copy_from_slice(&cmd);
+            msg[8..8 + ds.data.len()].copy_from_slice(&ds.data);
+            usb.msg_send(&msg[..8 + ds.data.len()])?;
+        } else {
+            // Large writes: send 8-byte header on EP1, then payload on EP2/EP3.
+            usb.msg_send(&cmd)?;
+            usb.write_payload(&ds.data)?;
+        }
         // Read back 64-byte status response
         let resp = usb.msg_recv(64)?;
         // Status byte 1 should be 0 on success
@@ -1198,7 +1211,8 @@ impl Protocol for Tl866iiPlusProtocol {
 // ── Packet builders ───────────────────────────────────────────────────────────
 
 fn read_cmd(ds: &DataSet) -> [u8; 8] {
-    // [cmd, protocol, len_lo, len_hi, addr0, addr1, addr2, addr3]
+    // [cmd, 0, len_lo, len_hi, addr0, addr1, addr2, addr3]
+    // msg[1] is left 0 — C code zero-initialises msg[64] and never sets [1].
     let cmd = match ds.page_type {
         MP_CODE => CMD_READ_CODE,
         MP_DATA => CMD_READ_DATA,
@@ -1208,13 +1222,14 @@ fn read_cmd(ds: &DataSet) -> [u8; 8] {
     let len = ds.data.len() as u16;
     let mut pkt = [0u8; 8];
     pkt[0] = cmd;
-    pkt[1] = ds.block_count as u8;
     le16(&mut pkt[2..4], len);
     le32(&mut pkt[4..8], ds.address);
     pkt
 }
 
 fn write_cmd(ds: &DataSet) -> [u8; 8] {
+    // [cmd, 0, len_lo, len_hi, addr0, addr1, addr2, addr3]
+    // msg[1] is left 0 — C code zero-initialises msg[64] and never sets [1].
     let cmd = match ds.page_type {
         MP_CODE => CMD_WRITE_CODE,
         MP_DATA => CMD_WRITE_DATA,
@@ -1224,7 +1239,6 @@ fn write_cmd(ds: &DataSet) -> [u8; 8] {
     let len = ds.data.len() as u16;
     let mut pkt = [0u8; 8];
     pkt[0] = cmd;
-    pkt[1] = ds.block_count as u8;
     le16(&mut pkt[2..4], len);
     le32(&mut pkt[4..8], ds.address);
     pkt
