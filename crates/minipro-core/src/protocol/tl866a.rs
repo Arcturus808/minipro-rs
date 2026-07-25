@@ -1350,11 +1350,13 @@ pub fn tl866a_logic_ic_test(
     }
 
     if errors > 0 {
+        eprintln!("Logic test failed: {} errors encountered.", errors);
         Err(MiniproError::Protocol(format!(
             "Logic test failed: {} errors encountered",
             errors
         )))
     } else {
+        eprintln!("Logic test successful.");
         Ok(())
     }
 }

@@ -1435,7 +1435,7 @@ pub(super) fn logic_ic_test_tl866(
     if errors > 0 {
         eprintln!("Logic test failed: {} errors encountered.", errors);
         Err(MiniproError::Protocol(format!(
-            "logic test failed: {} errors encountered",
+            "Logic test failed: {} errors encountered",
             errors
         )))
     } else {
