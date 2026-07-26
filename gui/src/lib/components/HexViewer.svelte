@@ -26,6 +26,7 @@
   let editInputRef = $state<HTMLInputElement | null>(null);
   let editCursorPos = $state(0);
   let editingMode = $state<"hex" | "ascii">("hex");
+  let editDirty = $state(false);
 
   // Go-to-offset dialog state
   let showGotoDialog = $state(false);
@@ -223,12 +224,20 @@
       editValue = toAscii(b);
     }
     editCursorPos = 0;
+    editDirty = false;
     scrollToOffset(offset);
     focusInput(0);
   }
 
   function commitEdit() {
     if (editingOffset === null) return;
+    // If the user didn't actually type anything (e.g., clicked a byte
+    // then clicked away), don't commit — the editValue is just the
+    // display representation, not a user modification.
+    if (!editDirty) {
+      editingOffset = null;
+      return;
+    }
     let v: number;
     if (editingMode === "ascii") {
       v = editValue.length > 0 ? editValue.charCodeAt(0) : 0x20;
@@ -263,6 +272,7 @@
       // ASCII mode: any printable character sets the byte and overflows
       if (e.key.length === 1 && e.key.charCodeAt(0) >= 0x20 && e.key.charCodeAt(0) <= 0x7E) {
         e.preventDefault();
+        editDirty = true;
         const byteVal = e.key.charCodeAt(0);
         const currentOffset = editingOffset;
         // Commit current
@@ -284,6 +294,7 @@
           editingOffset = nextOffset;
           editValue = toAscii(nextByte);
           editCursorPos = 1;
+          editDirty = false;
           focusInput(1);
         } else {
           editingOffset = null;
@@ -294,6 +305,7 @@
       // Backspace in ASCII mode: reset to space (0x20)
       if (e.key === "Backspace") {
         e.preventDefault();
+        editDirty = true;
         editValue = " ";
         editCursorPos = 0;
         if (editInputRef) {
@@ -306,6 +318,7 @@
       // Hex char: overwrite nibble at cursor, overflow to next byte
       if (/^[0-9A-Fa-f]$/.test(e.key)) {
         e.preventDefault();
+        editDirty = true;
         const pos = editCursorPos;
 
         if (pos >= 2) {
@@ -353,6 +366,7 @@
       // Backspace in hex mode
       if (e.key === "Backspace") {
         e.preventDefault();
+        editDirty = true;
         const pos = editCursorPos;
         if (pos > 0) {
           const chars = editValue.split("");
@@ -899,6 +913,7 @@
                     maxlength="2"
                     bind:value={editValue}
                     bind:this={editInputRef}
+                    oninput={() => editDirty = true}
                   />
                 {:else}
                   <span
@@ -928,6 +943,7 @@
                     maxlength="1"
                     bind:value={editValue}
                     bind:this={editInputRef}
+                    oninput={() => editDirty = true}
                   />
                 {:else}
                   <span
