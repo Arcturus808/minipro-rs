@@ -221,7 +221,11 @@ fn run() -> Result<()> {
 
     // ── Hardware self-test ────────────────────────────────────────────────────
     if cli.hardware_check {
-        eprint!("Running hardware self-test... ");
+        if cli.verbose {
+            eprintln!("Running hardware self-test...");
+        } else {
+            eprint!("Running hardware self-test... ");
+        }
         hardware_check(&mut handle)?;
         eprintln!("PASS");
         return Ok(());
@@ -340,7 +344,11 @@ fn do_operations(
 
     // ── Pin contact check ─────────────────────────────────────────────────────
     if cli.pin_check {
-        eprint!("Running pin contact check... ");
+        if cli.verbose {
+            eprintln!("Running pin contact check...");
+        } else {
+            eprint!("Running pin contact check... ");
+        }
         pin_contact_check(handle, &db_paths.infoic)?;
         return Ok(());
     }
@@ -402,7 +410,11 @@ fn do_operations(
 
     // ── Blank check ───────────────────────────────────────────────────────────
     if cli.blank_check {
-        eprint!("Checking blank... ");
+        if cli.verbose {
+            eprintln!("Checking blank...");
+        } else {
+            eprint!("Checking blank... ");
+        }
         blank_check(handle)?;
         eprintln!("BLANK.");
     }
