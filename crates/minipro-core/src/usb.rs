@@ -20,11 +20,48 @@
 use log::trace;
 use nusb::transfer::RequestBuffer;
 use nusb::{DeviceInfo, Interface};
+use std::time::Duration;
 
 use crate::{
     device::ProgrammerModel,
     error::{MiniproError, Result},
 };
+
+/// Timeout for individual USB transfers.  If a transfer doesn't complete
+/// within this duration, it is cancelled and an error is returned.  This
+/// prevents hangs when the firmware is in a bad state (e.g. after a
+/// sleep/wake cycle) and never responds to a command.
+const USB_TRANSFER_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Race a future against a timer.  If the timer fires first, return a
+/// timeout error.  Dropping the losing future cancels the pending USB
+/// transfer (nusb cancels transfers when their futures are dropped).
+fn block_on_with_timeout<F, T>(fut: F) -> Result<T>
+where
+    F: std::future::Future<Output = T> + std::marker::Unpin,
+{
+    let timer = timer_future(USB_TRANSFER_TIMEOUT);
+    match pollster::block_on(futures::future::select(fut, timer)) {
+        futures::future::Either::Left((result, _)) => Ok(result),
+        futures::future::Either::Right(_) => Err(MiniproError::Protocol(
+            "USB transfer timed out — the programmer may be in a bad state. \
+             Unplug it, wait 20-30 seconds, plug it back in, and try again."
+                .into(),
+        )),
+    }
+}
+
+/// Create a future that completes after `duration`.  Uses a background
+/// thread + `futures::channel::oneshot` because pollster has no built-in
+/// timer.
+fn timer_future(duration: Duration) -> futures::channel::oneshot::Receiver<()> {
+    let (tx, rx) = futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        std::thread::sleep(duration);
+        let _ = tx.send(());
+    });
+    rx
+}
 
 // ── USB VID/PID constants ────────────────────────────────────────────────────
 
@@ -188,7 +225,7 @@ impl UsbDevice {
             buf.len(),
             &buf[..buf.len().min(16)]
         );
-        let completion = pollster::block_on(self.iface()?.bulk_out(CMD_EP_OUT, buf.to_vec()));
+        let completion = block_on_with_timeout(self.iface()?.bulk_out(CMD_EP_OUT, buf.to_vec()))?;
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -208,7 +245,7 @@ impl UsbDevice {
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
         trace!("msg_recv: waiting for {size} bytes on EP 0x81");
         let completion =
-            pollster::block_on(self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)));
+            block_on_with_timeout(self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)))?;
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -248,7 +285,7 @@ impl UsbDevice {
         let iface = self.iface()?;
         let f2 = iface.bulk_out(DATA_EP2_OUT, ep2_data);
         let f3 = iface.bulk_out(DATA_EP3_OUT, ep3_data);
-        let (c2, c3) = pollster::block_on(futures::future::join(f2, f3));
+        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3))?;
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         c3.status
@@ -266,10 +303,10 @@ impl UsbDevice {
         // T76 uses EP 0x82 only for reads
         if self.pid == T76_PID {
             trace!("  -> T76 path: bulk_in(EP 0x82, {length})");
-            let c = pollster::block_on(
+            let c = block_on_with_timeout(
                 self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
-            );
+            )?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
                 c.data.len(),
@@ -283,7 +320,8 @@ impl UsbDevice {
         // Small reads: single EP2 transfer
         if length < 64 {
             trace!("  -> small path: bulk_in(EP 0x82, 64)");
-            let c = pollster::block_on(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)));
+            let c =
+                block_on_with_timeout(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)))?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
                 c.data.len(),
@@ -296,10 +334,10 @@ impl UsbDevice {
 
         if length == 64 || length <= limit || limit == 0 {
             trace!("  -> single-EP2 path: bulk_in(EP 0x82, {length})");
-            let c = pollster::block_on(
+            let c = block_on_with_timeout(
                 self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
-            );
+            )?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
                 c.data.len(),
@@ -320,7 +358,7 @@ impl UsbDevice {
         let iface = self.iface()?;
         let f2 = iface.bulk_in(DATA_EP2_IN, RequestBuffer::new(half));
         let f3 = iface.bulk_in(DATA_EP3_IN, RequestBuffer::new(half));
-        let (c2, c3) = pollster::block_on(futures::future::join(f2, f3));
+        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3))?;
         trace!(
             "  <- EP 0x82 complete: {} bytes, status={:?}",
             c2.data.len(),
@@ -347,7 +385,7 @@ impl UsbDevice {
             data.len(),
             &data[..data.len().min(16)]
         );
-        let c = pollster::block_on(self.iface()?.bulk_out(ep, data));
+        let c = block_on_with_timeout(self.iface()?.bulk_out(ep, data))?;
         c.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())

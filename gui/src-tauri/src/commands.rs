@@ -13,12 +13,24 @@ use tauri::{Emitter, State, Window};
 
 use crate::state::AppState;
 
-/// Check if an error indicates the programmer was physically disconnected.
-/// If so, clear cached state so the UI badge updates on next check.
+/// Check if an error indicates the programmer was physically disconnected
+/// or is in a bad state.  If so, clear cached state so the UI badge updates.
 fn handle_usb_error(state: &AppState, err: &str) {
-    let usb_errors = ["STALL", "NoDevice", "LIBUSB_ERROR_NO_DEVICE",
-        "LIBUSB_ERROR_IO", "LIBUSB_ERROR_PIPE", "DeviceNotFound",
-        "endpoint", "USB error", "No programmer connected"];
+    let usb_errors = [
+        "STALL",
+        "NoDevice",
+        "LIBUSB_ERROR_NO_DEVICE",
+        "LIBUSB_ERROR_IO",
+        "LIBUSB_ERROR_PIPE",
+        "DeviceNotFound",
+        "endpoint",
+        "USB error",
+        "No programmer connected",
+        "unknown error",   // nusb generic error when device is gone
+        "timed out",       // our USB transfer timeout
+        "cannot open it",  // open_programmer error when device can't be opened
+        "cannot claim",    // interface claim failure
+    ];
     if usb_errors.iter().any(|&keyword| err.contains(keyword)) {
         state.clear_programmer();
         log::warn!("USB error detected, clearing cached programmer state: {}", err);
@@ -301,6 +313,9 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 // ── Tauri commands ─────────────────────────────────────────────────────────
 
 /// Open the programmer and return its info.
+///
+/// Retries a few times at startup because Windows USB enumeration can lag
+/// behind the physical plug event by several seconds.
 #[tauri::command]
 pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
     {
@@ -315,27 +330,61 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
         }
     }
 
-    let (info, handle) = tokio::task::spawn_blocking(move || {
-        let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
-        let info = handle.info.clone();
-        Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
-    }).await.map_err(|e| format!("Task panicked: {}", e))??;
+    // Retry a few times — the device may not be ready immediately after
+    // a hot-plug or sleep/wake cycle.
+    let delays = [0u64, 500, 1000, 1500];
+    let mut last_err = String::new();
+    for (attempt, delay_ms) in delays.iter().enumerate() {
+        if *delay_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
+        }
 
-    {
-        let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
-        *guard = Some(info.clone());
-    }
-    {
-        let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
-        *guard = Some(handle);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::task::spawn_blocking(move || {
+                let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+                let info = handle.info.clone();
+                Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
+            }),
+        ).await;
+
+        let (info, handle) = match result {
+            Ok(Ok(Ok(v))) => v,
+            Ok(Ok(Err(e))) => {
+                last_err = e;
+                eprintln!("get_programmer_info attempt {} failed: {}", attempt + 1, last_err);
+                continue;
+            }
+            Ok(Err(e)) => {
+                last_err = format!("Task panicked: {}", e);
+                eprintln!("get_programmer_info attempt {} panicked", attempt + 1);
+                continue;
+            }
+            Err(_) => {
+                last_err = "Timed out waiting for USB device to respond".into();
+                eprintln!("get_programmer_info attempt {} timed out", attempt + 1);
+                continue;
+            }
+        };
+
+        {
+            let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+            *guard = Some(info.clone());
+        }
+        {
+            let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
+            *guard = Some(handle);
+        }
+
+        return Ok(ProgrammerInfoDto {
+            model: info.model.to_string(),
+            firmware: info.firmware_str,
+            serial_number: info.serial_number,
+            hardware_version: format!("{:02x}", info.hardware_version),
+        });
     }
 
-    Ok(ProgrammerInfoDto {
-        model: info.model.to_string(),
-        firmware: info.firmware_str,
-        serial_number: info.serial_number,
-        hardware_version: format!("{:02x}", info.hardware_version),
-    })
+    Err(last_err)
 }
 
 /// Force-close any existing handle and re-open the programmer.
