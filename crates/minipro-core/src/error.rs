@@ -5,7 +5,7 @@ pub enum MiniproError {
     #[error("USB error: {0}")]
     Usb(nusb::Error),
 
-    #[error("No programmer found; is one connected and the driver installed?")]
+    #[error("No programmer found. If one is connected, this can happen after the computer wakes from sleep — unplug the programmer, wait 20-30 seconds, plug it back in, and try again.")]
     NoProgrammerFound,
 
     #[error("Multiple programmers connected; please connect only one")]
