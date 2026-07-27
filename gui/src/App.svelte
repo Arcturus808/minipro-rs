@@ -580,7 +580,7 @@
       <button
         class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
         onclick={async () => {
-          logs.info("Reconnecting programmer...");
+          logs.info("Reconnecting programmer... (this may take up to 20s)");
           try {
             await forceReconnect();
             if ($programmer) {

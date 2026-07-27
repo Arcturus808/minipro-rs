@@ -366,14 +366,20 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
     for (attempt, delay_ms) in delays.iter().enumerate() {
         tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
 
-        let result = tokio::task::spawn_blocking(move || {
-            let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
-            let info = handle.info.clone();
-            Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
-        }).await;
+        // Wrap the blocking open in a timeout so a hung USB transfer
+        // doesn't block the retry loop forever.  The orphaned task will
+        // eventually finish or be cleaned up by tokio.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::task::spawn_blocking(move || {
+                let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+                let info = handle.info.clone();
+                Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
+            }),
+        ).await;
 
         match result {
-            Ok(Ok((info, handle))) => {
+            Ok(Ok(Ok((info, handle)))) => {
                 {
                     let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
                     *guard = Some(info.clone());
@@ -389,13 +395,17 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
                     hardware_version: format!("{:02x}", info.hardware_version),
                 });
             }
-            Ok(Err(e)) => {
+            Ok(Ok(Err(e))) => {
                 last_err = e;
                 eprintln!("force_reconnect attempt {} failed: {}", attempt + 1, last_err);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 last_err = format!("Task panicked: {}", e);
                 eprintln!("force_reconnect attempt {} panicked", attempt + 1);
+            }
+            Err(_) => {
+                last_err = "Timed out waiting for USB device to respond".into();
+                eprintln!("force_reconnect attempt {} timed out after 5s", attempt + 1);
             }
         }
     }
