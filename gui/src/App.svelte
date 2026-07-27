@@ -593,7 +593,7 @@
         }}
         title={$programmer
           ? "Programmer connected. If operations fail with USB errors, try unplugging and replugging the device, then click here to reconnect."
-          : "No programmer detected. Unplug the USB cable, wait 20-30 seconds, plug it back in, then click here to reconnect."}
+          : "No programmer detected. Unplug the USB cable, wait 20-30 seconds, plug it back in, then click here to reconnect. On Windows, if this is a new device, you may need to install the WinUSB driver with Zadig (https://zadig.akeo.ie/)."}
       >
         {#if $programmer}
           <span class="badge bg-emerald-600 text-white text-xs flex items-center gap-1">
