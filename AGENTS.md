@@ -229,6 +229,18 @@ Adding `select-none` to the root app container blocked selection everywhere incl
 ### `verify_chip` panic when file smaller than device
 `verify_chip` read the reference file but did not pad it to device size. When auto-verify ran after a write with a smaller file, `expected[offset..]` panicked at offsets beyond the file length. Fixed by resizing the expected buffer to `size` with blank_value padding, matching `write_chip` behavior.
 
+### USB sleep/wake Code 10 (Windows)
+When a Windows laptop goes to sleep with the programmer connected, the USB host controller suspends the port. On wake, the WinUSB driver sometimes fails to re-initialise the device, leaving it in a Code 10 state ("This device cannot start"). The device shows a yellow triangle in Device Manager and cannot be opened by the app until physically replugged.
+
+**Root cause:** Windows USB power management (selective suspend). Not a bug in our code — the device is broken at the OS driver level.
+
+**Workaround for users:**
+1. Unplug the USB cable, wait 20-30 seconds, plug it back in
+2. Click the reconnect button in the GUI (it retries for ~15 seconds)
+3. To prevent recurrence: disable "USB selective suspend" in Windows Power Options, or uncheck "Allow the computer to turn off this device to save power" for the USB root hub in Device Manager
+
+**App-side mitigation:** `force_reconnect` retries 8 times over ~15 seconds with increasing delays. The error message instructs the user to unplug, wait, and replug. The reconnect button tooltip also mentions the 20-30 second wait.
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.

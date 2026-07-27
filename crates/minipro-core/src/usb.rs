@@ -143,7 +143,8 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
             let device = info.open().map_err(|e| {
                 MiniproError::Protocol(format!(
                     "USB device found but cannot open it. \
-                     Try unplugging the programmer, wait a few seconds, and plug it back in. \
+                     This can happen after the computer wakes from sleep. \
+                     Unplug the programmer, wait 20-30 seconds, plug it back in, and try again. \
                      If the problem persists, the WinUSB driver may need reinstallation \
                      with Zadig (https://zadig.akeo.ie/). (nusb error: {})",
                     e
@@ -152,7 +153,8 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
             let interface = device.claim_interface(0).map_err(|e| {
                 MiniproError::Protocol(format!(
                     "USB device opened but cannot claim interface 0. \
-                     Try unplugging the programmer, wait a few seconds, and plug it back in. \
+                     This can happen after the computer wakes from sleep. \
+                     Unplug the programmer, wait 20-30 seconds, plug it back in, and try again. \
                      If the problem persists, use Zadig to reinstall the WinUSB driver. (nusb error: {})",
                     e
                 ))

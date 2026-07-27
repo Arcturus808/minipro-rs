@@ -340,8 +340,11 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
 
 /// Force-close any existing handle and re-open the programmer.
 /// Use this after unplugging/replugging the device.
-/// Retries up to 5 times with increasing delays because Windows USB
-/// enumeration can be stale immediately after a hot-plug event.
+///
+/// Retries for up to ~15 seconds with increasing delays because Windows USB
+/// enumeration can lag behind the physical replug by several seconds, and
+/// the device may need time to re-initialise after a sleep/wake cycle or
+/// hot-plug event.
 #[tauri::command]
 pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
     // Explicitly drop any stale handle so the USB device can be re-claimed
@@ -355,10 +358,13 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
     }
 
     // Retry with increasing delays — Windows USB enumeration can lag behind
-    // the Device Manager display by several seconds after hot-plug.
+    // the Device Manager display by several seconds after hot-plug, and a
+    // sleep/wake Code 10 recovery may require 20-30 seconds before the
+    // device is usable again.
+    let delays = [500, 1000, 1500, 2000, 2000, 2000, 2000, 2000];
     let mut last_err = String::new();
-    for attempt in 1..=5 {
-        tokio::time::sleep(std::time::Duration::from_millis(500 * attempt)).await;
+    for (attempt, delay_ms) in delays.iter().enumerate() {
+        tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
 
         let result = tokio::task::spawn_blocking(move || {
             let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
@@ -385,16 +391,26 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
             }
             Ok(Err(e)) => {
                 last_err = e;
-                eprintln!("force_reconnect attempt {} failed: {}", attempt, last_err);
+                eprintln!("force_reconnect attempt {} failed: {}", attempt + 1, last_err);
             }
             Err(e) => {
                 last_err = format!("Task panicked: {}", e);
-                eprintln!("force_reconnect attempt {} panicked", attempt);
+                eprintln!("force_reconnect attempt {} panicked", attempt + 1);
             }
         }
     }
 
-    Err(format!("No programmer detected after 5 reconnect attempts. Last error: {}", last_err))
+    Err(format!(
+        "Could not reconnect after {} attempts ({}s). \
+         If the programmer was connected when the computer went to sleep, \
+         unplug the USB cable, wait 20-30 seconds, then plug it back in \
+         and click the reconnect button again. \
+         To prevent this in future, disable 'USB selective suspend' in \
+         Windows Power Options. Last error: {}",
+        delays.len(),
+        delays.iter().sum::<u64>() / 1000,
+        last_err
+    ))
 }
 
 #[derive(Serialize, Clone)]
