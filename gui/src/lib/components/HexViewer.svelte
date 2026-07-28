@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData, trimTrailing, padToSize } from "../stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData, trimTrailing, padToSize, undoHexEdit, redoHexEdit } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
@@ -309,6 +309,26 @@
       return;
     }
 
+    // Ctrl+Z — Undo last edit
+    if (e.key === "z" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      e.preventDefault();
+      if (undoHexEdit()) {
+        logs.info("Undo");
+      }
+      return;
+    }
+
+    // Ctrl+Shift+Z — Redo (also support Ctrl+Y)
+    if (((e.key === "z" && e.shiftKey) || e.key === "y") && e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      e.preventDefault();
+      if (redoHexEdit()) {
+        logs.info("Redo");
+      }
+      return;
+    }
+
     // Ctrl+G — Go to offset
     if (e.key === "g" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
@@ -535,8 +555,8 @@
   // DOM changes when the input element is destroyed/recreated on overflow.
   function handleEditKeydown(e: KeyboardEvent) {
     if (editingOffset === null || !($hexMeta?.data)) return;
-    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S / Ctrl+A / Ctrl+Home / Ctrl+End — let the global handler deal with them.
-    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s" || e.key === "a" || e.key === "Home" || e.key === "End")) return;
+    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S / Ctrl+A / Ctrl+Home / Ctrl+End / Ctrl+Z / Ctrl+Y — let the global handler deal with them.
+    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s" || e.key === "a" || e.key === "Home" || e.key === "End" || e.key === "z" || e.key === "y")) return;
     const dataLen = $hexMeta.data.length;
 
     if (editingMode === "ascii") {
@@ -939,6 +959,28 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
           Apply
+        </button>
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px;"
+          onclick={() => { if (undoHexEdit()) logs.info("Undo"); }}
+          title="Undo (Ctrl+Z)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4" />
+          </svg>
+          Undo
+        </button>
+        <button
+          class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"
+          style="font-size: 13px;"
+          onclick={() => { if (redoHexEdit()) logs.info("Redo"); }}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a5 5 0 00-5 5v2m15-7l-4-4m4 4l-4 4" />
+          </svg>
+          Redo
         </button>
         <button
           class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800"

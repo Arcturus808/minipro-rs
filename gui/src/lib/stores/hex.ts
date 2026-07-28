@@ -83,24 +83,77 @@ export function clearHexBuffer() {
  *  underlying buffer until the user explicitly applies changes. */
 export const hexEdits = writable<Map<number, number>>(new Map());
 
+// ── Undo / Redo ─────────────────────────────────────────────────────────────
+
+interface EditEntry {
+  offset: number;
+  prevValue: number | null; // null = no prior edit
+  newValue: number | null;  // null = edit cleared
+}
+
+let undoStack: EditEntry[] = [];
+let redoStack: EditEntry[] = [];
+
 /** Record a single-byte edit.  Pass `null` to clear an edit. */
 export function setHexEdit(offset: number, value: number | null) {
   hexEdits.update((map) => {
     const next = new Map(map);
+    const prevValue = next.has(offset) ? next.get(offset)! : null;
     if (value === null || (value & 0xFF) === value) {
       if (value === null) {
         next.delete(offset);
       } else {
         next.set(offset, value & 0xFF);
       }
+      // Push to undo stack (only if the value actually changed)
+      if (prevValue !== value) {
+        undoStack.push({ offset, prevValue, newValue: value });
+        redoStack = []; // clear redo on new edit
+      }
     }
     return next;
   });
 }
 
-/** Clear all pending edits. */
+/** Undo the last edit. */
+export function undoHexEdit(): boolean {
+  const entry = undoStack.pop();
+  if (!entry) return false;
+  hexEdits.update((map) => {
+    const next = new Map(map);
+    if (entry.prevValue === null) {
+      next.delete(entry.offset);
+    } else {
+      next.set(entry.offset, entry.prevValue);
+    }
+    return next;
+  });
+  redoStack.push(entry);
+  return true;
+}
+
+/** Redo the last undone edit. */
+export function redoHexEdit(): boolean {
+  const entry = redoStack.pop();
+  if (!entry) return false;
+  hexEdits.update((map) => {
+    const next = new Map(map);
+    if (entry.newValue === null) {
+      next.delete(entry.offset);
+    } else {
+      next.set(entry.offset, entry.newValue);
+    }
+    return next;
+  });
+  undoStack.push(entry);
+  return true;
+}
+
+/** Clear all pending edits and reset undo/redo history. */
 export function clearHexEdits() {
   hexEdits.set(new Map());
+  undoStack = [];
+  redoStack = [];
 }
 
 /** Apply pending edits to the underlying hex buffer and clear the edit map.
