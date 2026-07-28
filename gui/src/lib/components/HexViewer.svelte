@@ -297,11 +297,51 @@
       return;
     }
 
+    // Ctrl+A — Select all bytes
+    if (e.key === "a" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      if ($hexMeta?.data && $hexMeta.data.length > 0) {
+        e.preventDefault();
+        commitEdit();
+        selectionStart = 0;
+        selectionEnd = $hexMeta.data.length - 1;
+      }
+      return;
+    }
+
     // Ctrl+G — Go to offset
     if (e.key === "g" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
       if (!showGotoDialog) {
         openGotoDialog();
+      }
+    }
+
+    // Ctrl+Home — Jump to first byte
+    if (e.key === "Home" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (!($hexMeta?.data)) return;
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      e.preventDefault();
+      const dataLen = $hexMeta.data.length;
+      if (dataLen > 0) {
+        commitEdit();
+        selectionStart = null;
+        selectionEnd = null;
+        startEdit(0);
+      }
+    }
+
+    // Ctrl+End — Jump to last byte
+    if (e.key === "End" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (!($hexMeta?.data)) return;
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      e.preventDefault();
+      const dataLen = $hexMeta.data.length;
+      if (dataLen > 0) {
+        commitEdit();
+        selectionStart = null;
+        selectionEnd = null;
+        startEdit(dataLen - 1);
       }
     }
   }
@@ -495,8 +535,8 @@
   // DOM changes when the input element is destroyed/recreated on overflow.
   function handleEditKeydown(e: KeyboardEvent) {
     if (editingOffset === null || !($hexMeta?.data)) return;
-    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S — let the global handler deal with them.
-    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s")) return;
+    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S / Ctrl+A / Ctrl+Home / Ctrl+End — let the global handler deal with them.
+    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s" || e.key === "a" || e.key === "Home" || e.key === "End")) return;
     const dataLen = $hexMeta.data.length;
 
     if (editingMode === "ascii") {
@@ -622,6 +662,15 @@
       case "Escape":
         e.preventDefault();
         cancelEdit();
+        break;
+      case "Tab":
+        e.preventDefault();
+        // Switch between hex and ASCII panes on the same byte
+        if (editingOffset !== null) {
+          const current = editingOffset;
+          commitEdit();
+          startEdit(current, editingMode === "hex" ? "ascii" : "hex");
+        }
         break;
       case "ArrowLeft": {
         e.preventDefault();
