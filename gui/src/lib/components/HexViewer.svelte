@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData, trimTrailing, padToSize, undoHexEdit, redoHexEdit } from "../stores/hex";
+  import { hexMeta, hexLoading, clearHexBuffer, hexEdits, setHexEdit, clearHexEdits, applyHexEdits, getHexData, trimTrailing, padToSize, undoHexEdit, redoHexEdit, pendingEditsPrompt, resolvePendingEditsPrompt } from "../stores/hex";
   import { settings, setSetting } from "../stores/settings";
   import { selectedDevice } from "../stores/device";
   import { saveBufferToFile, openFolder } from "../stores/operations";
@@ -1176,6 +1176,29 @@
             style="padding: 6px 12px; border: none; border-radius: 4px; background: #d97706; color: white; cursor: pointer; font-size: 13px;"
             onclick={confirmGoto}
           >Go</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if $pendingEditsPrompt}
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) resolvePendingEditsPrompt(false); }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 320px; max-width: 400px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Discard changes?</div>
+        <div style="font-size: 13px; opacity: 0.7; margin-bottom: 12px;">
+          {$pendingEditsPrompt.message}
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button
+            style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; font-size: 13px;"
+            onclick={() => resolvePendingEditsPrompt(false)}
+          >Cancel</button>
+          <button
+            style="padding: 6px 12px; border: none; border-radius: 4px; background: #dc2626; color: white; cursor: pointer; font-size: 13px;"
+            onclick={() => resolvePendingEditsPrompt(true)}
+          >Discard &amp; continue</button>
         </div>
       </div>
     </div>
