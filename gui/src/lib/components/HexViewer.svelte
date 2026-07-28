@@ -112,8 +112,192 @@
     });
   }
 
-  // Global keydown for go-to-offset (Ctrl+G)
+  // ── Save (Ctrl+S) ──────────────────────────────────────────────────────────
+
+  async function saveBuffer() {
+    if (!($hexMeta?.data)) return;
+    // Commit any pending edit before saving.
+    commitEdit();
+    // Apply pending edits to the buffer so the saved file includes them.
+    if ($hexEdits.size > 0) {
+      applyHexEdits();
+    }
+    const dir = get(settings).defaultDirectory ?? "";
+    const dev = get(selectedDevice);
+    const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
+    const defaultName = `${devName}.bin`;
+    const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
+    const iterativePath = await getIterativeSavePath(defaultPath);
+    let path = await pickSaveFile(
+      "Save chip dump as",
+      iterativePath,
+      [
+        { name: "Binary", extensions: ["bin"] },
+        { name: "Intel HEX", extensions: ["hex"] },
+        { name: "Motorola SREC", extensions: ["srec", "mot"] },
+        { name: "JEDEC", extensions: ["jed"] },
+      ]
+    );
+    if (path) {
+      if (!path.includes(".")) {
+        path += ".bin";
+      }
+      const ext = path.split(".").pop()?.toLowerCase() ?? "bin";
+      const format = ext === "hex" ? "ihex" : ext === "srec" || ext === "mot" ? "srec" : ext === "jed" ? "jedec" : "bin";
+      await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
+      await saveBufferToFile(path, format, dev?.name);
+      savedPath = path;
+    }
+  }
+
+  // ── Copy / Paste (Ctrl+C / Ctrl+V) ─────────────────────────────────────────
+
+  // Selection state: start and end offsets for a range selection.
+  // null means no selection. A single clicked byte is a cursor, not a
+  // selection — selection requires a drag or shift+click.
+  let selectionStart = $state<number | null>(null);
+  let selectionEnd = $state<number | null>(null);
+
+  function hasSelection(): boolean {
+    return selectionStart !== null && selectionEnd !== null;
+  }
+
+  function selectionLength(): number {
+    if (!hasSelection()) return 0;
+    return Math.abs(selectionEnd! - selectionStart!) + 1;
+  }
+
+  function getSelectionBytes(): Uint8Array | null {
+    if (!hasSelection() || !($hexMeta?.data)) return null;
+    const lo = Math.min(selectionStart!, selectionEnd!);
+    const hi = Math.max(selectionStart!, selectionEnd!);
+    const data = getHexData();
+    if (!data) return null;
+    return data.slice(lo, hi + 1);
+  }
+
+  async function copySelection() {
+    const bytes = getSelectionBytes();
+    if (!bytes || bytes.length === 0) return;
+    // Copy as hex string (space-separated, uppercase) — matches what
+    // most hex editors put on the clipboard.
+    const hexStr = Array.from(bytes, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+    try {
+      await invoke("plugin:clipboard-manager|write_text", { text: hexStr });
+      logs.info(`Copied ${bytes.length} bytes to clipboard`);
+    } catch {
+      logs.warn("Failed to copy to clipboard");
+    }
+  }
+
+  async function pasteFromClipboard() {
+    if (!($hexMeta?.data)) return;
+    let text: string;
+    try {
+      text = await invoke<string>("plugin:clipboard-manager|read_text");
+    } catch {
+      logs.warn("Failed to read from clipboard");
+      return;
+    }
+    // Parse clipboard as hex bytes. Accept space-separated hex, raw hex
+    // string, or C-style byte array (0xFF, 0xAA, ...).
+    const cleaned = text
+      .replace(/0x/gi, "")
+      .replace(/[,\[\]{}()]/g, " ")
+      .replace(/;\s*/g, " ")
+      .trim();
+    // Try hex first: split on whitespace, parse each as hex byte.
+    let bytes: number[] = [];
+    const tokens = cleaned.split(/\s+/).filter((t) => t.length > 0);
+    for (const tok of tokens) {
+      const v = parseInt(tok, 16);
+      if (!isNaN(v) && v >= 0 && v <= 0xff) {
+        bytes.push(v);
+      } else {
+        // Not valid hex tokens — try as continuous hex string
+        bytes = [];
+        break;
+      }
+    }
+    if (bytes.length === 0 && cleaned.length > 0) {
+      // Try as continuous hex string (e.g. "DEADBEEF")
+      if (/^[0-9a-fA-F]+$/.test(cleaned) && cleaned.length % 2 === 0) {
+        for (let i = 0; i < cleaned.length; i += 2) {
+          bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
+        }
+      }
+    }
+    if (bytes.length === 0) {
+      logs.warn("Clipboard doesn't contain valid hex bytes");
+      return;
+    }
+    // Paste at the current cursor position (editingOffset) or at the
+    // start of the selection.
+    let pasteOffset: number;
+    if (editingOffset !== null) {
+      pasteOffset = editingOffset;
+      commitEdit();
+    } else if (hasSelection()) {
+      pasteOffset = Math.min(selectionStart!, selectionEnd!);
+    } else {
+      logs.warn("Click a byte to set the paste position first");
+      return;
+    }
+    const data = getHexData();
+    if (!data) return;
+    const maxLen = Math.min(bytes.length, data.length - pasteOffset);
+    if (maxLen <= 0) {
+      logs.warn("No room to paste at this offset");
+      return;
+    }
+    for (let i = 0; i < maxLen; i++) {
+      setHexEdit(pasteOffset + i, bytes[i]);
+    }
+    logs.info(`Pasted ${maxLen} bytes at offset 0x${pasteOffset.toString(16).toUpperCase()}`);
+    // Clear selection after paste
+    selectionStart = null;
+    selectionEnd = null;
+  }
+
+  // Global keydown for hex viewer hotkeys
   function handleGlobalKeydown(e: KeyboardEvent) {
+    // Don't intercept hotkeys when a modal dialog or text input is focused
+    // (except for Ctrl+S which should always work).
+    const target = e.target as HTMLElement;
+    const isInputFocused = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+
+    // Ctrl+S — Save
+    if (e.key === "s" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      if ($hexMeta?.data) {
+        saveBuffer();
+      }
+      return;
+    }
+
+    // Ctrl+C — Copy selection
+    if (e.key === "c" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      // Allow copy even when our hex edit input is focused (class hex-edit-input),
+      // but skip for other text inputs (go-to dialog, trim/pad fields, etc.).
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      if (hasSelection()) {
+        e.preventDefault();
+        copySelection();
+      }
+      return;
+    }
+
+    // Ctrl+V — Paste
+    if (e.key === "v" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (isInputFocused && target?.className !== "hex-edit-input") return;
+      if ($hexMeta?.data) {
+        e.preventDefault();
+        pasteFromClipboard();
+      }
+      return;
+    }
+
+    // Ctrl+G — Go to offset
     if (e.key === "g" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
       if (!showGotoDialog) {
@@ -176,6 +360,51 @@
   function isEdited(offset: number): boolean {
     return $hexEdits.has(offset);
   }
+
+  function isSelected(offset: number): boolean {
+    if (!hasSelection()) return false;
+    const lo = Math.min(selectionStart!, selectionEnd!);
+    const hi = Math.max(selectionStart!, selectionEnd!);
+    return offset >= lo && offset <= hi;
+  }
+
+  // ── Mouse selection (drag to select a range of bytes) ──────────────────────
+
+  let isDragging = $state(false);
+  let dragMoved = false; // true if the drag extended beyond the start byte
+
+  function onCellMousedown(e: MouseEvent, byteOffset: number) {
+    // Only start selection on left click without Ctrl (Ctrl+click still edits)
+    if (e.button !== 0 || e.ctrlKey) return;
+    // If there's an active edit, commit it first
+    if (editingOffset !== null) {
+      commitEdit();
+    }
+    e.preventDefault();
+    isDragging = true;
+    dragMoved = false;
+    selectionStart = byteOffset;
+    selectionEnd = byteOffset;
+  }
+
+  function onCellMouseenter(byteOffset: number) {
+    if (!isDragging) return;
+    selectionEnd = byteOffset;
+    dragMoved = true;
+  }
+
+  function onMouseup() {
+    if (isDragging) {
+      isDragging = false;
+    }
+  }
+
+  $effect(() => {
+    if (isDragging) {
+      document.addEventListener("mouseup", onMouseup);
+      return () => document.removeEventListener("mouseup", onMouseup);
+    }
+  });
 
   function getByte(offset: number): number {
     if (!($hexMeta?.data)) return 0;
@@ -266,6 +495,8 @@
   // DOM changes when the input element is destroyed/recreated on overflow.
   function handleEditKeydown(e: KeyboardEvent) {
     if (editingOffset === null || !($hexMeta?.data)) return;
+    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S — let the global handler deal with them.
+    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s")) return;
     const dataLen = $hexMeta.data.length;
 
     if (editingMode === "ascii") {
@@ -397,6 +628,8 @@
         const current = editingOffset;
         if (current !== null && current > 0) {
           commitEdit();
+          selectionStart = null;
+          selectionEnd = null;
           startEdit(current - 1);
         }
         break;
@@ -406,6 +639,8 @@
         const current = editingOffset;
         if (current !== null && current < dataLen - 1) {
           commitEdit();
+          selectionStart = null;
+          selectionEnd = null;
           startEdit(current + 1);
         }
         break;
@@ -415,6 +650,8 @@
         const current = editingOffset;
         if (current !== null && current >= ROW_SIZE) {
           commitEdit();
+          selectionStart = null;
+          selectionEnd = null;
           startEdit(current - ROW_SIZE);
         }
         break;
@@ -424,6 +661,8 @@
         const current = editingOffset;
         if (current !== null && current < dataLen - ROW_SIZE) {
           commitEdit();
+          selectionStart = null;
+          selectionEnd = null;
           startEdit(current + ROW_SIZE);
         }
         break;
@@ -584,11 +823,19 @@
             · CRC-32: {$hexMeta.crc32.toString(16).padStart(8, '0').toUpperCase()}
           {/if}
         </div>
-        {#if editCount > 0}
-          <div style="font-size: 12px; color: #f59e0b; margin-top: 2px; font-weight: 500; white-space: nowrap;">
-            {editCount} edit{editCount === 1 ? '' : 's'} pending
-          </div>
-        {/if}
+        <div style="font-size: 12px; margin-top: 2px; font-weight: 500; white-space: nowrap; line-height: 16px; height: 16px; visibility: {(editCount > 0 || hasSelection()) ? 'visible' : 'hidden'};">
+          {#if editCount > 0}
+            <span style="color: #f59e0b;">
+              {editCount} edit{editCount === 1 ? '' : 's'} pending
+            </span>
+          {/if}
+          {#if editCount > 0 && hasSelection()}<span> · </span>{/if}
+          {#if hasSelection()}
+            <span style="color: #f59e0b;">
+              {selectionLength()} byte{selectionLength() === 1 ? '' : 's'} selected (Ctrl+C to copy)
+            </span>
+          {/if}
+        </div>
         {#if diffResult}
           <div style="font-size: 12px; margin-top: 2px; font-weight: 500; color: {diffResult.summary.is_equal ? '#16a34a' : '#dc2626'}; white-space: nowrap;">
             {#if diffResult.summary.is_equal}
@@ -655,34 +902,8 @@
       {/if}
       <button
         class="opacity-70 hover:opacity-100 transition-opacity px-3 py-1.5 rounded border border-transparent hover:border-surface-200-800 flex items-center gap-1.5" style="font-size: 13px;"
-        onclick={async () => {
-          const dir = get(settings).defaultDirectory ?? "";
-          const dev = get(selectedDevice);
-          const devName = dev?.name?.replace(/[\\/:*?"<>|@]/g, "_") ?? "dump";
-          const defaultName = `${devName}.bin`;
-          const defaultPath = dir ? `${dir}\\${defaultName}` : defaultName;
-          const iterativePath = await getIterativeSavePath(defaultPath);
-          let path = await pickSaveFile(
-            "Save chip dump as",
-            iterativePath,
-            [
-              { name: "Binary", extensions: ["bin"] },
-              { name: "Intel HEX", extensions: ["hex"] },
-              { name: "Motorola SREC", extensions: ["srec", "mot"] },
-              { name: "JEDEC", extensions: ["jed"] },
-            ]
-          );
-          if (path) {
-            if (!path.includes(".")) {
-              path += ".bin";
-            }
-            const ext = path.split(".").pop()?.toLowerCase() ?? "bin";
-            const format = ext === "hex" ? "ihex" : ext === "srec" || ext === "mot" ? "srec" : ext === "jed" ? "jedec" : "bin";
-            await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
-            await saveBufferToFile(path, format, dev?.name);
-            savedPath = path;
-          }
-        }}
+        onclick={saveBuffer}
+        title="Save (Ctrl+S)"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -905,6 +1126,7 @@
                 {@const edited = isEdited(byteOffset)}
                 {@const byteVal = getRenderByte(byteOffset)}
                 {@const diffStyle = getDiffCellStyle(byteOffset)}
+                {@const selected = isSelected(byteOffset)}
                 {#if isEditingHex}
                   <input
                     type="text"
@@ -918,11 +1140,12 @@
                 {:else}
                   <span
                     class="hex-cell"
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
-                    onclick={() => startEdit(byteOffset)}
-                    title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
-                  >{formatHex(byteVal)}</span>
-                {/if}
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    onmousedown={(e) => onCellMousedown(e, byteOffset)}
+                    onmouseenter={() => onCellMouseenter(byteOffset)}
+                    onclick={() => { if (dragMoved) { dragMoved = false; return; } startEdit(byteOffset); }}
+                    title="Click to edit, drag to select (offset 0x{byteOffset.toString(16).toUpperCase()})"
+                  >{formatHex(byteVal)}</span> {/if}
                 {#if j < len - 1}
                   <span> </span>
                 {/if}
@@ -935,6 +1158,7 @@
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
                 {@const byteVal = getRenderByte(byteOffset)}
                 {@const diffStyle = getDiffCellStyle(byteOffset)}
+                {@const selected = isSelected(byteOffset)}
                 {#if isEditingAscii}
                   <input
                     type="text"
@@ -947,9 +1171,11 @@
                   />
                 {:else}
                   <span
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
-                    onclick={() => startEdit(byteOffset, "ascii")}
-                    title="Click to edit (offset 0x{byteOffset.toString(16).toUpperCase()})"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    onmousedown={(e) => onCellMousedown(e, byteOffset)}
+                    onmouseenter={() => onCellMouseenter(byteOffset)}
+                    onclick={() => { if (dragMoved) { dragMoved = false; return; } startEdit(byteOffset, "ascii"); }}
+                    title="Click to edit, drag to select (offset 0x{byteOffset.toString(16).toUpperCase()})"
                   >{toAscii(byteVal)}</span>
                 {/if}
               {/each}
