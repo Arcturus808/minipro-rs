@@ -12,6 +12,49 @@ interface HexMeta {
 export const hexMeta = writable<HexMeta | null>(null);
 export const hexLoading = writable(false);
 
+// ── Buffer dirty flag (applied-but-unsaved changes) ─────────────────────────
+// True when the buffer has been modified by Apply but not yet saved to disk.
+// Cleared by loadFile, setHexData (new data), and saveBufferToFile.
+export const bufferDirty = writable(false);
+
+// ── Pending-edits overwrite confirmation ────────────────────────────────────
+// When a read/load operation is about to replace the buffer while pending
+// edits exist, this store drives a confirm modal in HexViewer. The operation
+// awaits the user's response via the returned Promise.
+let _pendingEditsResolver: ((confirmed: boolean) => void) | null = null;
+export const pendingEditsPrompt = writable<{ editCount: number; operation: string; message: string } | null>(null);
+
+/** If there are pending edits or an unsaved buffer, show a confirm modal
+ *  and await the user's response. Returns true if the user confirmed (or
+ *  if there's nothing to lose). Returns false if the user cancelled. */
+export function confirmOverwriteEdits(operation: string): Promise<boolean> {
+  const edits = get(hexEdits);
+  const dirty = get(bufferDirty);
+  if (edits.size === 0 && !dirty) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    _pendingEditsResolver = resolve;
+    const editCount = edits.size;
+    let message: string;
+    if (editCount > 0 && dirty) {
+      message = `You have ${editCount} pending edit${editCount === 1 ? '' : 's'} and unsaved buffer changes that will be lost if you ${operation}.`;
+    } else if (editCount > 0) {
+      message = `You have ${editCount} pending edit${editCount === 1 ? '' : 's'} that will be lost if you ${operation}.`;
+    } else {
+      message = `You have unsaved buffer changes that will be lost if you ${operation}.`;
+    }
+    pendingEditsPrompt.set({ editCount, operation, message });
+  });
+}
+
+/** Called by the HexViewer modal when the user confirms or cancels. */
+export function resolvePendingEditsPrompt(confirmed: boolean) {
+  if (_pendingEditsResolver) {
+    _pendingEditsResolver(confirmed);
+    _pendingEditsResolver = null;
+  }
+  pendingEditsPrompt.set(null);
+}
+
 export const hexSize = derived(hexMeta, ($m) => $m?.size ?? 0);
 export const hexFilePath = derived(hexMeta, ($m) => $m?.path ?? null);
 
@@ -45,6 +88,7 @@ function computeCrc32(data: Uint8Array): number {
 /** Directly set hex data (for testing or chip reads). */
 export function setHexData(data: Uint8Array | null, path: string | null = null) {
   hexMeta.set(data ? { size: data.length, path, data, crc32: computeCrc32(data) } : null);
+  bufferDirty.set(false);
 }
 
 export function base64ToUint8Array(base64: string): Uint8Array {
@@ -67,6 +111,7 @@ export async function loadFile(path: string, deviceSize?: number) {
     const base64 = await invoke<string>("read_file_bytes", args);
     const bytes = base64ToUint8Array(base64);
     setHexData(bytes, path);
+    clearHexEdits();
   } catch (e) {
     logs.error(`Failed to load file: ${e}`);
     setHexData(null);
@@ -171,6 +216,7 @@ export function applyHexEdits(): Uint8Array | null {
   }
   setHexData(newData, meta.path);
   clearHexEdits();
+  bufferDirty.set(true);
   return newData;
 }
 

@@ -155,6 +155,11 @@ async function runOp(
 }
 
 export async function doRead(path: string, options: OperationOptions = defaultOptions()) {
+  // Prompt before overwriting pending edits (loadFile also checks, but
+  // we check before the chip read so we don't waste time reading if cancelled)
+  const { confirmOverwriteEdits } = await import("./hex");
+  const confirmed = await confirmOverwriteEdits("read from chip");
+  if (!confirmed) return;
   await runOp("Read", async () => {
     const result = await invoke("do_read", { path, options });
     // Load the resulting file into the hex viewer
@@ -164,10 +169,15 @@ export async function doRead(path: string, options: OperationOptions = defaultOp
 }
 
 export async function doReadToBuffer(options: OperationOptions = defaultOptions()) {
+  const { confirmOverwriteEdits, clearHexEdits } = await import("./hex");
+  // Prompt before overwriting pending edits
+  const confirmed = await confirmOverwriteEdits("read from chip");
+  if (!confirmed) return;
   return await runOp("Read", async () => {
     const result = await invoke<{ base64: string; stats: { bytes: number; crc32: number } }>("read_chip_to_bytes", { options });
     const bytes = base64ToUint8Array(result.base64);
     setHexData(bytes, null); // no file path since we read to memory
+    clearHexEdits();
     return result.stats;
   });
 }
@@ -196,6 +206,9 @@ export async function saveBufferToFile(path: string, format: string = "bin", dev
   } else {
     await invoke("save_buffer_to_file", { path, base64Data: base64, format, deviceName });
   }
+  // Mark buffer as clean after successful save
+  const { bufferDirty } = await import("./hex");
+  bufferDirty.set(false);
 }
 
 export async function openFolder(path: string) {
