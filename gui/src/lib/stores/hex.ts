@@ -248,6 +248,7 @@ export function trimTrailing(eraseValue: number = 0xFF): number | null {
 
   const trimmed = data.slice(0, end);
   setHexData(trimmed, meta.path);
+  bufferDirty.set(true); // trim modifies the buffer without saving
   return end;
 }
 
@@ -265,5 +266,6 @@ export function padToSize(targetSize: number, eraseValue: number = 0xFF): number
   padded.fill(eraseValue, meta.data.length);
 
   setHexData(padded, meta.path);
+  bufferDirty.set(true); // pad modifies the buffer without saving
   return targetSize;
 }
