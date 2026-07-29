@@ -52,6 +52,9 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Hex editor find/search** — Ctrl+F opens find dialog with hex and ASCII search modes. Match highlighting (light blue for all matches, dark blue for current). F3/Shift+F3 navigates matches. Context-sensitive F3: navigates whichever mode (find or diff) was most recently activated.
 - [x] **Pending edits overwrite protection** — Read and Open operations prompt before replacing the hex buffer if pending edits or unsaved applied changes exist. Svelte-based confirm modal (not native dialog) to avoid WebView2 JS event loop freeze. `bufferDirty` flag tracks applied-but-unsaved changes (set by Apply/Trim/Pad, cleared by Save/load).
 - [x] **Entropy indicator in hex viewer** — per-row Shannon entropy bar in the gutter between offset and hex columns. Green=uniform, red=high entropy. Toggle in Settings (off by default).
+- [x] **Hex viewer help overlay** — ?/F1 key or "i" toolbar icon opens a modal with keyboard shortcuts and feature descriptions. Same pattern reusable for other panels.
+- [x] **Favorites show manufacturer** — device favorites in the search panel now display the manufacturer alongside the device name. Old favorites auto-migrate to the new format.
+- [x] **Hex edit blur fix** — clicking outside the hex viewer (e.g., the device search field) now properly commits the active edit and releases keyboard focus.
 
 ## Near-term
 
@@ -389,4 +392,10 @@ This is a living list of features and improvements planned for minipro-rs.
     - Error highlighting must be prominent (red cells, summary banner)
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
+
+- [ ] **Contextual help overlays for complex panels** — "i" icon in the Config/fuses and Batch/serial panels, similar to the hex viewer help overlay
+  - **Config/fuses panel:** fuse bit names (RSTDISBL, SPIEN, CKOUT, etc.) and their interactions are non-obvious. A help overlay would explain what each fuse does, which combinations are dangerous, and why certain warnings appear.
+  - **Batch/serial number panel:** the interacting fields (start, address, width, format, endian, step, checksum) and the live preview / overflow detection could use explanation for first-time users.
+  - Reuse the hex viewer help overlay pattern (modal with grouped content, "i" icon trigger).
+  - Priority: low-medium — the panels work without help, but the config panel in particular has footguns that a help overlay would mitigate.
 
