@@ -47,6 +47,11 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Near-term.
 - [x] **Serial overflow detection** — `patch_serial()` checks if the value exceeds the width's max and returns an error instead of silently truncating. CLI checks before batch start. GUI shows live warning and blocks start.
 - [x] **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND).
+- [x] **USB transfer timeout** — 5-second timeout on USB transfers in `usb.rs` prevents indefinite hangs when the programmer is unresponsive. Applies to both CLI and GUI.
+- [x] **Hex editor standard hotkeys** — Ctrl+S (save), Ctrl+C/V (copy/paste bytes), Ctrl+A (select all), Ctrl+Z/Shift+Z/Y (undo/redo), Ctrl+Home/End (jump to start/end), Tab (switch hex/ASCII panes). Copy uses Tauri clipboard plugin to avoid WebView2 permission prompts.
+- [x] **Hex editor find/search** — Ctrl+F opens find dialog with hex and ASCII search modes. Match highlighting (light blue for all matches, dark blue for current). F3/Shift+F3 navigates matches. Context-sensitive F3: navigates whichever mode (find or diff) was most recently activated.
+- [x] **Pending edits overwrite protection** — Read and Open operations prompt before replacing the hex buffer if pending edits or unsaved applied changes exist. Svelte-based confirm modal (not native dialog) to avoid WebView2 JS event loop freeze. `bufferDirty` flag tracks applied-but-unsaved changes (set by Apply/Trim/Pad, cleared by Save/load).
+- [x] **Entropy indicator in hex viewer** — per-row Shannon entropy bar in the gutter between offset and hex columns. Green=uniform, red=high entropy. Toggle in Settings (off by default).
 
 ## Near-term
 
@@ -385,10 +390,9 @@ This is a living list of features and improvements planned for minipro-rs.
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
 
-- [ ] **Entropy indicator in hex viewer** — per-row Shannon entropy bar to visually identify data regions
+- [x] **Entropy indicator in hex viewer** — per-row Shannon entropy bar to visually identify data regions
   - Lightweight version: small colored bar (green=low, yellow=medium, red=high) in the gutter next to each 16-byte hex row
   - No separate graph or heatmap — just a visual annotation on existing rows
   - Useful for RE/forensic work: spot where executable code ends and encrypted/compressed data begins, or where padding starts
-  - Implementation: Shannon entropy over each 16-byte row in Rust, returned alongside hex data or computed on-demand. ~30 lines of Rust, small Svelte change
-  - Priority: low — niche within a niche. Users doing serious RE work would export the dump and use binwalk/radare2/010 Editor. Better tools already exist for full entropy analysis
-  - Status: Backlog. Implement only if RE use case grows
+  - Implementation: Shannon entropy computed per visible 16-byte row in the frontend (TypeScript), normalized to 0.0–1.0. Color mapped to four tiers (green/yellow-green/amber/red). Gutter column always present to avoid layout shift. Toggle in Settings panel (off by default), persisted via `showEntropyBar` setting.
+  - Status: Done. Computed on rendered byte values so it works in diff mode too.

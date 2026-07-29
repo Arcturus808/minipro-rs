@@ -234,6 +234,14 @@ Uses `tauri-plugin-clipboard-manager` (not `navigator.clipboard`) to avoid the
 WebView2 clipboard permission prompt. The plugin is registered in `lib.rs` and
 the permissions are in `capabilities/default.json`.
 
+### Entropy indicator
+
+Per-row Shannon entropy bar in the gutter between offset and hex columns.
+Computed in TypeScript on rendered byte values (works in diff mode too).
+Normalized to 0.0–1.0, mapped to four color tiers (green/yellow-green/amber/red).
+Toggle via `showEntropyBar` setting in Settings panel (off by default).
+Gutter column is always rendered (1ch wide) to avoid layout shift when toggled.
+
 ## Project Structure
 
 ```
