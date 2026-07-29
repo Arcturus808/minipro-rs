@@ -532,6 +532,32 @@
     return n.toString(16).padStart(8, "0").toUpperCase();
   }
 
+  // Compute normalized Shannon entropy (0.0–1.0) for a row of bytes.
+  // Uses the rendered byte values (so diff mode shows reference bytes correctly).
+  function rowEntropy(offset: number, len: number): number {
+    if (len <= 1) return 0;
+    const counts = new Map<number, number>();
+    for (let i = 0; i < len; i++) {
+      const b = getRenderByte(offset + i);
+      counts.set(b, (counts.get(b) ?? 0) + 1);
+    }
+    let entropy = 0;
+    for (const count of counts.values()) {
+      const p = count / len;
+      entropy -= p * Math.log2(p);
+    }
+    // Normalize by max possible entropy for this row length
+    return entropy / Math.log2(len);
+  }
+
+  // Map entropy (0.0–1.0) to a color string
+  function entropyColor(entropy: number): string {
+    if (entropy < 0.25) return "#22c55e"; // green — uniform/repetitive
+    if (entropy < 0.50) return "#84cc16"; // yellow-green
+    if (entropy < 0.75) return "#f59e0b"; // amber — mixed
+    return "#ef4444"; // red — high entropy (random/encrypted/compressed)
+  }
+
   function toAscii(byte: number): string {
     if (byte >= 0x20 && byte < 0x7f) return String.fromCharCode(byte);
     return ".";
@@ -1418,7 +1444,8 @@
       <div style="height: {totalHeight + rowHeight}px; position: relative;">
         <!-- Column header -->
         <div class="bg-surface-100-900 border-b-2 border-surface-300-700" style="display: flex; white-space: nowrap; height: {rowHeight}px; position: sticky; top: 0; z-index: 1; margin-bottom: 4px;">
-          <span style="width: 9ch; margin-right: 1.5ch; opacity: 0.75; flex-shrink: 0; font-weight: 600;">Offset</span>
+          <span style="width: 9ch; margin-right: 0.5ch; opacity: 0.75; flex-shrink: 0; font-weight: 600; text-align: right;">Offset</span>
+          <span style="width: 1ch; margin-right: 0.5ch; flex-shrink: 0;"></span>
           <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.75; user-select: none; font-weight: 600;">
             {#each Array.from({length: ROW_SIZE}, (_, i) => i) as colIdx}
               <span style="display: inline-block; width: 2ch; text-align: center; margin-right: {colIdx < ROW_SIZE - 1 ? '1ch' : '0'}">{colIdx.toString(16).toUpperCase().padStart(2, '0')}</span>
@@ -1432,7 +1459,8 @@
           {@const end = Math.min(offset + ROW_SIZE, diffRenderSize)}
           {@const len = end - offset}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
-            <span style="width: 9ch; margin-right: 1.5ch; opacity: 0.55; flex-shrink: 0;">{formatOffset(offset)}</span>
+            <span style="width: 9ch; margin-right: 0.5ch; opacity: 0.55; flex-shrink: 0; text-align: right;">{formatOffset(offset)}</span>
+            <span style="width: 1ch; margin-right: 0.5ch; flex-shrink: 0; height: 100%; {$settings.showEntropyBar ? `background: ${entropyColor(rowEntropy(offset, len))}; opacity: 0.6; border-radius: 1px;` : ''}"></span>
             <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none;">
               {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset, j}
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
