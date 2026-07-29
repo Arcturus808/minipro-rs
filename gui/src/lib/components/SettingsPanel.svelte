@@ -170,6 +170,21 @@
         </button>
         <p class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Resets panel widths, font size, and window position to defaults. Takes effect immediately.</p>
       </div>
+
+      <!-- Hex Viewer -->
+      <div class="space-y-3">
+        <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Hex Viewer</h3>
+        <label class={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+          <input
+            type="checkbox"
+            class="checkbox"
+            checked={$settings.showEntropyBar}
+            onchange={(e) => update("showEntropyBar", e.currentTarget.checked)}
+          />
+          Show entropy bar
+          <span class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>— color-coded strip showing data randomness per row</span>
+        </label>
+      </div>
     </div>
   </div>
 {/if}

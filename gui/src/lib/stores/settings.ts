@@ -12,6 +12,7 @@ export interface AppSettings {
   theme: "system" | "dark" | "light";
   deviceViewMode: "paginated" | "scroll";
   hexViewerFontSize: number;
+  showEntropyBar: boolean;
   leftPanelPercent: number;
   rightPanelPercent: number;
   windowWidth: number | null;
@@ -31,6 +32,7 @@ const DEFAULTS: AppSettings = {
   theme: "system",
   deviceViewMode: "paginated",
   hexViewerFontSize: 13,
+  showEntropyBar: false,
   leftPanelPercent: 0.20,
   rightPanelPercent: 0.25,
   windowWidth: null,
