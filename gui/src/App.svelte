@@ -77,6 +77,20 @@
 
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
+  let showConfigHelp = $state(false);
+
+  // Close config help modal on Escape (global listener — modal doesn't receive focus on open)
+  $effect(() => {
+    if (!showConfigHelp) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        showConfigHelp = false;
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  });
 
   // Auto-initialize config panel with database defaults when a device is selected
   $effect(() => {
@@ -940,11 +954,23 @@
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu" && configData}
                   <div class="col-span-2 space-y-3">
-                    {#if $selectedDevice.invert_fuse_bits}
-                      <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">
-                        <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
-                      </div>
-                    {/if}
+                    <div class="flex items-center justify-between">
+                      {#if $selectedDevice.invert_fuse_bits}
+                        <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2 flex-1 mr-2">
+                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
+                        </div>
+                      {/if}
+                      <button
+                        class="opacity-50 hover:opacity-100 transition-opacity p-1.5 rounded border border-transparent hover:border-surface-200-800 shrink-0"
+                        onclick={() => showConfigHelp = true}
+                        title="Config help"
+                        aria-label="Config help"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
                     <div class="flex flex-wrap gap-3">
                       {#if configData.cfg_fuses.length > 0}
                         <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
@@ -1252,4 +1278,50 @@
       </div>
     </aside>
   </main>
+
+  {#if showConfigHelp}
+    <div
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showConfigHelp = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 480px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="font-size: 15px; font-weight: 600;">Config &amp; Fuses Help</div>
+          <button
+            style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
+            onclick={() => showConfigHelp = false}
+            title="Close"
+          >✕</button>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Fuse Basics</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>Fuses are non-volatile configuration bits that control chip behavior (clock source, watchdog, reset, etc.)</li>
+          <li>Checking a box <b>programs</b> the fuse (makes it active). The hex input shows the raw byte value; the checkbox toggles individual bits.</li>
+          <li>For <b>AVR</b> chips: programmed = bit is 0 (active-low).<br>For <b>PIC</b> and others: programmed = bit is 1.</li>
+          <li><b>Read Config from Chip</b> merges actual chip values into the panel.<br><b>Write Config to Chip</b> writes all fuses and lock bits.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Dangerous Fuses <span style="color: #dc2626;">(!)</span></div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li><b style="color: #dc2626;">RSTDISBL</b> — disables the reset pin. After writing, you can't reprogram via ISP. Requires high-voltage programming to recover.</li>
+          <li><b style="color: #dc2626;">SPIEN</b> — disables SPI programming. If disabled, you can't reprogram via SPI. Requires parallel or HV programming to recover.</li>
+          <li><b style="color: #dc2626;">JTAGEN</b> — disables JTAG. May lock out JTAG-based debuggers.</li>
+          <li><b style="color: #dc2626;">DWEN</b> — enables debugWIRE, which can interfere with normal ISP programming.</li>
+          <li>These fuses are highlighted in <span style="color: #dc2626;">red</span>. Double-check before writing.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Lock Bits</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>Lock bits control read/write protection of the chip's flash memory.</li>
+          <li>Setting lock bits can prevent future reads or writes. Clearing them usually requires a chip erase.</li>
+          <li>Read the chip's lock protection status before writing (the app warns if the chip is locked).</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
+          Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
