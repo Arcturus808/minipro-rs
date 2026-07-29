@@ -34,6 +34,9 @@
   let gotoValue = $state("");
   let gotoInputRef = $state<HTMLInputElement | null>(null);
 
+  // Help overlay state
+  let showHelpOverlay = $state(false);
+
   // ── Diff mode state ────────────────────────────────────────────────────────
   interface DiffEntry { offset: number; value_a: number; value_b: number; }
   interface TailRegion { start: number; end: number; kind: "Padding" | "Anomalous"; longer_side: string; }
@@ -385,6 +388,13 @@
 
   // Global keydown for hex viewer hotkeys
   function handleGlobalKeydown(e: KeyboardEvent) {
+    // Escape — close help overlay if open
+    if (e.key === "Escape" && showHelpOverlay) {
+      e.preventDefault();
+      showHelpOverlay = false;
+      return;
+    }
+
     // Don't intercept hotkeys when a modal dialog or text input is focused
     // (except for Ctrl+S which should always work).
     const target = e.target as HTMLElement;
@@ -439,6 +449,16 @@
       if (!showFindDialog) {
         openFindDialog();
       }
+      return;
+    }
+
+    // ? or F1 — Toggle help overlay
+    if ((e.key === "?" || e.key === "F1") && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      // Don't trigger when typing in a dialog input
+      if (showFindDialog || showGotoDialog || $pendingEditsPrompt) return;
+      e.preventDefault();
+      commitEdit();
+      showHelpOverlay = !showHelpOverlay;
       return;
     }
 
@@ -1321,6 +1341,17 @@
           title="Clear comparison"
         >✕ Clear Compare</button>
       {/if}
+      <div class="flex-1"></div>
+      <button
+        class="opacity-50 hover:opacity-100 transition-opacity p-1.5 rounded border border-transparent hover:border-surface-200-800"
+        onclick={() => showHelpOverlay = true}
+        title="Hex viewer help (? or F1)"
+        aria-label="Hex viewer help"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </button>
     </div>
   {/if}
   {#if diffResult && diffResult.summary.anomalous_tail > 0}
@@ -1410,6 +1441,58 @@
             style="padding: 6px 12px; border: none; border-radius: 4px; background: #d97706; color: white; cursor: pointer; font-size: 13px;"
             onclick={executeFind}
           >Find</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showHelpOverlay}
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 15; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showHelpOverlay = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 460px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="font-size: 15px; font-weight: 600;">Hex Viewer Help</div>
+          <button
+            style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
+            onclick={() => showHelpOverlay = false}
+            title="Close"
+          >✕</button>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Keyboard Shortcuts</div>
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 16px;">
+          <tbody>
+            <tr><td style="padding: 2px 0; opacity: 0.6; font-weight: 600; padding-right: 16px; white-space: nowrap;">Navigation</td><td></td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+G</td><td style="padding: 1px 0;">Go to offset</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+Home</td><td style="padding: 1px 0;">Jump to first byte</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+End</td><td style="padding: 1px 0;">Jump to last byte</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Arrow keys</td><td style="padding: 1px 0;">Move cursor</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Tab</td><td style="padding: 1px 0;">Switch hex/ASCII pane</td></tr>
+            <tr><td style="padding: 8px 0 2px 0; opacity: 0.6; font-weight: 600;">Editing</td><td></td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+S</td><td style="padding: 1px 0;">Save buffer to file</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+C / Ctrl+V</td><td style="padding: 1px 0;">Copy / paste bytes</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+A</td><td style="padding: 1px 0;">Select all bytes</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+Z</td><td style="padding: 1px 0;">Undo last edit</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+Shift+Z / Ctrl+Y</td><td style="padding: 1px 0;">Redo</td></tr>
+            <tr><td style="padding: 8px 0 2px 0; opacity: 0.6; font-weight: 600;">Search & Compare</td><td></td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">Ctrl+F</td><td style="padding: 1px 0;">Find (hex or ASCII)</td></tr>
+            <tr><td style="padding: 1px 0 1px 12px; font-family: 'Hack', 'Consolas', monospace; white-space: nowrap;">F3 / Shift+F3</td><td style="padding: 1px 0;">Next / prev match (or diff)</td></tr>
+          </tbody>
+        </table>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Features</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0;">
+          <li><b>In-place editing</b> — click any hex byte or ASCII character to edit</li>
+          <li><b>Find</b> — search by hex bytes or ASCII text; matches highlighted blue</li>
+          <li><b>Smart diff</b> — Compare button checks buffer against a reference file</li>
+          <li><b>Trim/Pad</b> — resize the buffer by trimming trailing fill or padding to a target size</li>
+          <li><b>Entropy bar</b> — per-row data randomness indicator (toggle in Settings)</li>
+          <li><b>Unsaved changes protection</b> — prompts before overwriting pending edits or unsaved buffer</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 16px; font-size: 11px; opacity: 0.5;">
+          Press <span style="font-family: 'Hack', 'Consolas', monospace;">?</span> or <span style="font-family: 'Hack', 'Consolas', monospace;">F1</span> to toggle · <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> to close
         </div>
       </div>
     </div>
