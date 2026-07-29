@@ -45,8 +45,12 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 **Hex viewer & analysis:**
 - **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
+- **Standard hotkeys** — Ctrl+S (save), Ctrl+C/V (copy/paste bytes), Ctrl+A (select all), Ctrl+Z/Shift+Z/Y (undo/redo), Ctrl+Home/End (jump to start/end), Tab (switch hex/ASCII panes), Ctrl+G (go to offset)
+- **Find/search** — Ctrl+F opens find dialog with hex and ASCII search modes. Match highlighting with F3/Shift+F3 navigation. Context-sensitive F3 navigates find matches or diff results (whichever was last activated)
+- **Entropy indicator** — per-row Shannon entropy bar in the gutter between offset and hex columns. Green=uniform/repetitive data, red=high entropy (random/encrypted/compressed). Toggle in Settings (off by default)
 - **Smart firmware diff** — compare the hex viewer buffer against a reference file with a single click. Byte-aligned comparison with three-way tail classification: differing bytes highlighted in red, trailing erase-value padding shown in gray (ignored), and anomalous non-padding data beyond the shorter buffer flagged in amber with a warning banner. Navigate between diffs with Prev/Next buttons or F3/Shift+F3. CLI: `minipro --diff fileA fileB [--erase-value 0xFF]`
 - **Manual trim/pad** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND)
+- **Unsaved changes protection** — Read and Open operations prompt before replacing the hex buffer if pending edits or unsaved applied changes exist, preventing accidental data loss
 
 **Batch programming:**
 - **Batch programming** — program multiple identical chips with the same firmware image. CLI: `minipro -p DEVICE -w file.bin --batch [N]` prompts to insert the next chip after each successful write + verify. GUI: "Batch Mode" toggle in the write panel with "Next Chip" / "Retry" / "Stop Batch" buttons and live pass/fail counter

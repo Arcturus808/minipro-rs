@@ -14,7 +14,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Erase** | Done | Erase the selected chip |
 | **Blank Check** | Done | Verify the chip is blank |
 | **Chip ID** | Done | Read and display the chip ID |
-| **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size (10-16px); Save/Open Folder/Clear buttons |
+| **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size (10-16px); Save/Open Folder/Clear buttons; in-place editing with standard hotkeys (Ctrl+S/C/V/A/Z, Ctrl+G, Ctrl+F, F3); entropy indicator; smart diff; trim/pad |
 | **File Dialogs** | Done | Native OS open/save dialogs with last-used-directory persistence; save defaults to device name |
 | **Progress** | Done | Live progress bar with bytes-read/written and CRC32 |
 | **Terminal Log** | Done | Timestamped info/warn/error log panel with Copy to clipboard button and drag-select |
@@ -234,6 +234,13 @@ The hex viewer renders chip dumps and files with three columns (offset, hex byte
 - **Save** — writes the in-memory buffer to disk; dialog defaults to the selected device name (e.g. `W25X20CL_SOIC8.bin`)
 - **Open Folder** — opens the save location in Explorer/Finder
 - **Clear** — wipes the memory buffer
+- **In-place editing** — click any hex byte or ASCII character to edit; type-through overflow, keyboard navigation (arrows, Enter, Escape, Backspace)
+- **Standard hotkeys** — Ctrl+S (save), Ctrl+C/V (copy/paste bytes), Ctrl+A (select all), Ctrl+Z/Shift+Z/Y (undo/redo), Ctrl+Home/End (jump to start/end), Tab (switch hex/ASCII panes), Ctrl+G (go to offset)
+- **Find/search** — Ctrl+F opens find dialog with hex and ASCII search modes; F3/Shift+F3 navigates matches
+- **Entropy indicator** — per-row Shannon entropy bar in the gutter; green=uniform, red=high entropy; toggle in Settings (off by default)
+- **Smart firmware diff** — compare buffer against a reference file with three-way tail classification; F3/Shift+F3 navigates diffs
+- **Manual trim/pad** — trim trailing fill bytes or pad to a target size
+- **Unsaved changes protection** — prompts before overwriting pending edits or unsaved buffer changes
 
 ### Theme System
 
@@ -247,6 +254,7 @@ The app supports System / Dark / Light themes. Skeleton's `preset-filled-surface
 - Theme preference
 - Device list view mode (paginated vs scroll)
 - Hex viewer font size
+- Entropy indicator toggle
 - Panel widths (Device Selector, Terminal)
 - Last-used directory for file dialogs
 
