@@ -390,9 +390,3 @@ This is a living list of features and improvements planned for minipro-rs.
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
 
-- [x] **Entropy indicator in hex viewer** — per-row Shannon entropy bar to visually identify data regions
-  - Lightweight version: small colored bar (green=low, yellow=medium, red=high) in the gutter next to each 16-byte hex row
-  - No separate graph or heatmap — just a visual annotation on existing rows
-  - Useful for RE/forensic work: spot where executable code ends and encrypted/compressed data begins, or where padding starts
-  - Implementation: Shannon entropy computed per visible 16-byte row in the frontend (TypeScript), normalized to 0.0–1.0. Color mapped to four tiers (green/yellow-green/amber/red). Gutter column always present to avoid layout shift. Toggle in Settings panel (off by default), persisted via `showEntropyBar` setting.
-  - Status: Done. Computed on rendered byte values so it works in diff mode too.
