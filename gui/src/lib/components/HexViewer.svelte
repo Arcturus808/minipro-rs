@@ -64,8 +64,131 @@
   // Determine the effective size for rendering (may be longer than hexMeta.data if reference is longer)
   let diffRenderSize = $derived(diffResult ? Math.max($hexMeta?.data?.length ?? 0, diffResult.summary.size_b) : ($hexMeta?.data?.length ?? 0));
 
+  // ── Find mode state ────────────────────────────────────────────────────────
+  let showFindDialog = $state(false);
+  let findValue = $state("");
+  let findInputRef = $state<HTMLInputElement | null>(null);
+  let findMode = $state<"hex" | "ascii">("hex");
+  // Match state: array of starting offsets where the search bytes were found
+  let findMatches = $state<number[]>([]);
+  let findNavIndex = $state(0);
+  // Track which navigation mode was most recently activated ("find" or "diff")
+  // so F3 navigates the expected set of results.
+  let lastNavMode = $state<"find" | "diff">("find");
+  // Set of offsets that are part of a match (for highlighting)
+  let findMatchOffsets = $derived(new Set(findMatches.flatMap(start => {
+    const len = findSearchBytes()?.length ?? 0;
+    return Array.from({ length: len }, (_, i) => start + i);
+  })));
+
+  // Parse the find input into a byte array based on mode
+  function findSearchBytes(): Uint8Array | null {
+    const trimmed = findValue.trim();
+    if (trimmed.length === 0) return null;
+    if (findMode === "hex") {
+      // Accept space-separated hex or continuous hex string
+      const cleaned = trimmed.replace(/\s+/g, "");
+      if (cleaned.length === 0 || cleaned.length % 2 !== 0) return null;
+      if (!/^[0-9a-fA-F]+$/.test(cleaned)) return null;
+      const bytes = new Uint8Array(cleaned.length / 2);
+      for (let i = 0; i < cleaned.length; i += 2) {
+        bytes[i / 2] = parseInt(cleaned.slice(i, i + 2), 16);
+      }
+      return bytes;
+    } else {
+      // ASCII mode: each character is a byte
+      const bytes = new Uint8Array(trimmed.length);
+      for (let i = 0; i < trimmed.length; i++) {
+        bytes[i] = trimmed.charCodeAt(i) & 0xFF;
+      }
+      return bytes;
+    }
+  }
+
+  function executeFind() {
+    const needle = findSearchBytes();
+    if (!needle || needle.length === 0) {
+      findMatches = [];
+      return;
+    }
+    const data = getHexData();
+    if (!data) {
+      findMatches = [];
+      return;
+    }
+    const matches: number[] = [];
+    const limit = data.length - needle.length;
+    for (let i = 0; i <= limit; i++) {
+      let found = true;
+      for (let j = 0; j < needle.length; j++) {
+        if (data[i + j] !== needle[j]) {
+          found = false;
+          break;
+        }
+      }
+      if (found) matches.push(i);
+    }
+    findMatches = matches;
+    findNavIndex = 0;
+    if (matches.length > 0) {
+      lastNavMode = "find";
+      scrollToOffset(matches[0]);
+      logs.info(`Find: ${matches.length} match${matches.length === 1 ? '' : 'es'}`);
+    } else {
+      logs.info("Find: no matches");
+    }
+  }
+
+  function navigateFind(direction: "next" | "prev") {
+    if (findMatches.length === 0) return;
+    const n = findMatches.length;
+    if (direction === "next") {
+      findNavIndex = (findNavIndex + 1) % n;
+    } else {
+      findNavIndex = (findNavIndex - 1 + n) % n;
+    }
+    scrollToOffset(findMatches[findNavIndex]);
+  }
+
+  function openFindDialog() {
+    if (!($hexMeta?.data) || $hexMeta.data.length === 0) return;
+    commitEdit();
+    showFindDialog = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        findInputRef?.focus();
+        findInputRef?.select();
+      });
+    });
+  }
+
+  function closeFindDialog() {
+    showFindDialog = false;
+  }
+
+  function clearFind() {
+    findMatches = [];
+    findNavIndex = 0;
+    findValue = "";
+    if (diffResult && diffResult.diffs.length > 0) {
+      lastNavMode = "diff";
+    }
+  }
+
+  // Check if an offset is the currently-navigated match start
+  function isCurrentFindMatch(offset: number): boolean {
+    if (findMatches.length === 0) return false;
+    return findMatches[findNavIndex] === offset;
+  }
+
   $effect(() => {
     fontSize = $settings.hexViewerFontSize;
+  });
+
+  // Clear find matches when the buffer changes (new data loaded)
+  $effect(() => {
+    $hexMeta;
+    clearFind();
   });
 
   function parseOffset(input: string): number | null {
@@ -305,6 +428,27 @@
         commitEdit();
         selectionStart = 0;
         selectionEnd = $hexMeta.data.length - 1;
+      }
+      return;
+    }
+
+    // Ctrl+F — Find
+    if (e.key === "f" && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      if (!showFindDialog) {
+        openFindDialog();
+      }
+      return;
+    }
+
+    // F3 / Shift+F3 — Navigate whichever mode was most recently activated
+    if (e.key === "F3" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (lastNavMode === "find" && findMatches.length > 0) {
+        e.preventDefault();
+        navigateFind(e.shiftKey ? "prev" : "next");
+      } else if (lastNavMode === "diff" && diffResult && diffResult.diffs.length > 0) {
+        e.preventDefault();
+        navigateDiff(e.shiftKey ? "prev" : "next");
       }
       return;
     }
@@ -555,8 +699,8 @@
   // DOM changes when the input element is destroyed/recreated on overflow.
   function handleEditKeydown(e: KeyboardEvent) {
     if (editingOffset === null || !($hexMeta?.data)) return;
-    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S / Ctrl+A / Ctrl+Home / Ctrl+End / Ctrl+Z / Ctrl+Y — let the global handler deal with them.
-    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s" || e.key === "a" || e.key === "Home" || e.key === "End" || e.key === "z" || e.key === "y")) return;
+    // Don't intercept Ctrl+C / Ctrl+V / Ctrl+S / Ctrl+A / Ctrl+F / Ctrl+Home / Ctrl+End / Ctrl+Z / Ctrl+Y — let the global handler deal with them.
+    if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "s" || e.key === "a" || e.key === "f" || e.key === "Home" || e.key === "End" || e.key === "z" || e.key === "y")) return;
     const dataLen = $hexMeta.data.length;
 
     if (editingMode === "ascii") {
@@ -790,6 +934,9 @@
       diffResult = result;
       diffRefPath = refPath;
       diffNavIndex = 0;
+      if (result.diffs.length > 0) {
+        lastNavMode = "diff";
+      }
 
       if (result.summary.is_equal) {
         logs.info(`Compare: Files match (ignoring trailing padding) — ${refPath}`);
@@ -814,6 +961,9 @@
     diffResult = null;
     diffRefPath = null;
     diffNavIndex = 0;
+    if (findMatches.length > 0) {
+      lastNavMode = "find";
+    }
   }
 
   function navigateDiff(direction: "next" | "prev") {
@@ -828,21 +978,8 @@
     scrollToOffset(targetOffset);
   }
 
-  // Global keydown for diff navigation (F3 / Shift+F3)
-  function handleDiffKeydown(e: KeyboardEvent) {
-    if (!diffResult) return;
-    if (e.key === "F3" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      e.preventDefault();
-      navigateDiff(e.shiftKey ? "prev" : "next");
-    }
-  }
-
-  $effect(() => {
-    if (diffResult) {
-      document.addEventListener("keydown", handleDiffKeydown);
-      return () => document.removeEventListener("keydown", handleDiffKeydown);
-    }
-  });
+  // Diff navigation is now handled by the global F3 handler above,
+  // which uses lastNavMode to decide whether to navigate find or diff.
 
   // Get diff cell style for a given offset
   function getDiffCellStyle(offset: number): string {
@@ -864,6 +1001,17 @@
       return "background: #f3f4f6; color: #9ca3af; border-radius: 2px;";
     }
     return "";
+  }
+
+  // Get find-match cell style for a given offset
+  function getFindCellStyle(offset: number): string {
+    if (findMatches.length === 0) return "";
+    if (!findMatchOffsets.has(offset)) return "";
+    // The currently-navigated match start gets a more prominent highlight
+    if (isCurrentFindMatch(offset)) {
+      return "background: #2563eb; color: #ffffff; font-weight: 700; border-radius: 2px; box-shadow: 0 0 0 2px #fbbf24;";
+    }
+    return "background: #dbeafe; color: #1e40af; font-weight: 600; border-radius: 2px;";
   }
 
   // Get byte value for rendering — in diff mode, bytes beyond the chip buffer
@@ -902,6 +1050,12 @@
           {#if hasSelection()}
             <span style="color: #f59e0b;">
               {selectionLength()} byte{selectionLength() === 1 ? '' : 's'} selected (Ctrl+C to copy)
+            </span>
+          {/if}
+          {#if hasSelection() && findMatches.length > 0}<span> · </span>{/if}
+          {#if findMatches.length > 0}
+            <span style="color: #2563eb;">
+              Find: {findMatches.length} match{findMatches.length === 1 ? '' : 'es'} ({findNavIndex + 1}/{findMatches.length}) — F3/Shift+F3
             </span>
           {/if}
         </div>
@@ -1181,6 +1335,52 @@
     </div>
   {/if}
 
+  {#if showFindDialog}
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
+      onclick={(e) => { if (e.target === e.currentTarget) closeFindDialog(); }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 340px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Find</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <button
+            style="padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; {findMode === 'hex' ? 'background: #d97706; color: white; border-color: #d97706;' : 'background: transparent;'}"
+            onclick={() => findMode = "hex"}
+          >Hex</button>
+          <button
+            style="padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; {findMode === 'ascii' ? 'background: #d97706; color: white; border-color: #d97706;' : 'background: transparent;'}"
+            onclick={() => findMode = "ascii"}
+          >ASCII</button>
+        </div>
+        <input
+          bind:this={findInputRef}
+          bind:value={findValue}
+          type="text"
+          placeholder={findMode === "hex" ? "DE AD BE EF" : "search text"}
+          style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: 'Hack', 'Consolas', 'Courier New', monospace; font-size: 14px; outline: none;"
+          onkeydown={(e: KeyboardEvent) => {
+            if (e.key === "Enter") { e.preventDefault(); executeFind(); }
+            if (e.key === "Escape") { e.preventDefault(); closeFindDialog(); }
+          }}
+        />
+        {#if findMatches.length > 0}
+          <div style="font-size: 12px; opacity: 0.7; margin-top: 8px;">
+            {findMatches.length} match{findMatches.length === 1 ? '' : 'es'} · F3 / Shift+F3 to navigate
+          </div>
+        {/if}
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button
+            style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; font-size: 13px;"
+            onclick={closeFindDialog}
+          >Close</button>
+          <button
+            style="padding: 6px 12px; border: none; border-radius: 4px; background: #d97706; color: white; cursor: pointer; font-size: 13px;"
+            onclick={executeFind}
+          >Find</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if $pendingEditsPrompt}
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) resolvePendingEditsPrompt(false); }}
@@ -1240,6 +1440,7 @@
                 {@const edited = isEdited(byteOffset)}
                 {@const byteVal = getRenderByte(byteOffset)}
                 {@const diffStyle = getDiffCellStyle(byteOffset)}
+                {@const findStyle = getFindCellStyle(byteOffset)}
                 {@const selected = isSelected(byteOffset)}
                 {#if isEditingHex}
                   <input
@@ -1254,7 +1455,7 @@
                 {:else}
                   <span
                     class="hex-cell"
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {findStyle || (selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle)}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onmousedown={(e) => onCellMousedown(e, byteOffset)}
                     onmouseenter={() => onCellMouseenter(byteOffset)}
                     onclick={() => { if (dragMoved) { dragMoved = false; return; } startEdit(byteOffset); }}
@@ -1272,6 +1473,7 @@
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
                 {@const byteVal = getRenderByte(byteOffset)}
                 {@const diffStyle = getDiffCellStyle(byteOffset)}
+                {@const findStyle = getFindCellStyle(byteOffset)}
                 {@const selected = isSelected(byteOffset)}
                 {#if isEditingAscii}
                   <input
@@ -1285,7 +1487,7 @@
                   />
                 {:else}
                   <span
-                    style="cursor: pointer; display: inline-block; vertical-align: middle; {selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
+                    style="cursor: pointer; display: inline-block; vertical-align: middle; {findStyle || (selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle)}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onmousedown={(e) => onCellMousedown(e, byteOffset)}
                     onmouseenter={() => onCellMouseenter(byteOffset)}
                     onclick={() => { if (dragMoved) { dragMoved = false; return; } startEdit(byteOffset, "ascii"); }}
