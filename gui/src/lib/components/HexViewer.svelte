@@ -27,6 +27,7 @@
   let editCursorPos = $state(0);
   let editingMode = $state<"hex" | "ascii">("hex");
   let editDirty = $state(false);
+  let suppressBlur = false; // true during programmatic focus changes (overflow)
 
   // Go-to-offset dialog state
   let showGotoDialog = $state(false);
@@ -657,6 +658,7 @@
   }
 
   function focusInput(pos: number) {
+    suppressBlur = true;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const input = document.querySelector('.hex-edit-input') as HTMLInputElement | null;
@@ -664,6 +666,7 @@
           input.focus();
           input.setSelectionRange(pos, pos);
         }
+        suppressBlur = false;
       });
     });
   }
@@ -719,6 +722,11 @@
 
   function cancelEdit() {
     editingOffset = null;
+  }
+
+  function onEditBlur() {
+    if (suppressBlur) return;
+    commitEdit();
   }
 
   // Global keydown handler for hex editing — attached to document so it survives
@@ -1479,6 +1487,7 @@
                     bind:value={editValue}
                     bind:this={editInputRef}
                     oninput={() => editDirty = true}
+                    onblur={onEditBlur}
                   />
                 {:else}
                   <span
@@ -1512,6 +1521,7 @@
                     bind:value={editValue}
                     bind:this={editInputRef}
                     oninput={() => editDirty = true}
+                    onblur={onEditBlur}
                   />
                 {:else}
                   <span

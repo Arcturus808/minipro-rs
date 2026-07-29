@@ -23,33 +23,45 @@
   let searchSeq = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Device favorites — a set of device names persisted to localStorage.
+  // Device favorites — array of {name, manufacturer} persisted to localStorage.
+  interface FavoriteEntry {
+    name: string;
+    manufacturer: string;
+  }
+
   const FAVORITES_KEY = "minipro_device_favorites";
 
-  function loadFavorites(): Set<string> {
+  function loadFavorites(): FavoriteEntry[] {
     try {
       const raw = localStorage.getItem(FAVORITES_KEY);
-      return raw ? new Set(JSON.parse(raw)) : new Set();
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      // Migrate old format (array of strings) to new format
+      if (parsed.length > 0 && typeof parsed[0] === "string") {
+        return parsed.map((name: string) => ({ name, manufacturer: "" }));
+      }
+      return parsed as FavoriteEntry[];
     } catch {
-      return new Set();
+      return [];
     }
   }
 
-  let favorites = $state<Set<string>>(loadFavorites());
+  let favorites = $state<FavoriteEntry[]>(loadFavorites());
 
   $effect(() => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
   });
 
   function isFavorite(name: string): boolean {
-    return favorites.has(name);
+    return favorites.some((f) => f.name === name);
   }
 
-  function toggleFavorite(name: string) {
-    const next = new Set(favorites);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    favorites = next;
+  function toggleFavorite(name: string, manufacturer?: string) {
+    if (isFavorite(name)) {
+      favorites = favorites.filter((f) => f.name !== name);
+    } else {
+      favorites = [...favorites, { name, manufacturer: manufacturer ?? "" }];
+    }
   }
 
   // Favorites section collapse state — persisted to localStorage.
@@ -65,9 +77,9 @@
     localStorage.setItem(FAV_COLLAPSED_KEY, String(favoritesCollapsed));
   });
 
-  // Favorite device names (sorted) for the pinned favorites section.
+  // Favorite devices (sorted by name) for the pinned favorites section.
   let favoriteItems = $derived(
-    Array.from(favorites).sort((a, b) => a.localeCompare(b))
+    [...favorites].sort((a, b) => a.name.localeCompare(b.name))
   );
 
   async function doSearch(query: string) {
@@ -165,7 +177,7 @@
       >
         <button
           class="shrink-0 rounded p-0.5 hover:bg-surface-200-800"
-          onclick={(e) => { e.stopPropagation(); toggleFavorite(name); }}
+          onclick={(e) => { e.stopPropagation(); toggleFavorite(name, manufacturer); }}
           aria-label={isFavorite(name) ? 'Unfavorite' : 'Favorite'}
           title={isFavorite(name) ? 'Remove from favorites' : 'Add to favorites'}
         >
@@ -207,8 +219,8 @@
         </button>
         {#if !favoritesCollapsed}
           <ul class="divide-y divide-surface-200-800">
-            {#each favoriteItems as name}
-              <li>{@render starRow(name)}</li>
+            {#each favoriteItems as fav}
+              <li>{@render starRow(fav.name, fav.manufacturer || undefined)}</li>
             {/each}
           </ul>
         {/if}
