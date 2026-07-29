@@ -92,8 +92,10 @@
     return () => document.removeEventListener("keydown", handler);
   });
 
-  // Auto-initialize config panel with database defaults when a device is selected
-  $effect(() => {
+  // Auto-initialize config panel with database defaults when a device is selected.
+  // Uses $effect.pre (runs before DOM update) so configData is fresh before the
+  // template re-renders with the new $selectedDevice — prevents stale fuse names.
+  $effect.pre(() => {
     const dev = $selectedDevice;
     if (dev?.config && dev.config.type === "Mcu") {
       configData = {
@@ -102,6 +104,8 @@
         user_fuses: [],
         calibration: [],
       };
+    } else {
+      configData = null;
     }
   });
 
