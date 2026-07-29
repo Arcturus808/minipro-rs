@@ -184,6 +184,56 @@ Use `ch` (character-width) units for columns so spacing scales with font size:
 <span>{bytes.map(b => toAscii(b)).join('')}</span>
 ```
 
+## Hex Viewer Hotkeys
+
+| Hotkey | Action |
+|--------|--------|
+| Ctrl+S | Save buffer to file (commits pending edits first) |
+| Ctrl+C | Copy selected bytes as hex string (uses Tauri clipboard plugin) |
+| Ctrl+V | Paste hex bytes from clipboard at cursor (parses hex, C-style, or continuous) |
+| Ctrl+A | Select all bytes |
+| Ctrl+Z | Undo last edit |
+| Ctrl+Shift+Z / Ctrl+Y | Redo last undone edit |
+| Ctrl+Home | Jump to first byte |
+| Ctrl+End | Jump to last byte |
+| Tab | Switch between hex and ASCII panes on the same byte |
+| Ctrl+F | Open find dialog (hex or ASCII search) |
+| F3 / Shift+F3 | Navigate find matches or diff results (whichever was last activated) |
+
+### Selection model
+
+- **Click** a byte — selects it (amber) and opens the edit input (bright amber)
+- **Drag** — selects a range of bytes
+- **Arrow keys** — move edit cursor, clear selection
+- Selection persists for copy/paste even while editing
+
+### Find vs Diff F3 navigation
+
+F3 navigates whichever mode was most recently activated (`lastNavMode` state).
+Running a Find sets `lastNavMode = "find"`. Running a Compare sets
+`lastNavMode = "diff"`. Clearing one mode falls back to the other if it has
+results. Both sets of highlights can coexist visually (blue for find, red for
+diffs), but F3 only moves one cursor at a time.
+
+### Pending edits and dirty flag
+
+- **`hexEdits`** — sparse map of pending byte edits (not yet applied to buffer)
+- **`bufferDirty`** — true when the buffer has been modified by Apply, Trim, or
+  Pad but not yet saved to disk
+- Read and Open operations call `confirmOverwriteEdits()` before replacing the
+  buffer. If pending edits or an unsaved buffer exist, a Svelte-based confirm
+  modal appears (not a native dialog — avoids WebView2 JS event loop freeze).
+- `setHexData()` clears `bufferDirty`. `applyHexEdits()`, `trimTrailing()`, and
+  `padToSize()` set it. `saveBufferToFile()` clears it.
+- Undo/redo history is cleared by `clearHexEdits()` (called by Apply, Reset, and
+  `loadFile`).
+
+### Clipboard
+
+Uses `tauri-plugin-clipboard-manager` (not `navigator.clipboard`) to avoid the
+WebView2 clipboard permission prompt. The plugin is registered in `lib.rs` and
+the permissions are in `capabilities/default.json`.
+
 ## Project Structure
 
 ```
