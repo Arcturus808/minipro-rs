@@ -14,12 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hex editor standard hotkeys** — Ctrl+S (save buffer), Ctrl+C/V (copy/paste bytes as hex), Ctrl+A (select all), Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y (undo/redo), Ctrl+Home/End (jump to first/last byte), Tab (switch hex/ASCII panes). Copy uses Tauri clipboard plugin to avoid WebView2 permission prompts
 - **Hex editor find/search** — Ctrl+F opens find dialog with hex and ASCII search modes. Match highlighting with F3/Shift+F3 navigation. Context-sensitive F3 navigates whichever mode (find or diff) was most recently activated
 - **Entropy indicator in hex viewer** — per-row Shannon entropy bar in the gutter between offset and hex columns. Green=uniform/repetitive, red=high entropy (random/encrypted/compressed). Toggle in Settings panel (off by default)
+- **Hex viewer help overlay** — ?/F1 key or "i" toolbar icon opens a modal with keyboard shortcuts and feature descriptions
+- **Config/fuses help overlay** — "i" icon in config panel opens a modal explaining fuse basics, dangerous fuses (RSTDISBL, SPIEN, JTAGEN, DWEN), and lock bits
+- **Favorites show manufacturer** — device favorites in the search panel now display the manufacturer alongside the device name. Old favorites auto-migrate to the new format
 
 ### Fixed
 
 - **USB transfer timeout** — 5-second timeout on USB transfers prevents indefinite hangs when the programmer is unresponsive. Applies to both CLI and GUI
 - **Pending edits overwrite protection** — Read and Open operations now prompt before replacing the hex buffer if pending edits or unsaved applied changes exist. Svelte-based confirm modal avoids WebView2 JS event loop freeze. `bufferDirty` flag tracks applied-but-unsaved changes (set by Apply/Trim/Pad, cleared by Save/load)
 - **Trim/pad buffer dirty flag** — `trimTrailing` and `padToSize` now mark the buffer as dirty, so a subsequent Read prompts about unsaved changes instead of silently discarding them
+- **Hex edit blur** — clicking outside the hex viewer (e.g., the device search field) now commits the active edit and releases keyboard focus. `suppressBlur` flag prevents blur during programmatic focus changes (overflow)
+- **Config panel stale fuses** — switching devices no longer shows the previous device's fuse names. Changed `$effect` to `$effect.pre` so `configData` refreshes before DOM re-render
 
 ## [0.5.1] - 2026-07-05
 

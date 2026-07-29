@@ -242,6 +242,21 @@ Normalized to 0.0–1.0, mapped to four color tiers (green/yellow-green/amber/re
 Toggle via `showEntropyBar` setting in Settings panel (off by default).
 Gutter column is always rendered (1ch wide) to avoid layout shift when toggled.
 
+### Help overlays
+
+Both the hex viewer and config/fuses panel have help overlays triggered by an
+"i" icon and/or keyboard shortcut (?/F1 for hex viewer). Modal with grouped
+content, dismissed by Escape, backdrop click, or ✕ button. Global keydown
+listener handles Escape (modal doesn't receive focus on open).
+
+### Config panel state (`$effect.pre`)
+
+`configData` in `App.svelte` is initialized via `$effect.pre` (not `$effect`)
+so it refreshes before DOM re-render when `$selectedDevice` changes. Using
+`$effect` caused stale fuse names from the previous device to flash briefly
+before the effect ran. The effect also has an `else` branch to reset
+`configData` to `null` when the device has no MCU config.
+
 ## Project Structure
 
 ```

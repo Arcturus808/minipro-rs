@@ -241,6 +241,7 @@ The hex viewer renders chip dumps and files with three columns (offset, hex byte
 - **Smart firmware diff** — compare buffer against a reference file with three-way tail classification; F3/Shift+F3 navigates diffs
 - **Manual trim/pad** — trim trailing fill bytes or pad to a target size
 - **Unsaved changes protection** — prompts before overwriting pending edits or unsaved buffer changes
+- **Help overlays** — hex viewer (?/F1 or "i" icon) and config/fuses panel ("i" icon) both have contextual help modals
 
 ### Theme System
 
