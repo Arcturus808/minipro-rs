@@ -377,12 +377,11 @@ This is a living list of features and improvements planned for minipro-rs.
     - Fill byte dropdown: 0xFF (NOR flash) / 0x00 (EEPROM/NAND)
   - Core functions in `hex.ts`: `trimTrailing()` and `padToSize()`
 
-- [ ] **ASCII insert mode in hex editor** — type characters to insert new bytes (shift existing data right)
-  - Current behavior: overtype mode (typing replaces existing bytes, file size stays fixed)
-  - Insert mode: each typed character grows the buffer by 1 byte and shifts subsequent bytes right
-  - Challenges: `Uint8Array` is fixed-size (requires reallocation), virtual scrolling sync on size change, mixed insert/edit operations need ordered operation log instead of sparse map
-  - Toggle UI: Insert key, toolbar "OVR/INS" button, or `Ctrl+Shift+I` shortcut
-  - Priority: medium — useful for text editing within binary files, but overtype handles most embedded use cases
+- [~] **ASCII insert mode in hex editor** — **Won't fix.** Overtype is the correct model for chip memory.
+  - Chip memory is address-indexed. Inserting bytes in the middle shifts all subsequent data to wrong offsets — when written to a chip, the data lands at wrong addresses. That's not editing, that's corruption.
+  - Overtype mode (current behavior) respects the address-space model: byte at offset 0x1FF0 stays at 0x1FF0. This is what embedded developers actually need.
+  - Users who need to insert bytes in a firmware file should use a dedicated binary editor (HxD, hexcurse) before loading the file into the programmer.
+  - A PR for this would need to address the fundamental address-shift problem before being considered.
 
 - [ ] **Logic Test GUI panel** — replace raw text output with a visual grid for testing logic ICs
   - Current state: backend returns ANSI-colored text table (vectors × pins). The GUI just dumps this to the terminal.
