@@ -47,7 +47,7 @@
 
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
   <header class="flex items-center justify-between p-2 border-b border-surface-200-800">
-    <span class="text-sm font-semibold">Terminal</span>
+    <span class="text-sm font-semibold">Log</span>
     <div class="flex items-center gap-1.5">
       <button
         class="btn preset-tonal text-xs px-2 py-1 flex items-center gap-1"
