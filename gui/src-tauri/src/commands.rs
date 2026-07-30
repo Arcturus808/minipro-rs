@@ -1879,8 +1879,35 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                     0xff
                 };
 
-                // AVR: any bit cleared means some lock protection is active
-                let is_protected = lock_byte != 0xff;
+                // Determine whether lock bits indicate external read/write
+                // protection.  AVR lock bits have a specific layout where only
+                // the LB bits (1:0) control external access; BLB0 (3:2) and
+                // BLB1 (5:4) only affect internal SPM/LPM instructions and do
+                // NOT prevent external ISP read/write.  Arduino bootloaders
+                // routinely set BLB1 to mode 3 (protect bootloader section),
+                // which is not external protection.
+                //
+                // The database stores all lock bits in a single "lock" field
+                // with mask 0x3F — it doesn't break out LB separately.  So we
+                // detect AVR by looking for fuses named "lfuse"/"hfuse"/"efuse"
+                // (a reliable AVR signature) and hardcode the LB mask as 0x03.
+                let dev = handle.device().map_err(|e| e.to_string())?;
+                let is_avr = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+                    cfg.fuses.iter().any(|f| f.name == "lfuse" || f.name == "hfuse")
+                } else {
+                    false
+                };
+
+                let is_protected = if is_avr {
+                    // AVR: only LB bits (1:0) control external read/write.
+                    // 11 = no protection, 10 = further programming disabled,
+                    // 00 = programming and verification disabled.
+                    (lock_byte & 0x03) != 0x03
+                } else {
+                    // Non-AVR: conservative default — any non-erased lock byte
+                    // may indicate protection.
+                    lock_byte != 0xff
+                };
 
                 Ok::<LockStatusDto, String>(LockStatusDto { is_protected, lock_byte })
             })();
