@@ -1889,11 +1889,11 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                 //
                 // The database stores all lock bits in a single "lock" field
                 // with mask 0x3F — it doesn't break out LB separately.  So we
-                // detect AVR by looking for fuses named "lfuse"/"hfuse"/"efuse"
-                // (a reliable AVR signature) and hardcode the LB mask as 0x03.
+                // detect AVR by checking the config name (e.g., "avr_11") and
+                // hardcode the LB mask as 0x03.
                 let dev = handle.device().map_err(|e| e.to_string())?;
                 let is_avr = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
-                    cfg.fuses.iter().any(|f| f.name == "lfuse" || f.name == "hfuse")
+                    cfg.name.starts_with("avr_")
                 } else {
                     false
                 };
@@ -2162,10 +2162,15 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         minipro_core::device::ChipConfig::Pld(_) => ChipConfigDto::Pld {},
     });
 
-    // Detect AVR-family devices (fuse bit=0 means programmed).
-    let name_upper = dev.name.to_uppercase();
-    let invert_fuse_bits = name_upper.starts_with("AT")
-        && (name_upper.contains("TINY") || name_upper.contains("MEGA") || name_upper.contains("90S") || name_upper.contains("90C") || name_upper.contains("SAMD") || name_upper.contains("XMEGA"));
+    // Detect AVR-family devices by config name (e.g., "avr_11", "avr_6").
+    // AVR convention: bit=0 means programmed (active).  PIC and others: bit=1.
+    // This is more reliable than name pattern matching — the database itself
+    // declares the convention via the config name.
+    let invert_fuse_bits = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+        cfg.name.starts_with("avr_")
+    } else {
+        false
+    };
 
     DeviceInfoDto {
         name: dev.name.clone(),

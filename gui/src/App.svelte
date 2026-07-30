@@ -1328,7 +1328,8 @@
         <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Fuse Basics</div>
         <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
           <li>Fuses are non-volatile configuration bits that control chip behavior (clock source, watchdog, reset, etc.)</li>
-          <li>Checking a box <b>programs</b> the fuse (makes it active). The hex input shows the raw byte value; the checkbox toggles individual bits.</li>
+          <li>Each field has a <b>hex input</b> showing the raw byte value. Edit this directly for multi-bit fields (e.g., AVR lfuse, hfuse, PIC config words).</li>
+          <li>For <b>single-bit</b> fields, a <b>checkbox</b> appears next to the label to toggle that bit. Multi-bit fields show hex input only — a single checkbox can't represent an 8-bit value.</li>
           <li>For <b>AVR</b> chips: programmed = bit is 0 (active-low).<br>For <b>PIC</b> and others: programmed = bit is 1.</li>
           <li><b>Read Config from Chip</b> merges actual chip values into the panel.<br><b>Write Config to Chip</b> writes all fuses and lock bits.</li>
         </ul>
@@ -1346,6 +1347,7 @@
         <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
           <li>Lock bits control read/write protection of the chip's flash memory.</li>
           <li>Setting lock bits can prevent future reads or writes. Clearing them usually requires a chip erase.</li>
+          <li>For <b>AVR</b>: only the LB bits (bits 1:0) control external ISP read/write. BLB0 and BLB1 only affect internal SPM/LPM access and do not prevent external programming. The app only warns when LB bits indicate external protection.</li>
           <li>Read the chip's lock protection status before writing (the app warns if the chip is locked).</li>
         </ul>
 

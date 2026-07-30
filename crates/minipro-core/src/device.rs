@@ -306,6 +306,10 @@ pub struct FuseField {
 /// MCU fuse/lock/calibration configuration block.
 #[derive(Debug, Clone, Default)]
 pub struct FuseConfig {
+    /// Config name from the XML `<config name="...">` attribute (e.g., "avr_11", "pic_11").
+    /// Used to determine fuse bit convention: AVR configs use bit=0 (programmed),
+    /// PIC and other configs use bit=1 (programmed).
+    pub name: String,
     pub num_calibytes: u32,
     pub num_uids: u32,
     pub config_addr: u32,

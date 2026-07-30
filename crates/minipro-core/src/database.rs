@@ -680,7 +680,7 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
                             let builder = if get_attr_u32(e, b"row_width").is_some() {
                                 ConfigBuilder::Pld(build_gal_config(e))
                             } else {
-                                ConfigBuilder::Mcu(build_fuse_config(e))
+                                ConfigBuilder::Mcu(build_fuse_config(e, &name))
                             };
                             current_config = Some((name, builder));
                         }
@@ -818,8 +818,9 @@ impl ConfigBuilder {
     }
 }
 
-fn build_fuse_config(e: &BytesStart) -> FuseConfig {
+fn build_fuse_config(e: &BytesStart, name: &str) -> FuseConfig {
     FuseConfig {
+        name: name.to_string(),
         num_calibytes: get_attr_u32(e, b"num_calibytes").unwrap_or(0),
         num_uids: get_attr_u32(e, b"num_uids").unwrap_or(0),
         config_addr: get_attr_u32(e, b"config_addr").unwrap_or(0),
