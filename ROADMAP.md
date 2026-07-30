@@ -270,14 +270,9 @@ This is a living list of features and improvements planned for minipro-rs.
     erase (0x3C), block-by-block reflash (0x814-byte blocks via 0x3B),
     and reset back to normal mode. Routed through `operations::firmware_update()`.
 
-  - [ ] **Database refresh** — our `infoic.xml` is from XGPro V12.90/V12.91.
-    XGPro V13.19 adds 2,028 new T76 chips and updates others. This is a
-    mechanical data update (replace the XML file), no code change needed.
-    Note: both the mainline C minipro and Matt Brown's t76-improvements
-    branch also use V12.90/V12.91 — the V13.19 refresh hasn't been done in
-    any public minipro fork. Requires downloading XGPro V13.19 and running
-    `dump-alg-minipro.bash` to extract the updated database.
-    **Impact:** 2,028 T76 chips missing from the device list.
+  - [x] **Database refresh** — DONE. Updated `infoic.xml` from Griffith's upstream
+    (XGPro V13.19). Device count went from 28,772 to 30,808 (+2,036 new T76 chips).
+    Same GPL v3 license, no IP issues. `logicic.xml` was unchanged.
 
   - [ ] **Parallel NOR programming (T76)** — READ and ERASE work, PROGRAM is
     non-functional. The vendor uses a per-command descriptor that hasn't been
