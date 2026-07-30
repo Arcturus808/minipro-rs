@@ -391,6 +391,17 @@ This is a living list of features and improvements planned for minipro-rs.
 
 - [x] **Contextual help overlay for batch/serial panel** — "i" icon next to the Serial Number Injection label opens a modal explaining serial injection, all fields (address, start, step, format, width, endian, checksum), and validation (live preview, overflow detection, blocking errors). Escape listener shared with config help modal.
 
+- [ ] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with dropdowns/checkboxes
+  - **Current state:** config panel shows hex input fields for each fuse/lock byte (e.g., lfuse, hfuse, efuse). User must manually compute bit values from the datasheet.
+  - **Goal:** like AVR Studio / Atmel Studio, break out each fuse byte into individual named bits (CKSEL3, CKSEL2, SUT1, SUT0, BODLEVEL, etc.) with human-readable descriptions and dropdowns for multi-valued fields.
+  - **Challenge:** the XGPro database (`infoic.xml`) stores fuses as monolithic bytes with a mask and default value — it does NOT break out individual bit fields or provide human-readable names for each bit. A fuse bit database would need to be built or sourced.
+  - **Possible approaches:**
+    1. Build a static fuse bit database for common AVR/PIC parts (ATmega328, ATtiny85, etc.) — maintain manually
+    2. Parse Atmel ATDF (.atdf) or Microchip .pic files for bit-level fuse definitions
+    3. Use a community fuse database (e.g., avrdude's fuse definitions)
+  - **Scope:** start with AVR (most common use case), expand to PIC later
+  - Priority: medium — hex input works but is error-prone for users unfamiliar with bit manipulation
+
 - [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
   - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the 40-pin ZIF socket
   - **Data available from database:**
