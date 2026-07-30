@@ -79,15 +79,17 @@
   let configData = $state<ConfigData | null>(null);
   let showConfigHelp = $state(false);
   let showBatchHelp = $state(false);
+  let showFuseWriteConfirm = $state(false);
 
-  // Close help modals on Escape (global listener — modals don't receive focus on open)
+  // Close help/confirm modals on Escape (global listener — modals don't receive focus on open)
   $effect(() => {
-    if (!showConfigHelp && !showBatchHelp) return;
+    if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         showConfigHelp = false;
         showBatchHelp = false;
+        showFuseWriteConfirm = false;
       }
     };
     document.addEventListener("keydown", handler);
@@ -310,12 +312,24 @@
 
   async function writeAllFuses() {
     if (!configData) return;
+    showFuseWriteConfirm = true;
+  }
+
+  async function doWriteFuses() {
+    if (!configData) return;
+    showFuseWriteConfirm = false;
     try {
       await writeFuses(configData.cfg_fuses, configData.lock_bits, icspMode);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
     }
+  }
+
+  // Check if any fuse field name matches a dangerous fuse pattern
+  function hasDangerousFuseChange(): boolean {
+    if (!configData) return false;
+    return configData.cfg_fuses.some((f) => isDangerousFuse(f.name));
   }
 
   function isDangerousFuse(name: string): boolean {
@@ -1369,6 +1383,40 @@
 
         <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
           Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showFuseWriteConfirm}
+    <div
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showFuseWriteConfirm = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 360px; max-width: 440px;">
+        <div style="font-size: 15px; font-weight: 600; margin-bottom: 14px;">Write Config to Chip?</div>
+        <div style="font-size: 12px; line-height: 1.5; margin-bottom: 14px;">
+          This will write all fuse and lock bit values to the chip.
+          {#if hasDangerousFuseChange()}
+            <div style="color: #dc2626; margin-top: 8px; font-weight: 600;">
+              Warning: One or more dangerous fuses (RSTDISBL, SPIEN, JTAGEN, DWEN) are present.
+              Writing incorrect values can make the chip inaccessible via ISP and require high-voltage programming to recover.
+            </div>
+          {:else}
+            <div style="margin-top: 8px; opacity: 0.7;">
+              Incorrect fuse settings can make the chip inaccessible. Double-check values against the datasheet before continuing.
+            </div>
+          {/if}
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button
+            style="padding: 6px 14px; border: 1px solid #ccc; background: transparent; border-radius: 4px; cursor: pointer; font-size: 13px;"
+            onclick={() => showFuseWriteConfirm = false}
+          >Cancel</button>
+          <button
+            style="padding: 6px 14px; border: none; background: #dc2626; color: white; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;"
+            onclick={doWriteFuses}
+          >Write Config</button>
         </div>
       </div>
     </div>
