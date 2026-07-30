@@ -795,7 +795,7 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("logic_test")}
-            disabled={$isRunning}
+            disabled={$isRunning || ($selectedDevice !== null && $selectedDevice.chip_type !== "Logic")}
             class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "logic_test"}
             class:ring-2={$activeOperation === "logic_test"}
