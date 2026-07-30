@@ -308,23 +308,6 @@
     };
   }
 
-  // isProgrammed: true when the fuse is active.
-  // invert=true (AVR): bit=0 means programmed.
-  // invert=false (PIC, etc.): bit=1 means programmed.
-  function isFuseProgrammed(value: number, mask: number, invert: boolean): boolean {
-    const bitSet = (value & mask) !== 0;
-    return invert ? !bitSet : bitSet;
-  }
-
-  function toggleFuseValue(current: number, mask: number, invert: boolean): number {
-    const programmed = isFuseProgrammed(current, mask, invert);
-    if (programmed) {
-      return invert ? current | mask : current & ~mask;  // unprogram
-    } else {
-      return invert ? current & ~mask : current | mask;  // program
-    }
-  }
-
   async function writeAllFuses() {
     if (!configData) return;
     try {
@@ -963,7 +946,7 @@
                     <div class="flex items-center justify-between">
                       {#if $selectedDevice.invert_fuse_bits}
                         <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2 flex-1 mr-2">
-                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: checked = programmed (active), unchecked = unprogrammed</p>
+                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: bit = 0 means programmed (active), bit = 1 means unprogrammed</p>
                         </div>
                       {/if}
                       <button
@@ -993,23 +976,10 @@
                                   if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
                                 }}
                               />
-                              {#if $selectedDevice.config.fuses[i].mask !== 0 && ($selectedDevice.config.fuses[i].mask & ($selectedDevice.config.fuses[i].mask - 1)) === 0}
-                                <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
-                                  <input
-                                    type="checkbox"
-                                    class="checkbox"
-                                    checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
-                                    onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
-                                  />
-                                  <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
-                                  {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                                </label>
-                              {:else}
-                                <span class="flex items-center gap-2 text-xs flex-1">
-                                  <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
-                                  {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                                </span>
-                              {/if}
+                              <span class="flex items-center gap-2 text-xs flex-1">
+                                <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
+                                {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                              </span>
                             </div>
                           {/each}
                         </div>
@@ -1029,21 +999,9 @@
                                   if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
                                 }}
                               />
-                              {#if $selectedDevice.config.locks[i].mask !== 0 && ($selectedDevice.config.locks[i].mask & ($selectedDevice.config.locks[i].mask - 1)) === 0}
-                                <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
-                                  <input
-                                    type="checkbox"
-                                    class="checkbox"
-                                    checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
-                                    onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
-                                  />
-                                  <span>{$selectedDevice.config.locks[i].display_name}</span>
-                                </label>
-                              {:else}
-                                <span class="flex items-center gap-2 text-xs flex-1">
-                                  <span>{$selectedDevice.config.locks[i].display_name}</span>
-                                </span>
-                              {/if}
+                              <span class="flex items-center gap-2 text-xs flex-1">
+                                <span>{$selectedDevice.config.locks[i].display_name}</span>
+                              </span>
                             </div>
                           {/each}
                         </div>
@@ -1328,8 +1286,7 @@
         <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Fuse Basics</div>
         <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
           <li>Fuses are non-volatile configuration bits that control chip behavior (clock source, watchdog, reset, etc.)</li>
-          <li>Each field has a <b>hex input</b> showing the raw byte value. Edit this directly for multi-bit fields (e.g., AVR lfuse, hfuse, PIC config words).</li>
-          <li>For <b>single-bit</b> fields, a <b>checkbox</b> appears next to the label to toggle that bit. Multi-bit fields show hex input only — a single checkbox can't represent an 8-bit value.</li>
+          <li>Edit each fuse via its <b>hex input</b> field. Values are raw bytes — enter the value from the chip datasheet (e.g., <span style="font-family: monospace;">D9</span> for hfuse).</li>
           <li>For <b>AVR</b> chips: programmed = bit is 0 (active-low).<br>For <b>PIC</b> and others: programmed = bit is 1.</li>
           <li><b>Read Config from Chip</b> merges actual chip values into the panel.<br><b>Write Config to Chip</b> writes all fuses and lock bits.</li>
         </ul>
