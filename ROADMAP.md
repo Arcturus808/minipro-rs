@@ -394,10 +394,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
 
-- [ ] **Contextual help overlay for batch/serial panel** — "i" icon in the Batch/serial panel, similar to the hex viewer and config panel help overlays
-  - The interacting fields (start, address, width, format, endian, step, checksum) and the live preview / overflow detection could use explanation for first-time users.
-  - Reuse the existing help overlay pattern (modal with grouped content, "i" icon trigger).
-  - Priority: low-medium — the panel works without help, but the interacting fields can be confusing on first use.
+- [x] **Contextual help overlay for batch/serial panel** — "i" icon next to the Serial Number Injection label opens a modal explaining serial injection, all fields (address, start, step, format, width, endian, checksum), and validation (live preview, overflow detection, blocking errors). Escape listener shared with config help modal.
 
 - [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
   - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the 40-pin ZIF socket
