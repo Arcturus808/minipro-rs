@@ -257,6 +257,10 @@ fn run() -> Result<()> {
     apply_overrides(&mut device, &collect_overrides(&cli))?;
     let device = Arc::new(device);
 
+    // Populate db_paths on the handle so begin_transaction can look up
+    // T56/T76 FPGA algorithm bitstreams from algorithm.xml.
+    handle.db_paths = Some(db_paths.clone());
+
     handle
         .begin_transaction(device.clone())
         .context("begin_transaction failed")?;
