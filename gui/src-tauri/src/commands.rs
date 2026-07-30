@@ -334,15 +334,31 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
     // a hot-plug or sleep/wake cycle.
     let delays = [0u64, 500, 1000, 1500];
     let mut last_err = String::new();
+
+    // Clone the Arc<AppState> so the spawn_blocking closure can populate
+    // the handle's db_paths (needed for T56/T76 algorithm lookup).
+    let state_arc = (*state).clone();
+
     for (attempt, delay_ms) in delays.iter().enumerate() {
         if *delay_ms > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
         }
 
+        let state_for_task = state_arc.clone();
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             tokio::task::spawn_blocking(move || {
-                let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+                let mut handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+
+                // Populate db_paths on the handle so T56/T76 algorithm lookup
+                // works (matches what lib.rs does at startup).
+                {
+                    let guard = state_for_task.db_paths.lock().map_err(|e| e.to_string())?;
+                    if let Some(ref paths) = *guard {
+                        handle.db_paths = Some(paths.clone());
+                    }
+                }
+
                 let info = handle.info.clone();
                 Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
             }),
@@ -412,16 +428,44 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
     // device is usable again.
     let delays = [500, 1000, 1500, 2000, 2000, 2000, 2000, 2000];
     let mut last_err = String::new();
+
+    // Clone the Arc<AppState> so the spawn_blocking closure can populate
+    // the handle's db_paths (needed for T56/T76 algorithm lookup after
+    // reconnect).
+    let state_arc = (*state).clone();
+
     for (attempt, delay_ms) in delays.iter().enumerate() {
         tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
 
         // Wrap the blocking open in a timeout so a hung USB transfer
         // doesn't block the retry loop forever.  The orphaned task will
         // eventually finish or be cleaned up by tokio.
+        let state_for_task = state_arc.clone();
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             tokio::task::spawn_blocking(move || {
-                let handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+                let mut handle = MiniproHandle::open().map_err(|e| e.to_string())?;
+
+                // Reset pin drivers to clear any stale transaction state
+                // left over from before the unplug.  If the programmer wasn't
+                // fully power-cycled (powered USB hub, capacitor), the firmware
+                // may still have an active transaction with wrong pin config,
+                // causing reads to return all 0xFF.  reset_state sends
+                // CMD_RESET_PIN_DRIVERS which clears the ZIF socket.
+                if let Err(e) = handle.protocol.reset_state(&handle.usb) {
+                    eprintln!("force_reconnect: reset_state warning: {}", e);
+                    // Non-fatal — continue anyway
+                }
+
+                // Populate db_paths on the handle so T56/T76 algorithm lookup
+                // works after reconnect (matches what lib.rs does at startup).
+                {
+                    let guard = state_for_task.db_paths.lock().map_err(|e| e.to_string())?;
+                    if let Some(ref paths) = *guard {
+                        handle.db_paths = Some(paths.clone());
+                    }
+                }
+
                 let info = handle.info.clone();
                 Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
             }),

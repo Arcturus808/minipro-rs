@@ -55,6 +55,7 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///  5. Platform data directory (minipro-rs first, then minipro as fallback):
 ///     - Unix: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
+#[derive(Clone)]
 pub struct DatabasePaths {
     pub infoic: PathBuf,
     pub logicic: PathBuf,
