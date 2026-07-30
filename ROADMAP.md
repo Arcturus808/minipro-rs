@@ -399,3 +399,29 @@ This is a living list of features and improvements planned for minipro-rs.
   - Reuse the existing help overlay pattern (modal with grouped content, "i" icon trigger).
   - Priority: low-medium — the panel works without help, but the interacting fields can be confusing on first use.
 
+- [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
+  - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the 40-pin ZIF socket
+  - **Data available from database:**
+    - `pin_count` — number of pins on the device
+    - `package_type` — DIP{N} or PLCC{N} (derived from `package_details`)
+    - `adapter` — adapter type index (TSOP48, SOP44, etc.) — for adapter-based devices
+    - `pin_map` — index into infoic.xml `<maps>` section; the `mask` array tells which ZIF pins are occupied, implicitly encoding placement position
+    - `icsp` — ICSP mode flags from `package_details`
+  - **Data NOT available (must be derived or static):**
+    - No explicit "insert at position X, oriented up/down" field — must be derived from `pin_map` mask data or fallback to standard DIP placement convention (bottom-aligned, pin 1 at ZIF pin 1)
+    - ICSP wiring diagrams cannot be derived from the database — need static SVG images per programmer model (TL866A, T48, T56, T76) showing VCC/GND/SCK/MISO/MOSI/RESET pin assignments
+  - **Design challenges to resolve before implementation:**
+    - How to derive chip position from `pin_map` mask data — is the mask array reliable enough for all devices, or do we need a fallback algorithm based on `pin_count` alone?
+    - How to handle devices with `pin_map == 0` (no contact-test data) — fallback to standard DIP placement by pin count?
+    - How to render the ZIF socket — SVG with 40 pin slots, chip overlay positioned and oriented based on derived placement
+    - How to handle non-DIP packages (PLCC, TSOP, SOP) — these use adapters; should the diagram show the adapter + chip, or just indicate "requires adapter X"?
+    - ICSP mode: show a static wiring diagram per programmer model, or a simplified pinout table?
+    - Panel placement in the UI — below the Log panel, or as a collapsible section in the device info area?
+    - Should the diagram update in real-time when the user toggles ICSP mode, or only when a device is selected?
+  - **Scope considerations:**
+    - Phase 1: DIP packages only (most common), derive placement from pin_count, render SVG ZIF socket with chip overlay
+    - Phase 2: ICSP wiring diagrams (static SVGs per programmer model)
+    - Phase 3: Adapter-based packages (TSOP, SOP, PLCC) — more complex, lower priority
+  - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
+  - **Status:** needs detailed design discussion before implementation begins
+
