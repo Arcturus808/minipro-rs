@@ -993,16 +993,23 @@
                                   if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
                                 }}
                               />
-                              <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
-                                <input
-                                  type="checkbox"
-                                  class="checkbox"
-                                  checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
-                                  onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
-                                />
-                                <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
-                                {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                              </label>
+                              {#if $selectedDevice.config.fuses[i].mask !== 0 && ($selectedDevice.config.fuses[i].mask & ($selectedDevice.config.fuses[i].mask - 1)) === 0}
+                                <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
+                                  <input
+                                    type="checkbox"
+                                    class="checkbox"
+                                    checked={isFuseProgrammed(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits)}
+                                    onchange={() => setCfgValue(i, toggleFuseValue(field.value, $selectedDevice.config.fuses[i].mask, $selectedDevice.invert_fuse_bits))}
+                                  />
+                                  <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
+                                  {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                                </label>
+                              {:else}
+                                <span class="flex items-center gap-2 text-xs flex-1">
+                                  <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
+                                  {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                                </span>
+                              {/if}
                             </div>
                           {/each}
                         </div>
@@ -1022,15 +1029,21 @@
                                   if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
                                 }}
                               />
-                              <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
-                                <input
-                                  type="checkbox"
-                                  class="checkbox"
-                                  checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
-                                  onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
-                                />
-                                <span>{$selectedDevice.config.locks[i].display_name}</span>
-                              </label>
+                              {#if $selectedDevice.config.locks[i].mask !== 0 && ($selectedDevice.config.locks[i].mask & ($selectedDevice.config.locks[i].mask - 1)) === 0}
+                                <label class="flex items-center gap-2 text-xs cursor-pointer flex-1">
+                                  <input
+                                    type="checkbox"
+                                    class="checkbox"
+                                    checked={isFuseProgrammed(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits)}
+                                    onchange={() => setLockValue(i, toggleFuseValue(field.value, $selectedDevice.config.locks[i].mask, $selectedDevice.invert_fuse_bits))}
+                                  />
+                                  <span>{$selectedDevice.config.locks[i].display_name}</span>
+                                </label>
+                              {:else}
+                                <span class="flex items-center gap-2 text-xs flex-1">
+                                  <span>{$selectedDevice.config.locks[i].display_name}</span>
+                                </span>
+                              {/if}
                             </div>
                           {/each}
                         </div>
