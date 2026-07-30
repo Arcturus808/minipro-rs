@@ -574,9 +574,18 @@
   // Map entropy (0.0–1.0) to a color string
   function entropyColor(entropy: number): string {
     if (entropy < 0.25) return "#22c55e"; // green — uniform/repetitive
-    if (entropy < 0.50) return "#84cc16"; // yellow-green
+    if (entropy < 0.50) return "#84cc16"; // yellow-green — low diversity
     if (entropy < 0.75) return "#f59e0b"; // amber — mixed
     return "#ef4444"; // red — high entropy (random/encrypted/compressed)
+  }
+
+  // Map entropy (0.0–1.0) to a tooltip description
+  function entropyLabel(entropy: number): string {
+    const pct = Math.round(entropy * 100);
+    if (entropy < 0.25) return `Entropy: ${pct}% — uniform/repetitive`;
+    if (entropy < 0.50) return `Entropy: ${pct}% — low diversity`;
+    if (entropy < 0.75) return `Entropy: ${pct}% — mixed`;
+    return `Entropy: ${pct}% — high (random/encrypted/compressed)`;
   }
 
   function toAscii(byte: number): string {
@@ -1551,7 +1560,7 @@
           {@const len = end - offset}
           <div style="display: flex; white-space: nowrap; height: {rowHeight}px;">
             <span style="width: 9ch; margin-right: 0.5ch; opacity: 0.55; flex-shrink: 0; text-align: right;">{formatOffset(offset)}</span>
-            <span style="width: 1ch; margin-right: 0.5ch; flex-shrink: 0; height: 100%; {$settings.showEntropyBar ? `background: ${entropyColor(rowEntropy(offset, len))}; opacity: 0.6; border-radius: 1px;` : ''}"></span>
+            <span style="width: 1ch; margin-right: 0.5ch; flex-shrink: 0; height: 100%; {$settings.showEntropyBar ? `background: ${entropyColor(rowEntropy(offset, len))}; opacity: 0.6; border-radius: 1px;` : ''}" title={$settings.showEntropyBar ? entropyLabel(rowEntropy(offset, len)) : ''}></span>
             <span style="width: 48ch; margin-right: 1.5ch; flex-shrink: 0; opacity: 0.85; user-select: none;">
               {#each Array.from({length: len}, (_, j) => offset + j) as byteOffset, j}
                 {@const isEditingHex = editingOffset === byteOffset && editingMode === "hex"}
