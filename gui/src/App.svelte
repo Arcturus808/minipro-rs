@@ -78,14 +78,16 @@
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
   let showConfigHelp = $state(false);
+  let showBatchHelp = $state(false);
 
-  // Close config help modal on Escape (global listener — modal doesn't receive focus on open)
+  // Close help modals on Escape (global listener — modals don't receive focus on open)
   $effect(() => {
-    if (!showConfigHelp) return;
+    if (!showConfigHelp && !showBatchHelp) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         showConfigHelp = false;
+        showBatchHelp = false;
       }
     };
     document.addEventListener("keydown", handler);
@@ -1081,10 +1083,22 @@
               <!-- Serial number config (only when batch mode is on) -->
               {#if $batchModeEnabled}
                 <div class="flex flex-col gap-2 py-2 px-3 rounded-lg bg-surface-100-900 border border-surface-200-800">
-                  <label class="flex items-center gap-2 cursor-pointer text-sm">
-                    <input type="checkbox" bind:checked={serialEnabled} class="accent-primary-600" />
-                    <span>Serial Number Injection</span>
-                  </label>
+                  <div class="flex items-center gap-2">
+                    <label class="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="checkbox" bind:checked={serialEnabled} class="accent-primary-600" />
+                      <span>Serial Number Injection</span>
+                    </label>
+                    <button
+                      class="opacity-50 hover:opacity-100 transition-opacity p-1 rounded border border-transparent hover:border-surface-200-800"
+                      onclick={() => showBatchHelp = true}
+                      title="Serial number injection help"
+                      aria-label="Serial number injection help"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                  </div>
                   {#if serialEnabled}
                     <div class="grid grid-cols-3 gap-2 text-xs">
                       <!-- Row 1: Where and what -->
@@ -1320,6 +1334,65 @@
           <li>Lock bits control read/write protection of the chip's flash memory.</li>
           <li>Setting lock bits can prevent future reads or writes. Clearing them usually requires a chip erase.</li>
           <li>Read the chip's lock protection status before writing (the app warns if the chip is locked).</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
+          Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showBatchHelp}
+    <div
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showBatchHelp = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 500px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="font-size: 15px; font-weight: 600;">Serial Number Injection Help</div>
+          <button
+            style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
+            onclick={() => showBatchHelp = false}
+            title="Close"
+          >✕</button>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Serial Number Injection</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>Injects a unique serial number into each chip during batch programming.</li>
+          <li>The serial is written at the specified address in the chip's memory, overwriting the firmware data at that location.</li>
+          <li>The firmware file is read fresh for each chip and patched in memory — the original file is not modified.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Fields</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li><b>Address</b> — byte offset in the chip's memory where the serial is written (hex, e.g., <span style="font-family: 'Hack', 'Consolas', monospace;">0x1FF0</span>). Required.</li>
+          <li><b>Start value</b> — serial number for the first chip (decimal or hex with <span style="font-family: 'Hack', 'Consolas', monospace;">0x</span> prefix). Default: 1.</li>
+          <li><b>Step</b> — increment per chip. Default: 1. Can be 0 for the same serial on every chip.</li>
+          <li><b>Format</b> — how the serial is encoded:
+            <ul style="padding-left: 18px; margin-top: 4px;">
+              <li><b>Binary</b> — raw bytes in the specified width and endianness</li>
+              <li><b>ASCII</b> — zero-padded decimal string (e.g., <span style="font-family: 'Hack', 'Consolas', monospace;">00000001</span>)</li>
+              <li><b>BCD</b> — binary-coded decimal, two digits per byte</li>
+            </ul>
+          </li>
+          <li><b>Width</b> — number of bytes written (1, 2, 4, or 8). For ASCII, this determines the string length.</li>
+          <li><b>Endian</b> — byte order for binary format (little-endian or big-endian). Ignored for ASCII/BCD.</li>
+          <li><b>Checksum</b> — optional checksum appended after the serial bytes:
+            <ul style="padding-left: 18px; margin-top: 4px;">
+              <li><b>None</b> — no checksum</li>
+              <li><b>XOR</b> — XOR of all serial bytes</li>
+              <li><b>CRC-8</b> — CRC-8/CCITT of all serial bytes</li>
+            </ul>
+          </li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Validation</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>The live preview shows the serial range and encoding (e.g., "Chip 1 of 10: serial 1 → 10, 4 bytes at 0x1FF0").</li>
+          <li>Overflow detection warns if the serial value exceeds the width's maximum (e.g., 0xFFFF for 2-byte) and blocks batch start.</li>
+          <li>Empty address or invalid start value blocks batch start with an error in the terminal log.</li>
         </ul>
 
         <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
