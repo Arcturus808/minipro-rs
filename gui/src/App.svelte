@@ -1034,7 +1034,7 @@
                       </div>
                     {/if}
                     <button
-                      class="btn preset-filled-primary text-sm px-3 py-2 w-full font-semibold"
+                      class="text-sm px-3 py-2 w-full font-semibold rounded-lg border border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
                       onclick={writeAllFuses}
                     >
                       Write Config to Chip
