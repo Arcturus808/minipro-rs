@@ -32,6 +32,7 @@
   import TerminalLog from "./lib/components/TerminalLog.svelte";
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
   import DiagnosticsPanel from "./lib/components/DiagnosticsPanel.svelte";
+  import ZifSocketDiagram from "./lib/components/ZifSocketDiagram.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
@@ -684,7 +685,7 @@
       <div class="flex-1 min-h-0">
         <DeviceSelector />
       </div>
-      <div class="shrink-0 h-64">
+      <div class="shrink-0">
         <DiagnosticsPanel />
       </div>
     </aside>
@@ -1274,10 +1275,13 @@
       <div class="w-0.5 h-8 rounded-full bg-surface-300-700"></div>
     </div>
 
-    <!-- Right sidebar: Terminal log -->
+    <!-- Right sidebar: Terminal log + ZIF diagram -->
     <aside class="flex flex-col border-l border-surface-200-800 gap-2 p-2 shrink-0" style="width: {rightWidth}px;">
       <div class="flex-1 min-h-0">
         <TerminalLog />
+      </div>
+      <div class="shrink-0">
+        <ZifSocketDiagram />
       </div>
     </aside>
   </main>
