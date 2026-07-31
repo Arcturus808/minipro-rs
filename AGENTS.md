@@ -325,6 +325,16 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **Complication:** `get_device_info` runs without a connected programmer, so the model is unknown. Fix requires either deferring voltage display until a programmer is connected, or showing voltages for all models.
 
+### Chip ID read had wrong type byte, endianness, and length (fixed)
+`get_chip_id` in all protocol implementations had three bugs compared to the upstream C minipro:
+1. **Wrong type byte**: TL866II+ read `resp[1]` as the ID type; should be `resp[0]` (matching upstream `msg[0]`)
+2. **Fixed 4-byte ID read**: Always read 4 bytes little-endian. Should read `chip_id_bytes_count` bytes (1-4) with endianness based on ID type (LE for type 3/4, BE otherwise)
+3. **Overly strict minimum length**: Required 6 bytes minimum. Should only require `2 + chip_id_bytes_count`
+
+**Impact:** Write operations failed with "Response too short: expected 6 bytes, got 4" on TL866II+ for chips with 2-byte IDs (e.g. 27512@DIP28). Blank check was unaffected (doesn't read chip ID).
+
+**Fix:** Changed `get_chip_id` trait signature to take `&Device` so `chip_id_bytes_count` is available. All four protocol implementations (TL866A, TL866II+, T56, T76) now use the same logic: read `resp[0]` as type, read `chip_id_bytes_count` bytes from `resp[2..]` with correct endianness.
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.

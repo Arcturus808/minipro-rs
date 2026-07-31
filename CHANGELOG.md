@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Trim/pad buffer dirty flag** — `trimTrailing` and `padToSize` now mark the buffer as dirty, so a subsequent Read prompts about unsaved changes instead of silently discarding them
 - **Hex edit blur** — clicking outside the hex viewer (e.g., the device search field) now commits the active edit and releases keyboard focus. `suppressBlur` flag prevents blur during programmatic focus changes (overflow)
 - **Config panel stale fuses** — switching devices no longer shows the previous device's fuse names. Changed `$effect` to `$effect.pre` so `configData` refreshes before DOM re-render
+- **Chip ID read** — `get_chip_id` now reads the correct type byte (`resp[0]` not `resp[1]`), uses `chip_id_bytes_count` for the ID length instead of always reading 4 bytes, and applies correct endianness based on ID type (LE for type 3/4, BE otherwise). Fixes "Response too short" errors on TL866II+ when reading chips with 2-byte IDs (e.g. 27512@DIP28). Affects all programmer models (TL866A, TL866II+, T56, T76)
 
 ## [0.5.1] - 2026-07-05
 
