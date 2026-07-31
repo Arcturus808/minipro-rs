@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hex viewer help overlay** — ?/F1 key or "i" toolbar icon opens a modal with keyboard shortcuts and feature descriptions
 - **Config/fuses help overlay** — "i" icon in config panel opens a modal explaining fuse basics, dangerous fuses (RSTDISBL, SPIEN, JTAGEN, DWEN), and lock bits
 - **Favorites show manufacturer** — device favorites in the search panel now display the manufacturer alongside the device name. Old favorites auto-migrate to the new format
+- **ZIF socket placement diagram** — visual diagram in the right sidebar showing correct chip orientation and placement in the programmer's ZIF socket. Supports 40-pin (TL866A/CS/II+) and 48-pin (T48/T56/T76) sockets with model-specific lever position. Uses `pin_map` data from the chip database for accurate chip footprint, with `pin_count` fallback. DIP packages only; non-DIP shows "adapter required" message
 
 ### Fixed
 

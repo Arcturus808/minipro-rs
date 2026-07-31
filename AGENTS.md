@@ -275,7 +275,8 @@ gui/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list
-        DiagnosticsPanel.svelte  — overcurrent, calibration, pin test
+        DiagnosticsPanel.svelte  — overcurrent, calibration, pin test (buttons collapsible)
+        ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log)
         SettingsPanel.svelte     — theme, defaults, layout reset
         ProgressPanel.svelte     — operation progress + cancel
       file-dialog.ts             — Tauri dialog wrappers
