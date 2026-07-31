@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
-    database::{find_device, find_device_any, DatabasePaths},
+    database::{find_device, find_device_any, get_pin_map, DatabasePaths},
     device::{ChipType, Device, PackageDetails, Voltages},
     operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
@@ -143,6 +143,9 @@ pub struct DeviceInfoDto {
     config: Option<ChipConfigDto>,
     /// True for AVR-family devices where fuse bit=0 means programmed.
     invert_fuse_bits: bool,
+    /// Raw pin_map value from the database (lower byte = index into `<maps>`).
+    /// 0 means no contact-test data (use pin_count fallback for placement).
+    pin_map: u32,
 }
 
 #[derive(Serialize)]
@@ -549,6 +552,35 @@ pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> R
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
+}
+
+/// Get the pin-contact map for a device (ZIF pin numbers that must make contact).
+/// Returns None when pin_map index is 0 (no contact-test data).
+#[tauri::command]
+pub async fn get_device_pin_map(pinMap: u32, state: State<'_, Arc<AppState>>) -> Result<Option<PinMapDto>, String> {
+    let index = pinMap & 0xFF;
+    if index == 0 {
+        return Ok(None);
+    }
+    let db = get_db_paths(&state)?;
+
+    tokio::task::spawn_blocking(move || {
+        let pm = get_pin_map(&db.infoic, index).map_err(|e| e.to_string())?;
+        Ok::<Option<PinMapDto>, String>(pm.map(|p| PinMapDto {
+            gnd_table: p.gnd_table,
+            mask: p.mask,
+        }))
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct PinMapDto {
+    /// ZIF pin numbers to drive as GND during contact test.
+    pub gnd_table: Vec<u16>,
+    /// ZIF pin numbers that must make electrical contact (chip footprint).
+    pub mask: Vec<u16>,
 }
 
 /// Select a device, resolving it for the connected programmer model if available.
@@ -2185,6 +2217,7 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         has_chip_id: dev.flags.has_chip_id,
         config,
         invert_fuse_bits,
+        pin_map: dev.pin_map,
     }
 }
 

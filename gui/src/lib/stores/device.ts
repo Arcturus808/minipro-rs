@@ -39,6 +39,16 @@ export interface DeviceInfo {
   config: ChipConfig | null;
   /** True for AVR-family devices where fuse bit=0 means programmed. */
   invert_fuse_bits: boolean;
+  /** Raw pin_map value from the database (lower byte = index into <maps>).
+   *  0 means no contact-test data (use pin_count fallback for placement). */
+  pin_map: number;
+}
+
+export interface PinMap {
+  /** ZIF pin numbers to drive as GND during contact test. */
+  gnd_table: number[];
+  /** ZIF pin numbers that must make electrical contact (chip footprint). */
+  mask: number[];
 }
 
 export const programmer = writable<ProgrammerInfo | null>(null);

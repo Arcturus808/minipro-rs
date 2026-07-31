@@ -98,6 +98,7 @@ pub fn run() {
             commands::get_programmer_details,
             commands::search_devices,
             commands::get_device_info,
+            commands::get_device_pin_map,
             commands::select_device,
             commands::deselect_device,
             commands::do_read,

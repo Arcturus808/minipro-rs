@@ -403,7 +403,21 @@ This is a living list of features and improvements planned for minipro-rs.
   - Priority: medium — hex input works but is error-prone for users unfamiliar with bit manipulation
 
 - [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
-  - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the 40-pin ZIF socket
+  - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the ZIF socket
+  - **Programmer model differences (VERIFIED):**
+    - All models use the same chip insertion convention: **chip pin 1 → ZIF pin 1, at the top of the socket**
+    - The ZIF socket is physically **upside down** on T48/T56/T76 compared to TL866A/CS/II+ — the lever moved from the top (pin 1 end) to the bottom (opposite end)
+    - Pin numbering is the same standard U-shaped arrangement on all models
+    - The `pin_map` mask data works uniformly — ZIF pin 1 is always ZIF pin 1 regardless of model
+
+    | Model | ZIF Socket | Pin 1 Position | Lever Position |
+    |-------|-----------|----------------|----------------|
+    | TL866A/CS | 40-pin | Top | Top (same end as pin 1) |
+    | TL866II+ | 40-pin | Top | Top (same end as pin 1) |
+    | T48 | 48-pin | Top | Bottom (opposite end from pin 1) |
+    | T56 | 48-pin | Top | Bottom (opposite end from pin 1) |
+    | T76 | 48-pin | Top | Bottom (opposite end from pin 1) |
+
   - **Data available from database:**
     - `pin_count` — number of pins on the device
     - `package_type` — DIP{N} or PLCC{N} (derived from `package_details`)
@@ -411,20 +425,54 @@ This is a living list of features and improvements planned for minipro-rs.
     - `pin_map` — index into infoic.xml `<maps>` section; the `mask` array tells which ZIF pins are occupied, implicitly encoding placement position
     - `icsp` — ICSP mode flags from `package_details`
   - **Data NOT available (must be derived or static):**
-    - No explicit "insert at position X, oriented up/down" field — must be derived from `pin_map` mask data or fallback to standard DIP placement convention (bottom-aligned, pin 1 at ZIF pin 1)
-    - ICSP wiring diagrams cannot be derived from the database — need static SVG images per programmer model (TL866A, T48, T56, T76) showing VCC/GND/SCK/MISO/MOSI/RESET pin assignments
-  - **Design challenges to resolve before implementation:**
-    - How to derive chip position from `pin_map` mask data — is the mask array reliable enough for all devices, or do we need a fallback algorithm based on `pin_count` alone?
-    - How to handle devices with `pin_map == 0` (no contact-test data) — fallback to standard DIP placement by pin count?
-    - How to render the ZIF socket — SVG with 40 pin slots, chip overlay positioned and oriented based on derived placement
+    - No explicit "insert at position X" field — derive from `pin_map` mask data, or fallback to pin_count-based placement (pin 1 at ZIF pin 1, chip at top of socket)
+    - ICSP wiring diagrams cannot be derived from the database — need static SVG images per programmer model showing VCC/GND/SCK/MISO/MOSI/RESET pin assignments
+  - **Design decisions (RESOLVED):**
+    - **Chip placement:** identical for all models — pin 1 at top (ZIF pin 1). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
+    - **Diagram rendering:** always render pin 1 at top. Draw lever at top (TL866A/CS/II+) or bottom (T48/T56/T76) based on `programmer.model`. Two SVG templates: 40-pin and 48-pin
+    - **UI placement:** ZIF diagram immediately below DeviceSelector (semantic continuity: "which chip" → "how to place it"). DiagnosticsPanel drops to bottom with collapsible buttons. Right sidebar stays focused on log
+    - **Socket size:** 40-pin (TL866A/CS/II+) or 48-pin (T48/T56/T76), determined by `programmer.model`
+  - **Implementation plan:**
+    - **Layout (left sidebar):**
+      ```
+      DeviceSelector (flex-1)
+        ├── search box
+        ├── device list
+        └── selected device info
+      ZifSocketDiagram (fixed height, ~200px)
+        ├── ZIF socket SVG (40 or 48 pin, based on programmer model)
+        ├── Chip overlay positioned on occupied pins
+        ├── Lever indicator (top or bottom, based on model)
+        └── Chip name + pin count label
+      DiagnosticsPanel (shrink-0, natural height)
+        ├── Programmer info (Model, FW, SN) — always visible
+        └── Collapsible buttons (collapsed by default)
+      ```
+    - **Component: `ZifSocketDiagram.svelte`**
+      - Reads `$selectedDevice` and `$programmer` stores directly (no props)
+      - `$derived`: socketSize (40/48), leverAtTop (bool), occupiedPins (from pin_map mask or pin_count fallback), chipName
+      - SVG: socket body (rounded rect, theme-aware fill), pin slots (currentColor + opacity), pin number labels (U-shape), chip overlay (semi-transparent primary accent), pin 1 notch/dot, lever icon
+      - Uses `currentColor` and Skeleton theme classes for automatic dark mode support
+    - **Fallback placement (pin_map == 0):** use `pin_count` — left side pins 1 to N/2, right side pins N/2+1 to N, all at top of socket
+    - **Backend:** add `get_pin_map` Tauri command wrapping existing `database::get_pin_map()`, returns mask array for selected device
+    - **DiagnosticsPanel:** wrap 4 diagnostic buttons in `<details>` collapsed by default, keep programmer info always visible
+    - **Files to create/modify:**
+      | File | Action |
+      |------|--------|
+      | `gui/src/lib/components/ZifSocketDiagram.svelte` | Create — SVG diagram component |
+      | `gui/src/lib/components/DiagnosticsPanel.svelte` | Modify — collapsible buttons |
+      | `gui/src/App.svelte` | Modify — import, reorder left sidebar |
+      | `gui/src-tauri/src/commands.rs` | Modify — add `get_pin_map` command |
+      | `gui/src-tauri/src/lib.rs` | Modify — register `get_pin_map` command |
+    - **Verification:** `cargo tauri build`, test DIP8/14/28/40 placement, verify lever position per model, verify dark mode, verify pin_map==0 fallback
+  - **Remaining design questions:**
     - How to handle non-DIP packages (PLCC, TSOP, SOP) — these use adapters; should the diagram show the adapter + chip, or just indicate "requires adapter X"?
     - ICSP mode: show a static wiring diagram per programmer model, or a simplified pinout table?
-    - Panel placement in the UI — below the Log panel, or as a collapsible section in the device info area?
     - Should the diagram update in real-time when the user toggles ICSP mode, or only when a device is selected?
-  - **Scope considerations:**
-    - Phase 1: DIP packages only (most common), derive placement from pin_count, render SVG ZIF socket with chip overlay
+  - **Scope:**
+    - Phase 1: DIP packages only (most common), derive placement from pin_map mask (fallback to pin_count), render SVG ZIF socket with chip overlay and lever indicator
     - Phase 2: ICSP wiring diagrams (static SVGs per programmer model)
     - Phase 3: Adapter-based packages (TSOP, SOP, PLCC) — more complex, lower priority
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
-  - **Status:** needs detailed design discussion before implementation begins
+  - **Status:** design discussion complete, ready for implementation
 
