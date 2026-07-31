@@ -72,7 +72,8 @@ pub trait Protocol: Send + Sync {
 
     /// Read the chip identification bytes.
     /// Returns `(id_type, chip_id)`.
-    fn get_chip_id(&self, usb: &UsbDevice) -> Result<(u8, u32)>;
+    /// `device` provides `chip_id_bytes_count` and ID type for endianness.
+    fn get_chip_id(&self, usb: &UsbDevice, device: &Device) -> Result<(u8, u32)>;
 
     /// Auto-detect an SPI chip by its JEDEC ID.
     fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {

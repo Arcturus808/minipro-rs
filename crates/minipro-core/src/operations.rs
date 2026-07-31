@@ -759,7 +759,7 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
     if !device.flags.has_chip_id {
         return Ok(());
     }
-    let (_id_type, actual) = handle.protocol.get_chip_id(&handle.usb)?;
+    let (_id_type, actual) = handle.protocol.get_chip_id(&handle.usb, &device)?;
     let expected_norm = normalize_chip_id(device.chip_id);
     let actual_norm = normalize_chip_id(actual);
     if device.chip_id == 0 {

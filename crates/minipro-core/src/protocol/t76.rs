@@ -14,12 +14,11 @@
 
 use super::t56::build_begin_msg;
 use super::tl866iiplus::logic_ic_test_tl866;
-use super::{DataSet, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::{
-    device::Device,
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
@@ -944,22 +943,30 @@ impl Protocol for T76Protocol {
         )))
     }
 
-    fn get_chip_id(&self, usb: &UsbDevice) -> Result<(u8, u32)> {
+    fn get_chip_id(&self, usb: &UsbDevice, device: &Device) -> Result<(u8, u32)> {
         let mut msg = [0u8; 8];
         msg[0] = CMD_READ_ID;
         usb.msg_send(&msg)?;
         let resp = usb.msg_recv(32)?;
-        if resp.len() < 5 {
+        let id_length = device.chip_id_bytes_count.min(4) as usize;
+        let min_len = 2 + id_length;
+        if resp.len() < min_len {
             return Err(MiniproError::ResponseTooShort {
-                expected: 5,
+                expected: min_len,
                 actual: resp.len(),
             });
         }
         let id_type = resp[0];
-        let chip_id = if id_type == 3 || id_type == 4 {
-            u32::from_le_bytes([resp[2], resp[3], resp[4], 0])
+        let chip_id = if id_length == 0 {
+            0
+        } else if id_type == 3 || id_type == 4 {
+            let mut bytes = [0u8; 4];
+            bytes[..id_length].copy_from_slice(&resp[2..2 + id_length]);
+            u32::from_le_bytes(bytes)
         } else {
-            ((resp[2] as u32) << 16) | ((resp[3] as u32) << 8) | resp[4] as u32
+            let mut bytes = [0u8; 4];
+            bytes[..id_length].copy_from_slice(&resp[2..2 + id_length]);
+            u32::from_be_bytes(bytes) >> (8 * (4 - id_length))
         };
         Ok((id_type, chip_id))
     }
