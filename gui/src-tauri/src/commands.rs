@@ -1551,7 +1551,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
         let result = (|| {
             handle.icsp = icspMode != "zif";
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
-            let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb).map_err(|e| e.to_string())?;
+            let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device).map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
             // chip that don't match what the firmware returns for that variant's protocol.
             // Treat them as "no expected value" to avoid false mismatch warnings.

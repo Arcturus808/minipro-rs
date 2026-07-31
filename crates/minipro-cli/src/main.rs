@@ -341,7 +341,8 @@ fn do_operations(
 
     // ── Chip ID ────────────────────────────────────────────────────────────────
     if cli.device_id {
-        let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb)?;
+        let device = handle.device.as_ref().context("no device selected")?;
+        let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, device)?;
         println!("Chip ID: {:#010x}", chip_id);
         return Ok(());
     }

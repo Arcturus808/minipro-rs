@@ -777,19 +777,35 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn get_chip_id(&self, usb: &UsbDevice) -> Result<(u8, u32)> {
+    fn get_chip_id(&self, usb: &UsbDevice, device: &Device) -> Result<(u8, u32)> {
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_READ_CHIP_ID;
         usb.msg_send(&pkt)?;
         let resp = usb.msg_recv(64)?;
-        if resp.len() < 6 {
+        // ID type is in resp[0], ID bytes start at resp[2].
+        // Length is chip_id_bytes_count (1-4), endianness depends on type.
+        let id_length = device.chip_id_bytes_count.min(4) as usize;
+        let min_len = 2 + id_length;
+        if resp.len() < min_len {
             return Err(MiniproError::ResponseTooShort {
-                expected: 6,
+                expected: min_len,
                 actual: resp.len(),
             });
         }
-        let id_type = resp[1];
-        let chip_id = u32::from_le_bytes([resp[2], resp[3], resp[4], resp[5]]);
+        let id_type = resp[0];
+        let chip_id = if id_length == 0 {
+            0
+        } else if id_type == 3 || id_type == 4 {
+            // Little-endian
+            let mut bytes = [0u8; 4];
+            bytes[..id_length].copy_from_slice(&resp[2..2 + id_length]);
+            u32::from_le_bytes(bytes)
+        } else {
+            // Big-endian
+            let mut bytes = [0u8; 4];
+            bytes[..id_length].copy_from_slice(&resp[2..2 + id_length]);
+            u32::from_be_bytes(bytes) >> (8 * (4 - id_length))
+        };
         Ok((id_type, chip_id))
     }
 
