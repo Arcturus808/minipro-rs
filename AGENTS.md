@@ -315,6 +315,16 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **App-side mitigation:** `force_reconnect` retries 8 times over ~15 seconds with increasing delays. The error message instructs the user to unplug, wait, and replug. The reconnect button tooltip also mentions the 20-30 second wait.
 
+### Voltage display uses wrong lookup tables (display-only, not yet fixed)
+`VoltagesDto` in `commands.rs` converts raw database voltage values to human-readable strings using a single set of 16-entry lookup tables (`VPP_TABLE`, `VCC_TABLE`). These tables are only correct for T48/T56 programmers. The upstream C minipro uses **different voltage tables per programmer model**:
+- TL866A: 8-entry VPP table, 6-entry VCC table (values are firmware-encoded, e.g. `0x40` = 10V, `0x00` = 12.5V)
+- TL866II+: 16-entry tables (values are firmware-encoded, e.g. `0x10` = 9V, `0x00` = 12V)
+- T48/T56: 16-entry tables (values are sequential indices — our current approach)
+
+**Impact:** The GUI shows incorrect voltage labels for TL866A and TL866II+ programmers. Actual programming voltages are correct — the protocol layer (`tl866iiplus.rs`) has the right firmware encoding tables. Only the display strings are wrong.
+
+**Complication:** `get_device_info` runs without a connected programmer, so the model is unknown. Fix requires either deferring voltage display until a programmer is connected, or showing voltages for all models.
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.
