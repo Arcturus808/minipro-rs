@@ -394,6 +394,11 @@ After consolidating `-x`/`--skip-device-id`, `-y` printed "WARNING: chip ID mism
 
 **Remaining cleanup:** The `check_device_id: bool` parameter is still in the core API signatures (`operations.rs`) and the GUI still passes `true` to per-operation calls (with its own separate `check_chip_id` calls before each op). Removing the parameter entirely is tracked in ROADMAP.md.
 
+### `erase_chip` didn't check `can_erase` flag (fixed)
+`erase_chip` in `operations.rs` unconditionally called `handle.protocol.erase()` without checking `device.flags.can_erase`. Upstream minipro checks this flag in `erase_device()` (main.c line 1738) and silently skips the erase for chips that don't support electrical erase (e.g. UV EPROMs like the 27512). Our code was sending erase commands to the programmer for UV EPROMs, which could apply VPP pulses to pins not meant for electrical erase — undefined behavior and a potential safety issue.
+
+**Fix:** `erase_chip` now checks `device.flags.can_erase` and returns `Ok(())` early if false. The CLI also checks `can_erase` before showing the "Erasing..." spinner. For explicit `-E` on a non-erasable chip, the CLI prints "This chip does not support electrical erase (use UV light for UV EPROMs)." instead of silently succeeding. For auto-erase before write on a non-erasable chip, the erase step is silently skipped (matching upstream — the write proceeds without a pre-erase).
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.

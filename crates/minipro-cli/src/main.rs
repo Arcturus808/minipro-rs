@@ -452,14 +452,19 @@ fn do_operations(
 
     // ── Erase ─────────────────────────────────────────────────────────────────
     if cli.erase {
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(
-            ProgressStyle::with_template("{spinner} Erasing...")
-                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-        );
-        pb.enable_steady_tick(std::time::Duration::from_millis(80));
-        erase_chip(handle, false)?;
-        pb.finish_with_message("Erasing... done.");
+        let can_erase = handle.device().map(|d| d.flags.can_erase).unwrap_or(false);
+        if can_erase {
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::with_template("{spinner} Erasing...")
+                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+            );
+            pb.enable_steady_tick(std::time::Duration::from_millis(80));
+            erase_chip(handle, false)?;
+            pb.finish_with_message("Erasing... done.");
+        } else {
+            eprintln!("This chip does not support electrical erase (use UV light for UV EPROMs).");
+        }
     }
 
     // ── Blank check ───────────────────────────────────────────────────────────
@@ -624,25 +629,29 @@ fn do_operations(
         } else if page == PageType::Calibration {
             anyhow::bail!("calibration page is read-only");
         } else {
-            // Auto-erase before write (unless suppressed)
+            // Auto-erase before write (unless suppressed or chip doesn't
+            // support electrical erase — e.g. UV EPROMs).
             if !cli.no_erase {
-                let pb = ProgressBar::new_spinner();
-                pb.set_style(
-                    ProgressStyle::with_template("{spinner} Erasing...")
-                        .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-                );
-                pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                erase_chip(handle, false)?;
-                pb.finish_with_message("Erasing... done.");
-                // The firmware requires a transaction reset after erase before
-                // writing (same as the C reference: end_transaction then
-                // begin_transaction).
-                let device_arc = handle
-                    .device
-                    .clone()
-                    .expect("device is set during an active transaction");
-                handle.end_transaction()?;
-                handle.begin_transaction(device_arc)?;
+                let can_erase = handle.device().map(|d| d.flags.can_erase).unwrap_or(false);
+                if can_erase {
+                    let pb = ProgressBar::new_spinner();
+                    pb.set_style(
+                        ProgressStyle::with_template("{spinner} Erasing...")
+                            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+                    );
+                    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+                    erase_chip(handle, false)?;
+                    pb.finish_with_message("Erasing... done.");
+                    // The firmware requires a transaction reset after erase before
+                    // writing (same as the C reference: end_transaction then
+                    // begin_transaction).
+                    let device_arc = handle
+                        .device
+                        .clone()
+                        .expect("device is set during an active transaction");
+                    handle.end_transaction()?;
+                    handle.begin_transaction(device_arc)?;
+                }
             }
 
             let size_mismatch = if cli.size_ignore {

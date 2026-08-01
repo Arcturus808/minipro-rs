@@ -703,11 +703,21 @@ fn write_osccal(handle: &mut MiniproHandle, data: &[u8]) -> Result<()> {
 }
 
 /// Erase the chip.
+///
+/// Silently returns `Ok(())` if the device does not support electrical erase
+/// (`can_erase` is false, e.g. UV EPROMs). This matches upstream minipro's
+/// `erase_device()` which checks `device->flags.can_erase` before erasing.
 pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<()> {
     if check_device_id {
         check_chip_id(handle)?;
     }
     let device = handle.device()?.clone();
+
+    // Not all chips can be erased (e.g. UV EPROMs require UV light, not
+    // electrical erase).  Skip silently — matches upstream behavior.
+    if !device.flags.can_erase {
+        return Ok(());
+    }
 
     // Save OSCCAL calibration word before erase
     let osccal = read_osccal(handle)?;
