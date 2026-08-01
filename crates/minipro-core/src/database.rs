@@ -1259,12 +1259,28 @@ mod tests {
 "#;
 
     fn fixture_paths(xml: &str) -> DatabasePaths {
-        let dir = std::env::temp_dir().join(format!("minipro-rs-test-{}", std::process::id()));
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("minipro-rs-test-{}-{}", std::process::id(), id));
         std::fs::create_dir_all(&dir).unwrap();
         let logicic = dir.join("logicic.xml");
         std::fs::write(&logicic, xml).unwrap();
+        // Create an empty infoic.xml so that find_device's fallback search
+        // doesn't fail with a file-not-found error (which on Linux gets
+        // misclassified as a USB error via nusb::Error's From<io::Error>).
+        let infoic = dir.join("infoic.xml");
+        std::fs::write(
+            &infoic,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<infoic>
+</infoic>
+"#,
+        )
+        .unwrap();
         DatabasePaths {
-            infoic: dir.join("infoic.xml"), // never read: logicic matches first
+            infoic,
             logicic,
             algorithms: None,
         }
