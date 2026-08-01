@@ -387,6 +387,13 @@ These looked identical in `--help` but gated different code paths. Passing `-x` 
 
 **Fix:** Removed `--skip-device-id` entirely. `-x` / `--skip-id` now controls both code paths (top-level and per-operation). Write and erase actions with `-x` are rejected with an error message directing the user to `-y` / `--continue-id` (which reads the ID but warns instead of aborting on mismatch — matching upstream `--no_id_error`).
 
+### `-y` / `--continue-id` didn't propagate to per-operation checks (fixed)
+After consolidating `-x`/`--skip-device-id`, `-y` printed "WARNING: chip ID mismatch — continuing" at the top-level check, but the per-operation `check_chip_id` calls inside `write_chip`, `read_chip`, `verify_chip`, and `erase_chip` still ran and aborted with a hard error. The `continue_id` flag only gated the top-level check.
+
+**Fix:** Consolidated to a single check point (matching upstream's architecture). The top-level `check_chip_id` call now covers write, read, erase, and verify. All per-operation `check_device_id` parameters are `false` — the top-level check handles `-x` (skip), `-y` (warn + continue), and the default (error) in one place. This also fixes batch mode: previously the ID was re-checked for every chip in a batch; now it's checked once at the start.
+
+**Remaining cleanup:** The `check_device_id: bool` parameter is still in the core API signatures (`operations.rs`) and the GUI still passes `true` to per-operation calls (with its own separate `check_chip_id` calls before each op). Removing the parameter entirely is tracked in ROADMAP.md.
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.

@@ -496,3 +496,8 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium** — the display bug is cosmetic but the wrong-voltage risk is real; the CLI is already fixed
   - **Status:** not started
 
+- [ ] **Remove `check_device_id` parameter from core API** — the per-operation `check_device_id: bool` parameter in `read_chip`, `write_chip`, `verify_chip`, `erase_chip`, `write_chip_bytes`, `verify_chip_bytes`, and `BatchConfig` is now dead weight from the CLI's perspective (the CLI does a single top-level `check_chip_id` call and passes `false` to all per-operation checks). The GUI still uses the parameter for its own pre-operation checks, but also has the same redundancy (calls `check_chip_id` separately AND passes `check_device_id: true` to the operation). Removing the parameter would eliminate the redundancy and simplify the API, but requires updating all GUI command calls in `commands.rs`.
+  - **Files to modify:** `crates/minipro-core/src/operations.rs` (remove parameter from all functions), `crates/minipro-cli/src/main.rs` (remove `false` arguments), `gui/src-tauri/src/commands.rs` (remove `check_device_id` field from `OperationOptions` and the per-operation arguments; the GUI's separate `check_chip_id` calls already handle it)
+  - **Priority: low** — code cleanup, no user-facing impact
+  - **Status:** not started
+
