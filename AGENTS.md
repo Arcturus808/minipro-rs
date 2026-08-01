@@ -512,12 +512,12 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
 
 ### Branching rules
 
-- **All fixes and features go on their own branch** — never commit directly to `main`. Use a descriptive branch name prefixed by type: `fix/...`, `feat/...`, `refactor/...`, `docs/...`.
+- **All work goes on its own branch** — never commit directly to `main`. Use a descriptive branch name prefixed by type: `fix/...`, `feat/...`, `refactor/...`, `docs/...`, `chore/...`, `release/...`.
 - **Branch from `main`** and merge back with `--no-ff` to preserve branch history.
-- **Run pre-commit checks** (`cargo fmt`, `cargo clippy`, `cargo test`) on the feature branch before merging.
-- **Delete the feature branch** after merging to `main`.
+- **Run pre-commit checks** (`cargo fmt`, `cargo clippy`, `cargo test`) on the branch before merging.
+- **Delete the branch after merging to `main`** — this applies to all short-lived branches (fix, feat, refactor, docs, chore, release). The only branches that persist are `main` and long-lived integration branches (e.g. `protocol-parity`) that span multiple sessions.
 - **Merge commit messages** follow the pattern: `Merge <branch-name>: <short description> [skip ci]` (use `[skip ci]` for doc-only or non-build changes to conserve CI credits).
-- **Feature branch pushes are free** on GitLab — they don't trigger CI pipelines. Only the merge to `main` triggers a pipeline.
+- **Branch pushes are free** on GitLab — they don't trigger CI pipelines. Only the merge to `main` triggers a pipeline.
 
 ---
 
