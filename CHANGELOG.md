@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config/fuses help overlay** — "i" icon in config panel opens a modal explaining fuse basics, dangerous fuses (RSTDISBL, SPIEN, JTAGEN, DWEN), and lock bits
 - **Favorites show manufacturer** — device favorites in the search panel now display the manufacturer alongside the device name. Old favorites auto-migrate to the new format
 - **ZIF socket placement diagram** — visual diagram in the right sidebar showing correct chip orientation and placement in the programmer's ZIF socket. Supports 40-pin (TL866A/CS/II+) and 48-pin (T48/T56/T76) sockets with model-specific lever position. Uses `pin_map` data from the chip database for accurate chip footprint, with `pin_count` fallback. DIP packages only; non-DIP shows "adapter required" message
+- **Logic IC test voltage selection** — `--vcc` now works for logic IC tests (valid: 1.8, 2.5, 3.3, 5 V), e.g. `minipro -p 7404 -T --vcc 3.3`. Upstream C minipro advertises these voltages in device info but provides no way to select them
 
 ### Fixed
 
@@ -27,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hex edit blur** — clicking outside the hex viewer (e.g., the device search field) now commits the active edit and releases keyboard focus. `suppressBlur` flag prevents blur during programmatic focus changes (overflow)
 - **Config panel stale fuses** — switching devices no longer shows the previous device's fuse names. Changed `$effect` to `$effect.pre` so `configData` refreshes before DOM re-render
 - **Chip ID read** — `get_chip_id` now reads the correct type byte (`resp[0]` not `resp[1]`), uses `chip_id_bytes_count` for the ID length instead of always reading 4 bytes, and applies correct endianness based on ID type (LE for type 3/4, BE otherwise). Fixes "Response too short" errors on TL866II+ when reading chips with 2-byte IDs (e.g. 27512@DIP28). Affects all programmer models (TL866A, TL866II+, T56, T76)
+- **CLI voltage overrides sent wrong codes** — `--vcc`/`--vdd`/`--vpp` mapped voltage names to sequential table indices, but programmer firmware expects model-specific encoded values. Overrides are now validated against per-model tables (TL866A/CS, TL866II+, T48, T56, T76), so invalid voltages error out instead of silently applying the wrong voltage
+- **Logic IC voltage attribute parsing** — logicic.xml `voltage="5V"` was never matched ("5" expected), so all logic ICs silently defaulted to 5 V
 
 ## [0.5.1] - 2026-07-05
 
