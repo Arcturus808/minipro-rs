@@ -254,7 +254,40 @@ fn run() -> Result<()> {
     )?;
     let mut device = find_device(&db_paths, part, handle.info.model)
         .with_context(|| format!("unknown device '{part}'"))?;
-    apply_overrides(&mut device, &collect_overrides(&cli), handle.info.model)?;
+
+    // Capture the database-default VCC code so we can warn if the user
+    // overrides it to a value that may produce unreliable results.
+    let default_vcc = device.voltages.vcc;
+    let is_logic = device.chip_type == minipro_core::device::ChipType::Logic as u32;
+    let model = handle.info.model;
+
+    apply_overrides(&mut device, &collect_overrides(&cli), model)?;
+
+    // Warn if VCC was overridden away from the database default.
+    if device.voltages.vcc != default_vcc {
+        let table = minipro_core::device::vcc_voltage_table(
+            model,
+            device.chip_type,
+            device.flags.custom_protocol,
+        );
+        let default_name = table
+            .and_then(|t| minipro_core::device::voltage_name(t, default_vcc))
+            .unwrap_or("?");
+        let override_name = table
+            .and_then(|t| minipro_core::device::voltage_name(t, device.voltages.vcc))
+            .unwrap_or("?");
+        eprintln!(
+            "WARNING: VCC overridden from {default_name}V to {override_name}V; \
+             results may be unreliable for this chip."
+        );
+        if !is_logic {
+            eprintln!(
+                "  The database default is {default_name}V. Reading or blank-checking \
+                 at a different VCC may produce false results (e.g. all 0xFF)."
+            );
+        }
+    }
+
     let device = Arc::new(device);
 
     // Populate db_paths on the handle so begin_transaction can look up

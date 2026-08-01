@@ -476,3 +476,23 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
   - **Status:** design discussion complete, ready for implementation
 
+- [ ] **GUI voltage override dropdowns** — replace free-text voltage inputs with model-specific dropdowns
+  - **Problem:** The GUI Advanced section currently uses free-text VPP/VCC/VDD inputs with a single 16-entry lookup table (the T48/T56 table). This produces wrong voltages on TL866A and TL866II+ programmers (see "Voltage display uses wrong lookup tables" in AGENTS.md). It also allows users to enter voltages that aren't supported by the connected programmer.
+  - **Solution:** Use the per-model voltage tables already implemented in `minipro-core/src/device.rs` (`vcc_voltage_table()`, `vpp_voltage_table()`) to populate dropdowns with only valid values for the connected programmer. For logic ICs, show only the 4-entry logic VCC table (1.8, 2.5, 3.3, 5V) and hide VPP/VDD.
+  - **Backend changes:**
+    - Expose voltage tables to the frontend via a new Tauri command (e.g. `get_voltage_options`) that returns valid VCC/VPP/VDD values for the connected programmer model and selected device type
+    - Update `VoltagesDto` to use the correct per-model table for display strings (fixes the display bug)
+  - **Frontend changes:**
+    - Replace free-text inputs with `<select>` dropdowns populated from the backend
+    - Show the database default as the selected option
+    - Disable/hide VPP and VDD for logic ICs
+    - Show a warning badge when the user selects a VCC different from the database default (matching the CLI warning)
+  - **Files affected:**
+    | File | Action |
+    |------|--------|
+    | `gui/src-tauri/src/commands.rs` | Add `get_voltage_options` command, fix `VoltagesDto` table selection |
+    | `gui/src/lib/stores/device.ts` | Add voltage options store |
+    | `gui/src/App.svelte` | Replace free-text voltage inputs with dropdowns |
+  - **Priority: medium** — the display bug is cosmetic but the wrong-voltage risk is real; the CLI is already fixed
+  - **Status:** not started
+

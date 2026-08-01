@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Chip ID read** — `get_chip_id` now reads the correct type byte (`resp[0]` not `resp[1]`), uses `chip_id_bytes_count` for the ID length instead of always reading 4 bytes, and applies correct endianness based on ID type (LE for type 3/4, BE otherwise). Fixes "Response too short" errors on TL866II+ when reading chips with 2-byte IDs (e.g. 27512@DIP28). Affects all programmer models (TL866A, TL866II+, T56, T76)
 - **CLI voltage overrides sent wrong codes** — `--vcc`/`--vdd`/`--vpp` mapped voltage names to sequential table indices, but programmer firmware expects model-specific encoded values. Overrides are now validated against per-model tables (TL866A/CS, TL866II+, T48, T56, T76), so invalid voltages error out instead of silently applying the wrong voltage
 - **Logic IC voltage attribute parsing** — logicic.xml `voltage="5V"` was never matched ("5" expected), so all logic ICs silently defaulted to 5 V
+- **CLI VCC override warning** — when `--vcc` changes VCC from the database default, the CLI prints a warning that results may be unreliable (e.g. blank-checking a 5V chip at 3.3V produces a false "BLANK" result)
 
 ## [0.5.1] - 2026-07-05
 
