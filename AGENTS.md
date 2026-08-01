@@ -336,6 +336,14 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **Note:** the "Voltage display uses wrong lookup tables" entry above claims T48/T56 use sequential-index tables; upstream actually assigns the encoded `xg_*` tables to T48/T56/T76 as well, so that entry's table breakdown should be revisited when the GUI display bug is fixed.
 
+### CLI warns when VCC override differs from database default (fixed)
+When `--vcc` (or `-o vcc=...`) changes VCC away from the database default, the CLI prints a warning to stderr:
+```
+WARNING: VCC overridden from 5V to 3.3V; results may be unreliable for this chip.
+  The database default is 5V. Reading or blank-checking at a different VCC may produce false results (e.g. all 0xFF).
+```
+This prevents silent false positives (e.g. blank-checking a 5V EPROM at 3.3V reports "BLANK" because the chip can't power up). The override is still applied — the warning is informational, not blocking. Logic ICs get the first line only (no "false results" explanation, since logic tests at different VCC are intentional stress tests).
+
 ### Chip ID read had wrong type byte, endianness, and length (fixed)
 `get_chip_id` in all protocol implementations had three bugs compared to the upstream C minipro:
 1. **Wrong type byte**: TL866II+ read `resp[1]` as the ID type; should be `resp[0]` (matching upstream `msg[0]`)

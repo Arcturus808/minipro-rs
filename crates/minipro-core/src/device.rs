@@ -452,6 +452,14 @@ pub fn voltage_table_names(table: &[(&str, u8)]) -> String {
         .join(", ")
 }
 
+/// Reverse lookup: firmware code → human-readable voltage name.
+pub fn voltage_name(table: &'static [(&'static str, u8)], code: u8) -> Option<&'static str> {
+    table
+        .iter()
+        .find(|(_, c)| *c == code)
+        .map(|(name, _)| *name)
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PackageDetails {
     pub pin_count: u8,
