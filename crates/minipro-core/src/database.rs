@@ -1130,14 +1130,16 @@ fn build_logic_device(e: &BytesStart, name: &str, manufacturer: &str) -> Result<
     };
     let pin_count = get_attr_u32(e, b"pins").unwrap_or(0) as u8;
 
-    // Map voltage string to VCC code
-    let vcc: u8 = match voltage_str.as_str() {
-        "1.8" => 0x03,
-        "2.5" => 0x02,
-        "3.3" => 0x01,
-        "5" => 0x00,
-        _ => 0x00,
-    };
+    // Map the voltage attribute (e.g. "5V") to a firmware VCC code.
+    // lookup_voltage strips the trailing 'V'; unknown voltages are an error
+    // rather than silently testing at 5 V (upstream skips such devices).
+    let vcc = crate::device::lookup_voltage(crate::device::LOGIC_VCC_VOLTAGES, &voltage_str)
+        .ok_or_else(|| {
+            MiniproError::Xml(format!(
+                "logic IC '{name}' has unknown voltage '{voltage_str}'; valid values: {}",
+                crate::device::voltage_table_names(crate::device::LOGIC_VCC_VOLTAGES)
+            ))
+        })?;
 
     let package = PackageDetails {
         pin_count,
@@ -1230,5 +1232,64 @@ fn compare_mask_for(chip_info: u32) -> (u16, u8) {
         PIC18F => (0xffff, 4),
         PIC18J => (0xffff, 5),
         _ => (0x00ff, 0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LOGICIC_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<logicic>
+  <database type="LOGIC">
+    <manufacturer name="Logic Ic">
+      <ic name="7404" type="5" voltage="5V" pins="14">
+        <vector id="00"> 0 H 0 H 0 H G H 0 H 0 H 0 V </vector>
+        <vector id="01"> 1 L 1 L 1 L G L 1 L 1 L 1 V </vector>
+      </ic>
+      <ic name="74HC00" type="5" voltage="3.3V" pins="14">
+        <vector id="00"> 0 H 0 H 0 H G H 0 H 0 H 0 V </vector>
+      </ic>
+      <ic name="BADIC" type="5" voltage="6V" pins="14">
+        <vector id="00"> 0 H 0 H 0 H G H 0 H 0 H 0 V </vector>
+      </ic>
+    </manufacturer>
+  </database>
+</logicic>
+"#;
+
+    fn fixture_paths(xml: &str) -> DatabasePaths {
+        let dir = std::env::temp_dir().join(format!("minipro-rs-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let logicic = dir.join("logicic.xml");
+        std::fs::write(&logicic, xml).unwrap();
+        DatabasePaths {
+            infoic: dir.join("infoic.xml"), // never read: logicic matches first
+            logicic,
+            algorithms: None,
+        }
+    }
+
+    #[test]
+    fn test_logic_voltage_attribute_parsing() {
+        let paths = fixture_paths(LOGICIC_FIXTURE);
+        // "5V" → 0x00 (trailing 'V' stripped)
+        let dev = find_device(&paths, "7404", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.voltages.vcc, 0x00);
+        assert_eq!(dev.chip_type, crate::device::ChipType::Logic as u32);
+        assert_eq!(dev.vector_count, 2);
+        // "3.3V" → 0x01 (previously fell through to the 5 V default)
+        let dev = find_device(&paths, "74HC00", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.voltages.vcc, 0x01);
+    }
+
+    #[test]
+    fn test_logic_voltage_unknown_is_error() {
+        let paths = fixture_paths(LOGICIC_FIXTURE);
+        let err = find_device(&paths, "BADIC", ProgrammerModel::Tl866iiPlus).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown voltage '6V'"),
+            "unexpected error: {err}"
+        );
     }
 }

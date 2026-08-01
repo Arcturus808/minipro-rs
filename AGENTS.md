@@ -325,6 +325,17 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **Complication:** `get_device_info` runs without a connected programmer, so the model is unknown. Fix requires either deferring voltage display until a programmer is connected, or showing voltages for all models.
 
+### CLI `--vcc`/`--vdd`/`--vpp` overrides used wrong voltage tables (fixed)
+`apply_overrides` in `minipro-cli/src/main.rs` mapped voltage names to **sequential indices** of a single hardcoded 16-entry table for all programmer models. On TL866II+ (and TL866A, T48, T56, T76) the firmware expects model-specific **encoded** values, so overrides sent the wrong codes — e.g. a `--vcc` sweep on a logic IC produced 5 V on every run (verified on a scope). Upstream C minipro rejects `--vcc` entirely for logic ICs (their `vcc_table` is NULL for logic devices).
+
+**Fix:** `minipro-core/src/device.rs` now has the full upstream table set (`TL866A_*`, `TL866II_*`, `XG_*`, `XG_PLD_VPP`, `T48_BB_*`, `LOGIC_VCC_VOLTAGES`) plus `vcc_voltage_table()` / `vpp_voltage_table()` (per-model selection, mirrors upstream `load_device()`) and `lookup_voltage()` (case-insensitive, tolerates trailing `V` and `.0`). `apply_overrides` takes the programmer model and validates against these tables.
+
+**Logic-IC `--vcc` is now supported** (upstream advertises the voltages in device info but offers no way to select them): valid values are exactly `1.8`, `2.5`, `3.3`, `5` (encodings `0x03`/`0x02`/`0x01`/`0x00`, sent in `msg[1]` of the logic-test command). `--vpp`/`--vdd` on logic ICs are rejected. Caveats: the programmer drives logic inputs at ~3.3 V regardless of VCC, and its input thresholds don't scale — sub-3.3 V tests are stress indicators, not conformance tests.
+
+**Related fix:** `build_logic_device` in `database.rs` matched the logicic.xml `voltage` attribute against `"5"`/`"3.3"` etc., but the XML stores `"5V"` — every entry fell through to the 5 V default. Now parsed via `lookup_voltage(LOGIC_VCC_VOLTAGES, …)`; unknown voltages are a hard error.
+
+**Note:** the "Voltage display uses wrong lookup tables" entry above claims T48/T56 use sequential-index tables; upstream actually assigns the encoded `xg_*` tables to T48/T56/T76 as well, so that entry's table breakdown should be revisited when the GUI display bug is fixed.
+
 ### Chip ID read had wrong type byte, endianness, and length (fixed)
 `get_chip_id` in all protocol implementations had three bugs compared to the upstream C minipro:
 1. **Wrong type byte**: TL866II+ read `resp[1]` as the ID type; should be `resp[0]` (matching upstream `msg[0]`)
@@ -488,6 +499,17 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
   cargo test --all --locked
   ```
 - **Batch commits when possible** — one push with multiple commits is one pipeline run. Multiple pushes of one commit each are multiple pipeline runs.
+
+---
+
+### Branching rules
+
+- **All fixes and features go on their own branch** — never commit directly to `main`. Use a descriptive branch name prefixed by type: `fix/...`, `feat/...`, `refactor/...`, `docs/...`.
+- **Branch from `main`** and merge back with `--no-ff` to preserve branch history.
+- **Run pre-commit checks** (`cargo fmt`, `cargo clippy`, `cargo test`) on the feature branch before merging.
+- **Delete the feature branch** after merging to `main`.
+- **Merge commit messages** follow the pattern: `Merge <branch-name>: <short description> [skip ci]` (use `[skip ci]` for doc-only or non-build changes to conserve CI credits).
+- **Feature branch pushes are free** on GitLab — they don't trigger CI pipelines. Only the merge to `main` triggers a pipeline.
 
 ---
 

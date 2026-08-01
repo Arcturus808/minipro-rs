@@ -254,7 +254,7 @@ fn run() -> Result<()> {
     )?;
     let mut device = find_device(&db_paths, part, handle.info.model)
         .with_context(|| format!("unknown device '{part}'"))?;
-    apply_overrides(&mut device, &collect_overrides(&cli))?;
+    apply_overrides(&mut device, &collect_overrides(&cli), handle.info.model)?;
     let device = Arc::new(device);
 
     // Populate db_paths on the handle so begin_transaction can look up
@@ -894,10 +894,15 @@ fn parse_fuse_file(text: &str) -> anyhow::Result<Vec<FuseValue>> {
 /// Supported keys:
 /// - `vpp=V`   — VPP programming voltage (e.g. `"12.0"`)
 /// - `vdd=V`   — VDD write voltage (e.g. `"5.0"`)
-/// - `vcc=V`   — VCC verify voltage (e.g. `"3.3"`)
+/// - `vcc=V`   — VCC verify voltage (e.g. `"3.3"`); for logic ICs this sets the
+///   logic-test supply voltage (valid: 1.8, 2.5, 3.3, 5)
 /// - `pulse=N` — write pulse delay in microseconds (0–65535)
 /// - `spi_clock=N` — SPI clock index (raw u8)
 /// - `address=N`   — I²C slave address (0–255)
+///
+/// Voltage names are validated against the firmware encoding table for the
+/// connected programmer model (see `vcc_voltage_table`/`vpp_voltage_table` in
+/// minipro-core).
 ///
 /// Merge individual long-form override flags (--vpp, --vcc, etc.) with any
 /// `-o KEY=VALUE` entries into a single list for `apply_overrides`.
@@ -924,58 +929,58 @@ fn collect_overrides(cli: &Cli) -> Vec<String> {
     all
 }
 
-fn apply_overrides(device: &mut minipro_core::device::Device, overrides: &[String]) -> Result<()> {
-    // VPP voltage table (index 0..15 → volts), from tl866iiplus.c
-    static VPP_TABLE: &[&str] = &[
-        "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
-        "15.5", "16.0", "16.5", "17.0", "18.0",
-    ];
-    // VCC / VDD voltage table (index 0..15 → volts), from tl866iiplus.c
-    static VCC_TABLE: &[&str] = &[
-        "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
-        "6.3", "6.5", "7.0",
-    ];
+fn apply_overrides(
+    device: &mut minipro_core::device::Device,
+    overrides: &[String],
+    model: ProgrammerModel,
+) -> Result<()> {
+    use minipro_core::device::{
+        lookup_voltage, vcc_voltage_table, voltage_table_names, vpp_voltage_table,
+    };
 
     for raw in overrides {
         let (key, value) = raw
             .split_once('=')
             .with_context(|| format!("invalid override '{raw}': expected KEY=VALUE"))?;
-        match key.to_ascii_lowercase().as_str() {
-            "vpp" => {
-                let idx = VPP_TABLE
-                    .iter()
-                    .position(|&v| v == value)
-                    .with_context(|| {
+        let key = key.to_ascii_lowercase();
+        match key.as_str() {
+            // Voltage overrides use the per-model firmware encoding tables
+            // from upstream database.c.  Logic ICs only support vcc, from the
+            // 4-entry logic table (1.8/2.5/3.3/5 V).
+            key @ ("vpp" | "vdd" | "vcc") => {
+                let is_logic =
+                    device.chip_type == minipro_core::device::ChipType::Logic as u32;
+                let table = match key {
+                    "vpp" => {
+                        vpp_voltage_table(model, device.chip_type, device.flags.custom_protocol)
+                    }
+                    // vdd shares the VCC table, but logic ICs only support vcc
+                    // (upstream has no vdd table for logic devices).
+                    "vdd" if is_logic => None,
+                    _ => vcc_voltage_table(model, device.chip_type, device.flags.custom_protocol),
+                }
+                .with_context(|| {
+                    if is_logic {
                         format!(
-                            "invalid vpp voltage '{value}'; valid values: {}",
-                            VPP_TABLE.join(", ")
+                            "'{key}' is not applicable to logic ICs; only 'vcc' is supported \
+                             (valid values: {})",
+                            voltage_table_names(minipro_core::device::LOGIC_VCC_VOLTAGES)
                         )
-                    })?;
-                device.voltages.vpp = idx as u8;
-            }
-            "vdd" => {
-                let idx = VCC_TABLE
-                    .iter()
-                    .position(|&v| v == value)
-                    .with_context(|| {
-                        format!(
-                            "invalid vdd voltage '{value}'; valid values: {}",
-                            VCC_TABLE.join(", ")
-                        )
-                    })?;
-                device.voltages.vdd = idx as u8;
-            }
-            "vcc" => {
-                let idx = VCC_TABLE
-                    .iter()
-                    .position(|&v| v == value)
-                    .with_context(|| {
-                        format!(
-                            "invalid vcc voltage '{value}'; valid values: {}",
-                            VCC_TABLE.join(", ")
-                        )
-                    })?;
-                device.voltages.vcc = idx as u8;
+                    } else {
+                        format!("'{key}' override is not supported for this device on {model}")
+                    }
+                })?;
+                let code = lookup_voltage(table, value).with_context(|| {
+                    format!(
+                        "invalid {key} voltage '{value}'; valid values: {}",
+                        voltage_table_names(table)
+                    )
+                })?;
+                match key {
+                    "vpp" => device.voltages.vpp = code,
+                    "vdd" => device.voltages.vdd = code,
+                    _ => device.voltages.vcc = code,
+                }
             }
             "pulse" => {
                 let n: u32 = value
@@ -1238,4 +1243,124 @@ It is distributed under the GNU General Public License version 3 or
     )?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minipro_core::device::{ChipType, Device};
+
+    fn logic_device() -> Device {
+        Device {
+            chip_type: ChipType::Logic as u32,
+            ..Default::default()
+        }
+    }
+
+    fn memory_device() -> Device {
+        Device {
+            chip_type: ChipType::Memory as u32,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_logic_vcc_override_accepted() {
+        // The 4-entry logic table: 1.8/2.5/3.3/5 V (firmware encodings 3/2/1/0).
+        for (value, code) in [("1.8", 0x03), ("2.5", 0x02), ("3.3", 0x01), ("5", 0x00)] {
+            let mut dev = logic_device();
+            apply_overrides(
+                &mut dev,
+                &[format!("vcc={value}")],
+                ProgrammerModel::Tl866iiPlus,
+            )
+            .unwrap();
+            assert_eq!(dev.voltages.vcc, code, "vcc={value}");
+        }
+        // 'V' suffix and .0 forms are tolerated.
+        let mut dev = logic_device();
+        apply_overrides(&mut dev, &["vcc=5V".into()], ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.voltages.vcc, 0x00);
+    }
+
+    #[test]
+    fn test_logic_vcc_override_rejects_invalid() {
+        // Values from the old (wrong) 16-entry table must now be rejected.
+        for value in ["1.9", "2.7", "4.8", "5.3", "7.0"] {
+            let mut dev = logic_device();
+            let err = apply_overrides(
+                &mut dev,
+                &[format!("vcc={value}")],
+                ProgrammerModel::Tl866iiPlus,
+            )
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("1.8, 2.5, 3.3, 5"),
+                "error should list valid logic voltages: {err:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_logic_vpp_vdd_rejected() {
+        for key in ["vpp", "vdd"] {
+            let mut dev = logic_device();
+            let err = apply_overrides(
+                &mut dev,
+                &[format!("{key}=12")],
+                ProgrammerModel::Tl866iiPlus,
+            )
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("not applicable to logic ICs"),
+                "{key}: {err:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tl866iiplus_memory_voltage_encoding() {
+        // Firmware-encoded values, not sequential indices.
+        let mut dev = memory_device();
+        apply_overrides(
+            &mut dev,
+            &["vcc=6.5".into(), "vdd=3.3".into(), "vpp=12.5".into()],
+            ProgrammerModel::Tl866iiPlus,
+        )
+        .unwrap();
+        assert_eq!(dev.voltages.vcc, 0x05);
+        assert_eq!(dev.voltages.vdd, 0x01);
+        assert_eq!(dev.voltages.vpp, 0x60);
+
+        // 7.0 V does not exist on the TL866II+.
+        let mut dev = memory_device();
+        assert!(
+            apply_overrides(&mut dev, &["vcc=7.0".into()], ProgrammerModel::Tl866iiPlus).is_err()
+        );
+    }
+
+    #[test]
+    fn test_t48_memory_voltage_encoding() {
+        let mut dev = memory_device();
+        apply_overrides(&mut dev, &["vcc=1.2".into()], ProgrammerModel::T48).unwrap();
+        assert_eq!(dev.voltages.vcc, 0x09);
+    }
+
+    #[test]
+    fn test_non_voltage_overrides_unchanged() {
+        let mut dev = memory_device();
+        apply_overrides(
+            &mut dev,
+            &[
+                "pulse=500".into(),
+                "spi_clock=2".into(),
+                "address=0xA0".into(),
+            ],
+            ProgrammerModel::Tl866iiPlus,
+        )
+        .unwrap();
+        assert_eq!(dev.pulse_delay, 500);
+        assert_eq!(dev.spi_clock, 2);
+        assert_eq!(dev.i2c_address, 0xA0);
+    }
 }
