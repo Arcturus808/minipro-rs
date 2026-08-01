@@ -120,10 +120,6 @@ struct Cli {
     #[arg(short = 'B', long = "skip-blank", action = ArgAction::SetTrue)]
     skip_blank: bool,
 
-    /// Skip chip ID verification before read/write/erase
-    #[arg(long = "skip-device-id", action = ArgAction::SetTrue)]
-    skip_device_id: bool,
-
     /// Disable write protection before operation
     #[arg(short = 'u', long = "protect-off", alias = "unprotect", action = ArgAction::SetTrue)]
     protect_off: bool,
@@ -136,7 +132,7 @@ struct Cli {
     #[arg(short = 'f', long = "format", default_value = "auto", value_name = "FORMAT")]
     format: String,
 
-    /// Skip chip ID verification
+    /// Skip chip ID verification (read mode only; rejected for write/erase)
     #[arg(short = 'x', long = "skip-id", alias = "skip_id", action = ArgAction::SetTrue)]
     skip_id: bool,
 

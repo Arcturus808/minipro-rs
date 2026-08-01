@@ -372,6 +372,16 @@ fn do_operations(
     let page = resolve_page(cli)?;
     let proto_page: u8 = page.as_protocol_page().unwrap_or(0x00);
 
+    // ── Reject -x/--skip-id in write/erase mode (upstream parity) ────────────
+    // Upstream minipro explicitly forbids skipping the ID check for write and
+    // erase actions.  Use -y/--continue-id to warn-but-continue on mismatch.
+    if cli.skip_id && (cli.write.is_some() || cli.erase) {
+        anyhow::bail!(
+            "Skipping the ID check is not permitted for this action.\n\
+             Use '-y' / --continue-id to warn but continue on chip ID mismatch."
+        );
+    }
+
     // ── Chip ID ────────────────────────────────────────────────────────────────
     if cli.device_id {
         let device = handle.device.as_ref().context("no device selected")?;
@@ -442,7 +452,7 @@ fn do_operations(
                 .unwrap_or_else(|_| ProgressStyle::default_spinner()),
         );
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
-        erase_chip(handle, !cli.skip_device_id)?;
+        erase_chip(handle, !cli.skip_id)?;
         pb.finish_with_message("Erasing... done.");
     }
 
@@ -485,7 +495,7 @@ fn do_operations(
                 format: cli.format.clone(),
                 size_mismatch,
                 skip_blank: cli.skip_blank,
-                check_device_id: !cli.skip_device_id,
+                check_device_id: !cli.skip_id,
                 erase: !cli.no_erase,
                 verify: !cli.no_verify,
                 count,
@@ -616,7 +626,7 @@ fn do_operations(
                         .unwrap_or_else(|_| ProgressStyle::default_spinner()),
                 );
                 pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                erase_chip(handle, !cli.skip_device_id)?;
+                erase_chip(handle, !cli.skip_id)?;
                 pb.finish_with_message("Erasing... done.");
                 // The firmware requires a transaction reset after erase before
                 // writing (same as the C reference: end_transaction then
@@ -650,7 +660,7 @@ fn do_operations(
                 &cli.format,
                 size_mismatch,
                 cli.skip_blank,
-                !cli.skip_device_id,
+                !cli.skip_id,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -693,7 +703,7 @@ fn do_operations(
                     path,
                     proto_page,
                     &cli.format,
-                    !cli.skip_device_id,
+                    !cli.skip_id,
                     Some(&mut |done, total| {
                         pb.set_length(total as u64);
                         pb.set_position(done as u64);
@@ -745,7 +755,7 @@ fn do_operations(
                 path,
                 proto_page,
                 &cli.format,
-                !cli.skip_device_id,
+                !cli.skip_id,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -786,7 +796,7 @@ fn do_operations(
             path,
             proto_page,
             &cli.format,
-            !cli.skip_device_id,
+            !cli.skip_id,
             Some(&mut |done, total| {
                 pb.set_length(total as u64);
                 pb.set_position(done as u64);
