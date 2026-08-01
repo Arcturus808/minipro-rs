@@ -198,6 +198,7 @@ struct Cli {
 
     /// Override a device parameter: KEY=VALUE.
     /// Supported keys: vpp=<V>, vdd=<V>, vcc=<V>, pulse=<us>, spi_clock=<N>, address=<N>.
+    /// Valid voltages depend on the programmer model; logic ICs accept vcc of 1.8, 2.5, 3.3, 5.
     /// May be repeated for multiple overrides.
     #[arg(short = 'o', long = "override", value_name = "KEY=VALUE", action = ArgAction::Append)]
     overrides: Vec<String>,
@@ -206,7 +207,8 @@ struct Cli {
     #[arg(long = "vpp", value_name = "V")]
     vpp: Option<String>,
 
-    /// Set the VCC verify voltage. Equivalent to -o vcc=<V>.
+    /// Set the VCC verify voltage (logic-test supply voltage for logic ICs).
+    /// Equivalent to -o vcc=<V>.
     #[arg(long = "vcc", value_name = "V")]
     vcc: Option<String>,
 

@@ -161,6 +161,297 @@ impl Voltages {
     }
 }
 
+// ── Voltage parameter tables ─────────────────────────────────────────────────
+//
+// Maps human-readable voltage names to the firmware encoding that goes into
+// `voltages.vcc` / `voltages.vpp` / `voltages.vdd`.  These are not raw DAC
+// values but indices into lookup tables inside the programmer firmware.
+// Tables mirror the `parameters_t` arrays in the upstream C `database.c`.
+
+/// TL866A/CS VPP table (`tl866a_vpp_voltages`).
+static TL866A_VPP_VOLTAGES: &[(&str, u8)] = &[
+    ("10", 0x40),
+    ("12.5", 0x00),
+    ("13.5", 0x30),
+    ("14", 0x50),
+    ("16", 0x10),
+    ("17", 0x70),
+    ("18", 0x60),
+    ("21", 0x20),
+];
+
+/// TL866A/CS VCC table (`tl866a_vcc_voltages`).
+static TL866A_VCC_VOLTAGES: &[(&str, u8)] = &[
+    ("3.3", 0x02),
+    ("4", 0x01),
+    ("4.5", 0x05),
+    ("5", 0x00),
+    ("5.5", 0x04),
+    ("6.5", 0x03),
+];
+
+/// TL866II+ VPP table (`tl866ii_vpp_voltages`).
+static TL866II_VPP_VOLTAGES: &[(&str, u8)] = &[
+    ("9", 0x10),
+    ("9.5", 0x20),
+    ("10", 0x30),
+    ("11", 0x40),
+    ("11.5", 0x50),
+    ("12", 0x00),
+    ("12.5", 0x60),
+    ("13", 0x70),
+    ("13.5", 0x80),
+    ("14", 0x90),
+    ("14.5", 0xa0),
+    ("15.5", 0xb0),
+    ("16", 0xc0),
+    ("16.5", 0xd0),
+    ("17", 0xe0),
+    ("18", 0xf0),
+];
+
+/// TL866II+ VCC table (`tl866ii_vcc_voltages`).
+static TL866II_VCC_VOLTAGES: &[(&str, u8)] = &[
+    ("3.3", 0x01),
+    ("4", 0x02),
+    ("4.5", 0x03),
+    ("5", 0x00),
+    ("5.5", 0x04),
+    ("6.5", 0x05),
+];
+
+/// XGecu T48/T56/T76 VPP table (`xg_vpp_voltages`).
+static XG_VPP_VOLTAGES: &[(&str, u8)] = &[
+    ("9", 0x10),
+    ("9.5", 0x20),
+    ("10", 0x30),
+    ("11", 0x40),
+    ("11.5", 0x50),
+    ("12", 0x00),
+    ("12.5", 0x60),
+    ("13", 0x70),
+    ("13.5", 0x80),
+    ("14", 0x90),
+    ("14.5", 0xa0),
+    ("15.5", 0xb0),
+    ("16", 0xc0),
+    ("16.5", 0xd0),
+    ("17", 0xe0),
+    ("18", 0xf0),
+    ("21", 0xf2),
+    ("25", 0xf1),
+];
+
+/// XGecu T76 PLD VPP table (`xg_pld_vpp_voltages`) — PLD VPP capped at 18 V.
+static XG_PLD_VPP_VOLTAGES: &[(&str, u8)] = &[
+    ("9", 0x10),
+    ("9.5", 0x20),
+    ("10", 0x30),
+    ("11", 0x40),
+    ("11.5", 0x50),
+    ("12", 0x00),
+    ("12.5", 0x60),
+    ("13", 0x70),
+    ("13.5", 0x80),
+    ("14", 0x90),
+    ("14.5", 0xa0),
+    ("15.5", 0xb0),
+    ("16", 0xc0),
+    ("16.5", 0xd0),
+    ("17", 0xe0),
+    ("18", 0xf0),
+];
+
+/// XGecu T48/T56/T76 VCC table (`xg_vcc_voltages`).
+static XG_VCC_VOLTAGES: &[(&str, u8)] = &[
+    ("1.2", 0x09),
+    ("1.8", 0x06),
+    ("2.5", 0x07),
+    ("3", 0x08),
+    ("3.3", 0x01),
+    ("4", 0x02),
+    ("4.5", 0x03),
+    ("4.75", 0x0a),
+    ("5", 0x00),
+    ("5.25", 0x0b),
+    ("5.5", 0x04),
+    ("5.75", 0x0c),
+    ("6", 0x0d),
+    ("6.25", 0x0e),
+    ("6.5", 0x05),
+];
+
+/// T48 bit-bang (custom protocol) VCC table (`t48_bb_vcc_voltages`).
+static T48_BB_VCC_VOLTAGES: &[(&str, u8)] = &[
+    ("1.75", 0x01),
+    ("1.8", 0x02),
+    ("1.9", 0x03),
+    ("2", 0x04),
+    ("2.1", 0x05),
+    ("2.2", 0x06),
+    ("2.3", 0x08),
+    ("2.4", 0x09),
+    ("2.5", 0x0a),
+    ("2.6", 0x0b),
+    ("2.7", 0x0d),
+    ("2.8", 0x0e),
+    ("2.9", 0x0f),
+    ("3", 0x10),
+    ("3.3", 0x14),
+    ("3.5", 0x16),
+    ("3.7", 0x18),
+    ("3.8", 0x1a),
+    ("4", 0x1c),
+    ("4.2", 0x1e),
+    ("4.3", 0x20),
+    ("4.4", 0x21),
+    ("4.5", 0x22),
+    ("4.7", 0x25),
+    ("4.8", 0x26),
+    ("4.9", 0x27),
+    ("5", 0x28),
+    ("5.2", 0x2b),
+    ("5.3", 0x2c),
+    ("5.4", 0x2d),
+    ("5.5", 0x2f),
+    ("5.6", 0x30),
+    ("5.7", 0x31),
+    ("5.8", 0x32),
+    ("5.9", 0x33),
+    ("6", 0x34),
+    ("6.1", 0x35),
+    ("6.2", 0x36),
+    ("6.3", 0x38),
+    ("6.5", 0x3b),
+    ("6.6", 0x3c),
+    ("6.7", 0x3d),
+    ("6.8", 0x3e),
+    ("6.9", 0x3f),
+];
+
+/// T48 bit-bang (custom protocol) VPP table (`t48_bb_vpp_voltages`).
+static T48_BB_VPP_VOLTAGES: &[(&str, u8)] = &[
+    ("9", 0x00),
+    ("9.5", 0x01),
+    ("10", 0x03),
+    ("11", 0x07),
+    ("11.5", 0x09),
+    ("12", 0x0b),
+    ("12.5", 0x0d),
+    ("13", 0x0e),
+    ("13.5", 0x11),
+    ("14", 0x13),
+    ("14.5", 0x15),
+    ("15.5", 0x18),
+    ("16", 0x1a),
+    ("16.5", 0x1c),
+    ("17", 0x1e),
+    ("18", 0x23),
+    ("21", 0x2f),
+    ("25", 0x3e),
+];
+
+/// Logic-IC test VCC table (`vcc_logic_voltages`), shared by all programmer
+/// models.  Used both to parse the `voltage` attribute of logicic.xml entries
+/// and to validate `--vcc` overrides for logic devices.
+pub static LOGIC_VCC_VOLTAGES: &[(&str, u8)] =
+    &[("1.8", 0x03), ("2.5", 0x02), ("3.3", 0x01), ("5", 0x00)];
+
+/// VCC/VDD voltage table for a given programmer model and device.
+///
+/// Mirrors the table assignment in the upstream C `load_device()`:
+/// logic ICs always use [`LOGIC_VCC_VOLTAGES`]; T56/T76 bit-bang (custom
+/// protocol) devices have no table in upstream, so `None` is returned and the
+/// caller should reject the override.
+pub fn vcc_voltage_table(
+    model: ProgrammerModel,
+    chip_type: u32,
+    custom_protocol: bool,
+) -> Option<&'static [(&'static str, u8)]> {
+    if chip_type == ChipType::Logic as u32 {
+        return Some(LOGIC_VCC_VOLTAGES);
+    }
+    match model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Some(TL866A_VCC_VOLTAGES),
+        ProgrammerModel::Tl866iiPlus => Some(TL866II_VCC_VOLTAGES),
+        ProgrammerModel::T48 => Some(if custom_protocol {
+            T48_BB_VCC_VOLTAGES
+        } else {
+            XG_VCC_VOLTAGES
+        }),
+        ProgrammerModel::T56 | ProgrammerModel::T76 => {
+            if custom_protocol {
+                None
+            } else {
+                Some(XG_VCC_VOLTAGES)
+            }
+        }
+    }
+}
+
+/// VPP voltage table for a given programmer model and device.
+///
+/// Logic ICs have no VPP (returns `None`).  On the T76, PLD devices are
+/// limited to the 18 V table (`xg_pld_vpp_voltages` in upstream).
+pub fn vpp_voltage_table(
+    model: ProgrammerModel,
+    chip_type: u32,
+    custom_protocol: bool,
+) -> Option<&'static [(&'static str, u8)]> {
+    if chip_type == ChipType::Logic as u32 {
+        return None;
+    }
+    match model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Some(TL866A_VPP_VOLTAGES),
+        ProgrammerModel::Tl866iiPlus => Some(TL866II_VPP_VOLTAGES),
+        ProgrammerModel::T48 => Some(if custom_protocol {
+            T48_BB_VPP_VOLTAGES
+        } else {
+            XG_VPP_VOLTAGES
+        }),
+        ProgrammerModel::T56 => {
+            if custom_protocol {
+                None
+            } else {
+                Some(XG_VPP_VOLTAGES)
+            }
+        }
+        ProgrammerModel::T76 => {
+            if custom_protocol {
+                None
+            } else if chip_type == ChipType::Pld as u32 {
+                Some(XG_PLD_VPP_VOLTAGES)
+            } else {
+                Some(XG_VPP_VOLTAGES)
+            }
+        }
+    }
+}
+
+/// Look up a voltage name in a parameter table, returning the firmware code.
+///
+/// The match is case-insensitive and tolerates a trailing `V` (as in the
+/// logicic.xml `voltage="5V"` attribute) and a trailing `.0` (so `--vcc 5.0`
+/// works as well as `--vcc 5`).
+pub fn lookup_voltage(table: &[(&str, u8)], value: &str) -> Option<u8> {
+    let v = value.trim();
+    let v = v.strip_suffix(['V', 'v']).unwrap_or(v);
+    let v = v.strip_suffix(".0").unwrap_or(v);
+    table
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(v))
+        .map(|(_, code)| *code)
+}
+
+/// List the valid voltage names of a table for error messages.
+pub fn voltage_table_names(table: &[(&str, u8)]) -> String {
+    table
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PackageDetails {
     pub pin_count: u8,
@@ -414,4 +705,110 @@ pub struct ProgrammerInfo {
     pub device_code: String,
     pub serial_number: String,
     pub hardware_version: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MEM: u32 = ChipType::Memory as u32;
+    const LOGIC: u32 = ChipType::Logic as u32;
+    const PLD: u32 = ChipType::Pld as u32;
+
+    #[test]
+    fn test_lookup_voltage_normalization() {
+        // Plain names, logicic.xml style 'V' suffix, and '.0' suffix all work.
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "5"), Some(0x00));
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "5V"), Some(0x00));
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "5.0"), Some(0x00));
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "3.3v"), Some(0x01));
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "2.5"), Some(0x02));
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "1.8"), Some(0x03));
+        // Not in the logic table.
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "7.0"), None);
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "1.9"), None);
+        assert_eq!(lookup_voltage(LOGIC_VCC_VOLTAGES, "abc"), None);
+    }
+
+    #[test]
+    fn test_logic_devices_always_use_logic_table() {
+        for model in [
+            ProgrammerModel::Tl866a,
+            ProgrammerModel::Tl866cs,
+            ProgrammerModel::Tl866iiPlus,
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ] {
+            let t = vcc_voltage_table(model, LOGIC, false).unwrap();
+            assert!(std::ptr::eq(t, LOGIC_VCC_VOLTAGES));
+            // Logic ICs have no VPP/VDD.
+            assert!(vpp_voltage_table(model, LOGIC, false).is_none());
+        }
+    }
+
+    #[test]
+    fn test_tl866iiplus_memory_tables() {
+        let vcc = vcc_voltage_table(ProgrammerModel::Tl866iiPlus, MEM, false).unwrap();
+        assert_eq!(lookup_voltage(vcc, "5"), Some(0x00));
+        assert_eq!(lookup_voltage(vcc, "6.5"), Some(0x05));
+        assert_eq!(lookup_voltage(vcc, "1.9"), None); // not a TL866II+ voltage
+        let vpp = vpp_voltage_table(ProgrammerModel::Tl866iiPlus, MEM, false).unwrap();
+        assert_eq!(lookup_voltage(vpp, "12"), Some(0x00));
+        assert_eq!(lookup_voltage(vpp, "12.5"), Some(0x60));
+        assert_eq!(lookup_voltage(vpp, "21"), None); // TL866II+ VPP caps at 18 V
+    }
+
+    #[test]
+    fn test_tl866a_memory_tables() {
+        let vcc = vcc_voltage_table(ProgrammerModel::Tl866a, MEM, false).unwrap();
+        assert_eq!(lookup_voltage(vcc, "4"), Some(0x01));
+        assert_eq!(lookup_voltage(vcc, "6.5"), Some(0x03));
+        let vpp = vpp_voltage_table(ProgrammerModel::Tl866a, MEM, false).unwrap();
+        assert_eq!(lookup_voltage(vpp, "21"), Some(0x20));
+        assert_eq!(lookup_voltage(vpp, "12.5"), Some(0x00));
+        assert_eq!(lookup_voltage(vpp, "9"), None); // TL866A VPP starts at 10 V
+    }
+
+    #[test]
+    fn test_xg_tables() {
+        for model in [
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ] {
+            let vcc = vcc_voltage_table(model, MEM, false).unwrap();
+            assert_eq!(lookup_voltage(vcc, "1.2"), Some(0x09));
+            assert_eq!(lookup_voltage(vcc, "5"), Some(0x00));
+            assert_eq!(lookup_voltage(vcc, "6.5"), Some(0x05));
+            assert_eq!(lookup_voltage(vcc, "7.0"), None);
+            let vpp = vpp_voltage_table(model, MEM, false).unwrap();
+            assert_eq!(lookup_voltage(vpp, "25"), Some(0xf1));
+            assert_eq!(lookup_voltage(vpp, "12"), Some(0x00));
+        }
+        // T76 PLD VPP is capped at 18 V.
+        let pld_vpp = vpp_voltage_table(ProgrammerModel::T76, PLD, false).unwrap();
+        assert_eq!(lookup_voltage(pld_vpp, "18"), Some(0xf0));
+        assert_eq!(lookup_voltage(pld_vpp, "21"), None);
+        assert_eq!(lookup_voltage(pld_vpp, "25"), None);
+    }
+
+    #[test]
+    fn test_custom_protocol_tables() {
+        // T48 bit-bang devices use the dedicated bb tables.
+        let vcc = vcc_voltage_table(ProgrammerModel::T48, MEM, true).unwrap();
+        assert_eq!(lookup_voltage(vcc, "3.3"), Some(0x14));
+        // T56/T76 bit-bang devices have no voltage table in upstream.
+        assert!(vcc_voltage_table(ProgrammerModel::T56, MEM, true).is_none());
+        assert!(vcc_voltage_table(ProgrammerModel::T76, MEM, true).is_none());
+        assert!(vpp_voltage_table(ProgrammerModel::T56, MEM, true).is_none());
+        // TL866A/II+ bit-bang tables are the same as the normal ones.
+        let vcc = vcc_voltage_table(ProgrammerModel::Tl866iiPlus, MEM, true).unwrap();
+        assert_eq!(lookup_voltage(vcc, "5"), Some(0x00));
+    }
+
+    #[test]
+    fn test_voltage_table_names() {
+        assert_eq!(voltage_table_names(LOGIC_VCC_VOLTAGES), "1.8, 2.5, 3.3, 5");
+    }
 }
