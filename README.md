@@ -40,7 +40,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
-- **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `--skip-device-id` CLI flag and GUI checkbox to bypass
+- **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `-x` / `--skip-id` CLI flag to skip in read mode (rejected for write/erase, matching upstream); `-y` / `--continue-id` to warn but continue on mismatch; GUI checkbox to bypass
 - **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
 
 **Hex viewer & analysis:**

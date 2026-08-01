@@ -378,6 +378,15 @@ This prevents silent false positives (e.g. blank-checking a 5V EPROM at 3.3V rep
 
 **Fix:** Changed `get_chip_id` trait signature to take `&Device` so `chip_id_bytes_count` is available. All four protocol implementations (TL866A, TL866II+, T56, T76) now use the same logic: read `resp[0]` as type, read `chip_id_bytes_count` bytes from `resp[2..]` with correct endianness.
 
+### Duplicate `--skip-id` / `--skip-device-id` flags diverged from upstream (fixed)
+The CLI had two separate flags for skipping chip ID verification:
+- `-x` / `--skip-id` — controlled the top-level `check_chip_id()` call before write/read
+- `--skip-device-id` — controlled the per-operation `check_device_id` parameter passed to `erase_chip`, `write_chip`, `read_chip`, `verify_chip`
+
+These looked identical in `--help` but gated different code paths. Passing `-x` alone skipped the top-level check but per-operation checks still ran. Passing `--skip-device-id` alone did the opposite. Neither matched upstream: the C minipro has a single `-x` / `--skip_id` flag that is **explicitly rejected** in write/erase mode (enforced at `main.c` lines 1062-1067).
+
+**Fix:** Removed `--skip-device-id` entirely. `-x` / `--skip-id` now controls both code paths (top-level and per-operation). Write and erase actions with `-x` are rejected with an error message directing the user to `-y` / `--continue-id` (which reads the ID but warns instead of aborting on mismatch — matching upstream `--no_id_error`).
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment depends on monospace fonts and preserved whitespace.
