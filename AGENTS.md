@@ -26,6 +26,30 @@ cd gui && cargo tauri build
 
 **Critical rule:** If you change any `.svelte`, `.ts`, `.css`, or `.html` file, you **must** run `cargo tauri build`. `cargo build --release` will keep stale embedded frontend assets from the previous full build.
 
+### GUI development workflows
+
+**Fast iteration (during active UI development):**
+```bash
+cd gui && npm run dev
+```
+Starts the Vite dev server with HMR (hot module replacement). Svelte/CSS/TS changes appear instantly in the browser preview without rebuilding the Rust binary. Use this while iterating on layout, styles, or component logic. The Tauri commands won't work (no Rust backend), but visual and state changes are immediate. Each cycle is seconds, not minutes.
+
+**Full verification (after changes are done):**
+```powershell
+# The running .exe locks the output binary on Windows — kill it first.
+Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
+cd "D:/Coding Projects/minipro-rs/minipro-rs/gui" && cargo tauri build
+Start-Process "D:\Coding Projects\minipro-rs\minipro-rs\gui\src-tauri\target\release\minipro-gui.exe"
+```
+Embeds the fresh frontend into the Rust binary and launches it for final testing with the real backend. Use this once after the iterative phase is complete, or when you need to test Tauri command integration.
+
+**Rust-only changes (backend, no frontend):**
+```bash
+cd gui && npm run build && cargo build --release
+```
+Reuses cached frontend assets. Faster than `cargo tauri build` because it skips the bundler. Only safe when no `.svelte`/`.ts`/`.css`/`.html` files changed.
+
 ## Store Patterns (CRITICAL)
 
 ### Rule 1: All state lives in writable stores
