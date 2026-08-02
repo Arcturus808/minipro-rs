@@ -378,7 +378,8 @@ fn do_operations(
     if cli.skip_id && (cli.write.is_some() || cli.erase) {
         anyhow::bail!(
             "-x / --skip-id is not permitted for write or erase actions.\n\
-             Use -y / --continue-id to warn but continue on chip ID mismatch instead."
+             Remove -x / --skip-id from the command. To continue despite a\n\
+             chip ID mismatch, use -y / --continue-id."
         );
     }
 
