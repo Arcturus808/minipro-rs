@@ -376,11 +376,19 @@ fn do_operations(
     // Upstream minipro explicitly forbids skipping the ID check for write and
     // erase actions.  Use -y/--continue-id to warn-but-continue on mismatch.
     if cli.skip_id && (cli.write.is_some() || cli.erase) {
-        anyhow::bail!(
-            "-x / --skip-id is not permitted for write or erase actions.\n\
-             Remove -x / --skip-id from the command. To continue despite a\n\
-             chip ID mismatch, use -y / --continue-id."
-        );
+        if cli.continue_id {
+            anyhow::bail!(
+                "-x / --skip-id is not permitted for write or erase actions.\n\
+                 Remove -x / --skip-id from the command; -y / --continue-id\n\
+                 is already set and will handle the ID mismatch."
+            );
+        } else {
+            anyhow::bail!(
+                "-x / --skip-id is not permitted for write or erase actions.\n\
+                 Remove -x / --skip-id from the command. To continue despite a\n\
+                 chip ID mismatch, use -y / --continue-id."
+            );
+        }
     }
 
     // ── Chip ID ────────────────────────────────────────────────────────────────
