@@ -553,6 +553,12 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
   ```
 - **Batch commits when possible** — one push with multiple commits is one pipeline run. Multiple pushes of one commit each are multiple pipeline runs.
 
+**Pre-commit checklist (mandatory before every commit):**
+1. Does the change affect compiled code, tests, or build config? (Rust source, Cargo.toml, CI config, test files)
+2. If NO → add `[skip ci]` to the commit message. This includes: string-only changes in error messages, documentation, ROADMAP, AGENTS.md, README, CHANGELOG, comments.
+3. If YES → verify locally (fmt, clippy, test), then commit without `[skip ci]`.
+4. Before writing the commit message, explicitly state aloud: "Build-affecting change: yes/no." If no, add `[skip ci]`.
+
 ---
 
 ### Branching rules
