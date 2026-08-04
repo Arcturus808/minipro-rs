@@ -470,24 +470,35 @@ This is a living list of features and improvements planned for minipro-rs.
     - Should the diagram update in real-time when the user toggles ICSP mode, or only when a device is selected?
   - **Scope:**
     - Phase 1: DIP packages only (most common), derive placement from pin_map mask (fallback to pin_count), render SVG ZIF socket with chip overlay and lever indicator — **DONE**
-    - Phase 2: ICSP wiring diagrams — **DROPPED** (see note below)
+    - Phase 2: ICSP connector pin-numbering diagram (see details below)
     - Phase 3: Adapter-based packages (TSOP, SOP, PLCC) — more complex, lower priority
-  - **ICSP wiring diagrams (Phase 2) — why dropped:**
+  - **ICSP wiring diagrams with signal labels — dropped:**
     ICSP pin assignment is not in `infoic.xml` — the `pin_map` field is for ZIF socket pin-contact testing, not ICSP header pinout. The ICSP signal routing is handled entirely in the programmer's firmware: `begin_transaction` sends a single boolean (`icsp: true/false`) in byte 3, and the firmware internally multiplexes the ICSP header pins based on `protocol_id` and chip family. The same physical ICSP pin carries different signals (VPP, VCC, GND, MISO, MOSI, SCK, SDA, CLK) depending on which chip is selected.
-    A static per-model diagram would be actively dangerous — showing "pin 1 = VCC" would be wrong for some chip families and could cause users to apply VPP to the wrong line, damaging the target chip or the programmer. Only Xgpro's "[View ICSP Connection]" feature generates chip-specific wiring diagrams, and that logic is embedded in Xgpro's binary, not derivable from the XML database.
+    A static per-model diagram with signal labels would be actively dangerous — showing "pin 1 = VCC" would be wrong for some chip families and could cause users to apply VPP to the wrong line, damaging the target chip or the programmer. Only Xgpro's "[View ICSP Connection]" feature generates chip-specific wiring diagrams, and that logic is embedded in Xgpro's binary, not derivable from the XML database.
     Reverse-engineering Xgpro to extract the pinout logic was considered and rejected due to legal risk (EULA prohibitions on RE), safety risk (RE errors could lead to hardware damage), and technical uncertainty (the pinout may be algorithmically generated, not a simple lookup table).
-    **Recommendation:** When ICSP mode is selected, show a note directing users to Xgpro's "[View ICSP Connection]" button for chip-specific wiring. Our tool handles ICSP programming correctly — the firmware does the signal routing. The only gap is the wiring diagram, which is Xgpro's responsibility.
-    **ICSP header physical layouts (for reference, if a header-only diagram is ever added):**
-    | Model | Header | Pins |
-    |-------|--------|------|
-    | TL866A | 1×6 | 6 |
-    | TL866CS | None | — (no ICSP support) |
-    | TL866II+ | 1×6 | 6 |
-    | T48 | 2×8 | 16 |
-    | T56 | 1×8 | 8 |
-    | T76 | 2×14 | 28 |
+  - **Phase 2: ICSP connector pin-numbering diagram (replaces signal-label diagrams):**
+    When ICSP mode is selected, show a physical diagram of the ICSP connector with pin numbers only (no signal labels). This helps users identify pin 1 (for ribbon cable red-stripe alignment) and cross-reference pin numbers with Xgpro's chip-specific "[View ICSP Connection]" diagram.
+    A note will direct users to Xgpro for chip-specific signal assignment: "ICSP mode active. Pin numbering shown for reference. For chip-specific signal assignment (VCC, GND, MISO, MOSI, SCK, RST), use Xgpro's [View ICSP Connection] button."
+    **ICSP header physical layouts:**
+    | Model | Header | Pins | Numbering |
+    |-------|--------|------|-----------|
+    | TL866A | 1×6 | 6 | Linear, pin 1 = leftmost |
+    | TL866CS | None | — | No ICSP support (show "not supported") |
+    | TL866II+ | 1×6 | 6 | Linear, pin 1 = leftmost |
+    | T48 | 2×8 | 16 | Zigzag: pin 1 = bottom-left, pin 2 = above pin 1, pin 3 = right of pin 1, etc. |
+    | T56 | 1×8 | 8 | Linear, pin 1 = leftmost |
+    | T76 | 2×14 | 28 | Zigzag: pin 1 = bottom-left, pin 2 = above pin 1, pin 3 = right of pin 1, etc. |
+    **Implementation:**
+    - New component `IcspConnectorDiagram.svelte` (or extend `ZifSocketDiagram.svelte` with a mode toggle)
+    - Renders when `icspMode` store is not `"zif"` (i.e. `"icsp"` or `"icsp_no_vcc"`)
+    - Layout selected by `$programmer.model`
+    - SVG: connector body, pin slots, pin number labels, pin-1 indicator (notch/dot)
+    - No signal labels — just pin numbers
+    - Note text below diagram directing to Xgpro for signal assignment
+    - No backend changes needed (layouts are hardcoded constants)
+    - TL866CS: show "ICSP not supported on this model" instead of a diagram
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
-  - **Status:** Phase 1 complete, Phase 2 dropped, Phase 3 not started
+  - **Status:** Phase 1 complete, Phase 2 scoped (pin-numbering only, no signal labels), Phase 3 not started
 
 - [ ] **GUI voltage override dropdowns** — replace free-text voltage inputs with model-specific dropdowns
   - **Problem:** The GUI Advanced section currently uses free-text VPP/VCC/VDD inputs with a single 16-entry lookup table (the T48/T56 table). This produces wrong voltages on TL866A and TL866II+ programmers (see "Voltage display uses wrong lookup tables" in AGENTS.md). It also allows users to enter voltages that aren't supported by the connected programmer.
