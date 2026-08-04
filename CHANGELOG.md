@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- *No unreleased changes yet.*
+
+## [0.6.0] - 2026-08-04
+
+### Added
+
 - **Hex editor standard hotkeys** — Ctrl+S (save buffer), Ctrl+C/V (copy/paste bytes as hex), Ctrl+A (select all), Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y (undo/redo), Ctrl+Home/End (jump to first/last byte), Tab (switch hex/ASCII panes). Copy uses Tauri clipboard plugin to avoid WebView2 permission prompts
 - **Hex editor find/search** — Ctrl+F opens find dialog with hex and ASCII search modes. Match highlighting with F3/Shift+F3 navigation. Context-sensitive F3 navigates whichever mode (find or diff) was most recently activated
 - **Entropy indicator in hex viewer** — per-row Shannon entropy bar in the gutter between offset and hex columns. Green=uniform/repetitive, red=high entropy (random/encrypted/compressed). Toggle in Settings panel (off by default)
@@ -31,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI voltage overrides sent wrong codes** — `--vcc`/`--vdd`/`--vpp` mapped voltage names to sequential table indices, but programmer firmware expects model-specific encoded values. Overrides are now validated against per-model tables (TL866A/CS, TL866II+, T48, T56, T76), so invalid voltages error out instead of silently applying the wrong voltage
 - **Logic IC voltage attribute parsing** — logicic.xml `voltage="5V"` was never matched ("5" expected), so all logic ICs silently defaulted to 5 V
 - **CLI VCC override warning** — when `--vcc` changes VCC from the database default, the CLI prints a warning that results may be unreliable (e.g. blank-checking a 5V chip at 3.3V produces a false "BLANK" result)
+- **`--skip-id` / `--skip-device-id` consolidation** — removed `--skip-device-id` (internal flag). `-x` / `--skip-id` now controls all chip ID check code paths, matching upstream minipro. `-x` is rejected for write/erase actions (matching upstream); use `-y` / `--continue-id` to warn-but-continue on chip ID mismatch instead
+- **`-y` / `--continue-id` propagation** — the top-level chip ID check now covers write, read, erase, and verify. Per-operation `check_device_id` parameters are `false` — the single top-level check handles `-x` (skip), `-y` (warn + continue), and the default (error) in one place. Previously `-y` printed "continuing" but per-operation checks still aborted with a hard error. Also fixes batch mode: ID is checked once at the start instead of re-checked for every chip
+- **`erase_chip` now checks `can_erase` flag** — UV EPROMs (e.g. 27512) have `can_erase=false` but were receiving erase commands anyway, potentially applying VPP pulses to pins not meant for electrical erase. Now silently skips erase for non-erasable chips (matching upstream). Explicit `-E` on a non-erasable chip prints an informative message. Auto-erase before write is silently skipped
+- **Test fixture race condition** — `fixture_paths` used a shared temp directory keyed by process ID. Parallel tests overwrote each other's files, causing intermittent Linux CI failures. Now uses a unique subdirectory per call (atomic counter) and creates a minimal `infoic.xml` to prevent fallback search failures
 
 ## [0.5.1] - 2026-07-05
 
