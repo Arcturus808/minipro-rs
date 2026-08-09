@@ -159,7 +159,10 @@ impl VoltagesDto {
     /// Build a `VoltagesDto` from raw voltage values using the per-model
     /// voltage tables.  When `model` is `None` (no programmer connected),
     /// falls back to the TL866II+ tables — the most common model.
+    ///
+    /// For logic ICs, VPP and VDD are not applicable (returned as "—").
     fn from_voltages(v: &Voltages, model: Option<ProgrammerModel>, chip_type: u32, custom_protocol: bool) -> Self {
+        let is_logic = chip_type == ChipType::Logic as u32;
         let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
         let vcc_table = minipro_core::device::vcc_voltage_table(model, chip_type, custom_protocol);
         let vpp_table = minipro_core::device::vpp_voltage_table(model, chip_type, custom_protocol);
@@ -169,13 +172,13 @@ impl VoltagesDto {
                 Some(t) => minipro_core::device::voltage_name(t, code)
                     .unwrap_or("?")
                     .to_string(),
-                None => "?".to_string(),
+                None => "—".to_string(),
             }
         };
 
         Self {
-            vpp: lookup(v.vpp, vpp_table),
-            vdd: lookup(v.vdd, vcc_table),
+            vpp: if is_logic { "—".to_string() } else { lookup(v.vpp, vpp_table) },
+            vdd: if is_logic { "—".to_string() } else { lookup(v.vdd, vcc_table) },
             vcc: lookup(v.vcc, vcc_table),
         }
     }
