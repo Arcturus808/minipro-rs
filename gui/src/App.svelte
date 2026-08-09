@@ -910,7 +910,7 @@
                     <div class="flex items-center gap-2">
                       <span class="opacity-60">VPP:</span>
                       <select class="select text-xs" bind:value={overrideVpp}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vpp ?? "—"}V)</option>
+                        <option value="">Default ({$selectedDevice?.voltages?.vpp === "—" || $selectedDevice?.voltages?.vpp === "?" ? $selectedDevice?.voltages?.vpp ?? "—" : `${$selectedDevice?.voltages?.vpp}V`})</option>
                         {#each VPP_OPTIONS as v}
                           <option value={v}>{v}V</option>
                         {/each}
@@ -919,7 +919,7 @@
                     <div class="flex items-center gap-2">
                       <span class="opacity-60">VCC:</span>
                       <select class="select text-xs" bind:value={overrideVcc}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vcc ?? "—"}V)</option>
+                        <option value="">Default ({$selectedDevice?.voltages?.vcc === "—" || $selectedDevice?.voltages?.vcc === "?" ? $selectedDevice?.voltages?.vcc ?? "—" : `${$selectedDevice?.voltages?.vcc}V`})</option>
                         {#each VCC_OPTIONS as v}
                           <option value={v}>{v}V</option>
                         {/each}
@@ -928,7 +928,7 @@
                     <div class="flex items-center gap-2">
                       <span class="opacity-60">VDD:</span>
                       <select class="select text-xs" bind:value={overrideVdd}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vdd ?? "—"}V)</option>
+                        <option value="">Default ({$selectedDevice?.voltages?.vdd === "—" || $selectedDevice?.voltages?.vdd === "?" ? $selectedDevice?.voltages?.vdd ?? "—" : `${$selectedDevice?.voltages?.vdd}V`})</option>
                         {#each VCC_OPTIONS as v}
                           <option value={v}>{v}V</option>
                         {/each}

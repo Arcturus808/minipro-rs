@@ -278,7 +278,7 @@
       </div>
       <div class="text-xs">{selectedInfo.manufacturer} · {selectedInfo.chip_type} · {selectedInfo.package_type} · {selectedInfo.pin_count} pins</div>
       <div class="text-xs">
-        VPP: {selectedInfo.voltages.vpp}V · VDD: {selectedInfo.voltages.vdd}V · VCC: {selectedInfo.voltages.vcc}V
+        VPP: {selectedInfo.voltages.vpp === "—" || selectedInfo.voltages.vpp === "?" ? selectedInfo.voltages.vpp : `${selectedInfo.voltages.vpp}V`} · VDD: {selectedInfo.voltages.vdd === "—" || selectedInfo.voltages.vdd === "?" ? selectedInfo.voltages.vdd : `${selectedInfo.voltages.vdd}V`} · VCC: {selectedInfo.voltages.vcc === "—" || selectedInfo.voltages.vcc === "?" ? selectedInfo.voltages.vcc : `${selectedInfo.voltages.vcc}V`}
       </div>
       <div class="text-xs">
         Code: {codeKb} · Data: {dataKb}
