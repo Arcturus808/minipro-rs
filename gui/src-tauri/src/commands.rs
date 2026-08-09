@@ -4,7 +4,7 @@ use std::sync::Arc;
 use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, get_pin_map, DatabasePaths},
-    device::{ChipType, Device, PackageDetails, Voltages},
+    device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
@@ -155,20 +155,28 @@ pub struct VoltagesDto {
     vcc: String,
 }
 
-impl From<&Voltages> for VoltagesDto {
-    fn from(v: &Voltages) -> Self {
-        static VPP_TABLE: &[&str] = &[
-            "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
-            "15.5", "16.0", "16.5", "17.0", "18.0",
-        ];
-        static VCC_TABLE: &[&str] = &[
-            "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
-            "6.3", "6.5", "7.0",
-        ];
+impl VoltagesDto {
+    /// Build a `VoltagesDto` from raw voltage values using the per-model
+    /// voltage tables.  When `model` is `None` (no programmer connected),
+    /// falls back to the TL866II+ tables — the most common model.
+    fn from_voltages(v: &Voltages, model: Option<ProgrammerModel>, chip_type: u32, custom_protocol: bool) -> Self {
+        let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
+        let vcc_table = minipro_core::device::vcc_voltage_table(model, chip_type, custom_protocol);
+        let vpp_table = minipro_core::device::vpp_voltage_table(model, chip_type, custom_protocol);
+
+        let lookup = |code: u8, table: Option<&'static [(&'static str, u8)]>| -> String {
+            match table {
+                Some(t) => minipro_core::device::voltage_name(t, code)
+                    .unwrap_or("?")
+                    .to_string(),
+                None => "?".to_string(),
+            }
+        };
+
         Self {
-            vpp: VPP_TABLE.get(v.vpp as usize).unwrap_or(&"?").to_string(),
-            vdd: VCC_TABLE.get(v.vdd as usize).unwrap_or(&"?").to_string(),
-            vcc: VCC_TABLE.get(v.vcc as usize).unwrap_or(&"?").to_string(),
+            vpp: lookup(v.vpp, vpp_table),
+            vdd: lookup(v.vdd, vcc_table),
+            vcc: lookup(v.vcc, vcc_table),
         }
     }
 }
@@ -228,38 +236,43 @@ fn default_size_mismatch() -> String { "error".into() }
 fn default_true() -> bool { true }
 
 /// Apply voltage overrides from GUI options to a device.
-fn apply_voltage_overrides(device: &mut Device, options: &OperationOptions) -> Result<(), String> {
-    // VPP voltage table (index 0..15 → volts), from tl866iiplus.c
-    static VPP_TABLE: &[&str] = &[
-        "9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5",
-        "15.5", "16.0", "16.5", "17.0", "18.0",
-    ];
-    // VCC / VDD voltage table (index 0..15 → volts), from tl866iiplus.c
-    static VCC_TABLE: &[&str] = &[
-        "1.9", "2.7", "3.0", "3.3", "3.6", "3.9", "4.1", "4.5", "4.8", "5.0", "5.3", "5.5", "6.0",
-        "6.3", "6.5", "7.0",
-    ];
+///
+/// Uses the per-model voltage tables from `minipro_core::device` to look up
+/// firmware codes from human-readable voltage strings.  When `model` is
+/// `None`, falls back to TL866II+ tables.
+fn apply_voltage_overrides(
+    device: &mut Device,
+    options: &OperationOptions,
+    model: Option<ProgrammerModel>,
+) -> Result<(), String> {
+    let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
+    let vcc_table = minipro_core::device::vcc_voltage_table(model, device.chip_type, device.flags.custom_protocol);
+    let vpp_table = minipro_core::device::vpp_voltage_table(model, device.chip_type, device.flags.custom_protocol);
+
+    let valid_list = |table: Option<&[(&str, u8)]>| -> String {
+        match table {
+            Some(t) => t.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", "),
+            None => "(no voltage overrides supported for this device)".to_string(),
+        }
+    };
 
     if let Some(ref v) = options.vpp {
-        let idx = VPP_TABLE
-            .iter()
-            .position(|&t| t == v)
-            .ok_or_else(|| format!("invalid vpp voltage '{v}'; valid values: {}", VPP_TABLE.join(", ")))?;
-        device.voltages.vpp = idx as u8;
+        let table = vpp_table.ok_or_else(|| format!("VPP override not supported for this device; valid values: {}", valid_list(vpp_table)))?;
+        let code = minipro_core::device::lookup_voltage(table, v)
+            .ok_or_else(|| format!("invalid vpp voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        device.voltages.vpp = code;
     }
     if let Some(ref v) = options.vdd {
-        let idx = VCC_TABLE
-            .iter()
-            .position(|&t| t == v)
-            .ok_or_else(|| format!("invalid vdd voltage '{v}'; valid values: {}", VCC_TABLE.join(", ")))?;
-        device.voltages.vdd = idx as u8;
+        let table = vcc_table.ok_or_else(|| format!("VDD override not supported for this device; valid values: {}", valid_list(vcc_table)))?;
+        let code = minipro_core::device::lookup_voltage(table, v)
+            .ok_or_else(|| format!("invalid vdd voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        device.voltages.vdd = code;
     }
     if let Some(ref v) = options.vcc {
-        let idx = VCC_TABLE
-            .iter()
-            .position(|&t| t == v)
-            .ok_or_else(|| format!("invalid vcc voltage '{v}'; valid values: {}", VCC_TABLE.join(", ")))?;
-        device.voltages.vcc = idx as u8;
+        let table = vcc_table.ok_or_else(|| format!("VCC override not supported for this device; valid values: {}", valid_list(vcc_table)))?;
+        let code = minipro_core::device::lookup_voltage(table, v)
+            .ok_or_else(|| format!("invalid vcc voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        device.voltages.vcc = code;
     }
     Ok(())
 }
@@ -545,10 +558,14 @@ pub async fn search_devices(query: String, state: State<'_, Arc<AppState>>) -> R
 pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
     let name_clone = name.clone();
+    let model = {
+        let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
 
     tokio::task::spawn_blocking(move || {
         let dev = find_device_any(&db, &name_clone).map_err(|e| e.to_string())?;
-        Ok::<DeviceInfoDto, String>(device_to_dto(&dev))
+        Ok::<DeviceInfoDto, String>(device_to_dto(&dev, model))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
@@ -602,7 +619,7 @@ pub async fn select_device(name: String, state: State<'_, Arc<AppState>>) -> Res
         } else {
             find_device_any(&db, &name_clone).map_err(|e| e.to_string())?
         };
-        Ok::<(DeviceInfoDto, Device), String>((device_to_dto(&dev), dev))
+        Ok::<(DeviceInfoDto, Device), String>((device_to_dto(&dev, model), dev))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))??;
@@ -926,12 +943,16 @@ pub async fn do_write(
     let window_clone = window.clone();
     let path_clone = path.clone();
     let options_clone = options.clone();
+    let model = {
+        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
 
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device_arc = state_task.get_device()?;
         let mut device = (*device_arc).clone();
-        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        apply_voltage_overrides(&mut device, &options_clone, model).map_err(|e| e.to_string())?;
         let device = Arc::new(device);
         let page = parse_page(&options_clone.page)?;
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
@@ -1047,12 +1068,16 @@ pub async fn do_batch_write_chip(
     let path_clone = path.clone();
     let options_clone = options.clone();
     let serial_dto = serialConfig.clone();
+    let model = {
+        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
 
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device_arc = state_task.get_device()?;
         let mut device = (*device_arc).clone();
-        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        apply_voltage_overrides(&mut device, &options_clone, model).map_err(|e| e.to_string())?;
         let device = Arc::new(device);
         let page = parse_page(&options_clone.page)?;
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
@@ -1243,6 +1268,10 @@ pub async fn do_write_bytes(
     let state_task = state_clone.clone();
     let window_clone = window.clone();
     let options_clone = options.clone();
+    let model = {
+        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
 
     let result = tokio::task::spawn_blocking(move || {
         let bytes = base64::Engine::decode(
@@ -1254,7 +1283,7 @@ pub async fn do_write_bytes(
         let mut handle = state_task.take_handle()?;
         let device_arc = state_task.get_device()?;
         let mut device = (*device_arc).clone();
-        apply_voltage_overrides(&mut device, &options_clone).map_err(|e| e.to_string())?;
+        apply_voltage_overrides(&mut device, &options_clone, model).map_err(|e| e.to_string())?;
         let device = Arc::new(device);
         let page = parse_page(&options_clone.page)?;
         let size_mismatch = parse_size_mismatch(&options_clone.size_mismatch)?;
@@ -2171,7 +2200,7 @@ fn fuse_display_name(name: &str) -> String {
     }
 }
 
-fn device_to_dto(dev: &Device) -> DeviceInfoDto {
+fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto {
     let chip_type_str = ChipType::try_from(dev.chip_type)
         .map(|t| format!("{:?}", t))
         .unwrap_or_else(|_| format!("Unknown({})", dev.chip_type));
@@ -2210,7 +2239,7 @@ fn device_to_dto(dev: &Device) -> DeviceInfoDto {
         chip_type: chip_type_str,
         pin_count: dev.package_details.pin_count,
         package_type: package_type_name(&dev.package_details),
-        voltages: VoltagesDto::from(&dev.voltages),
+        voltages: VoltagesDto::from_voltages(&dev.voltages, model, dev.chip_type, dev.flags.custom_protocol),
         code_memory_size: dev.code_memory_size,
         data_memory_size: dev.data_memory_size,
         can_erase: dev.flags.can_erase,
