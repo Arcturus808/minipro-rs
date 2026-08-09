@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
-  import { selectedDevice, programmer, type PinMap } from "../stores/device";
+  import { selectedDevice, programmer } from "../stores/device";
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -31,38 +30,15 @@
     $programmer ? LEVER_TOP_MODELS.has($programmer.model) : true
   );
 
-  let pinMapData = $state<PinMap | null>(null);
-  let pinMapLoading = $state(false);
-
-  // Fetch pin map when device changes
-  $effect.pre(() => {
-    const dev = $selectedDevice;
-    if (!dev || dev.pin_map === 0) {
-      pinMapData = null;
-      return;
-    }
-    pinMapLoading = true;
-    invoke<PinMap | null>("get_device_pin_map", { pinMap: dev.pin_map })
-      .then((data) => { pinMapData = data; })
-      .catch(() => { pinMapData = null; })
-      .finally(() => { pinMapLoading = false; });
-  });
-
-  // Compute occupied ZIF pin numbers
+  // Compute occupied ZIF pin numbers from pin_count.
+  // DIP chips are placed at the top of the ZIF socket with pin 1 at the
+  // top-left. Left side: ZIF pins 1 to N/2. Right side: ZIF pins
+  // (socketSize - N/2 + 1) to socketSize.
+  // On a 48-pin socket, pins 1-24 are left, 25-48 are right.
+  // A DIP-8 chip uses ZIF pins 1-4 (left) and 45-48 (right).
   let occupiedPins = $derived.by(() => {
     const dev = $selectedDevice;
     if (!dev) return [];
-
-    // Use pin_map mask data when available
-    if (pinMapData && pinMapData.mask.length > 0) {
-      return [...pinMapData.mask].sort((a, b) => a - b);
-    }
-
-    // Fallback: pin_count-based placement at top of socket
-    // Left side: ZIF pins 1 to N/2 (top of left side)
-    // Right side: ZIF pins (socketSize - N/2 + 1) to socketSize (top of right side)
-    // On a 48-pin socket, pins 1-24 are left, 25-48 are right.
-    // A DIP-8 chip uses ZIF pins 1-4 (left) and 45-48 (right).
     const pc = dev.pin_count;
     const half = Math.floor(pc / 2);
     const pins: number[] = [];
@@ -131,8 +107,6 @@
       {packageName} — adapter required.<br>
       Diagram available for DIP packages only.
     </p>
-  {:else if pinMapLoading}
-    <div class="py-4 text-sm opacity-50">Loading…</div>
   {:else}
     <svg
       viewBox="0 0 {SVG_W} {svgHeight}"
