@@ -339,15 +339,10 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **App-side mitigation:** `force_reconnect` retries 8 times over ~15 seconds with increasing delays. The error message instructs the user to unplug, wait, and replug. The reconnect button tooltip also mentions the 20-30 second wait.
 
-### Voltage display uses wrong lookup tables (display-only, not yet fixed)
-`VoltagesDto` in `commands.rs` converts raw database voltage values to human-readable strings using a single set of 16-entry lookup tables (`VPP_TABLE`, `VCC_TABLE`). These tables are only correct for T48/T56 programmers. The upstream C minipro uses **different voltage tables per programmer model**:
-- TL866A: 8-entry VPP table, 6-entry VCC table (values are firmware-encoded, e.g. `0x40` = 10V, `0x00` = 12.5V)
-- TL866II+: 16-entry tables (values are firmware-encoded, e.g. `0x10` = 9V, `0x00` = 12V)
-- T48/T56: 16-entry tables (values are sequential indices — our current approach)
+### Voltage display and overrides used wrong lookup tables (fixed)
+`VoltagesDto` and `apply_voltage_overrides` in `commands.rs` converted raw database voltage values using a single hardcoded 16-entry table that only matched T48/T56 firmware encoding. TL866A and TL866II+ use different encodings (e.g. TL866A VPP code `0x00` = 12.5V, not 9V), so the GUI showed wrong voltages for those programmers.
 
-**Impact:** The GUI shows incorrect voltage labels for TL866A and TL866II+ programmers. Actual programming voltages are correct — the protocol layer (`tl866iiplus.rs`) has the right firmware encoding tables. Only the display strings are wrong.
-
-**Complication:** `get_device_info` runs without a connected programmer, so the model is unknown. Fix requires either deferring voltage display until a programmer is connected, or showing voltages for all models.
+**Fix:** Both now use `minipro_core::device::{vcc_voltage_table, vpp_voltage_table, voltage_name, lookup_voltage}` which select the correct table per `ProgrammerModel`. The model is read from `AppState::programmer_info`; when no programmer is connected, falls back to TL866II+ tables.
 
 ### CLI `--vcc`/`--vdd`/`--vpp` overrides used wrong voltage tables (fixed)
 `apply_overrides` in `minipro-cli/src/main.rs` mapped voltage names to **sequential indices** of a single hardcoded 16-entry table for all programmer models. On TL866II+ (and TL866A, T48, T56, T76) the firmware expects model-specific **encoded** values, so overrides sent the wrong codes — e.g. a `--vcc` sweep on a logic IC produced 5 V on every run (verified on a scope). Upstream C minipro rejects `--vcc` entirely for logic ICs (their `vcc_table` is NULL for logic devices).

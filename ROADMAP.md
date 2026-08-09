@@ -501,11 +501,12 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** Phase 1 complete, Phase 2 scoped (pin-numbering only, no signal labels), Phase 3 not started
 
 - [ ] **GUI voltage override dropdowns** — replace free-text voltage inputs with model-specific dropdowns
-  - **Problem:** The GUI Advanced section currently uses free-text VPP/VCC/VDD inputs with a single 16-entry lookup table (the T48/T56 table). This produces wrong voltages on TL866A and TL866II+ programmers (see "Voltage display uses wrong lookup tables" in AGENTS.md). It also allows users to enter voltages that aren't supported by the connected programmer.
+  - **Problem:** The GUI Advanced section currently uses free-text VPP/VCC/VDD inputs. While the backend now uses the correct per-model voltage tables (display and override encoding are fixed), free-text inputs still allow users to enter voltages that aren't supported by the connected programmer.
   - **Solution:** Use the per-model voltage tables already implemented in `minipro-core/src/device.rs` (`vcc_voltage_table()`, `vpp_voltage_table()`) to populate dropdowns with only valid values for the connected programmer. For logic ICs, show only the 4-entry logic VCC table (1.8, 2.5, 3.3, 5V) and hide VPP/VDD.
   - **Backend changes:**
     - Expose voltage tables to the frontend via a new Tauri command (e.g. `get_voltage_options`) that returns valid VCC/VPP/VDD values for the connected programmer model and selected device type
-    - Update `VoltagesDto` to use the correct per-model table for display strings (fixes the display bug)
+    - ~~Update `VoltagesDto` to use the correct per-model table for display strings~~ — DONE
+    - ~~Fix `apply_voltage_overrides` to use per-model tables~~ — DONE
   - **Frontend changes:**
     - Replace free-text inputs with `<select>` dropdowns populated from the backend
     - Show the database default as the selected option
@@ -514,11 +515,11 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Files affected:**
     | File | Action |
     |------|--------|
-    | `gui/src-tauri/src/commands.rs` | Add `get_voltage_options` command, fix `VoltagesDto` table selection |
+    | `gui/src-tauri/src/commands.rs` | Add `get_voltage_options` command (display + override encoding already fixed) |
     | `gui/src/lib/stores/device.ts` | Add voltage options store |
     | `gui/src/App.svelte` | Replace free-text voltage inputs with dropdowns |
-  - **Priority: medium** — the display bug is cosmetic but the wrong-voltage risk is real; the CLI is already fixed
-  - **Status:** not started
+  - **Priority: medium** — the wrong-voltage risk from free-text entry remains; the display bug is fixed
+  - **Status:** backend display + override encoding fixed; dropdown UI not started
 
 - [ ] **Remove `check_device_id` parameter from core API** — the per-operation `check_device_id: bool` parameter in `read_chip`, `write_chip`, `verify_chip`, `erase_chip`, `write_chip_bytes`, `verify_chip_bytes`, and `BatchConfig` is now dead weight from the CLI's perspective (the CLI does a single top-level `check_chip_id` call and passes `false` to all per-operation checks). The GUI still uses the parameter for its own pre-operation checks, but also has the same redundancy (calls `check_chip_id` separately AND passes `check_device_id: true` to the operation). Removing the parameter would eliminate the redundancy and simplify the API, but requires updating all GUI command calls in `commands.rs`.
   - **Files to modify:** `crates/minipro-core/src/operations.rs` (remove parameter from all functions), `crates/minipro-cli/src/main.rs` (remove `false` arguments), `gui/src-tauri/src/commands.rs` (remove `check_device_id` field from `OperationOptions` and the per-operation arguments; the GUI's separate `check_chip_id` calls already handle it)
