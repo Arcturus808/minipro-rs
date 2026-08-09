@@ -533,12 +533,9 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
 - Tag pushes only
 
 **Rules:**
-- **Do NOT push to `main` for trivial/doc-only changes** without `[skip ci]` in the commit message. This prevents GitLab from running a full pipeline.
+- **Default: add `[skip ci]` to ALL commit and merge messages** — including build-affecting changes. CI is only run deliberately during release prep, not on every push. This conserves limited free CI minutes.
+- **Remove `[skip ci]` only when explicitly preparing for a release** — the user will indicate when CI should run. At that point, run a full pipeline to verify fmt, clippy, tests, and builds before tagging.
 - **Do NOT push tags casually** — each tag triggers both GitLab CI and GitHub Actions release builds. Only tag for actual releases.
-- **Use `[skip ci]`** in commit messages for documentation-only changes, ROADMAP updates, or any change that doesn't affect the build:
-  ```
-  git commit -m "docs: update ROADMAP [skip ci]"
-  ```
 - **Feature branch pushes are free** on both platforms — use feature branches for work-in-progress.
 - **Run all checks locally** before pushing to `main` or tagging:
   ```bash
@@ -550,9 +547,10 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
 
 **Pre-commit checklist (mandatory before every commit):**
 1. Does the change affect compiled code, tests, or build config? (Rust source, Cargo.toml, CI config, test files)
-2. If NO → add `[skip ci]` to the commit message. This includes: string-only changes in error messages, documentation, ROADMAP, AGENTS.md, README, CHANGELOG, comments.
-3. If YES → verify locally (fmt, clippy, test), then commit without `[skip ci]`.
-4. Before writing the commit message, explicitly state aloud: "Build-affecting change: yes/no." If no, add `[skip ci]`.
+2. If YES → verify locally (fmt, clippy, test) before committing.
+3. If NO → no local verification needed.
+4. **Always add `[skip ci]` to the commit message** — regardless of whether the change is build-affecting or not. CI is only run deliberately during release prep.
+5. Before writing the commit message, explicitly state aloud: "Build-affecting change: yes/no." If yes, run local checks first. Either way, add `[skip ci]`.
 
 ---
 
@@ -560,9 +558,9 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
 
 - **All work goes on its own branch** — never commit directly to `main`. Use a descriptive branch name prefixed by type: `fix/...`, `feat/...`, `refactor/...`, `docs/...`, `chore/...`, `release/...`.
 - **Branch from `main`** and merge back with `--no-ff` to preserve branch history.
-- **Run pre-commit checks** (`cargo fmt`, `cargo clippy`, `cargo test`) on the branch before merging.
+- **Run pre-commit checks** (`cargo fmt`, `cargo clippy`, `cargo test`) on the branch before merging build-affecting changes.
 - **Delete the branch after merging to `main`** — this applies to all short-lived branches (fix, feat, refactor, docs, chore, release). The only branches that persist are `main` and long-lived integration branches (e.g. `protocol-parity`) that span multiple sessions.
-- **Merge commit messages** follow the pattern: `Merge <branch-name>: <short description> [skip ci]` (use `[skip ci]` for doc-only or non-build changes to conserve CI credits).
+- **Merge commit messages** follow the pattern: `Merge <branch-name>: <short description> [skip ci]` (always include `[skip ci]` unless explicitly preparing for a release).
 - **Branch pushes are free** on GitLab — they don't trigger CI pipelines. Only the merge to `main` triggers a pipeline.
 
 ---
