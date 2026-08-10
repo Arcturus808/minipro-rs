@@ -49,10 +49,12 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///
 /// Search order:
 ///  1. Path override provided by the caller (e.g. `--infoic`).
-///  2. `MINIPRO_HOME` environment variable.
-///  3. Current working directory.
-///  4. Directory containing the running executable.
-///  5. Platform data directory (minipro-rs first, then minipro as fallback):
+///  2. Current working directory.
+///  3. Directory containing the running executable.
+///  4. (macOS only) Tauri resource directory: `.app/Contents/Resources/`
+///  5. Repo `data/` directory (dev builds only).
+///  6. `MINIPRO_HOME` environment variable.
+///  7. Platform data directory (minipro-rs first, then minipro as fallback):
 ///     - Linux: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
 ///     - macOS: `/Library/Application Support/minipro-rs/` then `/Library/Application Support/minipro/`
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
@@ -98,6 +100,18 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let p = dir.join(filename);
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+    }
+
+    // 2a. Tauri resource directory on macOS: .app/Contents/Resources/
+    //     (the executable is at .app/Contents/MacOS/, resources are one level up)
+    #[cfg(target_os = "macos")]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join("..").join("Resources").join(filename);
             if p.exists() {
                 return Ok(p);
             }
