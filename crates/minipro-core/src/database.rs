@@ -48,12 +48,13 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 /// Locate the chip database files in standard search paths.
 ///
 /// Search order:
-///  1. Path override provided by the caller (e.g. `--infoic-path`).
+///  1. Path override provided by the caller (e.g. `--infoic`).
 ///  2. `MINIPRO_HOME` environment variable.
 ///  3. Current working directory.
 ///  4. Directory containing the running executable.
 ///  5. Platform data directory (minipro-rs first, then minipro as fallback):
-///     - Unix: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
+///     - Linux: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
+///     - macOS: `/Library/Application Support/minipro-rs/` then `/Library/Application Support/minipro/`
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
 #[derive(Clone)]
 pub struct DatabasePaths {
@@ -138,7 +139,19 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
             }
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        for dir in [
+            "/Library/Application Support/minipro-rs",
+            "/Library/Application Support/minipro",
+        ] {
+            let p = PathBuf::from(dir).join(filename);
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         let share_dir = option_env!("SHARE_INSTDIR").unwrap_or("/usr/share/minipro-rs");
         let p = PathBuf::from(share_dir).join(filename);
