@@ -39,8 +39,8 @@ Starts the Vite dev server with HMR (hot module replacement). Svelte/CSS/TS chan
 # The running .exe locks the output binary on Windows — kill it first.
 Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
-cd "D:/Coding Projects/minipro-rs/minipro-rs/gui" && cargo tauri build
-Start-Process "D:\Coding Projects\minipro-rs\minipro-rs\gui\src-tauri\target\release\minipro-gui.exe"
+cd gui && cargo tauri build
+Start-Process "gui\src-tauri\target\release\minipro-gui.exe"
 ```
 Embeds the fresh frontend into the Rust binary and launches it for final testing with the real backend. Use this once after the iterative phase is complete, or when you need to test Tauri command integration.
 
@@ -567,7 +567,7 @@ wsl -d Ubuntu -- bash -c "source ~/.cargo/env && rustup install 1.85"
 
 WSL checks (run from the project root):
 ```bash
-wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd '/mnt/d/Coding Projects/minipro-rs/minipro-rs' && cargo +1.85 check --all --locked && cargo test --all --locked && cargo clippy --all-targets -- -D warnings"
+wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd /mnt/<your-repo-path> && cargo +1.85 check --all --locked && cargo test --all --locked && cargo clippy --all-targets -- -D warnings"
 ```
 
 **Note:** The GUI has its own workspace (`gui/src-tauri/`) and a separate MSRV (1.77.2 declared in `Cargo.toml`), but its dependencies now require Rust 1.88+. The CI `msrv` job only checks the root workspace (`--all`), not the GUI. GUI MSRV compliance is not currently enforced.
