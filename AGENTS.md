@@ -545,9 +545,36 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
   ```
 - **Batch commits when possible** — one push with multiple commits is one pipeline run. Multiple pushes of one commit each are multiple pipeline runs.
 
+**Local CI-equivalent checks (no CI minutes required):**
+
+Since CI is skipped on most commits, run these locally to catch issues that would fail in CI:
+
+| Check | Where | Command |
+|-------|-------|---------|
+| fmt | Windows | `cargo fmt --all -- --check` |
+| clippy | Windows | `cargo clippy --all-targets -- -D warnings` |
+| tests | Windows | `cargo test --all --locked` |
+| MSRV (CLI/core) | WSL Ubuntu | `cargo +1.85 check --all --locked` |
+| Linux build + tests | WSL Ubuntu | `cargo test --all --locked` |
+| clippy (Linux) | WSL Ubuntu | `cargo clippy --all-targets -- -D warnings` |
+
+WSL setup (one-time):
+```bash
+wsl -d Ubuntu -u root -- apt install -y build-essential pkg-config libssl-dev
+wsl -d Ubuntu -- curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+wsl -d Ubuntu -- bash -c "source ~/.cargo/env && rustup install 1.85"
+```
+
+WSL checks (run from the project root):
+```bash
+wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd '/mnt/d/Coding Projects/minipro-rs/minipro-rs' && cargo +1.85 check --all --locked && cargo test --all --locked && cargo clippy --all-targets -- -D warnings"
+```
+
+**Note:** The GUI has its own workspace (`gui/src-tauri/`) and a separate MSRV (1.77.2 declared in `Cargo.toml`), but its dependencies now require Rust 1.88+. The CI `msrv` job only checks the root workspace (`--all`), not the GUI. GUI MSRV compliance is not currently enforced.
+
 **Pre-commit checklist (mandatory before every commit):**
 1. Does the change affect compiled code, tests, or build config? (Rust source, Cargo.toml, CI config, test files)
-2. If YES → verify locally (fmt, clippy, test) before committing.
+2. If YES → verify locally (fmt, clippy, test) before committing. For Linux-specific issues, also run WSL checks.
 3. If NO → no local verification needed.
 4. **Always add `[skip ci]` to the commit message** — regardless of whether the change is build-affecting or not. CI is only run deliberately during release prep.
 5. Before writing the commit message, explicitly state aloud: "Build-affecting change: yes/no." If yes, run local checks first. Either way, add `[skip ci]`.
