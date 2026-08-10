@@ -77,11 +77,11 @@ struct Cli {
     icsp_no_vcc: bool,
 
     /// Override path to infoic.xml chip database
-    #[arg(long = "infoic-path", value_name = "PATH")]
+    #[arg(long = "infoic", alias = "infoic-path", value_name = "PATH")]
     infoic_path: Option<PathBuf>,
 
     /// Override path to logicic.xml logic IC database
-    #[arg(long = "logicic-path", value_name = "PATH")]
+    #[arg(long = "logicic", alias = "logicic-path", value_name = "PATH")]
     logicic_path: Option<PathBuf>,
 
     /// Override path to algorithm.xml FPGA bitstream database (T56/T76)
