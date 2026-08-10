@@ -476,7 +476,7 @@ git push github vX.Y.Z        # Immediate — triggers GitHub Actions right away
 The GitLab CI runs `cargo fmt --all -- --check` and `cargo clippy`. Running these locally before pushing prevents red pipelines.
 
 ```bash
-# Must pass before committing Rust changes
+# Run from the repo root. Must pass before committing Rust changes:
 cargo fmt --all          # auto-fixes formatting
 cargo fmt --all -- --check   # verify (same as CI)
 cargo clippy --all-targets -- -D warnings  # lint check
@@ -493,7 +493,7 @@ msg[0x65] = 0x03; // comment
 
 **When editing `.svelte` / `.ts` files:** Run `cargo tauri build` (not just `cargo build`), because the frontend is embedded into the Rust binary at build time.
 
-**Commit `Cargo.lock` after dependency changes:** The CI runs `cargo test --all --locked`, which fails if `Cargo.lock` is out of sync with `Cargo.toml`. Always regenerate and commit the lockfile when adding/updating dependencies or bumping versions:
+**Commit `Cargo.lock` after dependency changes:** The CI runs `cargo test --all --locked`, which fails if `Cargo.lock` is out of sync with `Cargo.toml`. Always regenerate and commit the lockfile when adding/updating dependencies or bumping versions (run from the repo root):
 ```bash
 cargo generate-lockfile   # updates Cargo.lock
 git add Cargo.lock gui/src-tauri/Cargo.lock
@@ -539,7 +539,7 @@ GitLab and GitHub have limited free CI minutes. Do not trigger pipelines unneces
 - **Remove `[skip ci]` only when explicitly preparing for a release** — the user will indicate when CI should run. At that point, run a full pipeline to verify fmt, clippy, tests, and builds before tagging.
 - **Do NOT push tags casually** — each tag triggers both GitLab CI and GitHub Actions release builds. Only tag for actual releases.
 - **Feature branch pushes are free** on both platforms — use feature branches for work-in-progress.
-- **Run all checks locally** before pushing to `main` or tagging:
+- **Run all checks locally** before pushing to `main` or tagging (from the repo root):
   ```bash
   cargo fmt --all -- --check
   cargo clippy --all-targets -- -D warnings
