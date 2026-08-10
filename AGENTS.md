@@ -18,6 +18,7 @@ cd gui && npm run build && cargo build --release
 
 # Full production build (embeds fresh frontend into binary)
 # Use this when ANY frontend code (Svelte, CSS, JS, HTML) changed.
+# Run from the repo root:
 cd gui && cargo tauri build
 
 # The `.exe` is at:
@@ -39,6 +40,7 @@ Starts the Vite dev server with HMR (hot module replacement). Svelte/CSS/TS chan
 # The running .exe locks the output binary on Windows — kill it first.
 Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
+# Run from the repo root:
 cd gui && cargo tauri build
 Start-Process "gui\src-tauri\target\release\minipro-gui.exe"
 ```
