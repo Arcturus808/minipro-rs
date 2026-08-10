@@ -826,7 +826,7 @@
         <!-- Options -->
         {#if $activeOperation}
           <div class="border-t border-surface-200-800 pt-3">
-            {#if $selectedDevice}
+            {#if $selectedDevice && ($activeOperation !== "logic_test" || $selectedDevice.chip_type === "Logic") && ($activeOperation !== "config" || $selectedDevice.config)}
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
               <button
@@ -1245,8 +1245,16 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                <p class="text-sm font-medium opacity-70 mb-1">No device selected</p>
-                <p class="text-xs opacity-50">Search for your chip in the Device Selector (left panel) to enable this operation.</p>
+                {#if !$selectedDevice}
+                  <p class="text-sm font-medium opacity-70 mb-1">No device selected</p>
+                  <p class="text-xs opacity-50">Search for your chip in the Device Selector (left panel) to enable this operation.</p>
+                {:else if $activeOperation === "logic_test" && $selectedDevice.chip_type !== "Logic"}
+                  <p class="text-sm font-medium opacity-70 mb-1">Not a logic IC</p>
+                  <p class="text-xs opacity-50">Logic test is only available for logic IC devices. Select a logic IC in the Device Selector to use this operation.</p>
+                {:else if $activeOperation === "config" && !$selectedDevice.config}
+                  <p class="text-sm font-medium opacity-70 mb-1">No configuration available</p>
+                  <p class="text-xs opacity-50">This device does not have fuses or lock bits. Select an MCU or PLD in the Device Selector to use this operation.</p>
+                {/if}
               </div>
             {/if}
           </div>
