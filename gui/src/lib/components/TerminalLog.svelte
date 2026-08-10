@@ -107,6 +107,6 @@
     bind:this={scrollContainer}
     onscroll={onScroll}
     class="flex-1 overflow-auto p-2 select-text m-0"
-    style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;white-space:pre;"
+    style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;white-space:pre;transform:translateZ(0);"
   >{@html htmlContent}</pre>
 </div>
