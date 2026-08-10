@@ -526,3 +526,35 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: low** — code cleanup, no user-facing impact
   - **Status:** not started
 
+- [ ] **GUI custom database directory** — allow users to select a custom directory containing `infoic.xml` / `logicic.xml` from the GUI settings
+  - **Problem:** The CLI supports custom database files via `--infoic` / `--logicic` flags and the `MINIPRO_HOME` env var, but the GUI has no in-app way to specify custom database files. Users who want custom device definitions (especially custom logic IC test vectors) must set `MINIPRO_HOME` before launching the GUI or place files in the current directory — neither is discoverable.
+  - **Context:** Custom logic IC test vectors are an established workflow in the XGecu ecosystem. Xgpro supports importing `.lgc` files (since v10.70), and community tools like [xgpro-logic](https://github.com/evolutional/xgpro-logic) convert `.lgc` to minipro's `logicic.xml` format. Parastream distributes expanded logic IC vector packs. The C minipro CLI supports `--infoic` / `--logicic` overrides. Our CLI has parity (including `--algorithms` for T56/T76). The GUI is the gap — no GUI in the ecosystem offers in-app custom database selection.
+  - **Solution:** Add a directory picker to SettingsPanel. The selected directory overrides the standard search path for `infoic.xml` and `logicic.xml`. Persists across restarts via the settings store.
+  - **Backend changes:**
+    - Add `set_custom_db_dir(dir: Option<String>)` Tauri command — validates that `infoic.xml` exists in the directory, updates `AppState.db_paths` cache, reloads device names, updates connected handle's `db_paths` if applicable
+    - On startup, read saved custom dir from settings and pass to `DatabasePaths::resolve()` as file-level overrides
+  - **Frontend changes:**
+    - Add `customDbDir` to settings store (persisted)
+    - Add UI to SettingsPanel: current path display, "Browse..." button (directory picker via Tauri dialog), "Reset to default" button
+    - On change: call `set_custom_db_dir`, reload device list, clear selected device, show confirmation
+  - **What gets invalidated on change:**
+    - `AppState.db_paths` cache → re-resolve with new override
+    - Device list → reload from new database
+    - Selected device → clear (may not exist in new database)
+    - Connected handle's `db_paths` → update if programmer is connected
+  - **Out of scope for v1:**
+    - Individual file overrides (directory only — covers both `infoic.xml` and `logicic.xml`)
+    - `algorithm.xml` override (niche, T56/T76 only)
+    - `.lgc` file import (use xgpro-logic to convert to `logicic.xml` first)
+  - **Files affected:**
+    | File | Action |
+    |------|--------|
+    | `gui/src-tauri/src/commands.rs` | Add `set_custom_db_dir` command, pass override on startup resolve |
+    | `gui/src-tauri/src/state.rs` | No change (db_paths cache already exists) |
+    | `gui/src/lib/stores/settings.ts` | Add `customDbDir` field |
+    | `gui/src/lib/components/SettingsPanel.svelte` | Add directory picker UI |
+    | `gui/src/lib/stores/device.ts` | Reload device list on db dir change |
+  - **Priority: medium-high** — established ecosystem workflow, real user demand, CLI already has parity
+  - **Status:** not started
+
+
