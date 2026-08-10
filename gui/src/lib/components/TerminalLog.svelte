@@ -17,11 +17,42 @@
   });
 
   // Convert ANSI escape codes to inline HTML <span> tags.
+  // Tracks open/close state to ensure balanced HTML — unbalanced tags cause
+  // WebKitGTK (Linux) rendering bugs where content doesn't repaint on scroll.
   function ansiToHtml(text: string): string {
-    return text
-      .replace(/\x1b\[0;91m/g, '<span style="color:#ef4444;">')
-      .replace(/\x1b\[0m/g, '</span>')
-      .replace(/\x1b\[[0-9;]*m/g, '');
+    let result = '';
+    let spanOpen = false;
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === '\x1b' && i + 1 < text.length && text[i + 1] === '[') {
+        // Parse the escape sequence
+        let j = i + 2;
+        while (j < text.length && text[j] !== 'm' && j < i + 10) j++;
+        if (j < text.length && text[j] === 'm') {
+          const code = text.slice(i + 2, j);
+          if (code === '0;91') {
+            // Red — close any open span first, then open a new one
+            if (spanOpen) result += '</span>';
+            result += '<span style="color:#ef4444;">';
+            spanOpen = true;
+          } else if (code === '0') {
+            // Reset — close any open span
+            if (spanOpen) {
+              result += '</span>';
+              spanOpen = false;
+            }
+          }
+          // Other ANSI codes: ignore
+          i = j + 1;
+          continue;
+        }
+      }
+      result += text[i];
+      i++;
+    }
+    // Close any dangling span at end of text
+    if (spanOpen) result += '</span>';
+    return result;
   }
 
   // Build the entire terminal as a single HTML string with \n line breaks.
