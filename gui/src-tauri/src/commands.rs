@@ -1,3 +1,9 @@
+// Tauri v2 auto-converts top-level invoke keys to camelCase before matching
+// to Rust parameter names, so all #[tauri::command] params must use
+// camelCase (e.g. icspMode, not icsp_mode). This triggers Rust's
+// non_snake_case lint, which we suppress file-wide rather than per-function.
+#![allow(non_snake_case)]
+
 use std::path::Path;
 use std::sync::Arc;
 

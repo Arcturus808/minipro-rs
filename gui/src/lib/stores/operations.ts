@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { logs } from "./logs";
 import { selectedDevice, refreshProgrammer } from "./device";
-import { setHexData, base64ToUint8Array, loadFile, getHexData } from "./hex";
+import { setHexData, base64ToUint8Array, loadFile, getHexData, confirmOverwriteEdits, clearHexEdits, bufferDirty } from "./hex";
 
 export interface ProgressEvent {
   done: number;
@@ -157,7 +157,6 @@ async function runOp(
 export async function doRead(path: string, options: OperationOptions = defaultOptions()) {
   // Prompt before overwriting pending edits (loadFile also checks, but
   // we check before the chip read so we don't waste time reading if cancelled)
-  const { confirmOverwriteEdits } = await import("./hex");
   const confirmed = await confirmOverwriteEdits("read from chip");
   if (!confirmed) return;
   await runOp("Read", async () => {
@@ -169,7 +168,6 @@ export async function doRead(path: string, options: OperationOptions = defaultOp
 }
 
 export async function doReadToBuffer(options: OperationOptions = defaultOptions()) {
-  const { confirmOverwriteEdits, clearHexEdits } = await import("./hex");
   // Prompt before overwriting pending edits
   const confirmed = await confirmOverwriteEdits("read from chip");
   if (!confirmed) return;
@@ -207,7 +205,6 @@ export async function saveBufferToFile(path: string, format: string = "bin", dev
     await invoke("save_buffer_to_file", { path, base64Data: base64, format, deviceName });
   }
   // Mark buffer as clean after successful save
-  const { bufferDirty } = await import("./hex");
   bufferDirty.set(false);
 }
 
