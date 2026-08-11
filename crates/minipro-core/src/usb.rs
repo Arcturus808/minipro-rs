@@ -187,6 +187,30 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
                     e
                 ))
             })?;
+
+            // On macOS/Linux, the device may be left in USB configuration 0
+            // (unconfigured) after a power-cycle. The C minipro (libusb)
+            // detects this and calls SetConfiguration(1) before claiming the
+            // interface. Without this, claim_interface fails with "interface
+            // not found". Not needed on Windows (the driver handles it).
+            // set_configuration is not supported on Windows per nusb docs.
+            #[cfg(not(target_os = "windows"))]
+            {
+                if device.active_configuration().is_err() {
+                    use nusb::MaybeFuture;
+                    device.set_configuration(1).wait().map_err(|e| {
+                        MiniproError::Protocol(format!(
+                            "USB device is in configuration 0 (unconfigured) \
+                             and cannot be set to configuration 1. \
+                             This can happen after a power-cycle. \
+                             Unplug the programmer, wait 20-30 seconds, \
+                             plug it back in, and try again. (nusb error: {})",
+                            e
+                        ))
+                    })?;
+                }
+            }
+
             let interface = device.claim_interface(0).map_err(|e| {
                 MiniproError::Protocol(format!(
                     "USB device opened but cannot claim interface 0. \

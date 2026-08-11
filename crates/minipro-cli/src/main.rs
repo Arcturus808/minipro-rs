@@ -393,8 +393,21 @@ fn do_operations(
 
     // ── Chip ID ────────────────────────────────────────────────────────────────
     if cli.device_id {
-        let device = handle.device.as_ref().context("no device selected")?;
-        let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, device)?;
+        let device = handle
+            .device
+            .as_ref()
+            .context("no device selected")?
+            .clone();
+        // begin_transaction is required before get_chip_id on T76 NAND/eMMC
+        // devices — it powers the socket adapter, uploads the FPGA bitstream,
+        // and sends NAND geometry setup. Without it, READID returns 0x00000000.
+        // Matches the C minipro flow where -D falls through to check_chip_id,
+        // which calls begin_transaction before get_chip_id.
+        handle
+            .protocol
+            .begin_transaction(&handle.usb, &device, false)?;
+        let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device)?;
+        handle.protocol.end_transaction(&handle.usb)?;
         println!("Chip ID: {:#010x}", chip_id);
         return Ok(());
     }
