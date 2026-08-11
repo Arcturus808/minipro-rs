@@ -1378,6 +1378,7 @@
     </div>
   {/if}
   {#if showGotoDialog}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
       onclick={(e) => { if (e.target === e.currentTarget) closeGotoDialog(); }}
     >
@@ -1410,6 +1411,7 @@
   {/if}
 
   {#if showFindDialog}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
       onclick={(e) => { if (e.target === e.currentTarget) closeFindDialog(); }}
     >
@@ -1456,6 +1458,7 @@
   {/if}
 
   {#if showHelpOverlay}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 15; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showHelpOverlay = false; }}
     >
@@ -1508,6 +1511,7 @@
   {/if}
 
   {#if $pendingEditsPrompt}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) resolvePendingEditsPrompt(false); }}
     >
@@ -1582,6 +1586,7 @@
                     onblur={onEditBlur}
                   />
                 {:else}
+                  <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
                   <span
                     class="hex-cell"
                     style="cursor: pointer; display: inline-block; vertical-align: middle; {findStyle || (selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle)}{isEditingAscii ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
@@ -1616,6 +1621,7 @@
                     onblur={onEditBlur}
                   />
                 {:else}
+                  <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
                   <span
                     style="cursor: pointer; display: inline-block; vertical-align: middle; {findStyle || (selected ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : edited ? 'background: #fef3c7; color: #92400e; font-weight: 600;' : diffStyle)}{isEditingHex ? 'background: #fbbf24; color: #78350f; font-weight: 600; border-radius: 2px;' : ''}"
                     onmousedown={(e) => onCellMousedown(e, byteOffset)}

@@ -691,9 +691,14 @@
     </aside>
 
     <!-- Left splitter -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex,a11y_no_noninteractive_element_interactions -->
     <div
       class="w-1 shrink-0 cursor-col-resize hover:bg-primary-500/30 transition-colors self-stretch flex items-center justify-center"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
       onmousedown={(e) => startDrag("left", e)}
+      onkeydown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") { leftPercent = Math.max(10, Math.min(60, leftPercent + (e.key === "ArrowLeft" ? -2 : 2))); e.preventDefault(); } }}
       title="Drag to resize"
     >
       <div class="w-0.5 h-8 rounded-full bg-surface-300-700"></div>
@@ -1275,9 +1280,14 @@
     </section>
 
     <!-- Right splitter -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex,a11y_no_noninteractive_element_interactions -->
     <div
       class="w-1 shrink-0 cursor-col-resize hover:bg-primary-500/30 transition-colors self-stretch flex items-center justify-center"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
       onmousedown={(e) => startDrag("right", e)}
+      onkeydown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") { rightPercent = Math.max(10, Math.min(60, rightPercent + (e.key === "ArrowLeft" ? -2 : 2))); e.preventDefault(); } }}
       title="Drag to resize"
     >
       <div class="w-0.5 h-8 rounded-full bg-surface-300-700"></div>
@@ -1295,6 +1305,7 @@
   </main>
 
   {#if showConfigHelp}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showConfigHelp = false; }}
@@ -1342,6 +1353,7 @@
   {/if}
 
   {#if showBatchHelp}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showBatchHelp = false; }}
@@ -1401,6 +1413,7 @@
   {/if}
 
   {#if showFuseWriteConfirm}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
     <div
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showFuseWriteConfirm = false; }}
