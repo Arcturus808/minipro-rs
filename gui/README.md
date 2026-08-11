@@ -91,7 +91,8 @@ gui/
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.77.2+ (use rustup, not distro packages, on older distros)
+- [Rust](https://rustup.rs/) 1.88+ (use rustup, not distro packages, on older distros; the `rust-version` in `Cargo.toml` is stale)
+- [Tauri CLI](https://tauri.app/) — install with `cargo install tauri-cli`
 - [Node.js](https://nodejs.org/) (LTS)
 - Windows: [Zadig](https://zadig.akeo.ie/) to install WinUSB driver (one-time)
 - Linux: system libraries required by Tauri's WebKitGTK renderer and bundler:

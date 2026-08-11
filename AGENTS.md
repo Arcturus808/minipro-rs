@@ -7,7 +7,7 @@
 | Svelte | 5.x | **Use Svelte 5 runes exclusively** (`$state`, `$derived`, `$effect`). Do NOT mix with legacy `$:` syntax. |
 | Tauri | 2.x | WebView2 on Windows. Native dialogs freeze the JS event loop. |
 | Vite | 6.x | Frontend bundler. `npm run build` produces `dist/`. |
-| Rust | 1.77+ | Backend commands in `src-tauri/src/commands.rs`. |
+| Rust | 1.88+ (GUI) / 1.85+ (CLI) | Backend commands in `src-tauri/src/commands.rs`. |
 
 ## Build Commands
 
@@ -506,7 +506,7 @@ git add Cargo.lock gui/src-tauri/Cargo.lock
 Rust stdlib API stability and Linux package names both drift over time. CI runs on a single Rust version (`rust:1.93` in GitLab, `stable` in GitHub Actions) and a single Ubuntu version, so it does **not** catch MSRV regressions or stale package names on other distros.
 
 **Before using a Rust stdlib API that was stabilized recently:**
-- Check that the API is stable under the declared MSRV (`rust-version` in `Cargo.toml`, currently 1.85 for CLI/core, 1.77.2 for GUI)
+- Check that the API is stable under the declared MSRV (`rust-version` in `Cargo.toml`, currently 1.85 for CLI/core, 1.88 for GUI)
 - CI green on `rust:1.93` does NOT mean it builds on 1.85. A user on Debian Stable discovered `is_multiple_of()` was unstable in 1.85 despite passing CI (see GitLab work item #1)
 - When in doubt, use the older equivalent (e.g. `x % y == 0` instead of `x.is_multiple_of(y)`)
 - Clippy's `manual_is_multiple_of` lint respects `rust-version` — if it flags your `%` usage, the MSRV is probably not set correctly
@@ -572,7 +572,7 @@ WSL checks (run from the project root):
 wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd /mnt/<your-repo-path> && cargo +1.85 check --all --locked && cargo test --all --locked && cargo clippy --all-targets -- -D warnings"
 ```
 
-**Note:** The GUI has its own workspace (`gui/src-tauri/`) and a separate MSRV (1.77.2 declared in `Cargo.toml`), but its dependencies now require Rust 1.88+. The CI `msrv` job only checks the root workspace (`--all`), not the GUI. GUI MSRV compliance is not currently enforced.
+**Note:** The GUI has its own workspace (`gui/src-tauri/`) and a separate MSRV (1.88 declared in `Cargo.toml`). The CI `msrv` job only checks the root workspace (`--all`), not the GUI. GUI MSRV compliance is not currently enforced.
 
 **Pre-commit checklist (mandatory before every commit):**
 1. Does the change affect compiled code, tests, or build config? (Rust source, Cargo.toml, CI config, test files)
