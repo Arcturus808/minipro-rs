@@ -27,20 +27,27 @@ use crate::{
     error::{MiniproError, Result},
 };
 
-/// Timeout for individual USB transfers.  If a transfer doesn't complete
-/// within this duration, it is cancelled and an error is returned.  This
-/// prevents hangs when the firmware is in a bad state (e.g. after a
-/// sleep/wake cycle) and never responds to a command.
-const USB_TRANSFER_TIMEOUT: Duration = Duration::from_secs(5);
+/// Timeout for outgoing USB transfers (sends, payload writes).  Matches
+/// the C minipro's `MP_USBTIMEOUT` (5 seconds).  Sends are fast — the
+/// firmware accepts data quickly even if processing it takes longer.
+const USB_SEND_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Timeout for incoming USB transfers (responses, payload reads).  Matches
+/// the C minipro's `MP_USB_READ_TIMEOUT` (6 minutes).  The firmware may
+/// take a long time to respond during slow operations like EPROM writes
+/// (e.g. 27512 takes >5s per block to program before the status response
+/// is ready).  Using the short send timeout here caused false timeouts on
+/// slow EPROMs.
+const USB_RECV_TIMEOUT: Duration = Duration::from_secs(360);
 
 /// Race a future against a timer.  If the timer fires first, return a
 /// timeout error.  Dropping the losing future cancels the pending USB
 /// transfer (nusb cancels transfers when their futures are dropped).
-fn block_on_with_timeout<F, T>(fut: F) -> Result<T>
+fn block_on_with_timeout<F, T>(fut: F, timeout: Duration) -> Result<T>
 where
     F: std::future::Future<Output = T> + std::marker::Unpin,
 {
-    let timer = timer_future(USB_TRANSFER_TIMEOUT);
+    let timer = timer_future(timeout);
     match pollster::block_on(futures::future::select(fut, timer)) {
         futures::future::Either::Left((result, _)) => Ok(result),
         futures::future::Either::Right(_) => Err(MiniproError::Protocol(
@@ -74,8 +81,6 @@ const T76_PID: u16 = 0x1a86;
 
 #[allow(dead_code)]
 const USB_TIMEOUT_MS: u32 = 5_000;
-#[allow(dead_code)]
-const USB_READ_TIMEOUT_MS: u32 = 360_000;
 
 const CMD_EP_OUT: u8 = 0x01;
 const CMD_EP_IN: u8 = 0x81;
@@ -249,7 +254,10 @@ impl UsbDevice {
             buf.len(),
             &buf[..buf.len().min(16)]
         );
-        let completion = block_on_with_timeout(self.iface()?.bulk_out(CMD_EP_OUT, buf.to_vec()))?;
+        let completion = block_on_with_timeout(
+            self.iface()?.bulk_out(CMD_EP_OUT, buf.to_vec()),
+            USB_SEND_TIMEOUT,
+        )?;
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -268,8 +276,10 @@ impl UsbDevice {
     /// commands that return more).
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
         trace!("msg_recv: waiting for {size} bytes on EP 0x81");
-        let completion =
-            block_on_with_timeout(self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)))?;
+        let completion = block_on_with_timeout(
+            self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)),
+            USB_RECV_TIMEOUT,
+        )?;
         completion
             .status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
@@ -309,7 +319,7 @@ impl UsbDevice {
         let iface = self.iface()?;
         let f2 = iface.bulk_out(DATA_EP2_OUT, ep2_data);
         let f3 = iface.bulk_out(DATA_EP3_OUT, ep3_data);
-        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3))?;
+        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3), USB_SEND_TIMEOUT)?;
         c2.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         c3.status
@@ -330,6 +340,7 @@ impl UsbDevice {
             let c = block_on_with_timeout(
                 self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
+                USB_RECV_TIMEOUT,
             )?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
@@ -344,8 +355,10 @@ impl UsbDevice {
         // Small reads: single EP2 transfer
         if length < 64 {
             trace!("  -> small path: bulk_in(EP 0x82, 64)");
-            let c =
-                block_on_with_timeout(self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)))?;
+            let c = block_on_with_timeout(
+                self.iface()?.bulk_in(DATA_EP2_IN, RequestBuffer::new(64)),
+                USB_RECV_TIMEOUT,
+            )?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
                 c.data.len(),
@@ -361,6 +374,7 @@ impl UsbDevice {
             let c = block_on_with_timeout(
                 self.iface()?
                     .bulk_in(DATA_EP2_IN, RequestBuffer::new(length)),
+                USB_RECV_TIMEOUT,
             )?;
             trace!(
                 "  <- EP 0x82 complete: {} bytes, status={:?}",
@@ -382,7 +396,7 @@ impl UsbDevice {
         let iface = self.iface()?;
         let f2 = iface.bulk_in(DATA_EP2_IN, RequestBuffer::new(half));
         let f3 = iface.bulk_in(DATA_EP3_IN, RequestBuffer::new(half));
-        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3))?;
+        let (c2, c3) = block_on_with_timeout(futures::future::join(f2, f3), USB_RECV_TIMEOUT)?;
         trace!(
             "  <- EP 0x82 complete: {} bytes, status={:?}",
             c2.data.len(),
@@ -409,7 +423,7 @@ impl UsbDevice {
             data.len(),
             &data[..data.len().min(16)]
         );
-        let c = block_on_with_timeout(self.iface()?.bulk_out(ep, data))?;
+        let c = block_on_with_timeout(self.iface()?.bulk_out(ep, data), USB_SEND_TIMEOUT)?;
         c.status
             .map_err(|e| MiniproError::Protocol(e.to_string()))?;
         Ok(())
