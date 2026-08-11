@@ -7,7 +7,7 @@
 [![GitLab Pipeline](https://gitlab.com/arcturus8081/minipro-rs/badges/main/pipeline.svg)](https://gitlab.com/arcturus8081/minipro-rs/-/pipelines)
 [![GitHub Release](https://img.shields.io/github/v/release/Arcturus808/minipro-rs)](https://github.com/Arcturus808/minipro-rs/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.85%2B%20(CLI)%20%7C%201.88%2B%20(GUI)-orange.svg)](https://www.rust-lang.org)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ff69b4?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Arcturus808)
 
 A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) — an open-source program for controlling XGecu's TL866xx/T48/T56/T76 series of chip programmers.
@@ -171,6 +171,8 @@ cargo build --release
 
 ## Linux support
 
+### CLI
+
 **Rust 1.85+ is required.** Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
 
 The CLI builds with no system dependencies beyond glibc:
@@ -183,7 +185,15 @@ cargo build --release
 # Binary is at target/release/minipro
 ```
 
-The GUI requires Tauri's WebKitGTK system libraries before `cargo tauri build` will compile:
+### GUI
+
+**Rust 1.88+ is required** for the GUI due to its Tauri v2 dependency tree. On Debian Stable, install a newer rustc via [rustup](https://rustup.rs/) or distro backports (e.g. `rustc` from Debian Trixie backports).
+
+The GUI also requires the Tauri CLI and WebKitGTK system libraries before `cargo tauri build` will compile:
+
+```sh
+cargo install tauri-cli
+```
 
 | Distro | Command |
 |--------|---------|
