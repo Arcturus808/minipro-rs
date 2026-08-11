@@ -574,6 +574,16 @@ wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd /mnt/<your-repo-path> && car
 
 **Note:** The GUI has its own workspace (`gui/src-tauri/`) and a separate MSRV (1.88 declared in `Cargo.toml`). The CI `msrv` job only checks the root workspace (`--all`), not the GUI. GUI MSRV compliance is not currently enforced.
 
+**When bumping an MSRV (CLI or GUI), update ALL of these files in the same commit:**
+1. `Cargo.toml` — root workspace `rust-version` (CLI)
+2. `gui/src-tauri/Cargo.toml` — `rust-version` (GUI)
+3. `README.md` — Linux support section + badge
+4. `gui/README.md` — prerequisites section
+5. `AGENTS.md` — this section (MSRV references in the cross-distro verification notes and the tech stack table)
+6. `.gitlab-ci.yml` — the `msrv:` job's `image: rust:X.Y` tag (if the CLI MSRV changes)
+
+Missing any of these causes user-reported discrepancies (see GitLab work item #5).
+
 **Pre-commit checklist (mandatory before every commit):**
 1. Does the change affect compiled code, tests, or build config? (Rust source, Cargo.toml, CI config, test files)
 2. If YES → verify locally (fmt, clippy, test) before committing. For Linux-specific issues, also run WSL checks.
