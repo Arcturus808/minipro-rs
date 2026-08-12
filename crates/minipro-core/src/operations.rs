@@ -18,6 +18,27 @@ use crate::{
     protocol::{t56, tl866a, DataSet},
 };
 
+/// When the file is smaller than the device, byte-programmable chips (UV
+/// EPROMs, flash, etc.) only need the file's bytes written — the remainder
+/// is already blank from erase.  Reduce the transfer size to `min(file_len,
+/// device_size)`, rounded up to a multiple of `read_buffer_size` to match
+/// upstream C minipro behavior (see `write_page_file` in `main.c`).
+fn effective_transfer_size(file_len: usize, device_size: usize, read_buffer_size: u16) -> usize {
+    if file_len >= device_size {
+        return device_size;
+    }
+    let buf = read_buffer_size as usize;
+    if buf == 0 {
+        return file_len;
+    }
+    let rem = file_len % buf;
+    if rem == 0 {
+        file_len
+    } else {
+        (file_len + buf - rem).min(device_size)
+    }
+}
+
 /// Compute the effective read/write block size for a device.
 ///
 /// For NAND chips this is the erase-block size (`write_buffer_size` *
@@ -244,20 +265,26 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
             ),
             SizeMismatch::Ignore => {}
         }
-        // Pad with blank_value or truncate to fit the device.
-        buf.resize(size, device.blank_value as u8);
     }
 
-    info!("Writing {} bytes...", size);
+    // When the file is smaller than the device, only write the file's bytes
+    // (rounded up to read_buffer_size).  UV EPROMs and similar byte-
+    // programmable chips don't need the blank padding programmed — the erase
+    // already left those bytes at blank_value.  This matches upstream C
+    // minipro's `write_page_file` size reduction.
+    let actual_size = effective_transfer_size(buf.len(), size, device.read_buffer_size);
+    buf.resize(actual_size, device.blank_value as u8);
+
+    info!("Writing {} bytes...", actual_size);
 
     let write_size = if device.write_buffer_size > 0 {
         effective_block_size(&device, device.write_buffer_size)
     } else {
-        size
+        actual_size
     };
 
     let total_blocks = if write_size > 0 {
-        size.div_ceil(write_size)
+        actual_size.div_ceil(write_size)
     } else {
         1
     } as u32;
@@ -268,8 +295,8 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     let mut offset = 0usize;
     let mut has_written = false;
     let mut skipped = 0usize;
-    while offset < size {
-        let block = write_size.min(size - offset);
+    while offset < actual_size {
+        let block = write_size.min(actual_size - offset);
         let address = if use_word_addr {
             (offset as u32) >> 1
         } else {
@@ -313,14 +340,17 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         }
         offset += block;
         if let Some(ref mut f) = progress {
-            f(offset, size);
+            f(offset, actual_size);
         }
     }
     if skipped > 0 {
         info!("Skipped {} blank bytes", skipped);
     }
     let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
-    Ok(OpStats { bytes: size, crc32 })
+    Ok(OpStats {
+        bytes: actual_size,
+        crc32,
+    })
 }
 
 /// Write `buf` (raw bytes) to chip memory.
@@ -367,19 +397,22 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
             ),
             SizeMismatch::Ignore => {}
         }
-        buf.resize(size, device.blank_value as u8);
     }
 
-    info!("Writing {} bytes...", size);
+    // Reduce transfer size when buffer is smaller than device (see write_chip).
+    let actual_size = effective_transfer_size(buf.len(), size, device.read_buffer_size);
+    buf.resize(actual_size, device.blank_value as u8);
+
+    info!("Writing {} bytes...", actual_size);
 
     let write_size = if device.write_buffer_size > 0 {
         effective_block_size(&device, device.write_buffer_size)
     } else {
-        size
+        actual_size
     };
 
     let total_blocks = if write_size > 0 {
-        size.div_ceil(write_size)
+        actual_size.div_ceil(write_size)
     } else {
         1
     } as u32;
@@ -388,8 +421,8 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
     let mut offset = 0usize;
     let mut has_written = false;
     let mut skipped = 0usize;
-    while offset < size {
-        let block = write_size.min(size - offset);
+    while offset < actual_size {
+        let block = write_size.min(actual_size - offset);
         let address = if use_word_addr {
             (offset as u32) >> 1
         } else {
@@ -430,14 +463,17 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
         }
         offset += block;
         if let Some(ref mut f) = progress {
-            f(offset, size);
+            f(offset, actual_size);
         }
     }
     if skipped > 0 {
         info!("Skipped {} blank bytes", skipped);
     }
     let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
-    Ok(OpStats { bytes: size, crc32 })
+    Ok(OpStats {
+        bytes: actual_size,
+        crc32,
+    })
 }
 
 /// Verify chip memory against `path`.
@@ -466,18 +502,21 @@ pub fn verify_chip(
         _ => code_size,
     };
     let mut expected = read_file(path, format, size, device.blank_value as u8)?;
-    // Pad or truncate the reference file to match the device size.
-    expected.resize(size, device.blank_value as u8);
-    info!("Verifying {} bytes...", size);
+    // When the file is smaller than the device, only verify the file's bytes
+    // (rounded up to read_buffer_size).  This matches the reduced write size
+    // in write_chip and the upstream C minipro verify-after-write behavior.
+    let actual_size = effective_transfer_size(expected.len(), size, device.read_buffer_size);
+    expected.resize(actual_size, device.blank_value as u8);
+    info!("Verifying {} bytes...", actual_size);
 
     let read_size = if device.read_buffer_size > 0 {
         effective_block_size(&device, device.read_buffer_size)
     } else {
-        size
+        actual_size
     };
 
     let total_blocks = if read_size > 0 {
-        size.div_ceil(read_size)
+        actual_size.div_ceil(read_size)
     } else {
         1
     } as u32;
@@ -485,8 +524,8 @@ pub fn verify_chip(
     // mirroring the same shift applied in read_chip and write_chip.
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
-    while offset < size {
-        let block = read_size.min(size - offset);
+    while offset < actual_size {
+        let block = read_size.min(actual_size - offset);
         let address = if use_word_addr {
             (offset as u32) >> 1
         } else {
@@ -512,7 +551,7 @@ pub fn verify_chip(
         }
         offset += block;
         if let Some(ref mut f) = progress {
-            f(offset, size);
+            f(offset, actual_size);
         }
     }
     Ok(())
@@ -538,24 +577,26 @@ pub fn verify_chip_bytes(
         0x01 => device.data_memory_size as usize,
         _ => code_size,
     };
-    expected.resize(size, device.blank_value as u8);
-    info!("Verifying {} bytes...", size);
+    // Reduce transfer size when buffer is smaller than device (see verify_chip).
+    let actual_size = effective_transfer_size(expected.len(), size, device.read_buffer_size);
+    expected.resize(actual_size, device.blank_value as u8);
+    info!("Verifying {} bytes...", actual_size);
 
     let read_size = if device.read_buffer_size > 0 {
         effective_block_size(&device, device.read_buffer_size)
     } else {
-        size
+        actual_size
     };
 
     let total_blocks = if read_size > 0 {
-        size.div_ceil(read_size)
+        actual_size.div_ceil(read_size)
     } else {
         1
     } as u32;
     let use_word_addr = device.flags.data_org == DataOrg::Words && page == 0x00;
     let mut offset = 0usize;
-    while offset < size {
-        let block = read_size.min(size - offset);
+    while offset < actual_size {
+        let block = read_size.min(actual_size - offset);
         let address = if use_word_addr {
             (offset as u32) >> 1
         } else {
@@ -581,7 +622,7 @@ pub fn verify_chip_bytes(
         }
         offset += block;
         if let Some(ref mut f) = progress {
-            f(offset, size);
+            f(offset, actual_size);
         }
     }
     Ok(())
