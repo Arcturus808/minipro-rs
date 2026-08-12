@@ -402,24 +402,32 @@ The GUI terminal simulates a real terminal using HTML. Column alignment depends 
 
 ### Rules
 
-1. **Use `<pre>` with `white-space: pre`** — HTML collapses whitespace by default. Without `pre`, leading spaces and column alignment are destroyed.
+1. **Use `white-space: pre` on per-entry elements** — HTML collapses whitespace by default. Without `pre`, leading spaces and column alignment are destroyed.
 
-2. **Build content as a single HTML string** — With `white-space: pre`, any whitespace in Svelte template source between elements (newlines, indentation) is rendered literally. Use `{@html htmlContent}` where `htmlContent` is built in JS via `.join('\n')`, not `{#each}` with separate `<div>` elements.
+2. **Render each log entry as its own DOM node via `{#each}`** — Use a regular `<div>` (no `white-space: pre`) as the scroll container, and render each entry as `<div style="white-space:pre;">{@html renderEntry(entry)}</div>` inside `{#each}`. This satisfies two constraints simultaneously:
+   - **Whitespace safety**: The outer container has normal HTML whitespace collapsing, so newlines/indentation in Svelte template source between `{#each}` blocks are collapsed (not preserved). Each inner div has `white-space:pre` which only applies to the entry's content, preserving column alignment within the log text.
+   - **WebKitGTK repaint**: Replacing the entire `innerHTML` of a scrolled container via a single `{@html}` string causes content to become invisible after horizontal scrolling on Linux (WebKitGTK doesn't repaint the scrolled region). Individual DOM nodes created by `{#each}` repaint correctly.
 
-3. **Flush `{@html}` against the container tag** — No newlines or comments between `>` and `{@html}`:
+   **Do NOT** use `{@html}` to replace the entire log as a single string inside a `<pre>` — this causes the WebKitGTK repaint bug.
+
+   **Do NOT** put `{#each}` inside a `<pre white-space:pre>` container — template whitespace between elements leaks into the output and breaks alignment.
+
+3. **Flush `{@html}` against the entry div tag** — No newlines or comments between `>` and `{@html}`:
    ```svelte
    <!-- BAD — whitespace leaks into output -->
-   <pre>
+   <div style="white-space:pre;">
      {@html content}
-   </pre>
+   </div>
 
    <!-- GOOD — no whitespace -->
-   <pre>{@html content}</pre>
+   <div style="white-space:pre;">{@html content}</div>
    ```
 
-4. **Use inline styles for ANSI colors** — Convert `\x1b[0;91m` (red) to `<span style="color:#ef4444;">` and `\x1b[0m` to `</span>`. Tailwind classes may not apply inside `<pre>` due to CSS scoping.
+4. **Use inline styles for ANSI colors** — Convert `\x1b[0;91m` (red) to `<span style="color:#ef4444;">` and `\x1b[0m` to `</span>`. Tailwind classes may not apply inside `white-space:pre` elements due to CSS scoping.
 
 5. **Don't use `.trim()` on multi-line strings** — `String.trim()` strips leading spaces from the first line, breaking alignment. Use `.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0)` instead.
+
+6. **Force repaint on WebKitGTK** — After log entries change, toggle `opacity` via `requestAnimationFrame` to force the compositor to redraw. WebKitGTK has a bug where content in scrolled containers doesn't repaint after DOM changes — the content is in the DOM but invisible until an unrelated event (hover, scroll, resize) triggers a repaint.
 
 ### Rust format specifiers
 

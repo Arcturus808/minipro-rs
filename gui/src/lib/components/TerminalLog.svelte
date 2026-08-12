@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { logs, logText } from "../stores/logs";
+  import { logs, logText, type LogEntry } from "../stores/logs";
 
-  let scrollContainer: HTMLPreElement;
+  let scrollContainer: HTMLDivElement;
   let wasAtBottom = true;
 
   function onScroll() {
@@ -16,9 +16,28 @@
     }
   });
 
+  // Force WebKitGTK (Linux) to repaint after log entries change.
+  // WebKitGTK has a bug where content in scrolled containers doesn't
+  // repaint after DOM changes — the content is in the DOM but invisible
+  // until an unrelated event (hover, scroll, resize) triggers a repaint.
+  // Toggling opacity in a requestAnimationFrame forces the compositor
+  // to redraw the area.
+  $effect(() => {
+    $logs.length; // dependency
+    if (scrollContainer) {
+      requestAnimationFrame(() => {
+        if (!scrollContainer) return;
+        scrollContainer.style.opacity = "0.999";
+        requestAnimationFrame(() => {
+          if (!scrollContainer) return;
+          scrollContainer.style.opacity = "";
+        });
+      });
+    }
+  });
+
   // Convert ANSI escape codes to inline HTML <span> tags.
-  // Tracks open/close state to ensure balanced HTML — unbalanced tags cause
-  // WebKitGTK (Linux) rendering bugs where content doesn't repaint on scroll.
+  // Tracks open/close state to ensure balanced HTML.
   function ansiToHtml(text: string): string {
     let result = '';
     let spanOpen = false;
@@ -55,25 +74,24 @@
     return result;
   }
 
-  // Build the entire terminal as a single HTML string with \n line breaks.
-  // Using <pre> + \n avoids per-line <div> whitespace issues.
-  function renderAll(entries: { level: string; message: string }[]): string {
-    return entries
-      .map((entry) => {
-        const color =
-          entry.level === 'error'
-            ? 'var(--color-error-500)'
-            : entry.level === 'warn'
-              ? 'var(--color-warning-500)'
-              : 'var(--color-success-500)';
-        const prefix = `[${entry.level.toUpperCase()}]`;
-        const body = ansiToHtml(entry.message);
-        return `<span style="color:${color}">${prefix}</span> ${body}`;
-      })
-      .join('\n');
+  function levelColor(level: string): string {
+    return level === 'error'
+      ? 'var(--color-error-500)'
+      : level === 'warn'
+        ? 'var(--color-warning-500)'
+        : 'var(--color-success-500)';
   }
 
-  let htmlContent = $derived(renderAll($logs));
+  // Render a single log entry as HTML — scoped @html per entry (not the
+  // entire log as one string) so Svelte creates individual DOM nodes via
+  // {#each}, which WebKitGTK repaints more reliably than bulk innerHTML
+  // replacement.
+  function renderEntry(entry: LogEntry): string {
+    const color = levelColor(entry.level);
+    const prefix = `<span style="color:${color}">[${entry.level.toUpperCase()}]</span>`;
+    const body = ansiToHtml(entry.message);
+    return `${prefix} ${body}`;
+  }
 </script>
 
 <div class="card preset-filled-surface-100-900 border border-surface-200-800 flex flex-col h-full">
@@ -103,10 +121,19 @@
       </button>
     </div>
   </header>
-  <pre
+  <!-- Using {#each} with per-entry divs instead of a single @html string.
+       Svelte creates individual DOM nodes for each log entry, which WebKitGTK
+       (Linux) repaints correctly. The previous approach (replacing the entire
+       <pre> innerHTML via @html) caused content to become invisible after
+       horizontal scrolling because WebKitGTK didn't repaint the scrolled region. -->
+  <div
     bind:this={scrollContainer}
     onscroll={onScroll}
     class="flex-1 overflow-auto p-2 select-text m-0"
-    style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;white-space:pre;transform:translateZ(0);"
-  >{@html htmlContent}</pre>
+    style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;"
+  >
+    {#each $logs as entry, i (i)}
+      <div style="white-space:pre;">{@html renderEntry(entry)}</div>
+    {/each}
+  </div>
 </div>
