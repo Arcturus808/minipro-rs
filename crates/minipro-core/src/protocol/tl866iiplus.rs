@@ -757,7 +757,7 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, device: &Device, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = write_cmd(ds);
         // Small writes (< 57 bytes payload): combine header + payload in a
         // single EP1 message (8 + payload <= 64).  Matches C tl866iiplus_write_block.
@@ -768,10 +768,16 @@ impl Protocol for Tl866iiPlusProtocol {
             usb.msg_send(&msg[..8 + ds.data.len()])?;
         } else {
             // Large writes: send 8-byte header on EP1, then payload on EP2/EP3.
-            // Use write_buffer_size as the split limit (matches C write_payload
-            // call with handle->device->write_buffer_size).
+            // The C write_payload wrapper always passes limit=64 to
+            // write_payload2, and the TL866II+ firmware expects payloads > 64
+            // bytes to be split across EP2/EP3.  Passing write_buffer_size
+            // (e.g. 128 for 27512) as the limit caused all 128 bytes to go to
+            // EP2 only, leaving EP3 waiting — the firmware hung and the USB
+            // transfer timed out.  This affected all DIP28 EPROMs
+            // (write_buffer_size=0x80) but not DIP24 (write_buffer_size=0x20,
+            // which uses the small < 57 byte single-EP1 path).
             usb.msg_send(&cmd)?;
-            usb.write_payload_limit(&ds.data, device.write_buffer_size as usize)?;
+            usb.write_payload(&ds.data)?;
         }
         // C tl866iiplus_write_block does not read a status response here.
         Ok(())
