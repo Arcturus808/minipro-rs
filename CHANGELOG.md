@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *No unreleased changes yet.*
 
+## [0.6.2] - 2026-08-13
+
+### Fixed
+
+- **macOS build error (nusb MaybeFuture)** — `set_configuration` in nusb 0.1.14 returns `Result<(), Error>` directly, not `impl MaybeFuture`. The `MaybeFuture` trait was introduced in nusb 0.2.x. The previous fix (v0.6.1) moved the `MaybeFuture`/`.wait()` code from "all non-Windows" to "macOS-only", which fixed Linux but moved the failure to macOS. Now calls `set_configuration` directly without `MaybeFuture` or `.wait()`, gated to all non-Windows platforms
+
 ## [0.6.1] - 2026-08-12
 
 ### Fixed
