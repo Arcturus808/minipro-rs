@@ -1310,7 +1310,7 @@
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showConfigHelp = false; }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 480px; max-height: 80vh; overflow-y: auto;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 480px; max-height: 80vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div style="font-size: 15px; font-weight: 600;">Config &amp; Fuses Help</div>
           <button
@@ -1358,7 +1358,7 @@
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showBatchHelp = false; }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 500px; max-height: 80vh; overflow-y: auto;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 500px; max-height: 80vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div style="font-size: 15px; font-weight: 600;">Serial Number Injection Help</div>
           <button
@@ -1418,7 +1418,7 @@
       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showFuseWriteConfirm = false; }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 360px; max-width: 440px;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 360px; max-width: 440px;">
         <div style="font-size: 15px; font-weight: 600; margin-bottom: 14px;">Write Config to Chip?</div>
         <div style="font-size: 12px; line-height: 1.5; margin-bottom: 14px;">
           This will write all fuse and lock bit values to the chip.
