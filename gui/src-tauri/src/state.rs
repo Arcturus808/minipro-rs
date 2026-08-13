@@ -20,6 +20,10 @@ pub struct AppState {
     pub is_running: AtomicBool,
     /// Pre-loaded list of all device names + manufacturers (loaded once at startup).
     pub all_device_names: Mutex<Vec<DeviceListItem>>,
+    /// True when a custom database directory was saved but is no longer
+    /// valid (missing or lacks infoic.xml/logicic.xml). The app fell back
+    /// to standard search paths; the GUI shows a warning in Settings.
+    pub db_dir_invalid: AtomicBool,
 }
 
 impl Default for AppState {
@@ -31,6 +35,7 @@ impl Default for AppState {
             selected_device: Mutex::new(None),
             is_running: AtomicBool::new(false),
             all_device_names: Mutex::new(Vec::new()),
+            db_dir_invalid: AtomicBool::new(false),
         }
     }
 }

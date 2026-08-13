@@ -32,6 +32,15 @@ export async function pickSaveFile(title: string, defaultPath?: string | null, f
   return path ?? null;
 }
 
+export async function pickDirectory(title: string): Promise<string | null> {
+  const path = await open({
+    title,
+    multiple: false,
+    directory: true,
+  });
+  return path ?? null;
+}
+
 export async function fileExists(path: string): Promise<boolean> {
   return invoke<boolean>("file_exists", { path });
 }
