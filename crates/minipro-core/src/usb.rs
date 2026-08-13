@@ -193,24 +193,22 @@ pub fn open_programmer() -> Result<(UsbDevice, ProgrammerModel)> {
                 ))
             })?;
 
-            // On macOS, the device may be left in USB configuration 0
+            // On macOS and Linux, the device may be left in USB configuration 0
             // (unconfigured) after a power-cycle. The C minipro (libusb)
             // detects this and calls SetConfiguration(1) before claiming the
             // interface. Without this, claim_interface fails with "interface
             // not found".
             //
-            // This is macOS-only because:
-            //  - Linux: the kernel sets the configuration automatically.
-            //  - Windows: WinUSB handles it, and set_configuration is not
-            //    supported per nusb docs.
-            //  - nusb's MaybeFuture / .wait() only exist on macOS (the
-            //    set_configuration API returns a direct Result on other
-            //    platforms).
-            #[cfg(target_os = "macos")]
+            // This is not needed on Windows because WinUSB handles it, and
+            // set_configuration is not supported per nusb docs.
+            //
+            // In nusb 0.1.14, set_configuration returns Result<(), Error>
+            // directly (no MaybeFuture / .wait() — those were added in nusb
+            // 0.2.x).
+            #[cfg(not(target_os = "windows"))]
             {
                 if device.active_configuration().is_err() {
-                    use nusb::MaybeFuture;
-                    device.set_configuration(1).wait().map_err(|e| {
+                    device.set_configuration(1).map_err(|e| {
                         MiniproError::Protocol(format!(
                             "USB device is in configuration 0 (unconfigured) \
                              and cannot be set to configuration 1. \
