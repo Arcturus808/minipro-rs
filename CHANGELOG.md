@@ -15,16 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.2] - 2026-08-13
 
+v0.6.2 supersedes v0.6.1, which failed to publish due to a macOS build error.
+All v0.6.1 fixes are included below.
+
 ### Fixed
 
 - **macOS build error (nusb MaybeFuture)** — `set_configuration` in nusb 0.1.14 returns `Result<(), Error>` directly, not `impl MaybeFuture`. The `MaybeFuture` trait was introduced in nusb 0.2.x. The previous fix (v0.6.1) moved the `MaybeFuture`/`.wait()` code from "all non-Windows" to "macOS-only", which fixed Linux but moved the failure to macOS. Now calls `set_configuration` directly without `MaybeFuture` or `.wait()`, gated to all non-Windows platforms
-
-## [0.6.1] - 2026-08-12
-
-### Fixed
-
 - **TL866II+ DIP28 EPROM write timeout** — DIP28 devices (e.g. 2764, 27128, 27512) have a 128-byte write buffer, but the TL866II+ write path passed `write_buffer_size` as the EP2/EP3 split limit. Upstream C minipro uses a fixed 64-byte split. Passing 128 sent the entire payload to EP2 instead of splitting between EP2 and EP3, causing write timeouts. Now uses the standard 64-byte split, matching upstream
-- **Linux build error (USB)** — `usb.rs` gated `nusb::MaybeFuture` and `.wait()` for all non-Windows targets, but those APIs are macOS-specific in the used `nusb` version. Linux's `set_configuration` path returns directly and doesn't need `.wait()`. Changed the conditional compilation to macOS-only
 - **UV EPROM padding unnecessarily increases programming time** — `write_chip`, `write_chip_bytes`, `verify_chip`, and `verify_chip_bytes` padded undersized files to full device size before transfer. For a 2 KiB file on a 4 KiB UV EPROM, minipro-rs transferred 4 KiB while upstream transferred approximately 2 KiB. Now computes an effective transfer size based on `min(file_size, device_size)`, rounded up to the relevant buffer size. Standalone blank checks still operate over the complete device
 - **USB recv timeout too short for slow EPROM writes** — single 5-second USB timeout was too short for slow EPROM writes (e.g. 27512). Split into separate send (5s) and recv (30s) timeouts so slow device responses aren't cut off
 - **T76 NAND chip ID returns 0x00000000** — `get_chip_id` on T76 didn't call `begin_transaction` first, so the NAND wasn't selected when the ID read was issued. Also fixes USB config 0 after power-cycle (T76 needs `set_configuration(1)` after device reset)
@@ -41,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CLI database override flags renamed** — `--infoic-path`/`--logicic-path` renamed to `--infoic`/`--logicic` to match upstream C minipro flag names
 - **MSRV discrepancy corrected** — README previously stated Rust 1.85+ for all builds, but the GUI requires 1.88+ due to the Tauri v2 dependency tree. README and docs now distinguish CLI (1.85+) from GUI (1.88+)
+
+## [0.6.1] - 2026-08-12
+
+*Superseded by v0.6.2 — v0.6.1 failed to publish due to a macOS build error.
+All fixes listed under v0.6.2.*
 
 ## [0.6.0] - 2026-08-04
 
