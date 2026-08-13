@@ -543,8 +543,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Startup fallback behavior:** If the saved custom directory is missing or lacks `infoic.xml`/`logicic.xml`, the app silently falls back to standard search paths. A warning is shown in Settings → Database prompting the user to browse for a new directory or reset to default.
   - **Limitation:** If a programmer is connected when the database directory is changed, the connected handle's algorithm lookup path is not updated until reconnection. Chip definitions and logic IC vectors take effect immediately.
   - **Out of scope:**
-    - Individual file overrides (directory only — covers both `infoic.xml` and `logicic.xml`)
-    - `algorithm.xml` override (niche, T56/T76 only)
+    - Individual file overrides (directory only — covers `infoic.xml`, `logicic.xml`, and `algorithm.xml` if present)
     - `.lgc` file import (use xgpro-logic to convert to `logicic.xml` first)
   - **Priority: medium-high** — established ecosystem workflow, real user demand, CLI already has parity
   - **Status:** implemented

@@ -305,11 +305,11 @@ minipro -p AT28C256 -w firmware.bin
 
 ### GUI
 
-In **Settings → Database**, click **Browse...** to select a directory containing your custom `infoic.xml` and `logicic.xml`. The device list reloads immediately from the new database. Click **Reset to default** to revert to the standard search paths.
+In **Settings → Database**, click **Browse...** to select a directory containing your custom `infoic.xml` and `logicic.xml`. If `algorithm.xml` is also present in the directory, it is picked up automatically. The device list reloads immediately from the new database. Click **Reset to default** to revert to the standard search paths.
 
 The selected directory persists across restarts. If the directory is later moved or deleted, the app silently falls back to the default search paths and shows a warning in Settings prompting you to browse for a new directory or reset.
 
-> **Note:** If a programmer is connected when the database directory is changed, the connected handle's algorithm lookup path is not updated until the programmer is reconnected. Chip definitions and logic IC vectors take effect immediately; algorithm.xml changes require reconnecting the programmer.
+> **Note:** If a programmer is connected when the database directory is changed, the connected handle's algorithm lookup path is not updated until the programmer is reconnected. Chip definitions and logic IC vectors take effect immediately; `algorithm.xml` changes require reconnecting the programmer.
 
 ---
 

@@ -50,10 +50,13 @@ pub fn run() {
                     let infoic = dir_path.join("infoic.xml");
                     let logicic = dir_path.join("logicic.xml");
                     if infoic.exists() && logicic.exists() {
+                        // algorithm.xml is optional — pass it as an override only if present
+                        let algorithms = dir_path.join("algorithm.xml");
+                        let algo_override = if algorithms.exists() { Some(algorithms.as_path()) } else { None };
                         db_paths = minipro_core::database::DatabasePaths::resolve(
                             Some(&infoic),
                             Some(&logicic),
-                            None,
+                            algo_override,
                         )
                         .ok();
                     } else {

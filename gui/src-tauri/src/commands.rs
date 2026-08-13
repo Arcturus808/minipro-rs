@@ -1720,8 +1720,9 @@ pub async fn get_db_status(state: State<'_, Arc<AppState>>) -> Result<DbDirStatu
 /// Set or clear a custom database directory.
 ///
 /// When `dir` is `Some(path)`, both `infoic.xml` and `logicic.xml` must
-/// exist in that directory. When `dir` is `None`, reverts to the standard
-/// search path. Reloads the device list and clears the selected device.
+/// exist in that directory. `algorithm.xml` is picked up if present but
+/// not required. When `dir` is `None`, reverts to the standard search
+/// path. Reloads the device list and clears the selected device.
 #[tauri::command]
 pub async fn set_custom_db_dir(
     dir: Option<String>,
@@ -1750,7 +1751,10 @@ pub async fn set_custom_db_dir(
                     dir_path.display()
                 ));
             }
-            DatabasePaths::resolve(Some(&infoic), Some(&logicic), None)
+            // algorithm.xml is optional — pass it as an override only if present
+            let algorithms = dir_path.join("algorithm.xml");
+            let algo_override = if algorithms.exists() { Some(algorithms.as_path()) } else { None };
+            DatabasePaths::resolve(Some(&infoic), Some(&logicic), algo_override)
                 .map_err(|e| format!("Failed to resolve database: {}", e))?
         }
         None => DatabasePaths::resolve(None, None, None)
