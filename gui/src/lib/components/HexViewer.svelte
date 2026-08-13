@@ -1382,7 +1382,7 @@
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
       onclick={(e) => { if (e.target === e.currentTarget) closeGotoDialog(); }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 280px;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 280px;">
         <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Go to Offset</div>
         <div style="font-size: 12px; opacity: 0.6; margin-bottom: 12px;">Enter offset in hex (0x1234) or decimal (1234)</div>
         <input
@@ -1415,7 +1415,7 @@
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: rgba(0,0,0,0.3);"
       onclick={(e) => { if (e.target === e.currentTarget) closeFindDialog(); }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 340px;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 340px;">
         <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Find</div>
         <div style="display: flex; gap: 8px; margin-bottom: 8px;">
           <button
@@ -1462,7 +1462,7 @@
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 15; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) showHelpOverlay = false; }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 460px; max-height: 80vh; overflow-y: auto;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 460px; max-height: 80vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div style="font-size: 15px; font-weight: 600;">Hex Viewer Help</div>
           <button
@@ -1515,7 +1515,7 @@
     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: rgba(0,0,0,0.4);"
       onclick={(e) => { if (e.target === e.currentTarget) resolvePendingEditsPrompt(false); }}
     >
-      <div style="background: var(--bg-color, #fff); border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 320px; max-width: 400px;">
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 320px; max-width: 400px;">
         <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Discard changes?</div>
         <div style="font-size: 13px; opacity: 0.7; margin-bottom: 12px;">
           {$pendingEditsPrompt.message}
