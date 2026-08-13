@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *No unreleased changes yet.*
 
+## [0.6.1] - 2026-08-12
+
+### Fixed
+
+- **TL866II+ DIP28 EPROM write timeout** — DIP28 devices (e.g. 2764, 27128, 27512) have a 128-byte write buffer, but the TL866II+ write path passed `write_buffer_size` as the EP2/EP3 split limit. Upstream C minipro uses a fixed 64-byte split. Passing 128 sent the entire payload to EP2 instead of splitting between EP2 and EP3, causing write timeouts. Now uses the standard 64-byte split, matching upstream
+- **Linux build error (USB)** — `usb.rs` gated `nusb::MaybeFuture` and `.wait()` for all non-Windows targets, but those APIs are macOS-specific in the used `nusb` version. Linux's `set_configuration` path returns directly and doesn't need `.wait()`. Changed the conditional compilation to macOS-only
+- **UV EPROM padding unnecessarily increases programming time** — `write_chip`, `write_chip_bytes`, `verify_chip`, and `verify_chip_bytes` padded undersized files to full device size before transfer. For a 2 KiB file on a 4 KiB UV EPROM, minipro-rs transferred 4 KiB while upstream transferred approximately 2 KiB. Now computes an effective transfer size based on `min(file_size, device_size)`, rounded up to the relevant buffer size. Standalone blank checks still operate over the complete device
+- **USB recv timeout too short for slow EPROM writes** — single 5-second USB timeout was too short for slow EPROM writes (e.g. 27512). Split into separate send (5s) and recv (30s) timeouts so slow device responses aren't cut off
+- **T76 NAND chip ID returns 0x00000000** — `get_chip_id` on T76 didn't call `begin_transaction` first, so the NAND wasn't selected when the ID read was issued. Also fixes USB config 0 after power-cycle (T76 needs `set_configuration(1)` after device reset)
+- **macOS database search path** — database resolution didn't check macOS-specific paths. Now searches `~/Library/Application Support/minipro-rs/`, `/usr/local/share/minipro-rs/`, and `/opt/homebrew/share/minipro-rs/` on macOS
+- **macOS Tauri resource directory** — GUI couldn't find the chip database on macOS because Tauri's resource directory wasn't in the search path. Now includes the Tauri resource directory in database resolution
+- **GUI voltage display uses wrong lookup tables** — `VoltagesDto` and `apply_voltage_overrides` used a single hardcoded 16-entry table that only matched T48/T56 firmware encoding. TL866A and TL866II+ use different encodings (e.g. TL866A VPP code `0x00` = 12.5V, not 9V). Now uses per-model voltage tables (`vcc_voltage_table()`, `vpp_voltage_table()`) selected by `ProgrammerModel`
+- **Logic IC voltage display shows VPP/VDD as inapplicable** — logic ICs don't have VPP or VDD, but the GUI displayed numeric values for them. Now shows "inapplicable" for VPP/VDD on logic ICs
+- **ZIF socket diagram pin placement** — diagram used the pin-contact test mask instead of `pin_count` for chip footprint width, showing incorrect chip placement for some devices
+- **Logic test and config panels shown for incompatible devices** — switching from a logic IC to an EPROM left the "Start logic test" button active, producing "no test vectors for this device" errors. Now hides logic test and config panels for devices that don't support those operations
+- **WebKitGTK log content invisible after horizontal scroll** — on Linux, log window content became invisible after horizontal scrolling. WebKitGTK doesn't repaint when the entire `<pre>` `innerHTML` is replaced via `{@html}` in a scrolled container. Switched to `{#each}` per-entry rendering with individual DOM nodes, which WebKitGTK repaints correctly
+- **GUI build warnings eliminated** — suppressed Rust `non_snake_case` warnings from Tauri camelCase parameters, added Svelte a11y attributes to splitters and modals, and fixed Svelte 5 ignore syntax for visual-only elements
+
+### Changed
+
+- **CLI database override flags renamed** — `--infoic-path`/`--logicic-path` renamed to `--infoic`/`--logicic` to match upstream C minipro flag names
+- **MSRV discrepancy corrected** — README previously stated Rust 1.85+ for all builds, but the GUI requires 1.88+ due to the Tauri v2 dependency tree. README and docs now distinguish CLI (1.85+) from GUI (1.88+)
+
 ## [0.6.0] - 2026-08-04
 
 ### Added
