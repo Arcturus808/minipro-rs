@@ -34,10 +34,45 @@ pub fn run() {
             let state = std::sync::Arc::new(state::AppState::default());
             {
                 let mut guard = state.db_paths.lock().unwrap();
-                // First try standard search paths (CWD, exe dir, MINIPRO_HOME, %PROGRAMDATA%)
-                let mut db_paths = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
 
-                // If not found, try Tauri bundled resources (for installed builds)
+                // Check for a saved custom database directory in settings
+                let custom_db_dir: Option<String> = app
+                    .app_handle()
+                    .store("settings.json")
+                    .ok()
+                    .and_then(|s| s.get("customDbDir").and_then(|v| v.as_str().map(|s| s.to_string())));
+
+                let mut db_paths = None;
+
+                // Try the saved custom directory first (if set)
+                if let Some(ref dir) = custom_db_dir {
+                    let dir_path = std::path::Path::new(dir);
+                    let infoic = dir_path.join("infoic.xml");
+                    let logicic = dir_path.join("logicic.xml");
+                    if infoic.exists() && logicic.exists() {
+                        db_paths = minipro_core::database::DatabasePaths::resolve(
+                            Some(&infoic),
+                            Some(&logicic),
+                            None,
+                        )
+                        .ok();
+                    } else {
+                        // Custom dir is invalid — mark it so the GUI can warn
+                        state.db_dir_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
+                        eprintln!(
+                            "Warning: saved custom database directory '{}' is missing \
+                             infoic.xml or logicic.xml — falling back to default search paths",
+                            dir_path.display()
+                        );
+                    }
+                }
+
+                // Fall back to standard search paths (CWD, exe dir, MINIPRO_HOME, %PROGRAMDATA%)
+                if db_paths.is_none() {
+                    db_paths = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
+                }
+
+                // If still not found, try Tauri bundled resources (for installed builds)
                 if db_paths.is_none() {
                     if let (Ok(infoic_res), Ok(logicic_res)) = (
                         app.path().resolve("infoic.xml", tauri::path::BaseDirectory::Resource),
@@ -119,6 +154,8 @@ pub fn run() {
             commands::read_file_bytes,
             commands::do_smart_diff,
             commands::check_database,
+            commands::get_db_status,
+            commands::set_custom_db_dir,
             commands::check_overcurrent,
             commands::read_calibration,
             commands::run_hardware_check,

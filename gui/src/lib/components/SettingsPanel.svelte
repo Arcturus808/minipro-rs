@@ -3,8 +3,13 @@
   import type { AppSettings } from "../stores/settings";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { invoke } from "@tauri-apps/api/core";
+  import { pickDirectory } from "../file-dialog";
+  import { getDbStatus, setCustomDbDir, reloadDatabase, type DbDirStatus } from "../stores/device";
 
   let show = $state(false);
+  let dbStatus = $state<DbDirStatus | null>(null);
+  let dbError = $state<string | null>(null);
+  let dbBusy = $state(false);
 
   let isDark = $derived(
     $settings.theme === "dark" ||
@@ -13,6 +18,11 @@
 
   function toggle() {
     show = !show;
+    if (show) {
+      dbError = null;
+      // Fetch db status when opening
+      getDbStatus().then((s) => { dbStatus = s; });
+    }
   }
 
   function close() {
@@ -21,6 +31,38 @@
 
   async function update<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
     await setSetting(key, value);
+  }
+
+  async function browseDbDir() {
+    dbError = null;
+    const dir = await pickDirectory("Select database directory");
+    if (!dir) return;
+    dbBusy = true;
+    try {
+      await setCustomDbDir(dir);
+      await setSetting("customDbDir", dir);
+      await reloadDatabase();
+      dbStatus = await getDbStatus();
+    } catch (e: any) {
+      dbError = String(e);
+    } finally {
+      dbBusy = false;
+    }
+  }
+
+  async function resetDbDir() {
+    dbError = null;
+    dbBusy = true;
+    try {
+      await setCustomDbDir(null);
+      await setSetting("customDbDir", null);
+      await reloadDatabase();
+      dbStatus = await getDbStatus();
+    } catch (e: any) {
+      dbError = String(e);
+    } finally {
+      dbBusy = false;
+    }
   }
 
   function handleBackdrop(event: MouseEvent) {
@@ -184,6 +226,47 @@
           Show entropy bar
           <span class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>— color-coded strip showing data randomness per row</span>
         </label>
+      </div>
+
+      <!-- Database -->
+      <div class="space-y-3">
+        <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Database</h3>
+        <div class="text-sm space-y-2">
+          <div class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {$settings.customDbDir
+              ? `Custom directory: ${$settings.customDbDir}`
+              : "Using default search paths"}
+          </div>
+          {#if $settings.customDbDir && dbStatus && !dbStatus.active}
+            <div class="text-xs text-amber-500 font-medium">
+              This directory is no longer valid — using default search paths. Browse for a new directory or reset to default.
+            </div>
+          {/if}
+          {#if dbError}
+            <div class="text-xs text-red-500">{dbError}</div>
+          {/if}
+          <div class="flex gap-2">
+            <button
+              class="btn preset-tonal text-xs"
+              onclick={browseDbDir}
+              disabled={dbBusy}
+            >
+              Browse...
+            </button>
+            {#if $settings.customDbDir}
+              <button
+                class="btn preset-tonal text-xs"
+                onclick={resetDbDir}
+                disabled={dbBusy}
+              >
+                Reset to default
+              </button>
+            {/if}
+          </div>
+          <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+            Select a directory containing custom <span class="font-mono">infoic.xml</span> and <span class="font-mono">logicic.xml</span> files. The device list reloads immediately.
+          </p>
+        </div>
       </div>
     </div>
   </div>

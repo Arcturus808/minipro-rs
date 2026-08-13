@@ -103,3 +103,26 @@ export async function deselectDevice() {
   await invoke("deselect_device");
   selectedDevice.set(null);
 }
+
+export interface DbDirStatus {
+  customDir: string | null;
+  active: boolean;
+}
+
+export async function getDbStatus(): Promise<DbDirStatus> {
+  return invoke<DbDirStatus>("get_db_status");
+}
+
+export async function setCustomDbDir(dir: string | null): Promise<void> {
+  await invoke("set_custom_db_dir", { dir });
+}
+
+/**
+ * Clear the selected device after a database directory change.
+ * The backend has already reloaded device names; the next searchDevices()
+ * call will return results from the new database.
+ */
+export async function reloadDatabase(): Promise<void> {
+  await deselectDevice();
+  deviceList.set([]);
+}

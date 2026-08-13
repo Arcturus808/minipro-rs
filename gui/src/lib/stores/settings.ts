@@ -17,6 +17,7 @@ export interface AppSettings {
   rightPanelPercent: number;
   windowWidth: number | null;
   windowHeight: number | null;
+  customDbDir: string | null;
 }
 
 // Panel widths as fractions of window width (0.0–1.0)
@@ -37,6 +38,7 @@ const DEFAULTS: AppSettings = {
   rightPanelPercent: 0.25,
   windowWidth: null,
   windowHeight: null,
+  customDbDir: null,
 };
 
 let store: Store | null = null;

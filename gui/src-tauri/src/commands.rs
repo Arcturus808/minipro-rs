@@ -1694,6 +1694,93 @@ pub async fn check_database(state: State<'_, Arc<AppState>>) -> Result<bool, Str
     }
 }
 
+/// DTO for database directory status returned to the GUI.
+#[derive(Serialize)]
+pub struct DbDirStatusDto {
+    /// The saved custom directory path, or null if using default search.
+    pub customDir: Option<String>,
+    /// True if the custom directory is actively in use.
+    /// False if a custom dir was saved but is invalid (fell back to default).
+    pub active: bool,
+}
+
+/// Return the current database directory status for the Settings panel.
+#[tauri::command]
+pub async fn get_db_status(state: State<'_, Arc<AppState>>) -> Result<DbDirStatusDto, String> {
+    // The custom dir is not stored in AppState — the GUI reads it from
+    // the settings store. We only return the invalid flag here so the
+    // GUI can show a warning if the saved dir fell back to default.
+    let invalid = state.db_dir_invalid.load(std::sync::atomic::Ordering::SeqCst);
+    Ok(DbDirStatusDto {
+        customDir: None, // GUI fills this from its own settings store
+        active: !invalid,
+    })
+}
+
+/// Set or clear a custom database directory.
+///
+/// When `dir` is `Some(path)`, both `infoic.xml` and `logicic.xml` must
+/// exist in that directory. When `dir` is `None`, reverts to the standard
+/// search path. Reloads the device list and clears the selected device.
+#[tauri::command]
+pub async fn set_custom_db_dir(
+    dir: Option<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let paths = match dir.as_deref() {
+        Some(d) => {
+            let dir_path = std::path::Path::new(d);
+            let infoic = dir_path.join("infoic.xml");
+            let logicic = dir_path.join("logicic.xml");
+            if !infoic.exists() {
+                state
+                    .db_dir_invalid
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err(format!(
+                    "infoic.xml not found in '{}'",
+                    dir_path.display()
+                ));
+            }
+            if !logicic.exists() {
+                state
+                    .db_dir_invalid
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err(format!(
+                    "logicic.xml not found in '{}'",
+                    dir_path.display()
+                ));
+            }
+            DatabasePaths::resolve(Some(&infoic), Some(&logicic), None)
+                .map_err(|e| format!("Failed to resolve database: {}", e))?
+        }
+        None => DatabasePaths::resolve(None, None, None)
+            .map_err(|e| format!("Failed to resolve database: {}", e))?,
+    };
+
+    // Update the cached paths
+    {
+        let mut guard = state.db_paths.lock().map_err(|e| e.to_string())?;
+        *guard = Some(DatabasePaths {
+            infoic: paths.infoic.clone(),
+            logicic: paths.logicic.clone(),
+            algorithms: paths.algorithms.clone(),
+        });
+    }
+
+    // Clear the invalid flag — the new directory is valid (or we reset to default)
+    state
+        .db_dir_invalid
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+
+    // Reload device names from the new database
+    state.load_device_names().map_err(|e| e.to_string())?;
+
+    // Clear the selected device (may not exist in the new database)
+    state.set_device(None).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Return expanded programmer details (no USB reconnection required).
 #[tauri::command]
 pub async fn get_programmer_details(state: State<'_, Arc<AppState>>) -> Result<ProgrammerDetailsDto, String> {

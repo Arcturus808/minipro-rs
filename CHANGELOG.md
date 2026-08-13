@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *No unreleased changes yet.*
+- **GUI custom database directory** — Settings → Database now has a directory picker for custom `infoic.xml` and `logicic.xml` files. The selected directory overrides the standard search path, persists across restarts, and reloads the device list immediately. If the saved directory is later moved or deleted, the app silently falls back to default search paths and shows a warning in Settings. The CLI's `--infoic` / `--logicic` / `--algorithms` flags and `MINIPRO_HOME` env var are now documented in the README alongside this GUI feature.
 
 ## [0.6.2] - 2026-08-13
 

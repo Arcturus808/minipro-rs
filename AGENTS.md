@@ -303,19 +303,22 @@ gui/
         DeviceSelector.svelte    — search + paginated IC list
         DiagnosticsPanel.svelte  — overcurrent, calibration, pin test (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log)
-        SettingsPanel.svelte     — theme, defaults, layout reset
+        SettingsPanel.svelte     — theme, defaults, layout reset, custom database directory picker
         ProgressPanel.svelte     — operation progress + cancel
-      file-dialog.ts             — Tauri dialog wrappers
+      file-dialog.ts             — Tauri dialog wrappers (file open/save, directory picker)
   src-tauri/
     src/
-      commands.rs                — all Rust command handlers
-      lib.rs                     — Tauri app builder + plugin init
-      state.rs                   — AppState (USB handle, selected device)
+      commands.rs                — all Rust command handlers (includes set_custom_db_dir, get_db_status)
+      lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup)
+      state.rs                   — AppState (USB handle, selected device, db_paths cache, db_dir_invalid flag)
     Cargo.toml
     tauri.conf.json
 ```
 
 ## Known Bugs & Fixes
+
+### Custom database directory startup fallback
+If the user sets a custom database directory in Settings and later moves or deletes that directory, the app cannot find `infoic.xml` / `logicic.xml` at the saved path on next launch. The startup code in `lib.rs` checks whether both files exist in the saved `customDbDir`; if not, it sets `db_dir_invalid` on `AppState`, logs a warning to stderr, and falls back to the standard search paths (CWD, exe dir, `MINIPRO_HOME`, platform data dirs, Tauri resources). The GUI reads `get_db_status` when opening Settings and shows an amber warning if `active` is false, prompting the user to browse for a new directory or reset to default. No popup or modal is shown — the warning is inline in the Settings panel only.
 
 ### `selectedDevice` store held string instead of object
 `DeviceSelector.svelte` was doing `selectedDevice.set(name)` (a string), but the store is typed as `DeviceInfo | null`. Fixed by storing the full `DeviceInfo` object: `selectedDevice.set(selectedInfo)`.

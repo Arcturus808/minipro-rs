@@ -285,6 +285,34 @@ Run `minipro --help` for the full list of options.
 
 ---
 
+## Custom database files
+
+The chip database (`infoic.xml`) and logic IC test vectors (`logicic.xml`) are bundled with the GUI installer and vendored in the repo's `data/` directory for CLI builds. You can override these with custom files — useful for community logic IC vector packs or custom chip definitions.
+
+### CLI
+
+```bash
+# Override individual files
+minipro -p AT28C256 -w firmware.bin --infoic /path/to/infoic.xml --logicic /path/to/logicic.xml
+
+# Override algorithm.xml for T56/T76
+minipro -p W25Q128 --algorithms /path/to/algorithm.xml
+
+# Or set a directory containing all three files
+export MINIPRO_HOME=/path/to/dbdir
+minipro -p AT28C256 -w firmware.bin
+```
+
+### GUI
+
+In **Settings → Database**, click **Browse...** to select a directory containing your custom `infoic.xml` and `logicic.xml`. The device list reloads immediately from the new database. Click **Reset to default** to revert to the standard search paths.
+
+The selected directory persists across restarts. If the directory is later moved or deleted, the app silently falls back to the default search paths and shows a warning in Settings prompting you to browse for a new directory or reset.
+
+> **Note:** If a programmer is connected when the database directory is changed, the connected handle's algorithm lookup path is not updated until the programmer is reconnected. Chip definitions and logic IC vectors take effect immediately; algorithm.xml changes require reconnecting the programmer.
+
+---
+
 ## Programmer Compatibility
 
 | Programmer | Read | Write | Erase | Verify | Chip ID | Fuses | JEDEC | Logic Test | Pin Check | Firmware Update | Hardware Test |
