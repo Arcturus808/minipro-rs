@@ -33,6 +33,7 @@
   import DeviceSelector from "./lib/components/DeviceSelector.svelte";
   import DiagnosticsPanel from "./lib/components/DiagnosticsPanel.svelte";
   import ZifSocketDiagram from "./lib/components/ZifSocketDiagram.svelte";
+  import IcspConnectorDiagram from "./lib/components/IcspConnectorDiagram.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
@@ -1335,7 +1336,11 @@
         <TerminalLog />
       </div>
       <div class="shrink-0">
-        <ZifSocketDiagram />
+        {#if icspMode !== "zif"}
+          <IcspConnectorDiagram />
+        {:else}
+          <ZifSocketDiagram />
+        {/if}
       </div>
     </aside>
   </main>
