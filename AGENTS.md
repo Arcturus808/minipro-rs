@@ -302,7 +302,8 @@ gui/
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list
         DiagnosticsPanel.svelte  — overcurrent, calibration, pin test (buttons collapsible)
-        ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log)
+        ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif")
+        IcspConnectorDiagram.svelte — ICSP connector pin-numbering diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc")
         SettingsPanel.svelte     — theme, defaults, layout reset, custom database directory picker
         ProgressPanel.svelte     — operation progress + cancel
       file-dialog.ts             — Tauri dialog wrappers (file open/save, directory picker)

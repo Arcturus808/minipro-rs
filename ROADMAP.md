@@ -498,7 +498,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - No backend changes needed (layouts are hardcoded constants)
     - TL866CS: show "ICSP not supported on this model" instead of a diagram
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
-  - **Status:** Phase 1 complete, Phase 2 scoped (pin-numbering only, no signal labels), Phase 3 not started
+  - **Status:** Phase 1 complete, Phase 2 complete (pin-numbering only, no signal labels), Phase 3 not started
 
 - [x] **GUI voltage override dropdowns** — replace hardcoded voltage option lists with model-specific dropdowns
   - **Problem:** The GUI Advanced section used hardcoded VPP/VCC option lists that only matched the XG (T48/T56) tables. TL866A and TL866II+ users saw invalid options, logic ICs showed VPP/VDD dropdowns that shouldn't exist, and T56/T76 custom-protocol devices showed options when overrides aren't supported.
