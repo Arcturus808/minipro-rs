@@ -159,6 +159,7 @@ pub fn run() {
             commands::check_database,
             commands::get_db_status,
             commands::set_custom_db_dir,
+            commands::get_voltage_options,
             commands::check_overcurrent,
             commands::read_calibration,
             commands::run_hardware_check,

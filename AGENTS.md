@@ -349,6 +349,11 @@ When a Windows laptop goes to sleep with the programmer connected, the USB host 
 
 **Fix:** Both now use `minipro_core::device::{vcc_voltage_table, vpp_voltage_table, voltage_name, lookup_voltage}` which select the correct table per `ProgrammerModel`. The model is read from `AppState::programmer_info`; when no programmer is connected, falls back to TL866II+ tables.
 
+### GUI voltage dropdowns used hardcoded option lists (fixed)
+The Advanced voltage override section in `App.svelte` used hardcoded `VPP_OPTIONS` and `VCC_OPTIONS` constants that only matched the XG (T48/T56) tables. TL866A and TL866II+ users saw invalid options, logic ICs showed VPP/VDD dropdowns that can't be used, and T56/T76 custom-protocol devices showed options when overrides aren't supported.
+
+**Fix:** Added `get_voltage_options` Tauri command in `commands.rs` that returns `VoltageOptionsDto { vcc, vpp, is_logic }` from the per-model voltage tables. The frontend `voltageOptions` store in `device.ts` is loaded via `$effect` in `App.svelte` whenever `$programmer` or `$selectedDevice` changes. Dropdowns are populated from the backend response; VPP is hidden when null (logic ICs, custom protocol), VDD is hidden for logic ICs, and "Voltage overrides not supported for this device" is shown when both are null. Override values reset to empty on device/programmer change.
+
 ### CLI `--vcc`/`--vdd`/`--vpp` overrides used wrong voltage tables (fixed)
 `apply_overrides` in `minipro-cli/src/main.rs` mapped voltage names to **sequential indices** of a single hardcoded 16-entry table for all programmer models. On TL866II+ (and TL866A, T48, T56, T76) the firmware expects model-specific **encoded** values, so overrides sent the wrong codes — e.g. a `--vcc` sweep on a logic IC produced 5 V on every run (verified on a scope). Upstream C minipro rejects `--vcc` entirely for logic ICs (their `vcc_table` is NULL for logic devices).
 

@@ -500,26 +500,29 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
   - **Status:** Phase 1 complete, Phase 2 scoped (pin-numbering only, no signal labels), Phase 3 not started
 
-- [ ] **GUI voltage override dropdowns** — replace free-text voltage inputs with model-specific dropdowns
-  - **Problem:** The GUI Advanced section currently uses free-text VPP/VCC/VDD inputs. While the backend now uses the correct per-model voltage tables (display and override encoding are fixed), free-text inputs still allow users to enter voltages that aren't supported by the connected programmer.
-  - **Solution:** Use the per-model voltage tables already implemented in `minipro-core/src/device.rs` (`vcc_voltage_table()`, `vpp_voltage_table()`) to populate dropdowns with only valid values for the connected programmer. For logic ICs, show only the 4-entry logic VCC table (1.8, 2.5, 3.3, 5V) and hide VPP/VDD.
+- [x] **GUI voltage override dropdowns** — replace hardcoded voltage option lists with model-specific dropdowns
+  - **Problem:** The GUI Advanced section used hardcoded VPP/VCC option lists that only matched the XG (T48/T56) tables. TL866A and TL866II+ users saw invalid options, logic ICs showed VPP/VDD dropdowns that shouldn't exist, and T56/T76 custom-protocol devices showed options when overrides aren't supported.
+  - **Solution:** Added `get_voltage_options` Tauri command that returns valid VCC/VPP values from the per-model voltage tables (`vcc_voltage_table()`, `vpp_voltage_table()` in `device.rs`). The frontend dropdowns are now populated from the backend, with inapplicable dropdowns hidden.
   - **Backend changes:**
-    - Expose voltage tables to the frontend via a new Tauri command (e.g. `get_voltage_options`) that returns valid VCC/VPP/VDD values for the connected programmer model and selected device type
-    - ~~Update `VoltagesDto` to use the correct per-model table for display strings~~ — DONE
-    - ~~Fix `apply_voltage_overrides` to use per-model tables~~ — DONE
+    - `get_voltage_options` command — returns `VoltageOptionsDto { vcc, vpp, is_logic }` based on connected programmer model and selected device's chip_type/custom_protocol. Falls back to TL866II+ tables when no programmer is connected. Returns all `None` when no device is selected.
+    - ~~Update `VoltagesDto` to use the correct per-model table for display strings~~ — DONE (earlier release)
+    - ~~Fix `apply_voltage_overrides` to use per-model tables~~ — DONE (earlier release)
   - **Frontend changes:**
-    - Replace free-text inputs with `<select>` dropdowns populated from the backend
-    - Show the database default as the selected option
-    - Disable/hide VPP and VDD for logic ICs
-    - Show a warning badge when the user selects a VCC different from the database default (matching the CLI warning)
-  - **Files affected:**
-    | File | Action |
-    |------|--------|
-    | `gui/src-tauri/src/commands.rs` | Add `get_voltage_options` command (display + override encoding already fixed) |
-    | `gui/src/lib/stores/device.ts` | Add voltage options store |
-    | `gui/src/App.svelte` | Replace free-text voltage inputs with dropdowns |
-  - **Priority: medium** — the wrong-voltage risk from free-text entry remains; the display bug is fixed
-  - **Status:** backend display + override encoding fixed; dropdown UI not started
+    - `voltageOptions` store and `loadVoltageOptions()` in `device.ts`
+    - `$effect` in `App.svelte` reloads voltage options when `$programmer` or `$selectedDevice` changes; resets override values to empty
+    - Dropdowns populated from `$voltageOptions.vcc` / `$voltageOptions.vpp`
+    - VPP hidden when `vpp` is null (logic ICs, custom protocol)
+    - VDD hidden for logic ICs; uses VCC table (matching backend behavior)
+    - "Voltage overrides not supported for this device" shown when both vcc and vpp are null
+  - **Edge cases handled:**
+    - No device selected: all options null, "not supported" message shown
+    - No programmer connected: falls back to TL866II+ tables
+    - Custom protocol on T56/T76: both vcc and vpp null, "not supported" message
+    - Logic IC: VCC shows 4-entry logic table (1.8, 2.5, 3.3, 5V), VPP/VDD hidden
+    - T76 PLD: VPP uses the PLD table (capped at 18V)
+    - Device switch: override values reset, options reload
+  - **Priority: medium** — prevents invalid voltage selections that would fail at the backend
+  - **Status:** implemented
 
 - [ ] **Remove `check_device_id` parameter from core API** — the per-operation `check_device_id: bool` parameter in `read_chip`, `write_chip`, `verify_chip`, `erase_chip`, `write_chip_bytes`, `verify_chip_bytes`, and `BatchConfig` is now dead weight from the CLI's perspective (the CLI does a single top-level `check_chip_id` call and passes `false` to all per-operation checks). The GUI still uses the parameter for its own pre-operation checks, but also has the same redundancy (calls `check_chip_id` separately AND passes `check_device_id: true` to the operation). Removing the parameter would eliminate the redundancy and simplify the API, but requires updating all GUI command calls in `commands.rs`.
   - **Files to modify:** `crates/minipro-core/src/operations.rs` (remove parameter from all functions), `crates/minipro-cli/src/main.rs` (remove `false` arguments), `gui/src-tauri/src/commands.rs` (remove `check_device_id` field from `OperationOptions` and the per-operation arguments; the GUI's separate `check_chip_id` calls already handle it)
