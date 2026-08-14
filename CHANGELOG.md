@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **GUI custom database directory** — Settings → Database now has a directory picker for custom `infoic.xml`, `logicic.xml`, and `algorithm.xml` files. The selected directory overrides the standard search path, persists across restarts, and reloads the device list immediately. `algorithm.xml` is optional — picked up if present, not required. If the saved directory is later moved or deleted, the app silently falls back to default search paths and shows a warning in Settings. The CLI's `--infoic` / `--logicic` / `--algorithms` flags and `MINIPRO_HOME` env var are now documented in the README alongside this GUI feature.
+- **GUI model-specific voltage override dropdowns** — the Advanced voltage section now shows only the voltage values supported by the connected programmer model and selected device, instead of a hardcoded list. VPP and VDD dropdowns are hidden for logic ICs. Custom-protocol devices on T56/T76 show "Voltage overrides not supported for this device" instead of invalid options. Override values reset when switching devices or reconnecting the programmer.
 
 ## [0.6.2] - 2026-08-13
 

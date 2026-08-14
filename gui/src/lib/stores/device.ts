@@ -51,11 +51,18 @@ export interface PinMap {
   mask: number[];
 }
 
+export interface VoltageOptions {
+  vcc: string[] | null;
+  vpp: string[] | null;
+  is_logic: boolean;
+}
+
 export const programmer = writable<ProgrammerInfo | null>(null);
 export const selectedDevice = writable<DeviceInfo | null>(null);
 export const deviceList = writable<string[]>([]);
 export const isConnected = derived(programmer, ($p) => $p !== null);
 export const dbAvailable = writable<boolean | null>(null);
+export const voltageOptions = writable<VoltageOptions | null>(null);
 
 export async function refreshProgrammer() {
   try {
@@ -102,6 +109,16 @@ export async function selectDevice(name: string) {
 export async function deselectDevice() {
   await invoke("deselect_device");
   selectedDevice.set(null);
+  voltageOptions.set(null);
+}
+
+export async function loadVoltageOptions(): Promise<void> {
+  try {
+    const opts = await invoke<VoltageOptions>("get_voltage_options");
+    voltageOptions.set(opts);
+  } catch {
+    voltageOptions.set(null);
+  }
 }
 
 export interface DbDirStatus {

@@ -286,6 +286,52 @@ fn apply_voltage_overrides(
     Ok(())
 }
 
+// ── Voltage options for GUI dropdowns ───────────────────────────────────────
+
+/// Valid voltage override values for the connected programmer and selected device.
+///
+/// `vcc` / `vpp` are `None` when overrides are not supported (e.g. custom
+/// protocol on T56/T76, or VPP on logic ICs).  `is_logic` tells the GUI to
+/// hide the VPP and VDD dropdowns entirely.
+#[derive(Serialize)]
+pub struct VoltageOptionsDto {
+    vcc: Option<Vec<String>>,
+    vpp: Option<Vec<String>>,
+    is_logic: bool,
+}
+
+/// Return the valid voltage override options for the connected programmer
+/// model and currently selected device.  When no device is selected, all
+/// fields are `None`.  When no programmer is connected, falls back to
+/// TL866II+ tables (matching `VoltagesDto::from_voltages` behavior).
+#[tauri::command]
+pub async fn get_voltage_options(state: State<'_, Arc<AppState>>) -> Result<VoltageOptionsDto, String> {
+    let device = state.get_device();
+    let model = {
+        let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
+
+    let device = match device {
+        Ok(dev) => dev,
+        Err(_) => return Ok(VoltageOptionsDto { vcc: None, vpp: None, is_logic: false }),
+    };
+
+    let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
+    let chip_type = device.chip_type;
+    let custom_protocol = device.flags.custom_protocol;
+    let is_logic = chip_type == ChipType::Logic as u32;
+
+    let names = |table: Option<&'static [(&'static str, u8)]>| -> Option<Vec<String>> {
+        table.map(|t| t.iter().map(|(n, _)| n.to_string()).collect())
+    };
+
+    let vcc = names(minipro_core::device::vcc_voltage_table(model, chip_type, custom_protocol));
+    let vpp = names(minipro_core::device::vpp_voltage_table(model, chip_type, custom_protocol));
+
+    Ok(VoltageOptionsDto { vcc, vpp, is_logic })
+}
+
 // ── Helper: resolve or reuse database paths ─────────────────────────────────
 
 fn get_db_paths(state: &Arc<AppState>) -> Result<DatabasePaths, String> {

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import pkg from "../package.json";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase, voltageOptions, loadVoltageOptions } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexLoading, loadFile, hexMeta, getHexData, hexEdits, applyHexEdits, confirmOverwriteEdits } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
@@ -73,9 +73,6 @@
   let serialStep = $state("1");
   let serialChecksum = $state("none");
 
-  const VPP_OPTIONS = ["9.0", "9.5", "10.0", "11.0", "11.5", "12.0", "12.5", "13.0", "13.5", "14.0", "14.5", "15.0", "16.0", "17.0", "18.0", "21.0"];
-  const VCC_OPTIONS = ["3.3", "4.0", "4.5", "5.0", "6.0", "6.3", "6.5", "7.0"];
-
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
   let showConfigHelp = $state(false);
@@ -112,6 +109,18 @@
     } else {
       configData = null;
     }
+  });
+
+  // Reload voltage override options when programmer or device changes.
+  // Resets any pending override values since they may not be valid for the
+  // new model/device combination.
+  $effect(() => {
+    $programmer;
+    $selectedDevice;
+    loadVoltageOptions();
+    overrideVpp = "";
+    overrideVcc = "";
+    overrideVdd = "";
   });
 
   // Active operation label for the options panel
@@ -911,42 +920,54 @@
                 </div>
                 <!-- Expanded: Voltage overrides -->
                 {#if showAdvanced}
-                  <div class="flex flex-wrap items-center gap-6 text-sm bg-surface-100-900 rounded-md p-2">
-                    <div class="flex items-center gap-2">
-                      <span class="opacity-60">VPP:</span>
-                      <select class="select text-xs" bind:value={overrideVpp}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vpp === "—" || $selectedDevice?.voltages?.vpp === "?" ? $selectedDevice?.voltages?.vpp ?? "—" : `${$selectedDevice?.voltages?.vpp}V`})</option>
-                        {#each VPP_OPTIONS as v}
-                          <option value={v}>{v}V</option>
-                        {/each}
-                      </select>
+                  {#if $voltageOptions && ($voltageOptions.vcc || $voltageOptions.vpp)}
+                    <div class="flex flex-wrap items-center gap-6 text-sm bg-surface-100-900 rounded-md p-2">
+                      {#if $voltageOptions.vpp}
+                        <div class="flex items-center gap-2">
+                          <span class="opacity-60">VPP:</span>
+                          <select class="select text-xs" bind:value={overrideVpp}>
+                            <option value="">Default ({$selectedDevice?.voltages?.vpp === "—" || $selectedDevice?.voltages?.vpp === "?" ? $selectedDevice?.voltages?.vpp ?? "—" : `${$selectedDevice?.voltages?.vpp}V`})</option>
+                            {#each $voltageOptions.vpp as v}
+                              <option value={v}>{v}V</option>
+                            {/each}
+                          </select>
+                        </div>
+                      {/if}
+                      {#if $voltageOptions.vcc}
+                        <div class="flex items-center gap-2">
+                          <span class="opacity-60">VCC:</span>
+                          <select class="select text-xs" bind:value={overrideVcc}>
+                            <option value="">Default ({$selectedDevice?.voltages?.vcc === "—" || $selectedDevice?.voltages?.vcc === "?" ? $selectedDevice?.voltages?.vcc ?? "—" : `${$selectedDevice?.voltages?.vcc}V`})</option>
+                            {#each $voltageOptions.vcc as v}
+                              <option value={v}>{v}V</option>
+                            {/each}
+                          </select>
+                        </div>
+                      {/if}
+                      {#if $voltageOptions.vcc && !$voltageOptions.is_logic}
+                        <div class="flex items-center gap-2">
+                          <span class="opacity-60">VDD:</span>
+                          <select class="select text-xs" bind:value={overrideVdd}>
+                            <option value="">Default ({$selectedDevice?.voltages?.vdd === "—" || $selectedDevice?.voltages?.vdd === "?" ? $selectedDevice?.voltages?.vdd ?? "—" : `${$selectedDevice?.voltages?.vdd}V`})</option>
+                            {#each $voltageOptions.vcc as v}
+                              <option value={v}>{v}V</option>
+                            {/each}
+                          </select>
+                        </div>
+                      {/if}
+                      <button
+                        class="text-xs opacity-60 hover:opacity-100 underline"
+                        onclick={() => { overrideVpp = ""; overrideVcc = ""; overrideVdd = ""; }}
+                        type="button"
+                      >
+                        Reset voltages
+                      </button>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <span class="opacity-60">VCC:</span>
-                      <select class="select text-xs" bind:value={overrideVcc}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vcc === "—" || $selectedDevice?.voltages?.vcc === "?" ? $selectedDevice?.voltages?.vcc ?? "—" : `${$selectedDevice?.voltages?.vcc}V`})</option>
-                        {#each VCC_OPTIONS as v}
-                          <option value={v}>{v}V</option>
-                        {/each}
-                      </select>
+                  {:else}
+                    <div class="text-xs opacity-50 italic p-2">
+                      Voltage overrides not supported for this device
                     </div>
-                    <div class="flex items-center gap-2">
-                      <span class="opacity-60">VDD:</span>
-                      <select class="select text-xs" bind:value={overrideVdd}>
-                        <option value="">Default ({$selectedDevice?.voltages?.vdd === "—" || $selectedDevice?.voltages?.vdd === "?" ? $selectedDevice?.voltages?.vdd ?? "—" : `${$selectedDevice?.voltages?.vdd}V`})</option>
-                        {#each VCC_OPTIONS as v}
-                          <option value={v}>{v}V</option>
-                        {/each}
-                      </select>
-                    </div>
-                    <button
-                      class="text-xs opacity-60 hover:opacity-100 underline"
-                      onclick={() => { overrideVpp = ""; overrideVcc = ""; overrideVdd = ""; }}
-                      type="button"
-                    >
-                      Reset voltages
-                    </button>
-                  </div>
+                  {/if}
                 {/if}
               {/if}
               {#if $activeOperation === "erase"}
