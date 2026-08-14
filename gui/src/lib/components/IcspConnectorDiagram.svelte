@@ -27,11 +27,11 @@
   };
 
   // ── SVG geometry ──────────────────────────────────────────────────────────
-  const PIN_SIZE = 18;       // pin pad size (square)
-  const PIN_GAP = 4;         // gap between pins
-  const ROW_GAP = 8;         // gap between rows (zigzag)
-  const PAD = 16;            // padding around connector body
-  const LABEL_FONT = 8;      // pin number label font size
+  const PIN_SIZE = 24;       // pin pad size (square)
+  const PIN_GAP = 5;         // gap between pins
+  const ROW_GAP = 10;        // gap between rows (zigzag)
+  const PAD = 18;            // padding around connector body
+  const LABEL_FONT = 11;     // pin number label font size
 
   let layout = $derived(
     $programmer ? LAYOUTS[$programmer.model] ?? null : null
