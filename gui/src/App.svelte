@@ -395,6 +395,15 @@
         sizeMismatch = "error";
         break;
       case "config":
+        // Reset fuse/lock values to database defaults
+        if ($selectedDevice?.config && $selectedDevice.config.type === "Mcu") {
+          configData = {
+            cfg_fuses: $selectedDevice.config.fuses.map((f) => ({ name: f.name, value: f.default_value })),
+            lock_bits: $selectedDevice.config.locks.map((l) => ({ name: l.name, value: l.default_value })),
+            user_fuses: [],
+            calibration: [],
+          };
+        }
         break;
       case "erase":
       case "blank_check":
