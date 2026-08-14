@@ -167,10 +167,12 @@ pub fn run() {
             commands::read_fuses,
             commands::write_fuses,
             commands::check_lock_protection,
+            commands::get_fuse_bit_defs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 mod commands;
+mod fuse_defs;
 mod state;

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import pkg from "../package.json";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase, voltageOptions, loadVoltageOptions } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase, voltageOptions, loadVoltageOptions, fuseBitDefs, loadFuseBitDefs } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexLoading, loadFile, hexMeta, getHexData, hexEdits, applyHexEdits, confirmOverwriteEdits } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
@@ -37,6 +37,7 @@
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
+  import FuseBitDecoder from "./lib/components/FuseBitDecoder.svelte";
   import {
     batchState,
     batchModeEnabled,
@@ -119,6 +120,7 @@
     $programmer;
     $selectedDevice;
     loadVoltageOptions();
+    loadFuseBitDefs();
     overrideVpp = "";
     overrideVcc = "";
     overrideVdd = "";
@@ -1018,50 +1020,126 @@
                       </button>
                     </div>
                     <div class="flex flex-wrap gap-3">
-                      {#if configData.cfg_fuses.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
-                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Fuses</span>
-                          {#each configData.cfg_fuses as field, i}
-                            <div class="flex items-center gap-3">
-                              <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
-                              <input
-                                type="text"
-                                class="input text-xs font-mono w-12 px-1 py-0.5"
-                                value={field.value.toString(16).padStart(2, '0').toUpperCase()}
-                                onchange={(e) => {
-                                  const v = parseInt(e.currentTarget.value, 16);
-                                  if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
-                                }}
-                              />
-                              <span class="flex items-center gap-2 text-xs flex-1">
-                                <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
-                                {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                      {#if configData.lock_bits.length > 0}
-                        <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
-                          <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Lock Bits</span>
-                          {#each configData.lock_bits as field, i}
-                            <div class="flex items-center gap-3">
-                              <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
-                              <input
-                                type="text"
-                                class="input text-xs font-mono w-12 px-1 py-0.5"
-                                value={field.value.toString(16).padStart(2, '0').toUpperCase()}
-                                onchange={(e) => {
-                                  const v = parseInt(e.currentTarget.value, 16);
-                                  if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
-                                }}
-                              />
-                              <span class="flex items-center gap-2 text-xs flex-1">
-                                <span>{$selectedDevice.config.locks[i].display_name}</span>
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
+                      {#if $fuseBitDefs}
+                        <!-- Bit-level fuse decoder (AVR configs with known bit layouts) -->
+                        {#if configData.cfg_fuses.length > 0}
+                          <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
+                            {#each configData.cfg_fuses as field, i}
+                              {@const byteDef = $fuseBitDefs.fuse_bytes[i]}
+                              {#if byteDef}
+                                <FuseBitDecoder
+                                  byteDef={byteDef}
+                                  value={field.value}
+                                  displayName={$selectedDevice.config.fuses[i].display_name}
+                                  invertFuseBits={$selectedDevice.invert_fuse_bits}
+                                  onchange={(v) => setCfgValue(i, v)}
+                                />
+                              {:else}
+                                <!-- Fallback: no bit def for this fuse byte -->
+                                <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                                  <div class="flex items-center justify-between">
+                                    <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">{$selectedDevice.config.fuses[i].display_name}</span>
+                                    <div class="flex items-center gap-2">
+                                      <span class="text-xs font-mono opacity-50">0x</span>
+                                      <input
+                                        type="text"
+                                        class="input text-xs font-mono w-12 px-1 py-0.5"
+                                        value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                        onchange={(e) => {
+                                          const v = parseInt(e.currentTarget.value, 16);
+                                          if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
+                                        }}
+                                        maxlength="2"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              {/if}
+                            {/each}
+                          </div>
+                        {/if}
+                        {#if configData.lock_bits.length > 0}
+                          <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
+                            {#each configData.lock_bits as field, i}
+                              {@const byteDef = $fuseBitDefs.lock_bytes[i]}
+                              {#if byteDef}
+                                <FuseBitDecoder
+                                  byteDef={byteDef}
+                                  value={field.value}
+                                  displayName={$selectedDevice.config.locks[i].display_name}
+                                  invertFuseBits={$selectedDevice.invert_fuse_bits}
+                                  onchange={(v) => setLockValue(i, v)}
+                                />
+                              {:else}
+                                <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
+                                  <div class="flex items-center justify-between">
+                                    <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">{$selectedDevice.config.locks[i].display_name}</span>
+                                    <div class="flex items-center gap-2">
+                                      <span class="text-xs font-mono opacity-50">0x</span>
+                                      <input
+                                        type="text"
+                                        class="input text-xs font-mono w-12 px-1 py-0.5"
+                                        value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                        onchange={(e) => {
+                                          const v = parseInt(e.currentTarget.value, 16);
+                                          if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
+                                        }}
+                                        maxlength="2"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              {/if}
+                            {/each}
+                          </div>
+                        {/if}
+                      {:else}
+                        <!-- Hex-only fallback (no bit definitions available) -->
+                        {#if configData.cfg_fuses.length > 0}
+                          <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
+                            <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Fuses</span>
+                            {#each configData.cfg_fuses as field, i}
+                              <div class="flex items-center gap-3">
+                                <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
+                                <input
+                                  type="text"
+                                  class="input text-xs font-mono w-12 px-1 py-0.5"
+                                  value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                  onchange={(e) => {
+                                    const v = parseInt(e.currentTarget.value, 16);
+                                    if (!isNaN(v) && v >= 0 && v <= 0xFF) setCfgValue(i, v);
+                                  }}
+                                />
+                                <span class="flex items-center gap-2 text-xs flex-1">
+                                  <span class={isDangerousFuse(field.name) ? "text-red-500 font-semibold" : ""}>{$selectedDevice.config.fuses[i].display_name}</span>
+                                  {#if isDangerousFuse(field.name)}<span class="text-red-500 text-[10px]" title="Dangerous — may disable programming access">!</span>{/if}
+                                </span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                        {#if configData.lock_bits.length > 0}
+                          <div class="bg-surface-100-900 rounded-lg p-3 space-y-2 flex-1 min-w-[240px]">
+                            <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">Lock Bits</span>
+                            {#each configData.lock_bits as field, i}
+                              <div class="flex items-center gap-3">
+                                <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
+                                <input
+                                  type="text"
+                                  class="input text-xs font-mono w-12 px-1 py-0.5"
+                                  value={field.value.toString(16).padStart(2, '0').toUpperCase()}
+                                  onchange={(e) => {
+                                    const v = parseInt(e.currentTarget.value, 16);
+                                    if (!isNaN(v) && v >= 0 && v <= 0xFF) setLockValue(i, v);
+                                  }}
+                                />
+                                <span class="flex items-center gap-2 text-xs flex-1">
+                                  <span>{$selectedDevice.config.locks[i].display_name}</span>
+                                </span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
                       {/if}
                     </div>
                     {#if configData.user_fuses.length > 0}

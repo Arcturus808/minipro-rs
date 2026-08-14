@@ -149,6 +149,9 @@ pub struct DeviceInfoDto {
     config: Option<ChipConfigDto>,
     /// True for AVR-family devices where fuse bit=0 means programmed.
     invert_fuse_bits: bool,
+    /// Config name from the XML `<config name="...">` attribute (e.g., "avr_11").
+    /// Used by the frontend to look up fuse bit definitions.
+    config_name: Option<String>,
     /// Raw pin_map value from the database (lower byte = index into `<maps>`).
     /// 0 means no contact-test data (use pin_count fallback for placement).
     pin_map: u32,
@@ -2366,6 +2369,15 @@ pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32)
 
 // ── Internal helpers ──────────────────────────────────────────────────────
 
+/// Look up fuse bit definitions for a device's config name and chip name.
+///
+/// Returns `None` (serialized as JSON `null`) when no bit-level definitions
+/// are available — the frontend falls back to hex-only input in that case.
+#[tauri::command]
+pub fn get_fuse_bit_defs(configName: String, chipName: String) -> Option<&'static crate::fuse_defs::FuseConfigDef> {
+    crate::fuse_defs::lookup(&configName, &chipName)
+}
+
 fn fuse_display_name(name: &str) -> String {
     match name.to_lowercase().as_str() {
         "lfuse" => "Low Fuse".to_string(),
@@ -2410,6 +2422,12 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         false
     };
 
+    let config_name = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+        Some(cfg.name.clone())
+    } else {
+        None
+    };
+
     DeviceInfoDto {
         name: dev.name.clone(),
         manufacturer: dev.manufacturer.clone(),
@@ -2423,6 +2441,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         has_chip_id: dev.flags.has_chip_id,
         config,
         invert_fuse_bits,
+        config_name,
         pin_map: dev.pin_map,
     }
 }
