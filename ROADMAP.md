@@ -391,15 +391,24 @@ This is a living list of features and improvements planned for minipro-rs.
 
 - [x] **Contextual help overlay for batch/serial panel** — "i" icon next to the Serial Number Injection label opens a modal explaining serial injection, all fields (address, start, step, format, width, endian, checksum), and validation (live preview, overflow detection, blocking errors). Escape listener shared with config help modal.
 
-- [ ] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with dropdowns/checkboxes
-  - **Current state:** config panel shows hex input fields for each fuse/lock byte (e.g., lfuse, hfuse, efuse). User must manually compute bit values from the datasheet.
-  - **Goal:** like AVR Studio / Atmel Studio, break out each fuse byte into individual named bits (CKSEL3, CKSEL2, SUT1, SUT0, BODLEVEL, etc.) with human-readable descriptions and dropdowns for multi-valued fields.
-  - **Challenge:** the XGPro database (`infoic.xml`) stores fuses as monolithic bytes with a mask and default value — it does NOT break out individual bit fields or provide human-readable names for each bit. A fuse bit database would need to be built or sourced.
-  - **Possible approaches:**
-    1. Build a static fuse bit database for common AVR/PIC parts (ATmega328, ATtiny85, etc.) — maintain manually
-    2. Parse Atmel ATDF (.atdf) or Microchip .pic files for bit-level fuse definitions
-    3. Use a community fuse database (e.g., avrdude's fuse definitions)
-  - **Scope:** start with AVR (most common use case), expand to PIC later
+- [~] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with checkboxes
+  - **AVR phase: DONE.** All 18 AVR config variants (`avr_1` through `avr_18`) have bit-level definitions sourced from avr-libc device headers and Microchip datasheets.
+  - **PIC phase: TODO.** 88 PIC config variants remain — same approach applies (static bit definitions keyed by config name).
+  - **Implementation:**
+    - Backend: `gui/src-tauri/src/fuse_defs.rs` — static bit definitions keyed by infoic.xml `<config name="...">` attribute, with chip-prefix overrides for configs that span multiple architectures.
+    - Frontend: `FuseBitDecoder.svelte` component renders an 8-bit grid (MSB→LSB) with clickable bit cells, field names, descriptions, and dangerous-bit warnings. Raw hex input remains visible and stays in sync (editing hex updates bits, clicking bits updates hex).
+    - Fallback: when no bit definitions exist for a config name (e.g., PIC, unknown), the config panel falls back to hex-only input.
+  - **Config-name keying analysis (verified):**
+    - 13 of 18 AVR configs map to a single chip family with consistent fuse bit meanings — one definition per config name.
+    - 5 configs span multiple architectures and require chip-prefix overrides:
+      - `avr_4`: ATmega48 vs ATtiny24/44 (different hfuse bit assignments)
+      - `avr_6`: ATtiny25/45/85 vs ATtiny2313/4313 (completely different hfuse bit order)
+      - `avr_13`: ATmega128A (legacy BODEN lfuse) vs ATmega164/324/644/1284 family (modern CKDIV8 lfuse)
+      - `avr_15`: ATmega8 (RSTDISBL in hfuse bit 7) vs ATmega8535 (S8535C in hfuse bit 7)
+      - `avr_17`: U2 chips (DWEN/RSTDISBL in hfuse) vs U4 chips (OCDEN/JTAGEN in hfuse) vs ATmega328PB (BODLEVEL in hfuse, BOOTRST/BOOTSZ in efuse)
+    - Prefix match order matters: longer prefixes (e.g., `ATMEGA1284`) must be checked before shorter ones (e.g., `ATMEGA128`) to avoid false matches.
+  - **Dangerous bit highlighting:** RSTDISBL, DWEN, SPIEN, OCDEN, JTAGEN are flagged with red styling and a ⚠ indicator in the field description list.
+  - **AVR fuse convention:** bit = 0 means programmed (active). The decoder shows "Programmed"/"Unprogrammed" labels for AVR devices and raw "1"/"0" for non-AVR.
   - Priority: medium — hex input works but is error-prone for users unfamiliar with bit manipulation
 
 - [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket

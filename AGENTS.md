@@ -283,6 +283,20 @@ so it refreshes before DOM re-render when `$selectedDevice` changes. Using
 before the effect ran. The effect also has an `else` branch to reset
 `configData` to `null` when the device has no MCU config.
 
+### Fuse bit decoder
+
+The config panel shows a bit-level fuse decoder (`FuseBitDecoder.svelte`) when
+the `fuseBitDefs` store is non-null. The store is loaded via
+`loadFuseBitDefs()` in the same `$effect` that loads voltage options, and
+cleared on device deselect. The backend `get_fuse_bit_defs` command looks up
+static bit definitions in `fuse_defs.rs` by config name + chip name prefix.
+When no definitions exist (e.g., PIC devices, unknown configs), the config
+panel falls back to hex-only input. The `DeviceInfoDto` includes a
+`config_name` field (the XML `<config name="...">` attribute) that the
+frontend uses for the lookup. Bit definitions are sourced from avr-libc
+device headers and Microchip datasheets — see `fuse_defs.rs` for the
+config-name keying analysis and chip-prefix override logic.
+
 ## Project Structure
 
 ```
@@ -304,12 +318,14 @@ gui/
         DiagnosticsPanel.svelte  — overcurrent, calibration, pin test (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif")
         IcspConnectorDiagram.svelte — ICSP connector pin-numbering diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc")
+        FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
         SettingsPanel.svelte     — theme, defaults, layout reset, custom database directory picker
         ProgressPanel.svelte     — operation progress + cancel
       file-dialog.ts             — Tauri dialog wrappers (file open/save, directory picker)
   src-tauri/
     src/
-      commands.rs                — all Rust command handlers (includes set_custom_db_dir, get_db_status)
+      commands.rs                — all Rust command handlers (includes set_custom_db_dir, get_db_status, get_fuse_bit_defs)
+      fuse_defs.rs               — AVR fuse bit definitions (static data keyed by infoic.xml config name, with chip-prefix overrides for mixed configs)
       lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup)
       state.rs                   — AppState (USB handle, selected device, db_paths cache, db_dir_invalid flag)
     Cargo.toml

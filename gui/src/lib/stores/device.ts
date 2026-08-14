@@ -1,4 +1,4 @@
-import { writable, derived } from "svelte/store";
+import { writable, derived, get } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface ProgrammerInfo {
@@ -39,6 +39,9 @@ export interface DeviceInfo {
   config: ChipConfig | null;
   /** True for AVR-family devices where fuse bit=0 means programmed. */
   invert_fuse_bits: boolean;
+  /** Config name from the XML `<config name="...">` attribute (e.g., "avr_11").
+   *  Used to look up fuse bit definitions. */
+  config_name: string | null;
   /** Raw pin_map value from the database (lower byte = index into <maps>).
    *  0 means no contact-test data (use pin_count fallback for placement). */
   pin_map: number;
@@ -57,12 +60,31 @@ export interface VoltageOptions {
   is_logic: boolean;
 }
 
+// ── Fuse bit definitions (from backend get_fuse_bit_defs) ───────────────────
+
+export interface FuseBitField {
+  name: string;
+  description: string;
+  bit: number;
+}
+
+export interface FuseByteDef {
+  name: string;
+  fields: FuseBitField[];
+}
+
+export interface FuseConfigDef {
+  fuse_bytes: FuseByteDef[];
+  lock_bytes: FuseByteDef[];
+}
+
 export const programmer = writable<ProgrammerInfo | null>(null);
 export const selectedDevice = writable<DeviceInfo | null>(null);
 export const deviceList = writable<string[]>([]);
 export const isConnected = derived(programmer, ($p) => $p !== null);
 export const dbAvailable = writable<boolean | null>(null);
 export const voltageOptions = writable<VoltageOptions | null>(null);
+export const fuseBitDefs = writable<FuseConfigDef | null>(null);
 
 export async function refreshProgrammer() {
   try {
@@ -110,6 +132,7 @@ export async function deselectDevice() {
   await invoke("deselect_device");
   selectedDevice.set(null);
   voltageOptions.set(null);
+  fuseBitDefs.set(null);
 }
 
 export async function loadVoltageOptions(): Promise<void> {
@@ -118,6 +141,28 @@ export async function loadVoltageOptions(): Promise<void> {
     voltageOptions.set(opts);
   } catch {
     voltageOptions.set(null);
+  }
+}
+
+/**
+ * Load fuse bit definitions for the currently selected device.
+ * Sets the store to null if no definitions are available (frontend falls
+ * back to hex-only input in that case).
+ */
+export async function loadFuseBitDefs(): Promise<void> {
+  const dev = get(selectedDevice);
+  if (!dev?.config_name) {
+    fuseBitDefs.set(null);
+    return;
+  }
+  try {
+    const defs = await invoke<FuseConfigDef | null>("get_fuse_bit_defs", {
+      configName: dev.config_name,
+      chipName: dev.name,
+    });
+    fuseBitDefs.set(defs);
+  } catch {
+    fuseBitDefs.set(null);
   }
 }
 
