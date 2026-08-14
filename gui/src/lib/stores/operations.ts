@@ -274,9 +274,9 @@ export async function doChipId(icspMode: string = "zif"): Promise<ChipIdResult |
   });
 }
 
-export async function doLogicTest(icspMode: string = "zif") {
+export async function doLogicTest(icspMode: string = "zif", vcc: string | null = null) {
   await runOp("Logic test", async () => {
-    const result = await invoke<string>("do_logic_test", { icspMode });
+    const result = await invoke<string>("do_logic_test", { icspMode, vcc: vcc || null });
     const lines = result.split("\n").map(l => l.trimEnd()).filter(l => l.length > 0);
     for (const line of lines) {
       if (line.startsWith("[ERROR]")) {

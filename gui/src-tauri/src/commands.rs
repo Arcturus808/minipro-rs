@@ -1686,8 +1686,9 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
 /// Test a logic IC against its built-in test vectors.
 /// Returns the test result table as a string.
+/// `vcc` is an optional VCC override (e.g. "3.3") for logic ICs.
 #[tauri::command]
-pub async fn do_logic_test(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1700,6 +1701,36 @@ pub async fn do_logic_test(icspMode: String, state: State<'_, Arc<AppState>>) ->
 
         let result = (|| {
             handle.icsp = icspMode != "zif";
+
+            // Apply VCC override for logic ICs before begin_transaction.
+            // Logic ICs only support VCC (from the 4-entry logic table).
+            let device = if let Some(ref v) = vcc {
+                if !v.is_empty() {
+                    let model = handle.info.model;
+                    let mut dev = (*device).clone();
+                    let options = OperationOptions {
+                        skip_erase: false,
+                        skip_verify: false,
+                        skip_blank: false,
+                        check_device_id: false,
+                        vpp: None,
+                        vcc: Some(v.clone()),
+                        vdd: None,
+                        icsp_mode: icspMode.clone(),
+                        page: "code".to_string(),
+                        format: "auto".to_string(),
+                        size_mismatch: "error".to_string(),
+                    };
+                    apply_voltage_overrides(&mut dev, &options, Some(model))
+                        .map_err(|e| e.to_string())?;
+                    std::sync::Arc::new(dev)
+                } else {
+                    device
+                }
+            } else {
+                device
+            };
+
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             let mut output = Vec::new();
             let test_result = logic_ic_test(&mut handle, &mut output);

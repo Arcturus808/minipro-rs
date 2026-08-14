@@ -546,7 +546,7 @@
         break;
       }
       case "logic_test":
-        await doLogicTest(icspMode);
+        await doLogicTest(icspMode, overrideVcc || null);
         break;
       case "config":
         try {
@@ -980,6 +980,21 @@
               {/if}
               {#if $activeOperation === "blank_check" || $activeOperation === "chip_id"}
                 <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
+              {/if}
+              {#if $activeOperation === "logic_test"}
+                <div class="flex flex-wrap items-center gap-6 text-sm">
+                  {#if $voltageOptions?.vcc}
+                    <div class="flex items-center gap-2">
+                      <span class="opacity-60">VCC:</span>
+                      <select class="select text-xs" bind:value={overrideVcc}>
+                        <option value="">Default ({$selectedDevice?.voltages?.vcc === "—" || $selectedDevice?.voltages?.vcc === "?" ? $selectedDevice?.voltages?.vcc ?? "—" : `${$selectedDevice?.voltages?.vcc}V`})</option>
+                        {#each $voltageOptions.vcc as v}
+                          <option value={v}>{v}V</option>
+                        {/each}
+                      </select>
+                    </div>
+                  {/if}
+                </div>
               {/if}
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu" && configData}
