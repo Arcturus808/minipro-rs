@@ -79,6 +79,14 @@
     }
   }
 
+  /** Full tooltip text for a bit cell: name, description, state, danger warning. */
+  function bitTooltip(bit: number): string {
+    const field = byteDef.fields.find((f) => f.bit === bit);
+    if (!field) return "Reserved / unused";
+    const danger = isDangerousField(field.name) ? " ⚠ Dangerous — may disable programming access" : "";
+    return `${field.name}: ${field.description} (${bitStateLabel(bit)})${danger}`;
+  }
+
   // ── Raw hex input ────────────────────────────────────────────────────────
 
   let hexInput = $derived(value.toString(16).padStart(2, "0").toUpperCase());
@@ -94,12 +102,12 @@
 
 <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
   <div class="flex items-center justify-between">
-    <span class="text-xs font-semibold opacity-70 uppercase tracking-wider">{displayName}</span>
+    <span class="text-sm font-semibold opacity-70 uppercase tracking-wider">{displayName}</span>
     <div class="flex items-center gap-2">
-      <span class="text-xs font-mono opacity-50">0x</span>
+      <span class="text-sm font-mono opacity-50">0x</span>
       <input
         type="text"
-        class="input text-xs font-mono w-12 px-1 py-0.5"
+        class="input text-sm font-mono w-14 px-1 py-0.5"
         value={hexInput}
         onchange={onHexChange}
         maxlength="2"
@@ -109,45 +117,30 @@
   </div>
 
   <!-- Bit-level grid: bit 7 (MSB) on left, bit 0 (LSB) on right -->
-  <div class="grid grid-cols-8 gap-1">
+  <div class="grid grid-cols-8 gap-1.5">
     {#each Array.from({ length: 8 }, (_, i) => 7 - i) as bitNum}
       {@const field = byteDef.fields.find((f) => f.bit === bitNum)}
-      <div class="flex flex-col items-center gap-0.5">
-        <span class="text-[9px] font-mono opacity-40">{bitNum}</span>
+      <div class="flex flex-col items-center gap-1">
+        <span class="text-xs font-mono opacity-40">{bitNum}</span>
         {#if field}
           <button
             class="bit-cell {bitClass(bitNum, field.name)}"
             onclick={() => toggleBit(bitNum)}
-            title="{field.name}: {field.description} ({bitStateLabel(bitNum)})"
+            title={bitTooltip(bitNum)}
             aria-label="{field.name} bit {bitNum}"
           >
             {isBitSet(bitNum) ? "1" : "0"}
           </button>
-          <span class="text-[8px] font-mono opacity-60 text-center leading-tight truncate w-full" title={field.name}>
-            {field.name}
+          <span class="bit-name-label" title={bitTooltip(bitNum)}>
+            {field.name}{#if isDangerousField(field.name)}<span class="text-red-500"> ⚠</span>{/if}
           </span>
         {:else}
           <!-- Reserved/unused bit -->
           <div class="bit-cell bit-reserved" title="Reserved / unused">
             {isBitSet(bitNum) ? "1" : "0"}
           </div>
-          <span class="text-[8px] font-mono opacity-25 text-center">—</span>
+          <span class="text-xs font-mono opacity-25 text-center">—</span>
         {/if}
-      </div>
-    {/each}
-  </div>
-
-  <!-- Field descriptions list -->
-  <div class="space-y-0.5 mt-1">
-    {#each byteDef.fields as field}
-      <div class="flex items-start gap-2 text-[10px]">
-        <span class="font-mono font-semibold opacity-70 w-20 shrink-0">{field.name}</span>
-        <span class="opacity-60 flex-1">
-          {field.description}
-          {#if isDangerousField(field.name)}
-            <span class="text-red-500 font-semibold" title="Dangerous — may disable programming access">⚠</span>
-          {/if}
-        </span>
       </div>
     {/each}
   </div>
@@ -155,18 +148,30 @@
 
 <style>
   .bit-cell {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 5px;
     font-family: monospace;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     border: 1px solid;
     transition: all 0.15s;
+  }
+
+  .bit-name-label {
+    font-family: monospace;
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
   }
 
   .bit-programmed {
