@@ -70,6 +70,8 @@ export interface FuseBitField {
 
 export interface FuseByteDef {
   name: string;
+  /** Bit width of the config word (8 for AVR, 12/14/16 for PIC). */
+  width: number;
   fields: FuseBitField[];
 }
 

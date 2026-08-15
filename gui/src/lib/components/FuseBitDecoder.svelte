@@ -3,11 +3,11 @@
 
   // ── Props ────────────────────────────────────────────────────────────────
   interface Props {
-    /** Fuse byte definition (bit fields) from the backend. */
+    /** Fuse byte/word definition (bit fields) from the backend. */
     byteDef: FuseByteDef;
-    /** Current raw byte value (0–0xFF). */
+    /** Current raw value (0 to 2^width - 1). */
     value: number;
-    /** Display name for this fuse byte (e.g., "Low Fuse"). */
+    /** Display name for this fuse byte (e.g., "Low Fuse", "Config Word 1"). */
     displayName: string;
     /** True for AVR devices (bit=0 means programmed). */
     invertFuseBits: boolean;
@@ -22,6 +22,22 @@
     invertFuseBits,
     onchange,
   }: Props = $props();
+
+  // ── Width-derived values ──────────────────────────────────────────────────
+
+  /** Number of bits in this config word (8, 12, 14, or 16). */
+  let width = $derived(byteDef.width || 8);
+
+  /** Maximum value for this width. */
+  let maxValue = $derived((1 << width) - 1);
+
+  /** Number of hex digits needed to display the value. */
+  let hexDigits = $derived(width <= 8 ? 2 : width <= 12 ? 3 : width <= 16 ? 4 : 4);
+
+  /** Bit positions from MSB to LSB for the grid. */
+  let bitPositions = $derived(
+    Array.from({ length: width }, (_, i) => width - 1 - i)
+  );
 
   // ── Bit helpers ──────────────────────────────────────────────────────────
 
@@ -89,12 +105,12 @@
 
   // ── Raw hex input ────────────────────────────────────────────────────────
 
-  let hexInput = $derived(value.toString(16).padStart(2, "0").toUpperCase());
+  let hexInput = $derived(value.toString(16).padStart(hexDigits, "0").toUpperCase());
 
   function onHexChange(e: Event) {
     const target = e.currentTarget as HTMLInputElement;
     const v = parseInt(target.value, 16);
-    if (!isNaN(v) && v >= 0 && v <= 0xFF) {
+    if (!isNaN(v) && v >= 0 && v <= maxValue) {
       onchange(v);
     }
   }
@@ -107,18 +123,19 @@
       <span class="text-sm font-mono opacity-50">0x</span>
       <input
         type="text"
-        class="input text-sm font-mono w-14 px-1 py-0.5"
+        class="input text-sm font-mono px-1 py-0.5"
+        style:width="{hexDigits + 2}ch"
         value={hexInput}
         onchange={onHexChange}
-        maxlength="2"
+        maxlength={hexDigits}
         title="Raw hex value — editing this updates all bits below"
       />
     </div>
   </div>
 
-  <!-- Bit-level grid: bit 7 (MSB) on left, bit 0 (LSB) on right -->
-  <div class="grid grid-cols-8 gap-1.5">
-    {#each Array.from({ length: 8 }, (_, i) => 7 - i) as bitNum}
+  <!-- Bit-level grid: MSB on left, LSB on right -->
+  <div class="grid gap-1.5" style:grid-template-columns="repeat({width}, 1fr)">
+    {#each bitPositions as bitNum}
       {@const field = byteDef.fields.find((f) => f.bit === bitNum)}
       <div class="flex flex-col items-center gap-1">
         <span class="text-xs font-mono opacity-40">{bitNum}</span>
