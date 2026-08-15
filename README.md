@@ -60,6 +60,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 **MCU support:**
 - **Fuse and lock-bit editor** (Config tab): auto-populated from database defaults when a device is selected; read/write MCU configuration bytes with checkbox UI and direct hex input; fuses and lock bits displayed side-by-side
+- **Bit-level fuse decoder**: each fuse/config byte is displayed as a grid of clickable bit cells (MSB→LSB) with named fields and descriptions. Click a bit to toggle it — hex value updates automatically. Covers all 18 AVR config variants (sourced from avr-libc and Microchip datasheets) and all database-referenced PIC config variants (PIC10F/PIC12F5 baseline 12-bit, PIC12F/PIC16F mid-range 14-bit, PIC16F baseline 12-bit, PIC18F 16-bit packed words, sourced from gputils and Microchip datasheets). Dangerous bits (RSTDISBL, SPIEN, JTAGEN, DWEN) are highlighted in red. A few PIC configs with database/datasheet mask discrepancies fall back to hex-only input — see [XGPro Database Discrepancies](docs/XGPRO-DATABASE-DISCREPANCIES.md)
 - **OSCCAL calibration preservation**: for PIC microcontrollers with `osccal_save=1`, the factory RC oscillator calibration word is automatically saved before erase and restored afterward, preventing clock accuracy loss
 
 **Safety features:**
@@ -330,7 +331,7 @@ The selected directory persists across restarts. If the directory is later moved
 - ❌³ **Not applicable** — the T56/T76 use FPGA-based bitstream algorithms that handle pin control internally; the C minipro also does not implement ZIF pin control or voltage setting for these models.
 - ❌⁵ **Unknown** — support status unclear; not yet verified against official XGecu software.
 
-> **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR BEGIN extension are implemented and ready for hardware testing. See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
+> **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. SPI-NAND read/erase/write/verify has been validated on real hardware (GD5F1GQ5UExxG, T76 firmware 00.1.18). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
 > **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism.
 

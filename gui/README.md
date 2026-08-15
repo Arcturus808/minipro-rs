@@ -26,6 +26,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Layout Reset** | Done | One-click restore of panel widths, font size, and window position in Settings |
 | **Hack Font** | Done | Open-source Hack monospace font bundled for hex viewer |
 | **Firmware Update** | Done | TL866A/CS `update.dat` decryption + flashing via CLI (`-F`) and GUI Diagnostics panel |
+| **Fuse Bit Decoder** | Done | Bit-level fuse/config decoder with clickable bit cells (MSB→LSB), named fields, descriptions, and dangerous-bit warnings (RSTDISBL, SPIEN, JTAGEN, DWEN). Covers all 18 AVR config variants and all database-referenced PIC config variants (12/14/16-bit). Hex input stays in sync with bit toggles. Contextual help modal explains fuse basics, bit decoder usage, and PIC code protection bits |
 
 ## Screenshots
 
