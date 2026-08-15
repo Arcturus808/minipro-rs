@@ -34,10 +34,19 @@
   /** Number of hex digits needed to display the value. */
   let hexDigits = $derived(width <= 8 ? 2 : width <= 12 ? 3 : width <= 16 ? 4 : 4);
 
-  /** Bit positions from MSB to LSB for the grid. */
-  let bitPositions = $derived(
-    Array.from({ length: width }, (_, i) => width - 1 - i)
+  /** Sorted fields (MSB first) — $derived tracks byteDef reactivity. */
+  let sortedFields = $derived(
+    [...byteDef.fields].sort((a, b) => b.bit - a.bit)
   );
+
+  /** Number of grid columns = number of defined fields. */
+  let gridCols = $derived(byteDef.fields.length);
+
+  /** Column width in px — smaller for wider words. */
+  let colWidth = $derived(gridCols > 8 ? '34px' : '42px');
+
+  /** Full grid-template-columns style string. */
+  let gridTemplate = $derived(`repeat(${gridCols}, ${colWidth})`);
 
   // ── Bit helpers ──────────────────────────────────────────────────────────
 
@@ -116,10 +125,10 @@
   }
 </script>
 
-<div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
-  <div class="flex items-center justify-between">
-    <span class="text-sm font-semibold opacity-70 uppercase tracking-wider">{displayName}</span>
-    <div class="flex items-center gap-2">
+<div class="fuse-card bg-surface-100-900 rounded-lg p-3 space-y-2">
+  <div class="flex items-center justify-between gap-2">
+    <span class="text-sm font-semibold opacity-70 uppercase tracking-wider whitespace-nowrap">{displayName}</span>
+    <div class="flex items-center gap-1 shrink-0">
       <span class="text-sm font-mono opacity-50">0x</span>
       <input
         type="text"
@@ -133,37 +142,37 @@
     </div>
   </div>
 
-  <!-- Bit-level grid: MSB on left, LSB on right -->
-  <div class="grid gap-1.5" style:grid-template-columns="repeat({width}, 1fr)">
-    {#each bitPositions as bitNum}
-      {@const field = byteDef.fields.find((f) => f.bit === bitNum)}
+  <!-- Bit-level grid: MSB on left, LSB on right — only defined bits, not reserved. -->
+  <div class="grid gap-1.5 {gridCols > 8 ? 'bit-grid-wide' : ''}" style:grid-template-columns={gridTemplate} style:justify-content="start">
+    {#each sortedFields as field (field.bit)}
       <div class="flex flex-col items-center gap-1">
-        <span class="text-xs font-mono opacity-40">{bitNum}</span>
-        {#if field}
-          <button
-            class="bit-cell {bitClass(bitNum, field.name)}"
-            onclick={() => toggleBit(bitNum)}
-            title={bitTooltip(bitNum)}
-            aria-label="{field.name} bit {bitNum}"
-          >
-            {isBitSet(bitNum) ? "1" : "0"}
-          </button>
-          <span class="bit-name-label" title={bitTooltip(bitNum)}>
-            {field.name}{#if isDangerousField(field.name)}<span class="text-red-500"> ⚠</span>{/if}
-          </span>
-        {:else}
-          <!-- Reserved/unused bit -->
-          <div class="bit-cell bit-reserved" title="Reserved / unused">
-            {isBitSet(bitNum) ? "1" : "0"}
-          </div>
-          <span class="text-xs font-mono opacity-25 text-center">—</span>
-        {/if}
+        <span class="text-xs font-mono opacity-40">{field.bit}</span>
+        <button
+          class="bit-cell {bitClass(field.bit, field.name)}"
+          onclick={() => toggleBit(field.bit)}
+          title={bitTooltip(field.bit)}
+          aria-label="{field.name} bit {field.bit}"
+        >
+          {isBitSet(field.bit) ? "1" : "0"}
+        </button>
+        <span class="bit-name-label" title={bitTooltip(field.bit)}>
+          {field.name}{#if isDangerousField(field.name)}<span class="text-red-500"> ⚠</span>{/if}
+        </span>
       </div>
     {/each}
   </div>
 </div>
 
 <style>
+  /* Card border — more visible than border-surface-200-800.
+     width: fit-content prevents flexbox from stretching the card beyond its bit grid. */
+  .fuse-card {
+    border: 1px solid rgb(148 163 184 / 0.4);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+    width: fit-content;
+    max-width: 100%;
+  }
+
   .bit-cell {
     width: 36px;
     height: 36px;
@@ -179,6 +188,13 @@
     transition: all 0.15s;
   }
 
+  /* For wider words (12-16 bits), use smaller cells so they fit in wrapped columns */
+  .bit-grid-wide .bit-cell {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
   .bit-name-label {
     font-family: monospace;
     font-size: 11px;
@@ -189,6 +205,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     opacity: 0.7;
+  }
+
+  .bit-grid-wide .bit-name-label {
+    font-size: 9px;
   }
 
   .bit-programmed {

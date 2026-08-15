@@ -77,6 +77,8 @@
 
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
+  // Unique key for the selected device — used to force {#each} block re-creation when switching devices
+  let selectedDeviceKey = $derived($selectedDevice?.name ?? "none");
   let showConfigHelp = $state(false);
   let configExpanded = $state(false);
   let showBatchHelp = $state(false);
@@ -1087,11 +1089,12 @@
                       <!-- Expanded: full bit-level decoder -->
                       {#if configExpanded}
                         <div class="px-3 pb-3">
+                          {#key selectedDeviceKey}
                           <div class="flex flex-wrap gap-3">
                             {#if $fuseBitDefs}
                               <!-- Bit-level fuse decoder (AVR configs with known bit layouts) -->
                               {#if configData.cfg_fuses.length > 0}
-                                <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
+                                <div class="flex flex-wrap gap-2 flex-1 items-start">
                                   {#each configData.cfg_fuses as field, i}
                                     {@const byteDef = $fuseBitDefs.fuse_bytes[i]}
                                     {#if byteDef}
@@ -1127,8 +1130,8 @@
                                 </div>
                               {/if}
                               {#if configData.lock_bits.length > 0}
-                                <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
-                                  {#each configData.lock_bits as field, i}
+                                <div class="flex flex-col gap-2 flex-1 items-start">
+                                  {#each configData.lock_bits as field, i (selectedDeviceKey + '-lock-' + i)}
                                     {@const byteDef = $fuseBitDefs.lock_bytes[i]}
                                     {#if byteDef}
                                       <FuseBitDecoder
@@ -1210,6 +1213,7 @@
                               {/if}
                             {/if}
                           </div>
+                          {/key}
                         </div>
                       {/if}
                     </div>
