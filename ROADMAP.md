@@ -393,19 +393,27 @@ This is a living list of features and improvements planned for minipro-rs.
 
 - [~] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with checkboxes
   - **AVR phase: DONE.** All 18 AVR config variants (`avr_1` through `avr_18`) have bit-level definitions sourced from avr-libc device headers and Microchip datasheets.
-  - **PIC phase: TODO.** 88 PIC config variants remain — same approach applies (static bit definitions keyed by config name).
+  - **PIC phase: DONE.** All database-referenced PIC config variants now have bit-level definitions:
+    - PIC10F/PIC12F5 baseline 12-bit: `pic_1`–`pic_8`
+    - PIC12F/PIC16F mid-range 14-bit: `pic_9`–`pic_13`, `pic_21`, `pic_23`–`pic_25`
+    - PIC16F baseline 12-bit: `pic_15`–`pic_18`, `pic_27`
+    - PIC18F 16-bit: `pic_28`–`pic_33`, `pic_34`–`pic_43`, `pic_49` (including aliases `pic_38`→`pic_34`, `pic_39`→`pic_35`, `pic_40`→`pic_36`, `pic_41`→`pic_37`)
+    - 5 configs remain skipped due to database/datasheet mask discrepancies: `pic_14`, `pic_19`, `pic_20`, `pic_22`, `pic_26` (see `docs/XGPRO-DATABASE-DISCREPANCIES.md`)
+    - Bit definitions verified against gputils configuration documentation and Microchip datasheets
+    - Fixed pre-existing CPB/CPD and WRTC/WRTD bit position swap in shared PIC18F protection word definitions
   - **Implementation:**
     - Backend: `gui/src-tauri/src/fuse_defs.rs` — static bit definitions keyed by infoic.xml `<config name="...">` attribute, with chip-prefix overrides for configs that span multiple architectures.
     - Frontend: `FuseBitDecoder.svelte` component renders an 8-bit grid (MSB→LSB) with clickable bit cells, field names, descriptions, and dangerous-bit warnings. Raw hex input remains visible and stays in sync (editing hex updates bits, clicking bits updates hex).
-    - Fallback: when no bit definitions exist for a config name (e.g., PIC, unknown), the config panel falls back to hex-only input.
+    - Fallback: when no bit definitions exist for a config name (e.g., the 5 skipped PIC configs, or unknown), the config panel falls back to hex-only input.
   - **Config-name keying analysis (verified):**
     - 13 of 18 AVR configs map to a single chip family with consistent fuse bit meanings — one definition per config name.
-    - 5 configs span multiple architectures and require chip-prefix overrides:
+    - 5 AVR configs span multiple architectures and require chip-prefix overrides:
       - `avr_4`: ATmega48 vs ATtiny24/44 (different hfuse bit assignments)
       - `avr_6`: ATtiny25/45/85 vs ATtiny2313/4313 (completely different hfuse bit order)
       - `avr_13`: ATmega128A (legacy BODEN lfuse) vs ATmega164/324/644/1284 family (modern CKDIV8 lfuse)
       - `avr_15`: ATmega8 (RSTDISBL in hfuse bit 7) vs ATmega8535 (S8535C in hfuse bit 7)
       - `avr_17`: U2 chips (DWEN/RSTDISBL in hfuse) vs U4 chips (OCDEN/JTAGEN in hfuse) vs ATmega328PB (BODLEVEL in hfuse, BOOTRST/BOOTSZ in efuse)
+    - Several PIC configs share layouts via aliases: `pic_16`/`pic_17`, `pic_30`/`pic_31` (separate defs), `pic_37`/`pic_41`
     - Prefix match order matters: longer prefixes (e.g., `ATMEGA1284`) must be checked before shorter ones (e.g., `ATMEGA128`) to avoid false matches.
   - **Dangerous bit highlighting:** RSTDISBL, DWEN, SPIEN, OCDEN, JTAGEN are flagged with red styling and a ⚠ indicator in the field description list.
   - **AVR fuse convention:** bit = 0 means programmed (active). The decoder shows "Programmed"/"Unprogrammed" labels for AVR devices and raw "1"/"0" for non-AVR.
