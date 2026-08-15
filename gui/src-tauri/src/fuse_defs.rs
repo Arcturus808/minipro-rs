@@ -732,6 +732,230 @@ const PIC_8: &FuseConfigDef = &FuseConfigDef {
     lock_bytes: &[],
 };
 
+// ── PIC 14-bit mid-range configs (PIC12F6xx, PIC16F6xx, PIC16F8x) ───────────
+//
+// Data sources: Microchip datasheets DS41232D (PIC12F635), DS41211B (PIC12F683),
+// DS41191D (PIC12F629/675), DS41284E (PIC12F609/615/16F610/616),
+// DS40044G (PIC16F627A/628A), DS30487D (PIC16F87/88),
+// DS41391D (PIC12F1822/16F182x).
+
+// pic_9: PIC12F635 — 14-bit config word, mask 0x1fff
+const PIC_9: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "WURE",   description: "Wake-up Reset enable (1=standard wake-up, 0=wake-up and reset)", bit: 12 },
+            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 11 },
+            FuseBitField { name: "IESO",   description: "Internal/External Switchover mode (1=enabled, 0=disabled)", bit: 10 },
+            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 9 },
+            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0 (11=on, 10=on in run only, 01=SW control, 00=off)", bit: 8 },
+            FuseBitField { name: "CPD",    description: "Data memory code protection (1=off, 0=on)", bit: 7 },
+            FuseBitField { name: "CP",     description: "Program memory code protection (1=off, 0=on)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
+            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_10: PIC12F683 — 14-bit config word, mask 0x0fff
+const PIC_10: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 11 },
+            FuseBitField { name: "IESO",   description: "Internal/External Switchover mode (1=enabled, 0=disabled)", bit: 10 },
+            FuseBitField { name: "BODEN1", description: "Brown-out Detect selection bit 1", bit: 9 },
+            FuseBitField { name: "BODEN0", description: "Brown-out Detect selection bit 0 (11=on, 10=on in run, 01=SW control, 00=off)", bit: 8 },
+            FuseBitField { name: "CPD",    description: "Data memory code protection (1=off, 0=on)", bit: 7 },
+            FuseBitField { name: "CP",     description: "Program memory code protection (1=off, 0=on)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 5 },
+            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
+            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off via SWDTEN)", bit: 3 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_11: PIC12F629/675 — 14-bit config word, mask 0x01ff
+const PIC_11: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
+            FuseBitField { name: "CP",    description: "Program memory code protection (1=off, 0=on)", bit: 7 },
+            FuseBitField { name: "BODEN", description: "Brown-out Detect enable (1=on, 0=off)", bit: 6 },
+            FuseBitField { name: "MCLRE", description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
+            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_12: PIC12F609/615/HV609/HV615, PIC16F610/616 — 14-bit config word, mask 0x03ff
+// All variants share the same layout (verified via DS41284E).
+const PIC_12: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 9 },
+            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0 (11=on, 10=on in run, 0x=off)", bit: 8 },
+            FuseBitField { name: "IOSCFS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 7 },
+            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
+            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_13: PIC12F1822/PIC16F182x family — 14-bit, 2 config words
+// CONFIG1 (word1): mask 0x3fff, CONFIG2 (word2): mask 0x3713
+const PIC_13: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef {
+            name: "word1",
+            width: 14,
+            fields: &[
+                FuseBitField { name: "FCMEN",    description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 13 },
+                FuseBitField { name: "IESO",     description: "Internal/External Switchover (1=enabled, 0=disabled)", bit: 12 },
+                FuseBitField { name: "CLKOUTEN", description: "Clock Out enable (1=disabled, 0=enabled)", bit: 11 },
+                FuseBitField { name: "BOREN1",   description: "Brown-out Reset enable bit 1", bit: 10 },
+                FuseBitField { name: "BOREN0",   description: "Brown-out Reset enable bit 0 (11=on, 10=run only, 01=SW, 00=off)", bit: 9 },
+                FuseBitField { name: "CPD",      description: "Data memory code protection (1=off, 0=on)", bit: 8 },
+                FuseBitField { name: "CP",       description: "Program memory code protection (1=off, 0=on)", bit: 7 },
+                FuseBitField { name: "MCLRE",    description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 6 },
+                FuseBitField { name: "PWRTE",    description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 5 },
+                FuseBitField { name: "WDTE1",    description: "Watchdog Timer enable bit 1", bit: 4 },
+                FuseBitField { name: "WDTE0",    description: "Watchdog Timer enable bit 0 (11=on, 10=run only, 01=SW, 00=off)", bit: 3 },
+                FuseBitField { name: "FOSC2",    description: "Oscillator selection bit 2", bit: 2 },
+                FuseBitField { name: "FOSC1",    description: "Oscillator selection bit 1", bit: 1 },
+                FuseBitField { name: "FOSC0",    description: "Oscillator selection bit 0", bit: 0 },
+            ],
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 14,
+            fields: &[
+                FuseBitField { name: "DEBUG",  description: "Debugger enable (1=disabled, 0=enabled)", bit: 12 },
+                FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=enabled, 0=disabled)", bit: 11 },
+                FuseBitField { name: "STVREN", description: "Stack Overflow/Underflow Reset enable (1=on, 0=off)", bit: 10 },
+                FuseBitField { name: "PLLEN",  description: "PLL enable (1=enabled, 0=disabled)", bit: 9 },
+                FuseBitField { name: "BORV",   description: "Brown-out Reset voltage select (1=high, 0=low)", bit: 8 },
+                FuseBitField { name: "WRT1",   description: "Flash self-write protection bit 1", bit: 1 },
+                FuseBitField { name: "WRT0",   description: "Flash self-write protection bit 0 (11=off, 10=half, 01=boot, 00=all)", bit: 0 },
+            ],
+        },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_21: PIC16F627A — 14-bit config word, mask 0x21ff
+const PIC_21: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "CP",    description: "Flash program memory code protection (1=off, 0=on)", bit: 13 },
+            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
+            FuseBitField { name: "LVP",   description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)", bit: 7 },
+            FuseBitField { name: "BOREN", description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
+            FuseBitField { name: "MCLRE", description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 4 },
+            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
+            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_23: PIC16F628A — 14-bit config word, mask 0x3fff (same layout as pic_21)
+const PIC_23: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "CP",    description: "Flash program memory code protection (1=off, 0=on)", bit: 13 },
+            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
+            FuseBitField { name: "LVP",   description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)", bit: 7 },
+            FuseBitField { name: "BOREN", description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
+            FuseBitField { name: "MCLRE", description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 4 },
+            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
+            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_24: PIC16F88 — 14-bit config word, mask 0x2fcf
+const PIC_24: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "CCPMX",  description: "CCP1 pin mux (1=RB0, 0=RB3)", bit: 12 },
+            FuseBitField { name: "WRT1",   description: "Flash write protection bit 1", bit: 10 },
+            FuseBitField { name: "WRT0",   description: "Flash write protection bit 0 (11=off, 10=256B, 01=2KB, 00=all)", bit: 9 },
+            FuseBitField { name: "CPD",    description: "Data EEPROM code protection (1=off, 0=on)", bit: 8 },
+            FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)", bit: 7 },
+            FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
+            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_25: PIC16F88A — 14-bit config word, mask 0x3bff
+const PIC_25: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 14,
+        fields: &[
+            FuseBitField { name: "CCPMX",  description: "CCP1 pin mux (1=RB0, 0=RB3)", bit: 12 },
+            FuseBitField { name: "DEBUG",  description: "In-Circuit Debugger enable (1=disabled, 0=enabled)", bit: 11 },
+            FuseBitField { name: "WRT1",   description: "Flash write protection bit 1", bit: 10 },
+            FuseBitField { name: "CPD",    description: "Data EEPROM code protection (1=off, 0=on)", bit: 8 },
+            FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)", bit: 7 },
+            FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 4 },
+            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
+            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
 // ── Lookup tables ───────────────────────────────────────────────────────────
 
 /// Config-name-only entries (13 AVR + 8 PIC configs with consistent bit layouts).
@@ -758,6 +982,16 @@ static CONFIG_TABLE: &[(&str, &FuseConfigDef)] = &[
     ("pic_6",  PIC_6),
     ("pic_7",  PIC_7),
     ("pic_8",  PIC_8),
+    // PIC 14-bit mid-range configs (PIC12F6xx, PIC16F6xx, PIC16F8x)
+    ("pic_9",  PIC_9),
+    ("pic_10", PIC_10),
+    ("pic_11", PIC_11),
+    ("pic_12", PIC_12),
+    ("pic_13", PIC_13),
+    ("pic_21", PIC_21),
+    ("pic_23", PIC_23),
+    ("pic_24", PIC_24),
+    ("pic_25", PIC_25),
 ];
 
 /// Chip-specific overrides for configs that span multiple architectures.
@@ -995,13 +1229,82 @@ mod tests {
     }
 
     #[test]
-    fn test_pic_configs_have_12_bit_width() {
+    fn test_pic_configs_have_correct_width() {
+        let baseline: &[&str] = &["pic_1", "pic_2", "pic_3", "pic_4", "pic_5", "pic_6", "pic_7", "pic_8"];
+        let midrange: &[&str] = &["pic_9", "pic_10", "pic_11", "pic_12", "pic_13", "pic_21", "pic_23", "pic_24", "pic_25"];
         for (name, def) in CONFIG_TABLE {
-            if name.starts_with("pic_") {
-                for fb in def.fuse_bytes {
-                    assert_eq!(fb.width, 12, "PIC config {} word {} should be 12-bit", name, fb.name);
-                }
+            if !name.starts_with("pic_") { continue; }
+            let expected = if baseline.contains(name) { 12 } else if midrange.contains(name) { 14 } else { continue; };
+            for fb in def.fuse_bytes {
+                assert_eq!(fb.width, expected, "PIC config {} word {} should be {}-bit", name, fb.name, expected);
             }
         }
+    }
+
+    #[test]
+    fn test_pic_9_pic12f635_has_wure_and_fcmen() {
+        let def = lookup("pic_9", "PIC12F635").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        let wure = def.fuse_bytes[0].fields.iter().find(|f| f.name == "WURE").unwrap();
+        assert_eq!(wure.bit, 12);
+        let fcmen = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FCMEN").unwrap();
+        assert_eq!(fcmen.bit, 11);
+    }
+
+    #[test]
+    fn test_pic_11_pic12f629_has_boden_not_boren1() {
+        let def = lookup("pic_11", "PIC12F629").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        // pic_11 uses BODEN (single bit) not BOREN1/BOREN0 (two bits)
+        let boden = def.fuse_bytes[0].fields.iter().find(|f| f.name == "BODEN").unwrap();
+        assert_eq!(boden.bit, 6);
+        assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "BOREN1"));
+    }
+
+    #[test]
+    fn test_pic_12_pic16f610_has_ioscfs() {
+        let def = lookup("pic_12", "PIC16F610").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        assert_eq!(ioscfs.bit, 7);
+    }
+
+    #[test]
+    fn test_pic_13_has_two_config_words() {
+        let def = lookup("pic_13", "PIC12F1822").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 2);
+        assert_eq!(def.fuse_bytes[0].name, "word1");
+        assert_eq!(def.fuse_bytes[1].name, "word2");
+        // word1 should have FCMEN at bit 13
+        let fcmen = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FCMEN").unwrap();
+        assert_eq!(fcmen.bit, 13);
+        // word2 should have LVP at bit 11
+        let lvp = def.fuse_bytes[1].fields.iter().find(|f| f.name == "LVP").unwrap();
+        assert_eq!(lvp.bit, 11);
+    }
+
+    #[test]
+    fn test_pic_21_pic16f627a_has_lvp() {
+        let def = lookup("pic_21", "PIC16F627A").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        let lvp = def.fuse_bytes[0].fields.iter().find(|f| f.name == "LVP").unwrap();
+        assert_eq!(lvp.bit, 7);
+    }
+
+    #[test]
+    fn test_pic_24_pic16f88_has_ccpmx() {
+        let def = lookup("pic_24", "PIC16F88").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        let ccpmx = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CCPMX").unwrap();
+        assert_eq!(ccpmx.bit, 12);
+    }
+
+    #[test]
+    fn test_pic_25_pic16f88a_has_debug_bit() {
+        let def = lookup("pic_25", "PIC16F88A").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 14);
+        // pic_25 has DEBUG at bit 11 (not in pic_24)
+        let debug = def.fuse_bytes[0].fields.iter().find(|f| f.name == "DEBUG").unwrap();
+        assert_eq!(debug.bit, 11);
     }
 }
