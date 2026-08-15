@@ -244,10 +244,11 @@ This is a living list of features and improvements planned for minipro-rs.
 
   - [ ] **T76 adapter ID validation** — DEFERRED. The mainline C minipro
     does NOT implement adapter ID validation for T76. The `t76_adapter_init`
-    sends a READ_ID command (0x24, 0xe4) but discards the response. The
-    referenced "Matt Brown branch" cannot be found publicly. Implementing
-    this would require reverse-engineering the adapter ID response format
-    from XGPro captures with different adapters.
+    sends a READ_ID command (0x24, 0xe4) but discards the response. Matt
+    Brown's merged MR #292 (https://gitlab.com/DavidGriffith/minipro/-/merge_requests/292)
+    also does not implement adapter ID validation. Implementing this would
+    require reverse-engineering the adapter ID response format from XGPro
+    captures with different adapters.
     **Impact:** User can select a chip that requires an adapter they haven't
     connected, leading to confusing protocol errors instead of a clear
     "wrong adapter" message.
@@ -276,10 +277,10 @@ This is a living list of features and improvements planned for minipro-rs.
 
   - [ ] **Parallel NOR programming (T76)** — READ and ERASE work, PROGRAM is
     non-functional. The vendor uses a per-command descriptor that hasn't been
-    reverse-engineered. Confirmed as a shared limitation: Matt Brown's
-    t76-improvements branch also states "parallel-NOR *program* (0x11) is
-    still non-functional (needs its own per-command descriptor); read and
-    erase work." Requires a vendor write capture to reverse engineer.
+    reverse-engineered. Confirmed as a shared limitation: Matt Brown's merged
+    MR #292 implements parallel NOR program (protocol 0x12/0x14) in the C
+    minipro, but our Rust port has not yet incorporated this. Requires porting
+    Matt Brown's parallel NOR write implementation from the upstream C code.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
 
@@ -301,6 +302,42 @@ This is a living list of features and improvements planned for minipro-rs.
     (32B, 32B, 24B) are from a single chip capture and may not generalize.
     **Impact:** eMMC init may desync on other chips.
 
+  ### Gaps vs Matt Brown's merged MR #292
+
+  Matt Brown's MR #292 (https://gitlab.com/DavidGriffith/minipro/-/merge_requests/292)
+  was merged to upstream C minipro master on 2026-06-01. A detailed comparison
+  identified 3 items we are missing. These may be partially addressed by
+  Agnius's pending MR (GitLab work item #3).
+
+  - [ ] **SPI-NAND geometry fix-up (database layer)** — ~1780 SPI-NAND chips
+    in the database have `code_memory_size == 0` because XGecu packs geometry
+    into other fields: `page_size` holds block count, `pages_per_block` has
+    vendor flags in the top byte, `write_buffer_size` is page + spare. Matt
+    Brown added fix-up logic in `database.c` that computes the real
+    `code_memory_size = block_count * pages_per_block * (page + spare)`. Our
+    `database.rs` reads these fields directly with no unpacking.
+    **Impact:** SPI-NAND chips with packed geometry read as zero-size.
+    **Location:** `crates/minipro-core/src/database.rs:1037`
+
+  - [ ] **pages_per_block masking (0xFFFF)** — the upper bits of
+    `pages_per_block` contain database flags, not geometry. Matt Brown's
+    database fix-up masks these. We use the raw value in at least 3 places
+    in `t76.rs` (lines 648, 830, 1045). Agnius independently found this same
+    bug during hardware testing.
+    **Impact:** Incorrect block calculations for NAND chips with non-zero
+    flag bits in pages_per_block.
+    **Location:** `crates/minipro-core/src/database.rs:1037`,
+    `crates/minipro-core/src/protocol/t76.rs:648, 830, 1045`
+
+  - [ ] **status_recv on EP83** — Matt Brown added a `status_recv()` function
+    that reads per-block NAND program status from EP83 (endpoint 0x83 IN).
+    Our `usb.rs` uses EP83 for payload reads but has no dedicated status
+    polling function. Our NAND program at `t76.rs:837-865` may not properly
+    check per-block status responses.
+    **Impact:** NAND program may not detect per-block write failures.
+    **Location:** `crates/minipro-core/src/usb.rs` (missing function),
+    `crates/minipro-core/src/protocol/t76.rs:837-865`
+
   ### Hardware validation (separate from code parity)
 
   These items are not code gaps — the code is written to match the C source
@@ -308,13 +345,20 @@ This is a living list of features and improvements planned for minipro-rs.
   T56/T76 devices and chips.
 
   - [ ] T76 SPI NOR (8-pin and 16-pin) — read/erase/program
-  - [ ] T76 SPI-NAND — read/erase/program
+  - [x] T76 SPI-NAND — read/erase/program — VALIDATED by Agnius (GitLab work
+    item #3) on GD5F1GQ5UExxG(x4)@WSON8, T76 firmware 00.1.18, XGPro v13.21.
+    Full read (142MB, SHA-256 verified across two reads), erase, write, and
+    verify all working with local patches. MR pending.
   - [ ] T76 parallel NAND — read/erase/program
   - [ ] T76 eMMC USER partition — read/erase/program
   - [ ] T76 parallel NOR — read/erase (program known broken)
   - [ ] T56 all chip classes — read/erase/program
   - [ ] T76 firmware update
   - [ ] T76 logic IC test (two-pass with bitstream reload)
+
+  Matt Brown's MR #292 was validated on: ZB25VQ64A, MX25L12845E (SPI NOR),
+  S29GL512N (parallel NOR), W29N02GZ and GD5F1GM7UEYIG (NAND), KLM8G1GEAC-B001
+  (eMMC).
 
 - [x] **Smart firmware diff** — compare firmware files or chip dumps with intelligent trailing-padding handling
   - **Problem:** Minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical. Naive "strip trailing 0xFF and compare" is insufficient because it silently ignores cases where the reference has real data beyond the dump length (truncated read, wrong chip selected) or where the dump has non-erased data beyond the reference (leftover from previous programming — forensically interesting).
