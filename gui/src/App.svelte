@@ -77,6 +77,8 @@
 
   // Config data state (fuses, locks, user bytes, calibration)
   let configData = $state<ConfigData | null>(null);
+  // Unique key for the selected device — used to force {#each} block re-creation when switching devices
+  let selectedDeviceKey = $derived($selectedDevice?.name ?? "none");
   let showConfigHelp = $state(false);
   let configExpanded = $state(false);
   let showBatchHelp = $state(false);
@@ -854,6 +856,7 @@
         {#if $activeOperation}
           <div class="border-t border-surface-200-800 pt-3">
             {#if $selectedDevice && ($activeOperation !== "logic_test" || $selectedDevice.chip_type === "Logic") && ($activeOperation !== "config" || $selectedDevice.config)}
+            {#if $activeOperation !== "config"}
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
               <button
@@ -864,6 +867,7 @@
                 Reset defaults
               </button>
             </div>
+            {/if}
             <div class="space-y-2 mb-3">
               {#if $selectedDevice && !$selectedDevice.has_chip_id && ($activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify")}
                 <div class="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
@@ -1012,40 +1016,49 @@
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu" && configData}
                   <div class="col-span-2 space-y-3">
-                    <div class="flex items-center justify-between">
-                      {#if $selectedDevice.invert_fuse_bits}
-                        <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2 flex-1 mr-2">
-                          <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: bit = 0 means programmed (active), bit = 1 means unprogrammed</p>
-                        </div>
-                      {/if}
-                      <button
-                        class="opacity-50 hover:opacity-100 transition-opacity p-1.5 rounded border border-transparent hover:border-surface-200-800 shrink-0"
-                        onclick={() => showConfigHelp = true}
-                        title="Config help"
-                        aria-label="Config help"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </button>
-                    </div>
+                    {#if $selectedDevice.invert_fuse_bits && configExpanded}
+                      <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">
+                        <p class="text-xs text-primary-700-200 font-medium">AVR fuse convention: bit = 0 means programmed (active), bit = 1 means unprogrammed</p>
+                      </div>
+                    {/if}
                     <!-- Collapsible fuse/lock bit editor -->
                     <div class="bg-surface-100-900 rounded-lg overflow-hidden">
                       <!-- Toggle header with collapsed summary -->
-                      <button
-                        class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
-                        onclick={() => configExpanded = !configExpanded}
-                        aria-expanded={configExpanded}
-                      >
-                        <svg
-                          class="h-4 w-4 transition-transform shrink-0"
-                          style:transform={configExpanded ? "rotate(90deg)" : "rotate(0deg)"}
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                      <div class="w-full flex items-center gap-2 px-3 py-2">
+                        <button
+                          class="flex items-center gap-2 text-sm font-semibold opacity-70 hover:opacity-100 transition-opacity"
+                          onclick={() => configExpanded = !configExpanded}
+                          aria-expanded={configExpanded}
                         >
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                        <span class="uppercase tracking-wider">Config</span>
+                          <svg
+                            class="h-4 w-4 transition-transform shrink-0"
+                            style:transform={configExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                          >
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span class="uppercase tracking-wider">Config</span>
+                        </button>
+                        <button
+                          class="opacity-50 hover:opacity-100 transition-opacity p-1 rounded border border-transparent hover:border-surface-200-800 shrink-0"
+                          onclick={() => showConfigHelp = true}
+                          title="Config help"
+                          aria-label="Config help"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div class="flex-1"></div>
+                        <button
+                          class="text-xs opacity-50 hover:opacity-100 underline transition-opacity shrink-0"
+                          onclick={() => selectOp("config")}
+                          disabled={$isRunning}
+                        >
+                          Reset defaults
+                        </button>
+                      </div>
                         <!-- Collapsed: inline editable hex summary -->
                         {#if !configExpanded}
                           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 ml-2 flex-1">
@@ -1083,15 +1096,17 @@
                             {/each}
                           </div>
                         {/if}
-                      </button>
                       <!-- Expanded: full bit-level decoder -->
                       {#if configExpanded}
                         <div class="px-3 pb-3">
-                          <div class="flex flex-wrap gap-3">
+                          {#key selectedDeviceKey}
+                          <div class="flex flex-wrap gap-3 max-h-[50vh] overflow-y-auto">
                             {#if $fuseBitDefs}
+                              {@const totalCards = configData.cfg_fuses.length + configData.lock_bits.length}
+                              {@const singleCard = totalCards === 1}
                               <!-- Bit-level fuse decoder (AVR configs with known bit layouts) -->
                               {#if configData.cfg_fuses.length > 0}
-                                <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
+                                <div class="flex flex-wrap gap-2 flex-1 items-stretch">
                                   {#each configData.cfg_fuses as field, i}
                                     {@const byteDef = $fuseBitDefs.fuse_bytes[i]}
                                     {#if byteDef}
@@ -1101,6 +1116,7 @@
                                         displayName={$selectedDevice.config.fuses[i].display_name}
                                         invertFuseBits={$selectedDevice.invert_fuse_bits}
                                         onchange={(v) => setCfgValue(i, v)}
+                                        isSingleCard={singleCard}
                                       />
                                     {:else}
                                       <!-- Fallback: no bit def for this fuse byte -->
@@ -1127,8 +1143,8 @@
                                 </div>
                               {/if}
                               {#if configData.lock_bits.length > 0}
-                                <div class="flex flex-col gap-2 flex-1 min-w-[320px]">
-                                  {#each configData.lock_bits as field, i}
+                                <div class="flex flex-col gap-2 flex-1 items-start">
+                                  {#each configData.lock_bits as field, i (selectedDeviceKey + '-lock-' + i)}
                                     {@const byteDef = $fuseBitDefs.lock_bytes[i]}
                                     {#if byteDef}
                                       <FuseBitDecoder
@@ -1137,6 +1153,7 @@
                                         displayName={$selectedDevice.config.locks[i].display_name}
                                         invertFuseBits={$selectedDevice.invert_fuse_bits}
                                         onchange={(v) => setLockValue(i, v)}
+                                        isSingleCard={singleCard}
                                       />
                                     {:else}
                                       <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
@@ -1210,6 +1227,7 @@
                               {/if}
                             {/if}
                           </div>
+                          {/key}
                         </div>
                       {/if}
                     </div>
