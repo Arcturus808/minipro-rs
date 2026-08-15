@@ -278,6 +278,59 @@ recorded masks and the actual chip behavior.  The forum reports confirm that
 these inconsistencies translate into real user-facing bugs that persist across
 versions.
 
+## Forum bug applicability to minipro-rs
+
+An investigation was conducted to determine whether the XGPro forum bugs
+listed above also affect minipro-rs.  The findings are recorded here so future
+work has a starting point.
+
+### Likely shared (code-level gap)
+
+**EEPROM write with EESAVE asserted (#4 ATtiny25/24, #5 ATmega328P on T48):**
+`write_chip` in `crates/minipro-core/src/operations.rs` writes to the EEPROM
+page (0x01) without reading or checking the EESAVE fuse.  The EESAVE bit is
+defined in `fuse_defs.rs` for GUI display only — no write-path logic consults
+it.  Whether this produces the same failure as XGPro depends on programmer
+firmware behavior, which cannot be confirmed without hardware testing.
+**Action needed:** Investigate whether EEPROM erase/write cycles should be
+gated on EESAVE state, and whether the firmware handles this automatically.
+
+### Partially mitigated
+
+**PIC12F629/675 erase with CP/CPD set (#1):** `erase_chip` in
+`operations.rs` includes OSCCAL preservation (read before erase, restore
+after), but does not check or handle CP/CPD fuse bits before erasing.
+Whether the programmer firmware handles CP/CPD correctly during erase is
+unknown without hardware testing.
+
+### Likely not affected
+
+**PIC12F629 broken on T48 (#2):** T48 and T56 share the same protocol code
+path in `crates/minipro-core/src/protocol/t56.rs`, which sends the actual
+fuse data directly (`msg[8..8+n].copy_from_slice(&data[..n])`).  There is no
+T48-specific code path that would zero out config data.  This was likely an
+XGPro-specific firmware quirk.
+
+**SPI Clock Frequency UI bug (#6):** minipro-rs does not have an SPI clock
+frequency setting in its GUI.  Not applicable.
+
+### Database limitations (not code bugs)
+
+**PIC12F509 missing last byte (#3):** The database sets
+`code_memory_size="0x7fe"` for PIC12F509, so minipro-rs inherits the same
+addressing limit (stops at 0x3FE).  OSCCAL preservation code exists in
+`operations.rs` but depends on `osccal_save` configuration attributes that
+are not present in the current `infoic.xml`.
+
+**Chips in support list but not in software (#7):** HY27UU08AG5A exists in
+`infoic.xml` and would appear in minipro-rs.  TC58NVG5D2FTA00 and
+TH58NVG5S0ETA20 do not exist in the database at all.  The database parser
+(`crates/minipro-core/src/database.rs`) does not filter or drop valid chip
+entries.
+
+**PIC16F18877 not supported (#8):** PIC16F18877 is not in `infoic.xml`.
+Supporting it would require adding a database entry, not a code change.
+
 ## References
 
 - XGecu Programmer Forums: http://forums.xgecu.com
