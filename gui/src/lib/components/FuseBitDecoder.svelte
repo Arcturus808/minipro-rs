@@ -62,13 +62,25 @@
   }
 
   // ── Dangerous bit detection ──────────────────────────────────────────────
+  // AVR: SPIEN/RSTDISBL/DWEN programmed (0) can disable programming access.
+  // PIC: LVP/WRTC/CP/CPD/DEBUG cleared (0) can lock out programming or
+  //   block code readback. All follow the same "0 is the dangerous state"
+  //   convention, so the existing bit-danger-programmed CSS class works
+  //   for both AVR (programmed=0) and PIC (set=1, danger when 0).
 
   const DANGEROUS_BITS = new Set([
+    // AVR
     "RSTDISBL",
     "DWEN",
     "SPIEN",
     "OCDEN",
     "JTAGEN",
+    // PIC
+    "LVP",
+    "WRTC",
+    "CP",
+    "CPD",
+    "DEBUG",
   ]);
 
   function isDangerousField(name: string): boolean {
@@ -92,13 +104,14 @@
     const isSet = isBitSet(bit);
     const danger = isDangerousField(fieldName);
     if (invertFuseBits) {
-      // For AVR: programmed (bit=0) = active, show as checked
+      // AVR: programmed (bit=0) = active. Danger when programmed (0).
       const programmed = !isSet;
       if (programmed && danger) return "bit-danger-programmed";
       if (programmed) return "bit-programmed";
       return "bit-unprogrammed";
     } else {
-      if (isSet && danger) return "bit-danger-programmed";
+      // PIC: bit=1 is set/active. Danger when cleared (0) for LVP/WRTC/CP/CPD/DEBUG.
+      if (!isSet && danger) return "bit-danger-programmed";
       if (isSet) return "bit-programmed";
       return "bit-unprogrammed";
     }
