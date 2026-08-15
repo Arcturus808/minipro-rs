@@ -13,6 +13,8 @@
     invertFuseBits: boolean;
     /** Callback when the raw value changes. */
     onchange: (value: number) => void;
+    /** When true, card is the only one on screen — scale up to fill space. */
+    isSingleCard?: boolean;
   }
 
   let {
@@ -21,6 +23,7 @@
     displayName,
     invertFuseBits,
     onchange,
+    isSingleCard = false,
   }: Props = $props();
 
   // ── Width-derived values ──────────────────────────────────────────────────
@@ -138,7 +141,7 @@
   }
 </script>
 
-<div class="fuse-card bg-surface-100-900 rounded-lg p-3 space-y-2">
+<div class="fuse-card bg-surface-100-900 rounded-lg p-3 space-y-2" style:zoom={isSingleCard ? 1.4 : 1}>
   <div class="flex items-center justify-between gap-2">
     <span class="text-sm font-semibold opacity-70 uppercase tracking-wider whitespace-nowrap">{displayName}</span>
     <div class="flex items-center gap-1 shrink-0">

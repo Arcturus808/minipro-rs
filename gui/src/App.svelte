@@ -1102,9 +1102,11 @@
                           {#key selectedDeviceKey}
                           <div class="flex flex-wrap gap-3 max-h-[50vh] overflow-y-auto">
                             {#if $fuseBitDefs}
+                              {@const totalCards = configData.cfg_fuses.length + configData.lock_bits.length}
+                              {@const singleCard = totalCards === 1}
                               <!-- Bit-level fuse decoder (AVR configs with known bit layouts) -->
                               {#if configData.cfg_fuses.length > 0}
-                                <div class="flex flex-wrap gap-2 flex-1 items-start">
+                                <div class="flex flex-wrap gap-2 flex-1 items-stretch">
                                   {#each configData.cfg_fuses as field, i}
                                     {@const byteDef = $fuseBitDefs.fuse_bytes[i]}
                                     {#if byteDef}
@@ -1114,6 +1116,7 @@
                                         displayName={$selectedDevice.config.fuses[i].display_name}
                                         invertFuseBits={$selectedDevice.invert_fuse_bits}
                                         onchange={(v) => setCfgValue(i, v)}
+                                        isSingleCard={singleCard}
                                       />
                                     {:else}
                                       <!-- Fallback: no bit def for this fuse byte -->
@@ -1150,6 +1153,7 @@
                                         displayName={$selectedDevice.config.locks[i].display_name}
                                         invertFuseBits={$selectedDevice.invert_fuse_bits}
                                         onchange={(v) => setLockValue(i, v)}
+                                        isSingleCard={singleCard}
                                       />
                                     {:else}
                                       <div class="bg-surface-100-900 rounded-lg p-3 space-y-2">
