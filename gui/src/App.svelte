@@ -1531,9 +1531,19 @@
         <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Fuse Basics</div>
         <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
           <li>Fuses are non-volatile configuration bits that control chip behavior (clock source, watchdog, reset, etc.)</li>
-          <li>Edit each fuse via its <b>hex input</b> field. Values are raw bytes — enter the value from the chip datasheet (e.g., <span style="font-family: monospace;">D9</span> for hfuse).</li>
-          <li>For <b>AVR</b> chips: programmed = bit is 0 (active-low).<br>For <b>PIC</b> and others: programmed = bit is 1.</li>
+          <li>Edit each fuse via its <b>hex input</b> field or by clicking individual <b>bit cells</b> in the decoder grid. Both stay in sync — editing hex updates the bits, and clicking bits updates the hex.</li>
+          <li>For <b>AVR</b> chips: programmed = bit is 0 (active-low). The decoder shows "Programmed"/"Unprogrammed" labels.<br>For <b>PIC</b> and others: programmed = bit is 1. The decoder shows raw 1/0 values.</li>
+          <li><b>AVR</b> fuse bytes are 8-bit. <b>PIC</b> config words vary by family: 12-bit (baseline PIC10F/PIC12F5/PIC16F), 14-bit (mid-range PIC12F/PIC16F), or 16-bit (PIC18F, packed as high:low byte).</li>
           <li><b>Read Config from Chip</b> merges actual chip values into the panel.<br><b>Write Config to Chip</b> writes all fuses and lock bits.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Bit-Level Decoder</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>Each config word is displayed as a grid of clickable bit cells (MSB left, LSB right) with named fields and descriptions below.</li>
+          <li>Click a bit cell to toggle that bit. The hex value updates automatically.</li>
+          <li>Multi-bit fields (e.g. FOSC3:FOSC0, BBSIZ1:BBSIZ0) are shown as individual bits — toggle each bit separately.</li>
+          <li>Coverage: all 18 AVR config variants and all database-referenced PIC config variants have bit-level definitions. A few PIC configs with database/datasheet discrepancies fall back to hex-only input (no bit grid).</li>
+          <li>Bit definitions are sourced from avr-libc, Microchip datasheets, and gputils configuration documentation.</li>
         </ul>
 
         <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Dangerous Fuses <span style="color: #dc2626;">(!)</span></div>
@@ -1550,6 +1560,7 @@
           <li>Lock bits control read/write protection of the chip's flash memory.</li>
           <li>Setting lock bits can prevent future reads or writes. Clearing them usually requires a chip erase.</li>
           <li>For <b>AVR</b>: only the LB bits (bits 1:0) control external ISP read/write. BLB0 and BLB1 only affect internal SPM/LPM access and do not prevent external programming. The app only warns when LB bits indicate external protection.</li>
+          <li>For <b>PIC</b>: config words include code protection bits (CP, CPB, CPD, WRT, WRTC, WRTB, WRTD, EBTR). Setting these can prevent future reads or writes. A chip erase is usually required to clear them.</li>
           <li>Read the chip's lock protection status before writing (the app warns if the chip is locked).</li>
         </ul>
 
