@@ -956,17 +956,91 @@ const PIC_25: &FuseConfigDef = &FuseConfigDef {
     lock_bytes: &[],
 };
 
+// ── PIC16F baseline 12-bit configs (PIC16F505/506/54/57/526) ──
+//
+// Data sources: Microchip DS41236E (PIC16F505), DS41268B (PIC16F506),
+// DS41213D (PIC16F54/57), DS41269B (PIC16F526), gputils configuration docs.
+
+// pic_15: PIC16F506 — 12-bit config word, mask 0x7f
+const PIC_15: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 12,
+        fields: &[
+            FuseBitField { name: "IOSCFS", description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
+            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 4 },
+            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_16/pic_17: PIC16F54/57 — 12-bit config word, mask 0x0f
+const PIC_16: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 12,
+        fields: &[
+            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
+            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=HS, 11=RC)", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_18: PIC16F505 — 12-bit config word, mask 0x3f
+const PIC_18: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 12,
+        fields: &[
+            FuseBitField { name: "MCLRE", description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
+            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 4 },
+            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
+// pic_27: PIC16F526 — 12-bit config word, mask 0xff
+const PIC_27: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[FuseByteDef {
+        name: "word1",
+        width: 12,
+        fields: &[
+            FuseBitField { name: "CPDF",   description: "Data memory code protection (1=off, 0=on)", bit: 7 },
+            FuseBitField { name: "IOSCFS", description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)", bit: 6 },
+            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
+            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 4 },
+            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+        ],
+    }],
+    lock_bytes: &[],
+};
+
 // ── PIC 16-bit PIC18F configs (7 config words, packed as CONFIG_H:CONFIG_L) ──
 //
 // PIC18F config registers are 8-bit, stored at byte addresses 0x300000-0x30000D.
 // XGPro packs them into 7 × 16-bit words: wordN = (CONFIG_H << 8) | CONFIG_L.
 //
 // Data sources: Microchip DS39632 (PIC18F4550/2550), DS39631 (PIC18F2520/4520),
-// DS39609 (PIC18F2420/2520), gputils configuration documentation.
+// DS39609 (PIC18F2420/2520), DS39564 (PIC18FXX2), DS41159 (PIC18FXX8),
+// DS39636 (PIC18F1220/1320), DS39632 (PIC18F2450), DS39631 (PIC18F2480/2580),
+// DS39625 (PIC18F2515/2525), DS39626 (PIC18F2221/2321), gputils configuration docs.
 //
 // Note: pic_44-48 are defined in the database but no chips reference them.
-// pic_28-31 (older PIC18F242/252) have a different 3-bit FOSC layout and are
-// skipped pending further datasheet research.
 
 // ── Reusable PIC18F field sets ───────────────────────────────────────────────
 
@@ -1025,17 +1099,18 @@ const PIC18F_WORD2_STD: &[FuseBitField] = &[
 ];
 
 /// CONFIG5H+CONFIG5L: 2 code protection blocks — mask 0xC003
+/// CPD at CONFIG5H bit 7 (packed 15), CPB at CONFIG5H bit 6 (packed 14)
 const PIC18F_WORD5_2BLK: &[FuseBitField] = &[
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
     FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
     FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
 ];
 
 /// CONFIG5H+CONFIG5L: 4 code protection blocks — mask 0xC00F
 const PIC18F_WORD5_4BLK: &[FuseBitField] = &[
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
     FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
     FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
     FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
@@ -1043,19 +1118,20 @@ const PIC18F_WORD5_4BLK: &[FuseBitField] = &[
 ];
 
 /// CONFIG6H+CONFIG6L: 2 write protection blocks — mask 0xE003
+/// WRTD at CONFIG6H bit 7 (packed 15), WRTB at bit 6 (packed 14), WRTC at bit 5 (packed 13)
 const PIC18F_WORD6_2BLK: &[FuseBitField] = &[
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
     FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
     FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
     FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
 ];
 
 /// CONFIG6H+CONFIG6L: 4 write protection blocks — mask 0xE00F
 const PIC18F_WORD6_4BLK: &[FuseBitField] = &[
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
     FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
     FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
     FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
     FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
@@ -1145,6 +1221,363 @@ const PIC_36: &FuseConfigDef = &FuseConfigDef {
     lock_bytes: &[],
 };
 
+// ── Additional PIC18F reusable field sets ───────────────────────────────────
+
+/// CONFIG1H: old-style (OSCS, 3-bit FOSC) — mask 0x27
+const PIC18F_CONFIG1H_OLD: &[FuseBitField] = &[
+    FuseBitField { name: "OSCS",  description: "Oscillator System Clock Switch Enable (1=enabled, 0=disabled)", bit: 13 },
+    FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 10 },
+    FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 9 },
+    FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0 (000=LP, 001=XT, 010=HS, 011=RC, 100=EC, 101=ECIO, 110=HSPLL, 111=RCIO)", bit: 8 },
+];
+
+/// CONFIG1H: PIC18F1220 style (FSCM instead of FCMEN, 4-bit FOSC) — mask 0xCF
+const PIC18F_CONFIG1H_FSCM: &[FuseBitField] = &[
+    FuseBitField { name: "IESO",  description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)", bit: 15 },
+    FuseBitField { name: "FSCM",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 14 },
+    FuseBitField { name: "FOSC3", description: "Oscillator selection bit 3", bit: 11 },
+    FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 10 },
+    FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 9 },
+    FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 8 },
+];
+
+/// CONFIG2H+CONFIG2L: old-style (3-bit WDTPS, single BOREN) — mask 0x0F0F
+const PIC18F_WORD2_OLD: &[FuseBitField] = &[
+    FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
+    FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
+    FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0 (000=1:1 to 111=1:128)", bit: 9 },
+    FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
+    FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 3 },
+    FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 2 },
+    FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 1 },
+    FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+];
+
+/// CONFIG2H+CONFIG2L: PIC18F1220 style (4-bit WDTPS, single BOREN) — mask 0x1F0F
+const PIC18F_WORD2_FSCM: &[FuseBitField] = &[
+    FuseBitField { name: "WDTPS3", description: "Watchdog Timer postscale bit 3", bit: 12 },
+    FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
+    FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
+    FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0", bit: 9 },
+    FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
+    FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 3 },
+    FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 2 },
+    FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 1 },
+    FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+];
+
+/// CONFIG3H: just CCP2MX — mask 0x01
+const PIC18F_CONFIG3H_CCP2MX: &[FuseBitField] = &[
+    FuseBitField { name: "CCP2MX", description: "CCP2 mux (1=RC1, 0=RB3)", bit: 8 },
+];
+
+/// CONFIG3H: just MCLRE — mask 0x80
+const PIC18F_CONFIG3H_MCLRE: &[FuseBitField] = &[
+    FuseBitField { name: "MCLRE", description: "MCLR pin enable (1=MCLR enabled, 0=RA5 input)", bit: 15 },
+];
+
+/// CONFIG3H: MCLRE, LPT1OSC, PBADEN (no CCP2MX) — mask 0x86
+const PIC18F_CONFIG3H_PBADEN: &[FuseBitField] = &[
+    FuseBitField { name: "MCLRE",   description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)", bit: 15 },
+    FuseBitField { name: "LPT1OSC", description: "Low-power Timer1 oscillator (1=low power, 0=high power)", bit: 10 },
+    FuseBitField { name: "PBADEN",  description: "PORTB A/D enable (1=analog on reset, 0=digital on reset)", bit: 9 },
+];
+
+/// CONFIG4L: DEBUG, XINST, BBSIZ (bit 3), LVP, STVREN — mask 0xCD
+const PIC18F_CONFIG4L_BBSIZ3: &[FuseBitField] = &[
+    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
+    FuseBitField { name: "XINST",  description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
+    FuseBitField { name: "BBSIZ",  description: "Boot block size (1=2KW, 0=1KW)", bit: 3 },
+    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
+    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+];
+
+/// CONFIG4L: DEBUG, XINST, BBSIZ (bit 4), LVP, STVREN — mask 0xD5
+const PIC18F_CONFIG4L_BBSIZ4: &[FuseBitField] = &[
+    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
+    FuseBitField { name: "XINST",  description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
+    FuseBitField { name: "BBSIZ",  description: "Boot block size (1=2K words, 0=1K words)", bit: 4 },
+    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
+    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+];
+
+/// CONFIG4L: DEBUG, XINST, BBSIZ1:BBSIZ0 (2-bit), LVP, STVREN — mask 0xF5
+const PIC18F_CONFIG4L_BBSIZ2: &[FuseBitField] = &[
+    FuseBitField { name: "DEBUG",   description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
+    FuseBitField { name: "XINST",   description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
+    FuseBitField { name: "BBSIZ1",  description: "Boot block size bit 1", bit: 5 },
+    FuseBitField { name: "BBSIZ0",  description: "Boot block size bit 0 (00=256W, 01=512W, 10=1KW, 11=2KW)", bit: 4 },
+    FuseBitField { name: "LVP",     description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
+    FuseBitField { name: "STVREN",  description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+];
+
+/// CONFIG5H+CONFIG5L: 3 code protection blocks with CPD — mask 0xC007
+const PIC18F_WORD5_3BLK: &[FuseBitField] = &[
+    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
+];
+
+/// CONFIG5H+CONFIG5L: 3 code protection blocks without CPD — mask 0x4007
+const PIC18F_WORD5_3BLK_NO_CPD: &[FuseBitField] = &[
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
+];
+
+/// CONFIG5H+CONFIG5L: 2 code protection blocks, CPB only (no CPD) — mask 0x4003
+const PIC18F_WORD5_CPB_ONLY: &[FuseBitField] = &[
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+];
+
+/// CONFIG6H+CONFIG6L: 3 write protection blocks with WRTD — mask 0xE007
+const PIC18F_WORD6_3BLK: &[FuseBitField] = &[
+    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
+];
+
+/// CONFIG6H+CONFIG6L: 3 write protection blocks without WRTD — mask 0x6007
+const PIC18F_WORD6_3BLK_NO_WRTD: &[FuseBitField] = &[
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
+];
+
+/// CONFIG6H+CONFIG6L: 2 write protection blocks, WRTC+WRTB only (no WRTD) — mask 0x6003
+const PIC18F_WORD6_WRTC_WRTB: &[FuseBitField] = &[
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+];
+
+/// CONFIG7H+CONFIG7L: 3 table read protection blocks — mask 0x4007
+const PIC18F_WORD7_3BLK: &[FuseBitField] = &[
+    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "EBTR2", description: "Table read protection block 2 (1=off, 0=on)", bit: 2 },
+];
+
+/// CONFIG7L only: 2 table read protection blocks (no EBTRB) — mask 0x0003
+const PIC18F_WORD7_2BLK_NO_EBTRB: &[FuseBitField] = &[
+    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
+];
+
+/// CONFIG4L: 4 code protection blocks (old-style PIC18F242/252) — mask 0x000F
+const PIC18F_WORD5_4BLK_OLD: &[FuseBitField] = &[
+    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField { name: "CP3", description: "Code protection block 3 (1=off, 0=on)", bit: 3 },
+];
+
+/// CONFIG6L: 4 write protection blocks (old-style PIC18F242/252) — mask 0x000F
+const PIC18F_WORD6_4BLK_OLD: &[FuseBitField] = &[
+    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
+    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
+    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField { name: "WRT3", description: "Write protection block 3 (1=off, 0=on)", bit: 3 },
+];
+
+/// CONFIG7L: 4 table read protection blocks (old-style PIC18F242/252) — mask 0x000F
+const PIC18F_WORD7_4BLK_OLD: &[FuseBitField] = &[
+    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
+    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
+    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField { name: "EBTR2", description: "Table read protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField { name: "EBTR3", description: "Table read protection block 3 (1=off, 0=on)", bit: 3 },
+];
+
+// ── Old-style PIC18F configs (PIC18F242/252/248/258 family) ──
+//
+// Data sources: gputils PIC18F242/252/248/258 configuration pages,
+// Microchip DS39564 (PIC18FXX2), DS41159 (PIC18FXX8).
+
+// pic_28: PIC18F242 — old-style, 3-bit FOSC, CCP2MX, 2 protection blocks
+const PIC_28: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_CCP2MX },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_29: PIC18F252 — old-style, 3-bit FOSC, CCP2MX, 4 protection blocks
+const PIC_29: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_CCP2MX },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_4BLK_OLD },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_4BLK_OLD },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_4BLK_OLD },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_30/pic_31: PIC18F258/248 — old-style, 3-bit FOSC, no CCP2MX, 4/2 protection blocks
+// PIC18F258 has 4 blocks, PIC18F248 has 2 blocks — use chip-specific overrides.
+const PIC_30: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
+        FuseByteDef { name: "word3", width: 16, fields: &[] },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_4BLK_OLD },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_4BLK_OLD },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_4BLK_OLD },
+    ],
+    lock_bytes: &[],
+};
+
+const PIC_31: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
+        FuseByteDef { name: "word3", width: 16, fields: &[] },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// ── Newer PIC18F configs ──
+
+// pic_32: PIC18F1220 — FSCM, 4-bit FOSC, MCLRE only, 2 protection blocks
+const PIC_32: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_FSCM },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_FSCM },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_MCLRE },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_33: PIC18F2450 — USB, FCMEN/IESO, VREGEN, BBSIZ at bit 3, 2 blocks, no CPD/WRTD/EBTRB
+const PIC_33: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: &[
+            FuseBitField { name: "IESO",   description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)", bit: 15 },
+            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 14 },
+            FuseBitField { name: "FOSC3",  description: "Oscillator selection bit 3", bit: 11 },
+            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 10 },
+            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 9 },
+            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 8 },
+            FuseBitField { name: "USBDIV", description: "USB clock selection (1=PLL/2, 0=primary)", bit: 5 },
+            FuseBitField { name: "CPUDIV1", description: "System clock postscaler bit 1", bit: 4 },
+            FuseBitField { name: "CPUDIV0", description: "System clock postscaler bit 0", bit: 3 },
+            FuseBitField { name: "PLLDIV2", description: "PLL prescaler bit 2", bit: 2 },
+            FuseBitField { name: "PLLDIV1", description: "PLL prescaler bit 1", bit: 1 },
+            FuseBitField { name: "PLLDIV0", description: "PLL prescaler bit 0", bit: 0 },
+        ]},
+        FuseByteDef { name: "word2", width: 16, fields: &[
+            FuseBitField { name: "WDTPS3", description: "Watchdog Timer postscale bit 3", bit: 12 },
+            FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
+            FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
+            FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0", bit: 9 },
+            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
+            FuseBitField { name: "VREGEN", description: "USB voltage regulator enable (1=enabled, 0=disabled)", bit: 5 },
+            FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 4 },
+            FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 3 },
+            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 2 },
+            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0", bit: 1 },
+            FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+        ]},
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_PBADEN },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ3 },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_CPB_ONLY },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_WRTC_WRTB },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK_NO_EBTRB },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_37/pic_41: PIC18F2480/2580 — FCMEN/IESO, 4-bit FOSC, PBADEN+LPT1OSC+MCLRE, BBSIZ at bit 4, 2 blocks
+const PIC_37: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_PBADEN },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ4 },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_42: PIC18F2515 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, XINST, 3 blocks, no CPD/WRTD
+const PIC_42: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_3BLK_NO_CPD },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_3BLK_NO_WRTD },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_3BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_43: PIC18F2525 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, XINST, 3 blocks, with CPD/WRTD
+const PIC_43: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_XINST },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_3BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_3BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_3BLK },
+    ],
+    lock_bytes: &[],
+};
+
+// pic_49: PIC18F2221 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, 2-bit BBSIZ+XINST, 2 blocks
+const PIC_49: &FuseConfigDef = &FuseConfigDef {
+    fuse_bytes: &[
+        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
+        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
+        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
+        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ2 },
+        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
+        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
+        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+    ],
+    lock_bytes: &[],
+};
+
 // ── Lookup tables ───────────────────────────────────────────────────────────
 
 /// Config-name-only entries (13 AVR + 8 PIC configs with consistent bit layouts).
@@ -1181,13 +1614,30 @@ static CONFIG_TABLE: &[(&str, &FuseConfigDef)] = &[
     ("pic_23", PIC_23),
     ("pic_24", PIC_24),
     ("pic_25", PIC_25),
+    // PIC16F baseline 12-bit configs (PIC16F505/506/54/57/526)
+    ("pic_15", PIC_15),
+    ("pic_16", PIC_16),
+    ("pic_17", PIC_16),
+    ("pic_18", PIC_18),
+    ("pic_27", PIC_27),
     // PIC 16-bit PIC18F configs (7 config words, packed as CONFIG_H:CONFIG_L)
+    ("pic_28", PIC_28),
+    ("pic_29", PIC_29),
+    ("pic_30", PIC_30),
+    ("pic_31", PIC_31),
+    ("pic_32", PIC_32),
+    ("pic_33", PIC_33),
     ("pic_34", PIC_34),
     ("pic_35", PIC_35),
     ("pic_36", PIC_36),
+    ("pic_37", PIC_37),
     ("pic_38", PIC_34),
     ("pic_39", PIC_35),
     ("pic_40", PIC_36),
+    ("pic_41", PIC_37),
+    ("pic_42", PIC_42),
+    ("pic_43", PIC_43),
+    ("pic_49", PIC_49),
 ];
 
 /// Chip-specific overrides for configs that span multiple architectures.
@@ -1427,10 +1877,16 @@ mod tests {
     #[test]
     fn test_pic_configs_have_correct_width() {
         let baseline: &[&str] = &["pic_1", "pic_2", "pic_3", "pic_4", "pic_5", "pic_6", "pic_7", "pic_8"];
+        let baseline16f: &[&str] = &["pic_15", "pic_16", "pic_17", "pic_18", "pic_27"];
         let midrange: &[&str] = &["pic_9", "pic_10", "pic_11", "pic_12", "pic_13", "pic_21", "pic_23", "pic_24", "pic_25"];
+        let pic18f: &[&str] = &["pic_28", "pic_29", "pic_30", "pic_31", "pic_32", "pic_33", "pic_34", "pic_35", "pic_36", "pic_37", "pic_38", "pic_39", "pic_40", "pic_41", "pic_42", "pic_43", "pic_49"];
         for (name, def) in CONFIG_TABLE {
             if !name.starts_with("pic_") { continue; }
-            let expected = if baseline.contains(name) { 12 } else if midrange.contains(name) { 14 } else { continue; };
+            let expected = if baseline.contains(name) { 12 }
+                else if baseline16f.contains(name) { 12 }
+                else if midrange.contains(name) { 14 }
+                else if pic18f.contains(name) { 16 }
+                else { continue; };
             for fb in def.fuse_bytes {
                 assert_eq!(fb.width, expected, "PIC config {} word {} should be {}-bit", name, fb.name, expected);
             }
@@ -1608,5 +2064,270 @@ mod tests {
         let w4_38 = &def38.fuse_bytes[3];
         assert!(w4_34.fields.iter().all(|f| f.name != "XINST"));
         assert!(w4_38.fields.iter().all(|f| f.name != "XINST"));
+    }
+
+    // ── New PIC16F baseline config tests (pic_15-18, pic_27) ──
+
+    #[test]
+    fn test_pic_15_pic16f506_has_ioscfs_and_mclre() {
+        let def = lookup("pic_15", "PIC16F506").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 1);
+        assert_eq!(def.fuse_bytes[0].width, 12);
+        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        assert_eq!(ioscfs.bit, 6);
+        let mclre = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCLRE").unwrap();
+        assert_eq!(mclre.bit, 5);
+        // 7 fields total
+        assert_eq!(def.fuse_bytes[0].fields.len(), 7);
+    }
+
+    #[test]
+    fn test_pic_16_pic16f54_has_4_fields() {
+        let def = lookup("pic_16", "PIC16F54").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 12);
+        assert_eq!(def.fuse_bytes[0].fields.len(), 4);
+        // No MCLRE or IOSCFS
+        assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "MCLRE"));
+        assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "IOSCFS"));
+    }
+
+    #[test]
+    fn test_pic_17_shares_pic_16_definition() {
+        let def16 = lookup("pic_16", "PIC16F54").unwrap();
+        let def17 = lookup("pic_17", "PIC16F57").unwrap();
+        assert_eq!(def16.fuse_bytes[0].fields.len(), def17.fuse_bytes[0].fields.len());
+        assert_eq!(def16.fuse_bytes[0].width, def17.fuse_bytes[0].width);
+    }
+
+    #[test]
+    fn test_pic_18_pic16f505_has_mclre_no_ioscfs() {
+        let def = lookup("pic_18", "PIC16F505").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 12);
+        assert_eq!(def.fuse_bytes[0].fields.len(), 6);
+        let mclre = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCLRE").unwrap();
+        assert_eq!(mclre.bit, 5);
+        // No IOSCFS (unlike pic_15)
+        assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "IOSCFS"));
+    }
+
+    #[test]
+    fn test_pic_27_pic16f526_has_cpdf_and_ioscfs() {
+        let def = lookup("pic_27", "PIC16F526").unwrap();
+        assert_eq!(def.fuse_bytes[0].width, 12);
+        assert_eq!(def.fuse_bytes[0].fields.len(), 8);
+        let cpdf = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CPDF").unwrap();
+        assert_eq!(cpdf.bit, 7);
+        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        assert_eq!(ioscfs.bit, 6);
+    }
+
+    // ── New PIC18F config tests ──
+
+    #[test]
+    fn test_pic_28_pic18f242_has_old_fosc_and_ccp2mx() {
+        let def = lookup("pic_28", "PIC18F242").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        for fb in def.fuse_bytes { assert_eq!(fb.width, 16); }
+        // Old-style 3-bit FOSC: FOSC2/FOSC1/FOSC0
+        let w1 = &def.fuse_bytes[0];
+        let fosc2 = w1.fields.iter().find(|f| f.name == "FOSC2").unwrap();
+        assert_eq!(fosc2.bit, 10);
+        let oscs = w1.fields.iter().find(|f| f.name == "OSCS").unwrap();
+        assert_eq!(oscs.bit, 13);
+        // CCP2MX in word3
+        let ccp2mx = def.fuse_bytes[2].fields.iter().find(|f| f.name == "CCP2MX").unwrap();
+        assert_eq!(ccp2mx.bit, 8);
+        // No XINST (old-style)
+        assert!(def.fuse_bytes[3].fields.iter().all(|f| f.name != "XINST"));
+    }
+
+    #[test]
+    fn test_pic_29_pic18f252_has_4_protection_blocks() {
+        let def = lookup("pic_29", "PIC18F252").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // 4 code protection blocks
+        let w5 = &def.fuse_bytes[4];
+        assert!(w5.fields.iter().any(|f| f.name == "CP3"));
+        // 4 write protection blocks
+        let w6 = &def.fuse_bytes[5];
+        assert!(w6.fields.iter().any(|f| f.name == "WRT3"));
+        // 4 table read protection blocks
+        let w7 = &def.fuse_bytes[6];
+        assert!(w7.fields.iter().any(|f| f.name == "EBTR3"));
+    }
+
+    #[test]
+    fn test_pic_28_has_2_protection_blocks() {
+        let def = lookup("pic_28", "PIC18F242").unwrap();
+        let w5 = &def.fuse_bytes[4];
+        assert!(w5.fields.iter().all(|f| f.name != "CP3"));
+        assert!(w5.fields.iter().any(|f| f.name == "CP1"));
+    }
+
+    #[test]
+    fn test_pic_30_pic18f258_no_ccp2mx() {
+        let def = lookup("pic_30", "PIC18F258").unwrap();
+        // No CCP2MX in word3
+        assert!(def.fuse_bytes[2].fields.iter().all(|f| f.name != "CCP2MX"));
+        // 4 protection blocks
+        assert!(def.fuse_bytes[4].fields.iter().any(|f| f.name == "CP3"));
+    }
+
+    #[test]
+    fn test_pic_31_pic18f248_no_ccp2mx_2_blocks() {
+        let def = lookup("pic_31", "PIC18F248").unwrap();
+        // No CCP2MX in word3
+        assert!(def.fuse_bytes[2].fields.iter().all(|f| f.name != "CCP2MX"));
+        // 2 protection blocks
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CP3"));
+        assert!(def.fuse_bytes[4].fields.iter().any(|f| f.name == "CP1"));
+    }
+
+    #[test]
+    fn test_pic_32_pic18f1220_has_fscm_and_mclre() {
+        let def = lookup("pic_32", "PIC18F1220").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // FSCM (not FCMEN) at bit 14
+        let fscm = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FSCM").unwrap();
+        assert_eq!(fscm.bit, 14);
+        assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "FCMEN"));
+        // 4-bit FOSC: FOSC3 present
+        assert!(def.fuse_bytes[0].fields.iter().any(|f| f.name == "FOSC3"));
+        // MCLRE only in word3 (no CCP2MX, no PBADEN, no LPT1OSC)
+        let w3 = &def.fuse_bytes[2];
+        assert!(w3.fields.iter().any(|f| f.name == "MCLRE"));
+        assert!(w3.fields.iter().all(|f| f.name != "CCP2MX"));
+        assert!(w3.fields.iter().all(|f| f.name != "PBADEN"));
+        // 2 protection blocks
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CP3"));
+    }
+
+    #[test]
+    fn test_pic_33_pic18f2450_has_usb_and_vregen() {
+        let def = lookup("pic_33", "PIC18F2450").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // USB-specific: PLLDIV, CPUDIV, USBDIV in word1
+        assert!(def.fuse_bytes[0].fields.iter().any(|f| f.name == "PLLDIV0"));
+        assert!(def.fuse_bytes[0].fields.iter().any(|f| f.name == "USBDIV"));
+        // VREGEN in word2
+        assert!(def.fuse_bytes[1].fields.iter().any(|f| f.name == "VREGEN"));
+        // FCMEN (not FSCM)
+        assert!(def.fuse_bytes[0].fields.iter().any(|f| f.name == "FCMEN"));
+        // No CPD (only CPB in word5)
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CPD"));
+        // No WRTD
+        assert!(def.fuse_bytes[5].fields.iter().all(|f| f.name != "WRTD"));
+        // No EBTRB
+        assert!(def.fuse_bytes[6].fields.iter().all(|f| f.name != "EBTRB"));
+    }
+
+    #[test]
+    fn test_pic_37_pic18f2480_has_pbaden_and_bbsiz() {
+        let def = lookup("pic_37", "PIC18F2480").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // PBADEN, LPT1OSC, MCLRE in word3 (no CCP2MX)
+        let w3 = &def.fuse_bytes[2];
+        assert!(w3.fields.iter().any(|f| f.name == "PBADEN"));
+        assert!(w3.fields.iter().any(|f| f.name == "LPT1OSC"));
+        assert!(w3.fields.iter().any(|f| f.name == "MCLRE"));
+        assert!(w3.fields.iter().all(|f| f.name != "CCP2MX"));
+        // BBSIZ at bit 4
+        let bbsiz = def.fuse_bytes[3].fields.iter().find(|f| f.name == "BBSIZ").unwrap();
+        assert_eq!(bbsiz.bit, 4);
+        // XINST present
+        assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "XINST"));
+        // 2 protection blocks
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CP3"));
+    }
+
+    #[test]
+    fn test_pic_41_shares_pic_37_definition() {
+        let def37 = lookup("pic_37", "PIC18F2480").unwrap();
+        let def41 = lookup("pic_41", "PIC18F2580").unwrap();
+        assert_eq!(def37.fuse_bytes.len(), def41.fuse_bytes.len());
+        // Both should have PBADEN and BBSIZ at bit 4
+        assert!(def41.fuse_bytes[2].fields.iter().any(|f| f.name == "PBADEN"));
+        let bbsiz = def41.fuse_bytes[3].fields.iter().find(|f| f.name == "BBSIZ").unwrap();
+        assert_eq!(bbsiz.bit, 4);
+    }
+
+    #[test]
+    fn test_pic_42_pic18f2515_has_ccp2mx_and_3_blocks() {
+        let def = lookup("pic_42", "PIC18F2515").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // CCP2MX, PBADEN, LPT1OSC, MCLRE all in word3
+        let w3 = &def.fuse_bytes[2];
+        assert!(w3.fields.iter().any(|f| f.name == "CCP2MX"));
+        assert!(w3.fields.iter().any(|f| f.name == "PBADEN"));
+        assert!(w3.fields.iter().any(|f| f.name == "LPT1OSC"));
+        // 3 protection blocks, no CPD
+        assert!(def.fuse_bytes[4].fields.iter().any(|f| f.name == "CP2"));
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CP3"));
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CPD"));
+        // No WRTD
+        assert!(def.fuse_bytes[5].fields.iter().all(|f| f.name != "WRTD"));
+    }
+
+    #[test]
+    fn test_pic_43_pic18f2525_has_3_blocks_with_cpd() {
+        let def = lookup("pic_43", "PIC18F2525").unwrap();
+        // 3 protection blocks WITH CPD (unlike pic_42)
+        assert!(def.fuse_bytes[4].fields.iter().any(|f| f.name == "CP2"));
+        assert!(def.fuse_bytes[4].fields.iter().any(|f| f.name == "CPD"));
+        assert!(def.fuse_bytes[5].fields.iter().any(|f| f.name == "WRTD"));
+    }
+
+    #[test]
+    fn test_pic_49_pic18f2221_has_2bit_bbsiz() {
+        let def = lookup("pic_49", "PIC18F2221").unwrap();
+        assert_eq!(def.fuse_bytes.len(), 7);
+        // 2-bit BBSIZ (BBSIZ1:BBSIZ0)
+        assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "BBSIZ1"));
+        assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "BBSIZ0"));
+        assert!(def.fuse_bytes[3].fields.iter().all(|f| f.name != "BBSIZ" ));
+        // CCP2MX, PBADEN, LPT1OSC, MCLRE in word3
+        let w3 = &def.fuse_bytes[2];
+        assert!(w3.fields.iter().any(|f| f.name == "CCP2MX"));
+        // 2 protection blocks
+        assert!(def.fuse_bytes[4].fields.iter().all(|f| f.name != "CP3"));
+    }
+
+    // ── PIC18F protection bit position tests (CPB/CPD, WRTC/WRTD) ──
+
+    #[test]
+    fn test_pic18f_cpd_above_cpb_in_word5() {
+        // CPD at bit 15, CPB at bit 14 (CPD is CONFIG5H bit 7, CPB is bit 6)
+        for (name, def) in CONFIG_TABLE {
+            if !name.starts_with("pic_") { continue; }
+            for fb in def.fuse_bytes {
+                let cpd = fb.fields.iter().find(|f| f.name == "CPD");
+                let cpb = fb.fields.iter().find(|f| f.name == "CPB");
+                if let (Some(cpd), Some(cpb)) = (cpd, cpb) {
+                    assert_eq!(cpd.bit, 15, "CPD should be at bit 15 in {} {}", name, fb.name);
+                    assert_eq!(cpb.bit, 14, "CPB should be at bit 14 in {} {}", name, fb.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_pic18f_wrtd_above_wrtb_above_wrtc_in_word6() {
+        // WRTD at bit 15, WRTB at bit 14, WRTC at bit 13
+        for (name, def) in CONFIG_TABLE {
+            if !name.starts_with("pic_") { continue; }
+            for fb in def.fuse_bytes {
+                let wrtd = fb.fields.iter().find(|f| f.name == "WRTD");
+                let wrtb = fb.fields.iter().find(|f| f.name == "WRTB");
+                let wrtc = fb.fields.iter().find(|f| f.name == "WRTC");
+                if let (Some(wrtd), Some(wrtb)) = (wrtd, wrtb) {
+                    assert_eq!(wrtd.bit, 15, "WRTD should be at bit 15 in {} {}", name, fb.name);
+                    assert_eq!(wrtb.bit, 14, "WRTB should be at bit 14 in {} {}", name, fb.name);
+                }
+                if let (Some(wrtc), Some(wrtb)) = (wrtc, wrtb) {
+                    assert_eq!(wrtc.bit, 13, "WRTC should be at bit 13 in {} {}", name, fb.name);
+                    assert_eq!(wrtb.bit, 14, "WRTB should be at bit 14 in {} {}", name, fb.name);
+                }
+            }
+        }
     }
 }

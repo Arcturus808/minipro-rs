@@ -93,37 +93,54 @@ assigned the wrong mask.  The actual PIC16F630 config would need mask `0x01ff`.
 
 ### pic_28-31 — Classic PIC18F242/252/258/248
 
-These older PIC18F chips use a 3-bit FOSC selection (FOSC2:0) rather than the
-4-bit FOSC3:0 used by newer PIC18F devices.  They also lack XINST and have
-different CONFIG3H/CONFIG4L layouts.  Implementation requires separate
-datasheet research for each config.
+**Status:** Implemented.  These older PIC18F chips use a 3-bit FOSC selection
+(FOSC2:0) rather than the 4-bit FOSC3:0 used by newer PIC18F devices.  They
+also lack XINST and have different CONFIG3H/CONFIG4L layouts.  Verified against
+gputils configuration documentation and Microchip DS39564 (PIC18FXX2),
+DS41159 (PIC18FXX8).
+
+- `pic_28` (PIC18F242): 3-bit FOSC, CCP2MX, 2 protection blocks.
+- `pic_29` (PIC18F252): 3-bit FOSC, CCP2MX, 4 protection blocks.
+- `pic_30` (PIC18F258): 3-bit FOSC, no CCP2MX, 4 protection blocks.
+- `pic_31` (PIC18F248): 3-bit FOSC, no CCP2MX, 2 protection blocks.
 
 ### pic_32 — PIC18F1220/1320
 
-18-pin devices with a reduced config word layout.  CONFIG2L and CONFIG3H differ
-from the standard PIC18F layout.
+**Status:** Implemented.  18-pin device with FSCM (not FCMEN), 4-bit FOSC,
+MCLRE-only CONFIG3H, and 2 protection blocks.  Verified against gputils
+PIC18F1220 configuration page and Microchip DS39636.
 
 ### pic_33 — PIC18F2450
 
-USB device with a different CONFIG3H/CONFIG4L mask pattern than PIC18F2455/2550.
+**Status:** Implemented.  USB device with PLLDIV/CPUDIV/USBDIV in CONFIG1L,
+VREGEN in CONFIG2L, BBSIZ at bit 3, and no CPD/WRTD/EBTRB.  Verified against
+gputils PIC18F2450 configuration page and Microchip DS39632.
 
 ### pic_37 — PIC18F2480
 
-CAN-enabled variant with different CONFIG3H/CONFIG4L bits.
+**Status:** Implemented.  CAN-enabled variant with PBADEN, LPT1OSC, MCLRE in
+CONFIG3H (no CCP2MX), BBSIZ at bit 4, XINST, and 2 protection blocks.  Verified
+against gputils PIC18F2480 configuration page.
 
 ### pic_41 — PIC18F2580
 
-CAN-enabled variant, similar issues to pic_37.
+**Status:** Implemented.  Shares the same layout as `pic_37` (PIC18F2480).
 
 ### pic_42/43 — PIC18F2515/2525
 
-Larger flash devices with additional CONFIG4L bits and different protection
-block counts.
+**Status:** Implemented.  Larger flash devices with CCP2MX, PBADEN, LPT1OSC,
+MCLRE in CONFIG3H, XINST, and 3 protection blocks.
+
+- `pic_42` (PIC18F2515): 3 blocks without CPD/WRTD.
+- `pic_43` (PIC18F2525): 3 blocks with CPD/WRTD.
+
+Verified against gputils PIC18F2515/2525 configuration pages.
 
 ### pic_49 — PIC18F2221/2321
 
-Nanowatt-technology devices with a different CONFIG2L layout (no BORV bits in
-some variants).
+**Status:** Implemented.  Nanowatt-technology device with CCP2MX, PBADEN,
+LPT1OSC, MCLRE in CONFIG3H, 2-bit BBSIZ (BBSIZ1:BBSIZ0), XINST, and 2
+protection blocks.  Verified against gputils PIC18F2221 configuration page.
 
 ### pic_44-48 — Not referenced
 
@@ -149,6 +166,25 @@ different** configuration word layouts from each other and from PIC18F:
 
 If PIC24/dsPIC chips are added to the database in the future, these configs
 would need family-specific definitions rather than a unified layout.
+
+## PIC18F protection bit position fix
+
+During implementation of the additional PIC18F configs, a pre-existing bit
+position bug was identified and corrected in the shared PIC18F protection word
+definitions:
+
+- **CONFIG5H (word5):** `CPD` is at bit 7 (packed bit 15) and `CPB` is at
+  bit 6 (packed bit 14).  The original implementation had these swapped.
+- **CONFIG6H (word6):** `WRTD` is at bit 7 (packed bit 15), `WRTB` is at
+  bit 6 (packed bit 14), and `WRTC` is at bit 5 (packed bit 13).  The original
+  implementation had `WRTC` and `WRTD` swapped.
+
+This affected all PIC18F configs using the shared `PIC18F_WORD5_2BLK`,
+`PIC18F_WORD5_4BLK`, `PIC18F_WORD6_2BLK`, and `PIC18F_WORD6_4BLK` field sets
+(`pic_34` through `pic_40`).  The fix was verified against gputils
+configuration pages for PIC18F252, PIC18F2480, PIC18F1220, PIC18F2450,
+PIC18F2515, PIC18F2525, and PIC18F2221, all of which consistently place CPD
+above CPB and WRTD above WRTB above WRTC.
 
 ## Known XGPro bugs from user forums
 
