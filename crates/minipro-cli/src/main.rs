@@ -437,6 +437,10 @@ fn do_operations(
             eprintln!("Pin test is not supported in ICSP mode.");
             return Ok(());
         }
+        if !matches!(handle.info.model, ProgrammerModel::Tl866iiPlus | ProgrammerModel::T76) {
+            eprintln!("Pin test is not supported on this programmer model.");
+            return Ok(());
+        }
         if cli.verbose {
             eprintln!("Running pin contact check...");
         } else {
