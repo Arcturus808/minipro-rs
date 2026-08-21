@@ -224,6 +224,7 @@ Use `ch` (character-width) units for columns so spacing scales with font size:
 | Ctrl+End | Jump to last byte |
 | Tab | Switch between hex and ASCII panes on the same byte |
 | Ctrl+F | Open find dialog (hex or ASCII search) |
+| Ctrl+Scroll | Increase/decrease font size (10-16px, 1px per notch) |
 | F3 / Shift+F3 | Navigate find matches or diff results (whichever was last activated) |
 
 ### Selection model
