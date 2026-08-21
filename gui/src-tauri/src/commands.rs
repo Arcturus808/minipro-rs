@@ -242,6 +242,24 @@ pub struct OperationOptions {
 }
 
 fn default_icsp_mode() -> String { "zif".into() }
+
+/// Set ICSP mode from the GUI's mode string.
+/// "icsp" → ICSP with VCC (0x81), "icsp_no_vcc" → ICSP without VCC (0x80),
+/// "zif" → ZIF socket mode (0x00).  Also auto-activates ICSP for ICSP-only chips.
+fn set_icsp_from_mode(handle: &mut minipro_core::handle::MiniproHandle, mode: &str, device: &minipro_core::device::Device) {
+    use minipro_core::device::{MP_ICSP_ONLY, MP_ZIF_ONLY};
+    if device.flags.prog_support == MP_ICSP_ONLY {
+        handle.set_icsp(true);
+    } else if device.flags.prog_support == MP_ZIF_ONLY {
+        handle.icsp = 0;
+    } else {
+        match mode {
+            "icsp" => handle.set_icsp(true),
+            "icsp_no_vcc" => handle.set_icsp(false),
+            _ => handle.icsp = 0,
+        }
+    }
+}
 fn default_page() -> String { "code".into() }
 fn default_format() -> String { "auto".into() }
 fn default_size_mismatch() -> String { "error".into() }
@@ -741,7 +759,7 @@ pub async fn do_read(
                 ));
             }
 
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             if options_clone.check_device_id {
@@ -844,7 +862,7 @@ pub async fn read_chip_to_bytes(
             let temp_path = temp_dir.join(format!("minipro_read_{}.bin", std::process::id()));
             let _temp_path_str = temp_path.to_string_lossy().to_string();
 
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             let stats = read_chip(
@@ -1017,7 +1035,7 @@ pub async fn do_write(
         let op_name = "write".to_string();
 
         let result = (|| {
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             if options_clone.check_device_id {
@@ -1151,7 +1169,7 @@ pub async fn do_batch_write_chip(
         };
 
         let result = (|| {
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             if options_clone.check_device_id {
@@ -1348,7 +1366,7 @@ pub async fn do_write_bytes(
         let op_name = "write".to_string();
 
         let result = (|| {
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
             if options_clone.check_device_id {
@@ -1456,7 +1474,7 @@ pub async fn do_verify(
         let page = parse_page(&options_clone.page)?;
 
         let result = (|| {
-            handle.icsp = options_clone.icsp_mode != "zif";
+            set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
             if options_clone.check_device_id {
@@ -1526,7 +1544,7 @@ pub async fn do_erase(icspMode: String, checkDeviceId: bool, window: Window, sta
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icspMode != "zif";
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
             if checkDeviceId {
@@ -1584,7 +1602,7 @@ pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icspMode != "zif";
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
             blank_check(&mut handle).map_err(|e| e.to_string())?;
             Ok::<BlankCheckResultDto, String>(BlankCheckResultDto { is_blank: true, address: 0 })
@@ -1636,7 +1654,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icspMode != "zif";
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device).map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
@@ -1703,7 +1721,7 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
         let device = state_task.get_device()?;
 
         let result = (|| {
-            handle.icsp = icspMode != "zif";
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
 
             // Apply VCC override for logic ICs before begin_transaction.
             // Logic ICs only support VCC (from the 4-entry logic table).
@@ -1984,7 +2002,7 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
             let device = state_task.get_device()?;
             let result = (|| {
-                handle.icsp = icspMode != "zif";
+                set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
                 // Read named CFG fuses + LOCK bits
@@ -2045,7 +2063,7 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
 
             let device = state_task.get_device()?;
             let result = (|| {
-                handle.icsp = icspMode != "zif";
+                set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
                 // Write CFG + LOCK via high-level function
@@ -2101,7 +2119,7 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
 
             let device = state_task.get_device()?;
             let result = (|| {
-                handle.icsp = icspMode != "zif";
+                set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
                 let lock_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {

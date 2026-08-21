@@ -175,7 +175,7 @@ fn put_le(buf: &mut [u8], val: u32, len: usize) {
 }
 
 impl Protocol for Tl866aProtocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: u8) -> Result<()> {
         self.protocol_id
             .store(device.protocol_id, std::sync::atomic::Ordering::Relaxed);
         self.variant_lo
@@ -200,7 +200,7 @@ impl Protocol for Tl866aProtocol {
         // [9..10] pulse_delay       (16-bit LE)
         put_le(&mut msg[9..], device.pulse_delay, 2);
         // [10]    icsp
-        msg[11] = icsp as u8;
+        msg[11] = icsp;
         // [12..14] code_memory_size (24-bit LE)
         put_le(&mut msg[12..], device.code_memory_size, 3);
         usb.msg_send(&msg[..48])?;

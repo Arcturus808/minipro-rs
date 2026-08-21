@@ -185,7 +185,13 @@ fn run() -> Result<()> {
 
     // ── Operations that need USB ──────────────────────────────────────────────
     let mut handle = MiniproHandle::open().context("failed to open programmer")?;
-    handle.icsp = cli.icsp || cli.icsp_no_vcc;
+    // ICSP mode: -i enables ICSP with VCC, -I enables ICSP without VCC.
+    // The bitmask (0x80=enable, 0x01=VCC) is sent in begin_transaction.
+    if cli.icsp {
+        handle.set_icsp(true);
+    } else if cli.icsp_no_vcc {
+        handle.set_icsp(false);
+    }
 
     // ── Programmer info ───────────────────────────────────────────────────────
     if cli.info {
@@ -289,6 +295,19 @@ fn run() -> Result<()> {
     }
 
     let device = Arc::new(device);
+
+    // Auto-activate ICSP for ICSP-only chips; force ZIF for ZIF-only chips.
+    // Matches upstream C minipro main.c logic.
+    use minipro_core::device::{MP_ICSP_ONLY, MP_ZIF_ONLY};
+    if device.flags.prog_support == MP_ICSP_ONLY {
+        handle.set_icsp(true);
+        eprintln!("Activating ICSP...");
+    } else if device.flags.prog_support == MP_ZIF_ONLY {
+        if handle.icsp != 0 {
+            eprintln!("Warning: ICSP is not supported by this chip.");
+        }
+        handle.icsp = 0;
+    }
 
     // Populate db_paths on the handle so begin_transaction can look up
     // T56/T76 FPGA algorithm bitstreams from algorithm.xml.
@@ -405,7 +424,7 @@ fn do_operations(
         // which calls begin_transaction before get_chip_id.
         handle
             .protocol
-            .begin_transaction(&handle.usb, &device, false)?;
+            .begin_transaction(&handle.usb, &device, 0)?;
         let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device)?;
         handle.protocol.end_transaction(&handle.usb)?;
         println!("Chip ID: {:#010x}", chip_id);
@@ -414,6 +433,10 @@ fn do_operations(
 
     // ── Pin contact check ─────────────────────────────────────────────────────
     if cli.pin_check {
+        if handle.icsp != 0 {
+            eprintln!("Pin test is not supported in ICSP mode.");
+            return Ok(());
+        }
         if cli.verbose {
             eprintln!("Running pin contact check...");
         } else {

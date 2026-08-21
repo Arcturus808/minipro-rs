@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GUI PIC fuse bit decoder** — the config panel now decodes PIC configuration words into individual named bits for all database-referenced PIC config variants. Covers PIC10F/PIC12F5 baseline (12-bit), PIC12F/PIC16F mid-range (14-bit), PIC16F baseline (12-bit), and PIC18F (16-bit packed words). Bit definitions verified against gputils configuration documentation and Microchip datasheets. 5 configs with database/datasheet mask discrepancies (`pic_14`, `pic_19`, `pic_20`, `pic_22`, `pic_26`) remain as hex-only fallback — see `docs/XGPRO-DATABASE-DISCREPANCIES.md`. Also fixes a pre-existing CPB/CPD and WRTC/WRTD bit position swap in shared PIC18F protection word definitions.
 - **GUI hex viewer Ctrl+mousewheel font size** — Ctrl+scroll now adjusts the hex viewer font size (10-16px, 1px per notch) in addition to the existing dropdown. Normal scrolling is unaffected. Also adds 15px to the dropdown options so the range is continuous.
 
+### Fixed
+
+- **ICSP bitmask sent incorrectly as boolean** — `begin_transaction` was sending `icsp as u8` (0 or 1) instead of the upstream bitmask (0x80 = ICSP enable, 0x81 = ICSP with VCC). This meant ICSP mode was likely not activating correctly at the firmware level, and "ICSP no VCC" was indistinguishable from "ICSP with VCC". Now sends the correct bitmask matching upstream C minipro. Also adds auto-activation of ICSP for ICSP-only chips, a warning when ICSP is selected for ZIF-only chips, and skips pin contact check in ICSP mode (pin test drives ZIF socket pins, not ICSP header pins).
+
 ## [0.6.2] - 2026-08-13
 
 v0.6.2 supersedes v0.6.1, which failed to publish due to a macOS build error.
