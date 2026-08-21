@@ -536,9 +536,26 @@
     return () => document.removeEventListener("keydown", handleGlobalKeydown);
   });
 
+  // Ctrl+mousewheel font size — non-passive listener so preventDefault works
+  $effect(() => {
+    const el = scrollContainer;
+    if (!el) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  });
+
   function setFontSize(size: number) {
     fontSize = size;
     setSetting("hexViewerFontSize", size);
+  }
+
+  // Ctrl+mousewheel to adjust font size (non-passive listener so preventDefault works)
+  function handleWheel(e: WheelEvent) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1 : -1;
+    const next = Math.max(10, Math.min(16, fontSize + delta));
+    if (next !== fontSize) setFontSize(next);
   }
 
   let scrollContainer: HTMLDivElement;
@@ -1148,6 +1165,7 @@
           <option value={12}>12px</option>
           <option value={13}>13px</option>
           <option value={14}>14px</option>
+          <option value={15}>15px</option>
           <option value={16}>16px</option>
         </select>
         {#if fontSize !== 13}
