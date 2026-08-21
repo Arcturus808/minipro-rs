@@ -547,6 +547,16 @@ const MP_CALIBRATION: u32 = 0x0008_0000;
 const MP_SUPPORTED_PROGRAMMING: u32 = 0x0030_0000;
 const MP_DATA_ORG: u32 = MP_DATA_BUS_WIDTH;
 
+// prog_support values (extracted from flags >> 20)
+pub const MP_ZIF_ONLY: u8 = 0x00;
+pub const MP_ZIF_ICSP: u8 = 0x01;
+pub const MP_ICSP_ONLY: u8 = 0x02;
+
+// ICSP bitmask sent in begin_transaction byte 3 (TL866II+/T56/T76) or
+// byte 11 (TL866A).  Matches upstream C minipro's MP_ICSP_ENABLE / MP_ICSP_VCC.
+pub const ICSP_ENABLE: u8 = 0x80;
+pub const ICSP_VCC: u8 = 0x01;
+
 // Voltage chip_info values
 const MP_VOLTAGES1: u32 = 0x0006;
 const MP_VOLTAGES2: u32 = 0x0007;

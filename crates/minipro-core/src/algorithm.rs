@@ -158,7 +158,7 @@ const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 pub fn get_algorithm(
     device: &Device,
     model: ProgrammerModel,
-    icsp: bool,
+    icsp: u8,
     vopt: u8,
     algo_path: &Path,
 ) -> Result<crate::device::Algorithm, MiniproError> {
@@ -189,7 +189,7 @@ pub fn needs_algorithm(device: &Device, model: ProgrammerModel) -> bool {
 fn compute_algorithm_name(
     device: &Device,
     model: ProgrammerModel,
-    icsp: bool,
+    icsp: u8,
     vopt: u8,
 ) -> Result<String, MiniproError> {
     let algo_number = (device.variant >> 8) as u8;
@@ -237,7 +237,7 @@ fn compute_algorithm_name(
         match device.protocol_id {
             IC2_ALG_ATMGA => {
                 // ATmega: ICSP uses "11S" suffix, otherwise hex algo number.
-                if icsp {
+                if icsp != 0 {
                     name.push_str("11S");
                 } else {
                     name.push_str(&format!("{:02X}", algo_number));
@@ -245,7 +245,7 @@ fn compute_algorithm_name(
             }
             IC2_ALG_AT89C => {
                 // AT89C: ICSP uses "2S" suffix, otherwise hex algo number.
-                if icsp {
+                if icsp != 0 {
                     name.push_str("2S");
                 } else {
                     name.push_str(&format!("{:02X}", algo_number));
@@ -511,7 +511,7 @@ mod tests {
             variant: 0x1100,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T56, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T56, 0, V_3V3).unwrap();
         assert_eq!(name, "SPI25F11");
     }
 
@@ -523,7 +523,7 @@ mod tests {
             variant: 0x5100,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T76, false, V_1V8).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T76, 0, V_1V8).unwrap();
         assert_eq!(name, "EMMC_51_18");
     }
 
@@ -534,7 +534,7 @@ mod tests {
             variant: 0x5400,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T76, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T76, 0, V_3V3).unwrap();
         assert_eq!(name, "EMMC_54_33");
     }
 
@@ -546,7 +546,7 @@ mod tests {
             variant: 0x0100,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T56, true, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T56, 0x80, V_3V3).unwrap();
         assert_eq!(name, "ATMGA_11S");
     }
 
@@ -557,7 +557,7 @@ mod tests {
             variant: 0x0100,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T56, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T56, 0, V_3V3).unwrap();
         assert_eq!(name, "ATMGA_01");
     }
 
@@ -572,7 +572,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T56, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T56, 0, V_3V3).unwrap();
         assert_eq!(name, "SPI25F11R");
     }
 
@@ -585,7 +585,7 @@ mod tests {
             chip_type: crate::device::ChipType::Logic as u32,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T56, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T56, 0, V_3V3).unwrap();
         assert_eq!(name, "TTL1");
     }
 
@@ -597,7 +597,7 @@ mod tests {
             chip_type: crate::device::ChipType::Logic as u32,
             ..Default::default()
         };
-        let name = compute_algorithm_name(&device, ProgrammerModel::T76, false, V_3V3).unwrap();
+        let name = compute_algorithm_name(&device, ProgrammerModel::T76, 0, V_3V3).unwrap();
         assert_eq!(name, "TestGND");
     }
 

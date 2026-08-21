@@ -135,14 +135,14 @@ fn upload_bitstream(usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
 /// Encoding taken directly from t56.c / t76.c.
 /// The caller may write additional bytes (e.g. T76's msg[63] algorithm number)
 /// before sending.
-pub(super) fn build_begin_msg(device: &Device, icsp: bool) -> [u8; 64] {
+pub(super) fn build_begin_msg(device: &Device, icsp: u8) -> [u8; 64] {
     let mut msg = [0u8; 64];
     let v = device.voltages.raw;
 
     msg[0] = CMD_BEGIN_TRANS;
     msg[1] = device.protocol_id;
     msg[2] = device.variant as u8;
-    msg[3] = icsp as u8;
+    msg[3] = icsp;
 
     put_le16(&mut msg[4..6], v & 0xffff);
     msg[6] = device.chip_info as u8;
@@ -180,7 +180,7 @@ pub(super) fn build_begin_msg(device: &Device, icsp: bool) -> [u8; 64] {
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T56Protocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: u8) -> Result<()> {
         // 1. Upload FPGA algorithm bitstream if the device provides one.
         //    Skip the upload if we already sent it in this session — the
         //    FPGA retains its configuration across end/begin cycles.

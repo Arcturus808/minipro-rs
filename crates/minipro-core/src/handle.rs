@@ -38,8 +38,8 @@ pub struct MiniproHandle {
     pub protocol: Box<dyn Protocol>,
     /// Database paths for XML chip database resolution.
     pub db_paths: Option<DatabasePaths>,
-    /// Whether ICSP (in-circuit serial programming) mode is active.
-    pub icsp: bool,
+    /// ICSP mode bitmask (0 = ZIF, 0x80 = ICSP no VCC, 0x81 = ICSP with VCC).
+    pub icsp: u8,
 }
 
 impl MiniproHandle {
@@ -102,8 +102,20 @@ impl MiniproHandle {
             device: None,
             protocol,
             db_paths: None,
-            icsp: false,
+            icsp: 0,
         })
+    }
+
+    /// Enable ICSP mode with or without VCC.
+    /// `with_vcc = true` sets `ICSP_ENABLE | ICSP_VCC` (0x81);
+    /// `with_vcc = false` sets `ICSP_ENABLE` (0x80).
+    pub fn set_icsp(&mut self, with_vcc: bool) {
+        self.icsp = crate::device::ICSP_ENABLE
+            | if with_vcc {
+                crate::device::ICSP_VCC
+            } else {
+                0
+            };
     }
 
     /// Set the active chip device and send `begin_transaction` to the hardware.

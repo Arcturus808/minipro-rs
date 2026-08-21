@@ -507,7 +507,7 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
 // ── Protocol implementation ───────────────────────────────────────────────────
 
 impl Protocol for T76Protocol {
-    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: bool) -> Result<()> {
+    fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: u8) -> Result<()> {
         let is_nand = device.protocol_id == 0x2d;
         let is_emmc = device.protocol_id == 0x31;
 
