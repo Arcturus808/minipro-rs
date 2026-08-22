@@ -514,6 +514,21 @@ This is a living list of features and improvements planned for minipro-rs.
     - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion)
   - **Priority: low-medium** — useful feature not available in upstream minipro, but niche (most users program MCUs/memory, not logic ICs). XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
 
+- [ ] **GUI SPI flash autodetect button** — "Auto Detect" button in the device selector area that reads the JEDEC ID from an inserted SPI flash and shows matching devices from the database
+  - **Core logic already implemented:** `spi_autodetect_and_lookup()` in `operations.rs` combines the firmware JEDEC ID read with `find_devices_by_chip_id()` database lookup. Works for TL866A/CS and TL866II+ today; T56/T76 pending protocol implementation (gaps 2/3 in the parity section above).
+  - **GUI workflow:** user inserts unknown SPI flash → clicks "Auto Detect" → backend reads JEDEC ID and searches `infoic.xml` → frontend shows list of matching device names (with manufacturer) → user clicks one to select it in the DeviceSelector
+  - **Implementation plan:**
+    1. **Backend:** new `do_spi_autodetect` Tauri command — takes `id_type` (0 = 8-pin, 1 = 16-pin), calls `spi_autodetect_and_lookup()`, returns `SpiAutodetectResultDto { jedec_id: u32, matches: Vec<DeviceListItemDto> }`
+    2. **Frontend:** "Auto Detect" button in DeviceSelector (or a small toolbar above the search box). On click, calls the command, shows results in a dropdown or inline list. Each result is clickable and sets `$selectedDevice`. If no matches, shows "No device found (JEDEC ID: 0xXXXX)" with a hint to try the other pin-count option.
+    3. **Pin-count selector:** a small toggle (8-pin / 16-pin) next to the button, defaulting to 8-pin (most common). Or two buttons: "Auto Detect 8-pin" / "Auto Detect 16-pin".
+  - **Design considerations:**
+    - Button should be disabled when no programmer is connected
+    - Button should be disabled for T56/T76 until protocol support is implemented (gaps 2/3) — or show a "not yet supported for this programmer" tooltip
+    - Results list should show manufacturer alongside name (same as search results)
+    - If multiple matches, show all — user picks the correct one (e.g., W25Q128 vs W25Q128JV may have the same JEDEC ID)
+    - If JEDEC ID is 0x000000, show "No SPI chip detected" (chip not inserted or not SPI flash)
+  - **Priority: medium** — XGPro has this feature, core logic is done, GUI work is small (~1 Tauri command + ~1 button + results list). Most useful for users with unmarked SPI flash or salvaged chips.
+
 - [x] **Contextual help overlay for batch/serial panel** — "i" icon next to the Serial Number Injection label opens a modal explaining serial injection, all fields (address, start, step, format, width, endian, checksum), and validation (live preview, overflow detection, blocking errors). Escape listener shared with config help modal.
 
 - [~] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with checkboxes
