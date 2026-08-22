@@ -273,27 +273,18 @@ This is a living list of features and improvements planned for minipro-rs.
     - CLI flag `-a` / `--spi-autodetect` (with `auto_detect` alias)
     - Protocol implementations for TL866A/CS and TL866II+ (firmware
       command 0x37, 3-byte big-endian JEDEC ID parse)
-    - Operations layer `spi_autodetect()` in `operations.rs`
+    - Operations layer `spi_autodetect()` and
+      `spi_autodetect_and_lookup()` in `operations.rs`
+    - Database lookup by JEDEC ID: `find_devices_by_chip_id()` in
+      `database.rs` — DONE. Searches the model-appropriate `infoic.xml`
+      section, matches on `chip_id` equality and optional pin-count
+      filter, splits comma-separated names, skips degenerate chip_id=0
+      entries. CLI output now matches upstream format:
+      `Autodetecting device (ID:0xXXXX)` + device names + count.
 
-    **What we're missing (3 gaps):**
+    **What we're missing (2 remaining gaps):**
 
-    1. **Database lookup by JEDEC ID** — upstream's
-       `spi_autodetect_and_exit()` calls `list_devices()` with
-       `match_id=1` to search `infoic.xml` for devices with matching
-       `chip_id` and pin count, printing all matching device names. Our
-       CLI just prints the raw hex JEDEC ID and stops. No
-       `find_by_chip_id` function exists in `database.rs`.
-       **Difficulty: Low.** We already parse `chip_id` and
-       `package_details.pin_count` from every `<ic>` element in
-       `build_device()`. A new `find_devices_by_chip_id()` function
-       would stream-parse `infoic.xml` (same pattern as
-       `collect_names_for_model`), extract `chip_id` and
-       `package_details` attributes from each `<ic>` tag, and collect
-       names where `chip_id == target && pin_count == target_pin_count`.
-       The `id_bytes_count()` helper already exists for validating
-       chip IDs. ~100 lines of new code, no protocol changes.
-
-    2. **T56 autodetect** — T56 has `CMD_AUTODETECT = 0x37` defined but
+    1. **T56 autodetect** — T56 has `CMD_AUTODETECT = 0x37` defined but
        no `spi_autodetect` trait method override (falls through to
        `UnsupportedOperation`). Upstream's `t56_spi_autodetect()` must
        first upload an FPGA bitstream (SPI25F11 for 8-pin or SPI25F21
@@ -314,7 +305,7 @@ This is a living list of features and improvements planned for minipro-rs.
        bitstream than the subsequently-selected device, so the flag
        must be reset after autodetect.
 
-    3. **T76 autodetect** — same pattern as T56. Upstream's
+    2. **T76 autodetect** — same pattern as T56. Upstream's
        `t76_spi_autodetect()` uploads SPI25F11/SPI25F21 bitstream via
        `t76_send_bitstream()`, then sends 0x37. No trait override in
        our `t76.rs`.
@@ -327,14 +318,13 @@ This is a living list of features and improvements planned for minipro-rs.
       `minipro_pin_test` on TL866II+ before autodetect). We have pin
       test support; wiring it in is trivial but low-value.
 
-    **Overall difficulty: Low-Medium.** The database lookup is
-    straightforward (existing parsing patterns, ~100 lines). T56/T76
-    protocol implementations are mechanical ports from C (~50 lines
-    each) with existing bitstream infrastructure. The main subtlety is
-    bitstream-flag management across the autodetect → device-selection
-    transition. No hardware validation needed for the database lookup;
-    T56/T76 protocol implementations ideally need hardware testing but
-    the code path is identical to upstream C.
+    **Overall difficulty: Medium.** The database lookup is now done.
+    T56/T76 protocol implementations are mechanical ports from C (~50
+    lines each) with existing bitstream infrastructure. The main
+    subtlety is bitstream-flag management across the autodetect →
+    device-selection transition. T56/T76 protocol implementations
+    ideally need hardware testing but the code path is identical to
+    upstream C.
 
   - [x] **T56 firmware update** — DONE (protocol-parity branch). Ported
     from C `t56_firmware_update()`. Implemented as `firmware_update_t56()`

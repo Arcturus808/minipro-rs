@@ -26,7 +26,7 @@ use minipro_core::{
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
         logic_ic_test, pin_contact_check, read_chip, read_chip_calibration, read_fuses,
-        spi_autodetect, verify_chip, write_chip, write_fuses, FuseValue, SizeMismatch,
+        spi_autodetect_and_lookup, verify_chip, write_chip, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -241,8 +241,25 @@ fn run() -> Result<()> {
     if let Some(id_type_opt) = cli.spi_autodetect {
         if cli.part.is_none() {
             let id_type = id_type_opt.unwrap_or(0);
-            let jedec_id = spi_autodetect(&mut handle, id_type)?;
-            println!("JEDEC ID: {:#08x}", jedec_id);
+            let db_paths = DatabasePaths::resolve(
+                cli.infoic_path.as_deref(),
+                cli.logicic_path.as_deref(),
+                cli.algorithms_path.as_deref(),
+            )?;
+            let result = spi_autodetect_and_lookup(&mut handle, &db_paths, id_type)?;
+            eprintln!("Autodetecting device (ID:0x{:04X})", result.jedec_id);
+            if result.matches.is_empty() {
+                if result.jedec_id == 0 {
+                    eprintln!("No SPI chip detected.");
+                } else {
+                    eprintln!("No device found.");
+                }
+            } else {
+                for item in &result.matches {
+                    println!("{}", item.name);
+                }
+                eprintln!("{} device(s) found.", result.matches.len());
+            }
             return Ok(());
         }
     }
@@ -938,8 +955,20 @@ fn do_operations(
     // ── SPI autodetect ────────────────────────────────────────────────────────
     if let Some(id_type_opt) = cli.spi_autodetect {
         let id_type = id_type_opt.unwrap_or(0);
-        let jedec_id = spi_autodetect(handle, id_type)?;
-        println!("JEDEC ID: {:#08x}", jedec_id);
+        let result = spi_autodetect_and_lookup(handle, db_paths, id_type)?;
+        eprintln!("Autodetecting device (ID:0x{:04X})", result.jedec_id);
+        if result.matches.is_empty() {
+            if result.jedec_id == 0 {
+                eprintln!("No SPI chip detected.");
+            } else {
+                eprintln!("No device found.");
+            }
+        } else {
+            for item in &result.matches {
+                println!("{}", item.name);
+            }
+            eprintln!("{} device(s) found.", result.matches.len());
+        }
     }
 
     Ok(())
