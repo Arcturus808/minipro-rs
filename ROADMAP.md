@@ -433,6 +433,25 @@ This is a living list of features and improvements planned for minipro-rs.
   - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
 
+- [ ] **Logic IC auto-find ("Auto Find")** — automatically identify an unknown logic IC by iterating test vectors
+  - **Problem:** When a user has an unmarked or unknown logic IC, they must manually guess the part number and select it before running a logic test. XGPro's "Auto Find" feature iterates through all logic ICs in the database, runs each one's test vectors, and reports which ones pass — no manual selection needed.
+  - **Upstream parity note:** The C minipro does NOT implement this. Upstream's `-a` / `--auto_detect` is SPI flash only (JEDEC ID read via firmware command 0x37). The `compare_device()` function in `database.c` explicitly skips logic ICs (`if (sm->db_version == LOGIC_DATABASE) return EXIT_SUCCESS;`). Logic ICs have no chip ID — they only have test vectors. XGPro's Auto Find is a software-level loop, not a firmware command.
+  - **Implementation approach:**
+    1. **CLI:** `minipro --logic-autofind [--pin-count N]` — iterates all `logicic.xml` entries (optionally filtered by pin count), runs `logic_ic_test` for each, prints passing candidates
+    2. **Core:** new `logic_ic_autofind()` function in `operations.rs` — takes a callback for progress reporting and candidate reporting. Reuses existing `logic_ic_test` per candidate. Must handle `begin_transaction` / `end_transaction` per device.
+    3. **GUI:** "Auto Find" button in the Logic Test options panel (visible only when no device is selected, or when a logic IC device type is selected). Shows progress ("Testing 74HC00... pass / Testing 74HC02... fail"). Results list with clickable entries that select the device.
+  - **Design considerations:**
+    - Pin count filter is important: testing a 14-pin IC against 16-pin vectors wastes time and can report false passes
+    - Some logic ICs share the same pin count and similar pinouts — multiple candidates may pass. The results list should show all passing candidates, not just the first.
+    - Each candidate requires a fresh `begin_transaction` with that device's parameters (voltages, pin map, etc.)
+    - Progress reporting is important — the database has thousands of logic IC entries, and each test takes ~1-2 seconds
+    - Should be cancelable (user may want to stop after finding a match)
+  - **Scope:**
+    - Phase 1: CLI only (`--logic-autofind`), no pin-count filter (test all), prints passing candidates
+    - Phase 2: GUI "Auto Find" button with progress and clickable results
+    - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion)
+  - **Priority: low-medium** — useful feature not available in upstream minipro, but niche (most users program MCUs/memory, not logic ICs). XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
+
 - [x] **Contextual help overlay for batch/serial panel** — "i" icon next to the Serial Number Injection label opens a modal explaining serial injection, all fields (address, start, step, format, width, endian, checksum), and validation (live preview, overflow detection, blocking errors). Escape listener shared with config help modal.
 
 - [~] **Fuse bit decoder for config panel** — decode raw fuse bytes into individual named bits with checkboxes
