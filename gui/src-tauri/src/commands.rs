@@ -11,7 +11,7 @@ use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, get_pin_map, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
-    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -1859,6 +1859,72 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
 
     match result {
         Ok(Ok(text)) => Ok(text),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+// ── SPI flash autodetect ───────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct SpiAutodetectMatchDto {
+    pub name: String,
+    pub manufacturer: String,
+}
+
+#[derive(Serialize)]
+pub struct SpiAutodetectResultDto {
+    pub jedec_id: u32,
+    pub matches: Vec<SpiAutodetectMatchDto>,
+}
+
+/// Auto-detect an SPI flash chip by reading its JEDEC ID and searching the database.
+///
+/// `idType` selects the package: 0 = 8-pin, 1 = 16-pin.
+/// Does NOT require a device to be selected — autodetect is a standalone firmware
+/// command (0x37) that needs no transaction context.
+#[tauri::command]
+pub async fn do_spi_autodetect(idType: u8, state: State<'_, Arc<AppState>>) -> Result<SpiAutodetectResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+
+        let result = (|| {
+            let db = get_db_paths(&state_task)?;
+            let autodetect = spi_autodetect_and_lookup(&mut handle, &db, idType)
+                .map_err(|e| e.to_string())?;
+            let matches = autodetect
+                .matches
+                .into_iter()
+                .map(|item| SpiAutodetectMatchDto {
+                    name: item.name,
+                    manufacturer: item.manufacturer,
+                })
+                .collect();
+            Ok::<SpiAutodetectResultDto, String>(SpiAutodetectResultDto {
+                jedec_id: autodetect.jedec_id,
+                matches,
+            })
+        })();
+
+        // Always return the handle, even on error
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(dto)) => Ok(dto),
         Ok(Err(e)) => Err(e),
         Err(e) => Err(format!("Task panicked: {}", e)),
     }

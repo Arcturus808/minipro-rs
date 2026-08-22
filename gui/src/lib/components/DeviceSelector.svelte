@@ -2,11 +2,16 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
-  import { selectedDevice } from "../stores/device";
+  import { selectedDevice, programmer } from "../stores/device";
 
   interface SearchResult {
     name: string;
     manufacturer: string;
+  }
+
+  interface SpiAutodetectResult {
+    jedec_id: number;
+    matches: SearchResult[];
   }
 
   let searchQuery = $state("");
@@ -17,6 +22,18 @@
   let viewMode = $state<"paginated" | "scroll">("paginated");
   const PAGE_SIZE = 12;
   let store: Store | null = null;
+
+  // SPI flash autodetect state
+  let autodetecting = $state(false);
+  let autodetectResults = $state<SearchResult[] | null>(null);
+  let autodetectJedecId = $state<string | null>(null);
+  let autodetectError = $state<string | null>(null);
+
+  // Autodetect is supported on TL866A, TL866CS, TL866II+, and T48.
+  // T56 and T76 need protocol implementations (gaps 2/3).
+  let autodetectSupported = $derived(
+    $programmer !== null && !["T56", "T76"].includes($programmer.model)
+  );
 
   // Live search: debounce + race-condition guard.
   // A monotonic counter tags each request; only the latest response is kept.
@@ -89,6 +106,8 @@
       page = 0;
       return;
     }
+    // Clear autodetect results when user starts searching
+    if (autodetectResults !== null) clearAutoDetect();
     const seq = ++searchSeq;
     const r = await invoke<SearchResult[]>("search_devices", { query: trimmed });
     // Discard stale responses (user typed more characters since this request).
@@ -111,6 +130,28 @@
     // Immediate search (Enter key bypasses the debounce).
     if (debounceTimer) clearTimeout(debounceTimer);
     await doSearch(searchQuery);
+  }
+
+  async function doAutoDetect(idType: number) {
+    autodetecting = true;
+    autodetectResults = null;
+    autodetectJedecId = null;
+    autodetectError = null;
+    try {
+      const result = await invoke<SpiAutodetectResult>("do_spi_autodetect", { idType });
+      autodetectJedecId = "0x" + result.jedec_id.toString(16).toUpperCase().padStart(4, "0");
+      autodetectResults = result.matches;
+    } catch (e: any) {
+      autodetectError = String(e?.message ?? e);
+    } finally {
+      autodetecting = false;
+    }
+  }
+
+  function clearAutoDetect() {
+    autodetectResults = null;
+    autodetectJedecId = null;
+    autodetectError = null;
   }
 
   function goPrev() { if (page > 0) page--; }
@@ -164,9 +205,62 @@
       class="w-full rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-surface-950-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
       onkeydown={(e) => { if (e.key === 'Enter') onSearch(); }}
     />
+    {#if autodetectSupported}
+      <div class="flex items-center gap-2 mt-2">
+        <span class="text-xs opacity-60">SPI Auto Detect:</span>
+        <button
+          class="btn preset-tonal text-xs px-2 py-1"
+          onclick={() => doAutoDetect(0)}
+          disabled={autodetecting}
+          title="Detect 8-pin SPI flash (25xx)"
+        >
+          {autodetecting ? "..." : "8-pin"}
+        </button>
+        <button
+          class="btn preset-tonal text-xs px-2 py-1"
+          onclick={() => doAutoDetect(1)}
+          disabled={autodetecting}
+          title="Detect 16-pin SPI flash (25xx)"
+        >
+          {autodetecting ? "..." : "16-pin"}
+        </button>
+      </div>
+    {/if}
   </header>
 
   <div class="flex-1 overflow-auto p-2">
+    {#if autodetectResults !== null || autodetectError !== null}
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold opacity-70 uppercase tracking-wide">
+            {#if autodetectError}
+              Error
+            {:else if autodetectResults && autodetectResults.length > 0}
+              JEDEC ID: {autodetectJedecId} · {autodetectResults.length} match(es)
+            {:else if autodetectJedecId === "0x0000"}
+              No SPI chip detected
+            {:else}
+              No device found (JEDEC ID: {autodetectJedecId})
+            {/if}
+          </span>
+          <button class="text-xs opacity-60 hover:opacity-100" onclick={clearAutoDetect}>Clear</button>
+        </div>
+        {#if autodetectError}
+          <p class="text-xs text-red-500 px-1">{autodetectError}</p>
+        {:else if autodetectResults && autodetectResults.length > 0}
+          <ul class="divide-y divide-surface-200-800">
+            {#each autodetectResults as item}
+              <li>{@render starRow(item.name, item.manufacturer)}</li>
+            {/each}
+          </ul>
+        {:else if autodetectJedecId === "0x0000"}
+          <p class="text-xs opacity-50 px-1">Make sure a 25xx SPI flash is inserted in the ZIF socket.</p>
+        {:else}
+          <p class="text-xs opacity-50 px-1">Try the other pin count option.</p>
+        {/if}
+      </div>
+    {/if}
+
     {#snippet starRow(name: string, manufacturer?: string)}
       <div
         class={`w-full text-left py-2 px-3 transition-colors flex items-center gap-2 ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}

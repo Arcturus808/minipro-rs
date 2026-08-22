@@ -153,6 +153,7 @@ pub fn run() {
             commands::do_blank_check,
             commands::do_chip_id,
             commands::do_logic_test,
+            commands::do_spi_autodetect,
             commands::do_firmware_update,
             commands::read_file_bytes,
             commands::do_smart_diff,

@@ -514,7 +514,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion)
   - **Priority: low-medium** — useful feature not available in upstream minipro, but niche (most users program MCUs/memory, not logic ICs). XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
 
-- [ ] **GUI SPI flash autodetect button** — "Auto Detect" button in the device selector area that reads the JEDEC ID from an inserted SPI flash and shows matching devices from the database
+- [x] **GUI SPI flash autodetect button** — "Auto Detect" button in the device selector area that reads the JEDEC ID from an inserted SPI flash and shows matching devices from the database
   - **Core logic already implemented:** `spi_autodetect_and_lookup()` in `operations.rs` combines the firmware JEDEC ID read with `find_devices_by_chip_id()` database lookup. Works for TL866A/CS and TL866II+ today; T56/T76 pending protocol implementation (gaps 2/3 in the parity section above).
   - **GUI workflow:** user inserts unknown SPI flash → clicks "Auto Detect" → backend reads JEDEC ID and searches `infoic.xml` → frontend shows list of matching device names (with manufacturer) → user clicks one to select it in the DeviceSelector
   - **Implementation plan:**
