@@ -642,7 +642,12 @@ fn collect_by_chip_id(
                     if chip_id == 0 || id_bytes_count(chip_id) == 0 {
                         continue;
                     }
-                    if chip_id != target_chip_id {
+                    // Normalize both IDs before comparison.
+                    // The firmware autodetect always returns 3 bytes big-endian
+                    // (e.g. 0x9D7C00), but the database may store a shorter ID
+                    // (e.g. 0x00009D7C — 2 bytes). Shift right to remove
+                    // trailing zero bytes so the significant bytes align.
+                    if normalize_chip_id(chip_id) != normalize_chip_id(target_chip_id) {
                         continue;
                     }
 
@@ -1380,6 +1385,24 @@ fn id_bytes_count(chip_id: u32) -> u8 {
     0
 }
 
+/// Normalize a chip ID by removing trailing zero bytes.
+///
+/// The firmware SPI autodetect always returns 3 bytes big-endian (e.g.
+/// `0x9D7C00`), but the database may store a shorter ID (e.g. `0x00009D7C`
+/// — 2 significant bytes). This function shifts right until the least
+/// significant byte is non-zero, so the significant bytes align for
+/// comparison:
+///   `0x9D7C00` → `0x9D7C`
+///   `0x00009D7C` → `0x9D7C`
+///   `0xEF4014` → `0xEF4014` (no trailing zeros, unchanged)
+fn normalize_chip_id(chip_id: u32) -> u32 {
+    let mut id = chip_id;
+    while id != 0 && id & 0xff == 0 {
+        id >>= 8;
+    }
+    id
+}
+
 /// Returns `(compare_mask, rev_bits)` for PIC-family chip_info values.
 fn compare_mask_for(chip_info: u32) -> (u16, u8) {
     const PIC_12: u32 = 0x84;
@@ -1484,6 +1507,13 @@ mod tests {
     </manufacturer>
     <manufacturer name="Macronix">
       <ic name="MX25L8005" type="0" protocol_id="3" variant="0" chip_id="0xc22014"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+    <manufacturer name="ISSI">
+      <!-- 2-byte chip_id stored as 0x00009D7C (zero-padded high bytes).
+           Firmware autodetect returns 3-byte 0x9D7C00.
+           normalize_chip_id() aligns them: 0x9D7C == 0x9D7C -->
+      <ic name="PM25LV010" type="0" protocol_id="3" variant="0" chip_id="0x00009d7c"
          package_details="0x08000000" voltages="0x0" />
     </manufacturer>
     <manufacturer name="NoID">
@@ -1613,5 +1643,17 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "MX25L8005");
         assert_eq!(matches[0].manufacturer, "Macronix");
+    }
+
+    #[test]
+    fn test_find_by_chip_id_byte_alignment() {
+        let paths = chipid_fixture_paths();
+        // PM25LV010 has chip_id 0x00009D7C (2 bytes) in the database.
+        // Firmware autodetect returns 0x9D7C00 (3 bytes).
+        // normalize_chip_id aligns them: 0x9D7C == 0x9D7C.
+        let matches = find_devices_by_chip_id(&paths, 0x9D7C00, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "PM25LV010");
+        assert_eq!(matches[0].manufacturer, "ISSI");
     }
 }
