@@ -271,10 +271,15 @@ Gutter column is always rendered (1ch wide) to avoid layout shift when toggled.
 
 ### Help overlays
 
-Both the hex viewer and config/fuses panel have help overlays triggered by an
-"i" icon and/or keyboard shortcut (?/F1 for hex viewer). Modal with grouped
-content, dismissed by Escape, backdrop click, or ✕ button. Global keydown
-listener handles Escape (modal doesn't receive focus on open).
+The hex viewer, config/fuses panel, batch serial injection, and logic test
+panel all have help overlays triggered by an "i" icon and/or keyboard
+shortcut (?/F1 for hex viewer). Modal with grouped content, dismissed by
+Escape, backdrop click, or ✕ button. Global keydown listener handles Escape
+(modal doesn't receive focus on open).
+
+The logic test help modal explains the single-character vector symbols
+(0, 1, L, H, C, Z, X, G, V) used in the test result table, matching the
+XGPro definitions.
 
 ### Config panel state (`$effect.pre`)
 
