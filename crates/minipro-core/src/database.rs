@@ -272,6 +272,31 @@ pub fn find_device_any(paths: &DatabasePaths, name: &str) -> Result<Device> {
     )))
 }
 
+/// Find all devices in `infoic.xml` whose `chip_id` matches the given JEDEC ID.
+///
+/// Mirrors upstream C `compare_device()` in `database.c`: searches only the
+/// model-appropriate database section (not `logicic.xml` — logic ICs have no
+/// chip IDs), matches on `chip_id` equality and optional pin-count filter.
+///
+/// `pin_count` of 0 means "match any pin count" (wildcard), matching upstream's
+/// `match_package` logic where `sm->device->package_details.pin_count == 0`
+/// disables the package filter.
+///
+/// Does NOT filter by `pin_map` model flags — upstream's `compare_device()`
+/// does not do this either. A T56 user will see TL866II+/T48-only devices in
+/// the results. This is upstream behavior.
+pub fn find_devices_by_chip_id(
+    paths: &DatabasePaths,
+    chip_id: u32,
+    pin_count: u8,
+    model: ProgrammerModel,
+) -> Result<Vec<DeviceListItem>> {
+    let mut items = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    collect_by_chip_id(&paths.infoic, chip_id, pin_count, model, &mut items, &mut seen)?;
+    Ok(items)
+}
+
 /// Pin-contact test configuration for a chip, parsed from the `<maps>` section
 /// of `infoic.xml`.
 ///
@@ -526,6 +551,114 @@ fn collect_names_for_model(
                                 part.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
                             }) && seen.insert(part.to_ascii_lowercase())
                             {
+                                out.push(DeviceListItem {
+                                    name: part.to_string(),
+                                    manufacturer: current_manufacturer.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"configurations" {
+                    skip_section = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(())
+}
+
+/// Stream-parse `infoic.xml` and collect device names whose `chip_id` matches.
+///
+/// This mirrors upstream `compare_device()` in `database.c`:
+/// - Only searches the model-appropriate `<database type="...">` section.
+/// - Skips entries with `chip_id == 0` or `id_bytes_count(chip_id) == 0`
+///   (degenerate/placeholder IDs).
+/// - Matches when `chip_id == target` AND pin count matches (or either side
+///   is 0 = wildcard).
+/// - Does NOT filter by `pin_map` model flags (upstream doesn't either).
+/// - Splits comma-separated names into separate entries.
+fn collect_by_chip_id(
+    path: &Path,
+    target_chip_id: u32,
+    target_pin_count: u8,
+    model: ProgrammerModel,
+    out: &mut Vec<DeviceListItem>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Result<()> {
+    if target_chip_id == 0 {
+        return Ok(()); // No valid chip ID to search for
+    }
+
+    let xml = read_file(path)?;
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let expected_db = match model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => DB_ATTR_INFOIC,
+        ProgrammerModel::T76 => DB_ATTR_INFOICT76,
+        _ => DB_ATTR_INFOIC2,
+    };
+
+    let mut in_correct_db = false;
+    let mut skip_section = false;
+    let mut current_manufacturer = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = e.name();
+
+                if tag.as_ref() == b"database" {
+                    if let Some(db_type) = get_attr_str(e, b"type") {
+                        in_correct_db = db_type.eq_ignore_ascii_case(expected_db);
+                    }
+                    continue;
+                }
+
+                if tag.as_ref() == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
+                    continue;
+                }
+
+                if tag.as_ref() == b"configurations" {
+                    skip_section = true;
+                    continue;
+                }
+
+                if skip_section || !in_correct_db {
+                    continue;
+                }
+
+                if tag.as_ref() == b"ic" {
+                    let chip_id = get_attr_u32(e, b"chip_id").unwrap_or(0);
+                    if chip_id == 0 || id_bytes_count(chip_id) == 0 {
+                        continue;
+                    }
+                    if chip_id != target_chip_id {
+                        continue;
+                    }
+
+                    // Pin count filter (wildcard if either side is 0)
+                    if target_pin_count != 0 {
+                        let pkg_raw = get_attr_u32(e, b"package_details").unwrap_or(0);
+                        let pkg = PackageDetails::from_raw(pkg_raw);
+                        if pkg.pin_count != 0 && pkg.pin_count != target_pin_count {
+                            continue;
+                        }
+                    }
+
+                    if let Some(raw_name) = get_attr_str(e, b"name") {
+                        for part in raw_name.split(',') {
+                            let part = part.trim();
+                            if seen.insert(part.to_ascii_lowercase()) {
                                 out.push(DeviceListItem {
                                     name: part.to_string(),
                                     manufacturer: current_manufacturer.to_string(),
@@ -1334,5 +1467,151 @@ mod tests {
             err.to_string().contains("unknown voltage '6V'"),
             "unexpected error: {err}"
         );
+    }
+
+    // ── find_devices_by_chip_id tests ──────────────────────────────────────
+
+    const INFOIC_CHIPID_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<infoic>
+  <database type="INFOIC2PLUS">
+    <manufacturer name="Winbond">
+      <ic name="W25Q80" type="0" protocol_id="3" variant="0" chip_id="0xef4014"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="W25Q16" type="0" protocol_id="3" variant="0" chip_id="0xef4015"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="W25Q128,W25Q128JV" type="0" protocol_id="3" variant="0" chip_id="0xef4018"
+         package_details="0x10000000" voltages="0x0" />
+    </manufacturer>
+    <manufacturer name="Macronix">
+      <ic name="MX25L8005" type="0" protocol_id="3" variant="0" chip_id="0xc22014"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+    <manufacturer name="NoID">
+      <ic name="NOCHEAP" type="0" protocol_id="3" variant="0" chip_id="0x0"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+  <database type="INFOIC">
+    <manufacturer name="Winbond">
+      <ic name="W25Q80A" type="0" protocol_id="3" variant="0" chip_id="0xef4014"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+  <database type="INFOICT76">
+    <manufacturer name="Winbond">
+      <ic name="W25Q80T76" type="0" protocol_id="3" variant="0" chip_id="0xef4014"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+</infoic>
+"#;
+
+    fn chipid_fixture_paths() -> DatabasePaths {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("minipro-rs-chipid-test-{}-{}", std::process::id(), id));
+        std::fs::create_dir_all(&dir).unwrap();
+        let infoic = dir.join("infoic.xml");
+        std::fs::write(&infoic, INFOIC_CHIPID_FIXTURE).unwrap();
+        let logicic = dir.join("logicic.xml");
+        std::fs::write(&logicic, r#"<logicic></logicic>"#).unwrap();
+        DatabasePaths {
+            infoic,
+            logicic,
+            algorithms: None,
+        }
+    }
+
+    #[test]
+    fn test_find_by_chip_id_basic_match() {
+        let paths = chipid_fixture_paths();
+        // W25Q80 has chip_id 0xef4014, 8-pin
+        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "W25Q80");
+        assert_eq!(matches[0].manufacturer, "Winbond");
+    }
+
+    #[test]
+    fn test_find_by_chip_id_comma_separated_names() {
+        let paths = chipid_fixture_paths();
+        // W25Q128,W25Q128JV has chip_id 0xef4018, 16-pin
+        let matches = find_devices_by_chip_id(&paths, 0xef4018, 16, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 2);
+        let names: Vec<&str> = matches.iter().map(|m| m.name.as_str()).collect();
+        assert!(names.contains(&"W25Q128"));
+        assert!(names.contains(&"W25Q128JV"));
+    }
+
+    #[test]
+    fn test_find_by_chip_id_pin_count_filter() {
+        let paths = chipid_fixture_paths();
+        // W25Q128 has 16-pin package; searching with 8-pin should not match
+        let matches = find_devices_by_chip_id(&paths, 0xef4018, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 0);
+    }
+
+    #[test]
+    fn test_find_by_chip_id_wildcard_pin_count() {
+        let paths = chipid_fixture_paths();
+        // pin_count=0 means wildcard — should match regardless of package
+        let matches = find_devices_by_chip_id(&paths, 0xef4018, 0, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 2); // W25Q128 + W25Q128JV
+    }
+
+    #[test]
+    fn test_find_by_chip_id_no_match() {
+        let paths = chipid_fixture_paths();
+        let matches = find_devices_by_chip_id(&paths, 0xdeadbeef, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 0);
+    }
+
+    #[test]
+    fn test_find_by_chip_id_zero_target() {
+        let paths = chipid_fixture_paths();
+        // Searching for chip_id=0 should return nothing (early return)
+        let matches = find_devices_by_chip_id(&paths, 0, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 0);
+    }
+
+    #[test]
+    fn test_find_by_chip_id_skips_zero_chip_id_entries() {
+        let paths = chipid_fixture_paths();
+        // NOCHEAP has chip_id=0 — should never match even if target is 0
+        // (already covered by test_find_by_chip_id_zero_target, but this
+        // documents the intent)
+        let matches = find_devices_by_chip_id(&paths, 0, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert!(matches.iter().all(|m| m.name != "NOCHEAP"));
+    }
+
+    #[test]
+    fn test_find_by_chip_id_model_section_filter() {
+        let paths = chipid_fixture_paths();
+        // TL866II+ searches INFOIC2PLUS section — should NOT see W25Q80A (INFOIC) or W25Q80T76 (INFOICT76)
+        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert!(matches.iter().all(|m| m.name != "W25Q80A"));
+        assert!(matches.iter().all(|m| m.name != "W25Q80T76"));
+
+        // TL866A searches INFOIC section — should see W25Q80A but not W25Q80
+        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866a).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "W25Q80A");
+
+        // T76 searches INFOICT76 section — should see W25Q80T76
+        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::T76).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "W25Q80T76");
+    }
+
+    #[test]
+    fn test_find_by_chip_id_multiple_manufacturers() {
+        let paths = chipid_fixture_paths();
+        // Different manufacturers, different chip_ids — verify manufacturer is tracked
+        let matches = find_devices_by_chip_id(&paths, 0xc22014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "MX25L8005");
+        assert_eq!(matches[0].manufacturer, "Macronix");
     }
 }

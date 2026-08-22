@@ -1057,3 +1057,41 @@ pub fn firmware_update(
 pub fn spi_autodetect(handle: &mut MiniproHandle, id_type: u8) -> Result<u32> {
     handle.protocol.spi_autodetect(&handle.usb, id_type)
 }
+
+/// Result of an SPI autodetect with database lookup.
+#[derive(Debug)]
+pub struct SpiAutodetectResult {
+    /// Raw JEDEC ID (3 bytes big-endian, packed into u32).
+    pub jedec_id: u32,
+    /// Devices in the database whose chip_id matches, filtered by pin count.
+    pub matches: Vec<crate::database::DeviceListItem>,
+}
+
+/// Auto-detect an SPI flash chip and look up matching devices in the database.
+///
+/// Combines [`spi_autodetect`] with [`crate::database::find_devices_by_chip_id`].
+/// `id_type` selects the package: 0 = 8-pin, 1 = 16-pin.  The pin count is
+/// derived from `id_type` (8 or 16) and used to filter database matches.
+///
+/// Matches upstream C `spi_autodetect_and_exit()` behavior: reads the JEDEC ID
+/// via firmware command 0x37, then searches `infoic.xml` for devices with the
+/// same `chip_id` and matching pin count.
+pub fn spi_autodetect_and_lookup(
+    handle: &mut MiniproHandle,
+    paths: &crate::database::DatabasePaths,
+    id_type: u8,
+) -> Result<SpiAutodetectResult> {
+    let jedec_id = spi_autodetect(handle, id_type)?;
+    let pin_count = match id_type {
+        0 => 8,
+        1 => 16,
+        _ => 0, // wildcard — shouldn't happen with valid CLI input
+    };
+    let matches = crate::database::find_devices_by_chip_id(
+        paths,
+        jedec_id,
+        pin_count,
+        handle.info.model,
+    )?;
+    Ok(SpiAutodetectResult { jedec_id, matches })
+}
