@@ -1,0 +1,56 @@
+# cargo-deny configuration
+#
+# Run locally during release prep (no CI job — conserves compute minutes):
+#   cargo install cargo-deny
+#   cargo deny check                              # CLI workspace (root)
+#   cd gui/src-tauri && cargo deny check -c ../../deny.toml   # GUI workspace
+#
+# See https://embarkstudios.github.io/cargo-deny/ for full config reference.
+
+# ── Advisories: check against RustSec advisory database ─────────────────────
+[advisories]
+# Warn on unmaintained crates (don't fail the check — these are informational)
+unmaintained = "workspace"
+# Don't fail on yanked crates (common in transitive deps, not a security issue)
+yanked = "warn"
+# Ignore advisories for crates we've reviewed and accepted (add by ID)
+ignore = []
+
+# ── Licenses: verify GPL-3.0-or-later compatibility ─────────────────────────
+[licenses]
+# Allow all GPL-3.0+ compatible licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MPL-2.0",
+    "Zlib",
+    "CC0-1.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "GPL-3.0",
+    "GPL-3.0-or-later",
+    "LGPL-3.0",
+    "LGPL-3.0-or-later",
+]
+# Confidence threshold for license detection from crate metadata
+confidence-threshold = 0.8
+
+# ── Sources: only allow crates.io registry ──────────────────────────────────
+[sources]
+# Unknown registries are not allowed
+unknown-registry = "deny"
+# Unknown git sources are not allowed
+unknown-git = "deny"
+# Allow the standard crates.io registry
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# ── Bans: disabled (not needed for this project) ────────────────────────────
+[bans]
+# No specific crate bans — left at defaults
+multiple-versions = "warn"
+wildcards = "warn"

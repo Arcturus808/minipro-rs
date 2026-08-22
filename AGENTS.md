@@ -488,11 +488,37 @@ All version numbers in the repo must match for any given release:
 1. Update all four version fields above
 2. Add a `## [X.Y.Z]` section to `CHANGELOG.md` (CI extracts this for release notes)
 3. Run `cargo generate-lockfile` and stage `Cargo.lock` + `gui/src-tauri/Cargo.lock`
-4. Commit with message like `chore(release): bump version to X.Y.Z`
-5. Create the tag `vX.Y.Z`
-6. Push the commit and tag to `origin` (GitLab). The GitLab push mirror replicates branches and tags to GitHub automatically, but with a delay (seconds to minutes).
-7. If GitHub Actions doesn't trigger within a few minutes, push the tag directly: `git push github vX.Y.Z`
-8. Let CI build and release everything consistently
+4. Run `cargo deny check` (supply-chain audit — see below)
+5. Commit with message like `chore(release): bump version to X.Y.Z`
+6. Create the tag `vX.Y.Z`
+7. Push the commit and tag to `origin` (GitLab). The GitLab push mirror replicates branches and tags to GitHub automatically, but with a delay (seconds to minutes).
+8. If GitHub Actions doesn't trigger within a few minutes, push the tag directly: `git push github vX.Y.Z`
+9. Let CI build and release everything consistently
+
+**Supply-chain audit (cargo-deny):**
+
+Run `cargo deny check` during release prep to scan for known vulnerabilities, license issues, and non-crates.io sources. This is a **local-only** check — no CI job, to conserve compute minutes. The config is `deny.toml` at the repo root.
+
+```bash
+# One-time install:
+cargo install cargo-deny
+
+# Check CLI workspace (run from repo root):
+cargo deny check
+
+# Check GUI workspace (Tauri has its own Cargo.lock with 530+ crates):
+cd gui/src-tauri && cargo deny --config ../../deny.toml check
+```
+
+This checks:
+- **Advisories** — known vulnerabilities from the [RustSec advisory database](https://rustsec.org/advisories/)
+- **Licenses** — all dependencies have GPL-3.0-or-later compatible licenses
+- **Sources** — all crates come from crates.io (no git dependencies)
+
+If `cargo deny check` reports advisories, evaluate each one:
+- **Critical/high severity** — update the affected dependency before releasing
+- **Low severity / unmaintained** — document in the release notes if accepted
+- **False positive** — add the advisory ID to `ignore = []` in `deny.toml` with a comment explaining why
 
 **Git remotes — GitLab is primary, GitHub is a push mirror:**
 

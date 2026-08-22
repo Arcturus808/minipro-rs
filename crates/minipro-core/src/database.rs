@@ -15,7 +15,7 @@ use std::{
 
 use quick_xml::{
     events::{BytesStart, Event},
-    Reader,
+    Reader, XmlVersion,
 };
 
 use crate::{
@@ -380,7 +380,7 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
                 in_vector = true;
             }
             Ok(Event::Text(ref te)) if in_vector => {
-                let cow = te.unescape().unwrap_or_default();
+                let cow = te.decode().unwrap_or_default();
                 let mut pins: Vec<u8> = cow
                     .split_ascii_whitespace()
                     .take(pc)
@@ -761,7 +761,7 @@ fn parse_pin_map(xml: &str, target: u32) -> Result<Option<PinMap>> {
                 _ => {}
             },
             Ok(Event::Text(ref te)) => {
-                let cow = te.unescape().unwrap_or_default();
+                let cow = te.decode().unwrap_or_default();
                 let text = cow.trim();
                 if pending_gnd {
                     pending_gnd = false;
@@ -884,7 +884,7 @@ fn parse_configs(xml: &str) -> Result<HashMap<String, ChipConfig>> {
             }
             Ok(Event::Text(ref e)) => {
                 // Parse fuse/lock CSV text content: "mask_hex,default_hex"
-                let cow = e.unescape().unwrap_or_default();
+                let cow = e.decode().unwrap_or_default();
                 let text = cow.trim();
                 if !text.is_empty() {
                     if let Some(name) = pending_fuse_name.take() {
@@ -1354,7 +1354,7 @@ fn get_attr_str(e: &BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .filter_map(|a| a.ok())
         .find(|a| a.key.as_ref() == key)
-        .and_then(|a| a.unescape_value().ok())
+        .and_then(|a| a.normalized_value(XmlVersion::Implicit1_0).ok())
         .map(|v| v.into_owned())
 }
 
