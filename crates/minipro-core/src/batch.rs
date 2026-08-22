@@ -334,6 +334,10 @@ pub struct BatchConfig {
     pub verify: bool,
     /// Maximum number of chips to program (None = unlimited).
     pub count: Option<usize>,
+    /// Unprotect chip before write (if device has off_protect_before flag).
+    pub unprotect_before: bool,
+    /// Re-protect chip after write (if device has protect_after flag).
+    pub protect_after_op: bool,
 }
 
 /// Progress callback type: `(chip_number, total_or_none, phase)`.
@@ -465,6 +469,26 @@ fn batch_write_single(
 ) -> Result<()> {
     let _ = chip_num;
 
+    // ── Protect off (before erase/write) ───────────────────────────────────
+    // T76 + off_protect_before: auto-unprotect regardless of user flag.
+    // Non-T76: only if unprotect_before AND off_protect_before.
+    let off_protect = handle
+        .device()
+        .map(|d| d.flags.off_protect_before)
+        .unwrap_or(false);
+    let is_t76 = handle.info.model == crate::device::ProgrammerModel::T76;
+    if off_protect && (is_t76 || config.unprotect_before) {
+        handle.protocol.protect_off(&handle.usb)?;
+        if is_t76 {
+            let device_arc = handle
+                .device
+                .clone()
+                .ok_or_else(|| MiniproError::DeviceNotFound("no device selected".into()))?;
+            handle.end_transaction()?;
+            handle.begin_transaction(device_arc)?;
+        }
+    }
+
     // ── Erase ───────────────────────────────────────────────────────────────
     if config.erase {
         if let Some(ref mut on_progress) = callbacks.on_progress {
@@ -526,6 +550,17 @@ fn batch_write_single(
             config.check_device_id,
             None,
         )?;
+    }
+
+    // ── Protect on (after write + verify) ──────────────────────────────────
+    if config.protect_after_op {
+        let protect_after = handle
+            .device()
+            .map(|d| d.flags.protect_after)
+            .unwrap_or(false);
+        if protect_after {
+            handle.protocol.protect_on(&handle.usb)?;
+        }
     }
 
     Ok(())

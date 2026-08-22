@@ -554,6 +554,8 @@ fn do_operations(
                 erase: !cli.no_erase,
                 verify: !cli.no_verify,
                 count,
+                unprotect_before: cli.protect_off,
+                protect_after_op: cli.protect_on,
             };
 
             // ── Parse serial number config (if --serial-start is given) ──────
