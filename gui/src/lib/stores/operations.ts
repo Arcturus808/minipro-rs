@@ -23,6 +23,8 @@ export interface OperationOptions {
   page: string;
   format: string;
   size_mismatch: string;
+  unprotect_before: boolean;
+  protect_after_op: boolean;
 }
 
 export const isRunning = writable(false);

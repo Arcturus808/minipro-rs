@@ -494,11 +494,6 @@ fn do_operations(
         }
     }
 
-    // ── Protect off ───────────────────────────────────────────────────────────
-    if cli.protect_off {
-        handle.protocol.protect_off(&handle.usb)?;
-    }
-
     // ── Erase ─────────────────────────────────────────────────────────────────
     if cli.erase {
         let can_erase = handle.device().map(|d| d.flags.can_erase).unwrap_or(false);
@@ -678,6 +673,36 @@ fn do_operations(
         } else if page == PageType::Calibration {
             anyhow::bail!("calibration page is read-only");
         } else {
+            // ── Protect off (before erase/write) ──────────────────────────────
+            // T76 + off_protect_before: auto-unprotect regardless of -u flag.
+            // The firmware needs this before erase for protected parallel-NOR.
+            // Non-T76: only unprotect if -u flag AND off_protect_before.
+            let off_protect = handle
+                .device()
+                .map(|d| d.flags.off_protect_before)
+                .unwrap_or(false);
+            let is_t76 = handle.info.model == ProgrammerModel::T76;
+            if off_protect && (is_t76 || cli.protect_off) {
+                eprint!("Protect off... ");
+                handle.protocol.protect_off(&handle.usb)?;
+                eprintln!("OK");
+                // T76 needs a transaction reset after protect_off for the
+                // change to take effect before erase.
+                if is_t76 {
+                    let device_arc = handle
+                        .device
+                        .clone()
+                        .expect("device is set during an active transaction");
+                    handle.end_transaction()?;
+                    handle.begin_transaction(device_arc)?;
+                }
+            }
+
+            // Warning if chip may be write-protected and user didn't request unprotect.
+            if off_protect && !cli.protect_off && !is_t76 {
+                eprintln!("Note: This chip may be write-protected. Use -u to unprotect before writing.");
+            }
+
             // Auto-erase before write (unless suppressed or chip doesn't
             // support electrical erase — e.g. UV EPROMs).
             if !cli.no_erase {
@@ -775,6 +800,20 @@ fn do_operations(
                 )?;
                 pb.finish_and_clear();
                 eprintln!("Verified OK.");
+            }
+
+            // ── Protect on (after write + verify) ─────────────────────────────
+            // Only if -P flag AND protect_after flag are both set.
+            let protect_after = handle
+                .device()
+                .map(|d| d.flags.protect_after)
+                .unwrap_or(false);
+            if cli.protect_on && protect_after {
+                eprint!("Protect on...");
+                handle.protocol.protect_on(&handle.usb)?;
+                eprintln!("OK");
+            } else if protect_after && !cli.protect_on {
+                eprintln!("Note: Use -P if you want to write-protect this chip.");
             }
         }
     }
@@ -899,11 +938,6 @@ fn do_operations(
         let id_type = id_type_opt.unwrap_or(0);
         let jedec_id = spi_autodetect(handle, id_type)?;
         println!("JEDEC ID: {:#08x}", jedec_id);
-    }
-
-    // ── Protect on ────────────────────────────────────────────────────────────
-    if cli.protect_on {
-        handle.protocol.protect_on(&handle.usb)?;
     }
 
     Ok(())

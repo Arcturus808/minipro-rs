@@ -56,6 +56,8 @@
   let skipVerify = $state(false);
   let skipBlank = $state(false);
   let checkDeviceId = $state(true);
+  let unprotectBefore = $state(true);
+  let protectAfterOp = $state(false);
   let showAdvanced = $state(false);
   let overrideVpp = $state("");
   let overrideVcc = $state("");
@@ -371,6 +373,8 @@
       page,
       format,
       size_mismatch: sizeMismatch,
+      unprotect_before: unprotectBefore,
+      protect_after_op: protectAfterOp,
     };
   }
 
@@ -389,6 +393,8 @@
         skipErase = false;
         skipVerify = false;
         skipBlank = false;
+        unprotectBefore = true;
+        protectAfterOp = false;
         sizeMismatch = "error";
         break;
       case "verify":
@@ -926,6 +932,19 @@
                     <input type="checkbox" class="checkbox" bind:checked={skipBlank} />
                     Skip blank
                   </label>
+                  {#if $selectedDevice?.off_protect_before && $programmer?.model !== "T48" && $programmer?.model !== "T76"}
+                    <span class="w-px h-4 bg-surface-300-700 mx-2"></span>
+                    <label class="flex items-center gap-2" title="Disable write protection before writing (recommended for protected chips)">
+                      <input type="checkbox" class="checkbox" bind:checked={unprotectBefore} />
+                      Unprotect before write
+                    </label>
+                  {/if}
+                  {#if $selectedDevice?.protect_after && $programmer?.model !== "T48"}
+                    <label class="flex items-center gap-2" title="Re-enable write protection after successful write">
+                      <input type="checkbox" class="checkbox" bind:checked={protectAfterOp} />
+                      Re-protect after write
+                    </label>
+                  {/if}
                   <span class="w-px h-4 bg-surface-300-700 mx-2"></span>
                   <button
                     class="text-xs opacity-70 hover:opacity-100 underline transition-opacity"

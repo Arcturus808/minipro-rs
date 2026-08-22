@@ -155,6 +155,10 @@ pub struct DeviceInfoDto {
     /// Raw pin_map value from the database (lower byte = index into `<maps>`).
     /// 0 means no contact-test data (use pin_count fallback for placement).
     pin_map: u32,
+    /// True if chip has off_protect_before flag (needs unprotect before write).
+    off_protect_before: bool,
+    /// True if chip has protect_after flag (can be write-protected after write).
+    protect_after: bool,
 }
 
 #[derive(Serialize)]
@@ -239,6 +243,12 @@ pub struct OperationOptions {
     pub format: String,
     #[serde(default = "default_size_mismatch")]
     pub size_mismatch: String,
+    /// Unprotect chip before write (if device supports off_protect_before).
+    #[serde(default)]
+    pub unprotect_before: bool,
+    /// Re-protect chip after write (if device supports protect_after).
+    #[serde(default)]
+    pub protect_after_op: bool,
 }
 
 fn default_icsp_mode() -> String { "zif".into() }
@@ -1050,10 +1060,25 @@ pub async fn do_write(
                 }
             }
 
+            // ── Protect off (before erase/write) ──────────────────────────────
+            // T76 + off_protect_before: auto-unprotect regardless of checkbox.
+            // Non-T76: only if unprotect_before checkbox AND off_protect_before.
+            let off_protect = device.flags.off_protect_before;
+            let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
+            if off_protect && (is_t76 || options_clone.unprotect_before) {
+                emit_log(&window_clone, "info", "Protect off...");
+                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", "Protect off...OK");
+                if is_t76 {
+                    handle.end_transaction().map_err(|e| e.to_string())?;
+                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                }
+            }
+
             if !options_clone.skip_erase {
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             }
 
             let stats = write_chip(
@@ -1097,6 +1122,13 @@ pub async fn do_write(
                     }),
                 )
                 .map_err(|e| e.to_string())?;
+            }
+
+            // ── Protect on (after write + verify) ─────────────────────────────
+            if options_clone.protect_after_op && device.flags.protect_after {
+                emit_log(&window_clone, "info", "Protect on...");
+                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", "Protect on...OK");
             }
 
             Ok::<OpStats, String>(stats)
@@ -1381,10 +1413,23 @@ pub async fn do_write_bytes(
                 }
             }
 
+            // ── Protect off (before erase/write) ──────────────────────────────
+            let off_protect = device.flags.off_protect_before;
+            let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
+            if off_protect && (is_t76 || options_clone.unprotect_before) {
+                emit_log(&window_clone, "info", "Protect off...");
+                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", "Protect off...OK");
+                if is_t76 {
+                    handle.end_transaction().map_err(|e| e.to_string())?;
+                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                }
+            }
+
             if !options_clone.skip_erase {
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
             }
 
             let verify_bytes = bytes.clone();
@@ -1427,6 +1472,13 @@ pub async fn do_write_bytes(
                     }),
                 )
                 .map_err(|e| e.to_string())?;
+            }
+
+            // ── Protect on (after write + verify) ─────────────────────────────
+            if options_clone.protect_after_op && device.flags.protect_after {
+                emit_log(&window_clone, "info", "Protect on...");
+                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", "Protect on...OK");
             }
 
             Ok::<OpStats, String>(stats)
@@ -1741,6 +1793,8 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
                         page: "code".to_string(),
                         format: "auto".to_string(),
                         size_mismatch: "error".to_string(),
+                        unprotect_before: false,
+                        protect_after_op: false,
                     };
                     apply_voltage_overrides(&mut dev, &options, Some(model))
                         .map_err(|e| e.to_string())?;
@@ -2461,6 +2515,8 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         invert_fuse_bits,
         config_name,
         pin_map: dev.pin_map,
+        off_protect_before: dev.flags.off_protect_before,
+        protect_after: dev.flags.protect_after,
     }
 }
 
