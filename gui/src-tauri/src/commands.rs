@@ -1216,6 +1216,19 @@ pub async fn do_batch_write_chip(
                 }
             }
 
+            // ── Protect off (before erase/write) ──────────────────────────────
+            let off_protect = device.flags.off_protect_before;
+            let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
+            if off_protect && (is_t76 || options_clone.unprotect_before) {
+                emit_log(&window_clone, "info", &format!("Chip {}: protect off...", chipNumber));
+                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", &format!("Chip {}: protect off...OK", chipNumber));
+                if is_t76 {
+                    handle.end_transaction().map_err(|e| e.to_string())?;
+                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                }
+            }
+
             if !options_clone.skip_erase {
                 emit_log(&window_clone, "info", &format!("Chip {}: erasing...", chipNumber));
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
@@ -1290,6 +1303,13 @@ pub async fn do_batch_write_chip(
                     .map_err(|e| e.to_string())?;
                 }
 
+                // ── Protect on (after write + verify) ─────────────────────────
+                if options_clone.protect_after_op && device.flags.protect_after {
+                    emit_log(&window_clone, "info", &format!("Chip {}: protect on...", chipNumber));
+                    handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                    emit_log(&window_clone, "info", &format!("Chip {}: protect on...OK", chipNumber));
+                }
+
                 emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
                 return Ok::<OpStats, String>(stats);
             }
@@ -1336,6 +1356,13 @@ pub async fn do_batch_write_chip(
                     }),
                 )
                 .map_err(|e| e.to_string())?;
+            }
+
+            // ── Protect on (after write + verify) ─────────────────────────────
+            if options_clone.protect_after_op && device.flags.protect_after {
+                emit_log(&window_clone, "info", &format!("Chip {}: protect on...", chipNumber));
+                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                emit_log(&window_clone, "info", &format!("Chip {}: protect on...OK", chipNumber));
             }
 
             emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
