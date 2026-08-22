@@ -708,4 +708,55 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium-high** — established ecosystem workflow, real user demand, CLI already has parity
   - **Status:** implemented
 
+- [ ] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
+  - **Problem:** The core pin-contact test exists (`pin_contact_check()` in `operations.rs`, `pin_test_tl866()` in `tl866iiplus.rs`) and the CLI exposes it via `-z` / `--pin_check`. But the GUI's DiagnosticsPanel has a disabled "Pin Test (unsupported)" button, and even if enabled, the test results go to `eprintln!` (stderr) — the GUI can't capture them. XGPro shows specific bad pins (e.g., "Bad Pin: ZIF1 - PIN#1") and the user can see exactly which socket positions have poor contact.
+  - **Current state:**
+    - `pin_test_tl866()` prints "Bad contact on pin: {d_pin}" to stderr and returns `Err(PinContactFailed)` — no structured result
+    - `Protocol::pin_test()` trait method returns `Result<()>` — no bad-pin list
+    - `pin_contact_check()` in `operations.rs` is a thin wrapper, also returns `Result<()>`
+    - DiagnosticsPanel.svelte line 95: disabled button with title "Not yet implemented"
+    - ZifSocketDiagram.svelte: shows occupied/unoccupied pins but has no concept of pass/fail state
+  - **Implementation plan:**
+    1. **Core: change `pin_test` to return structured results**
+       - Change `Protocol::pin_test()` trait signature from `Result<()>` to `Result<PinTestResult>` where `PinTestResult { bad_pins: Vec<u16> }` (empty = all good)
+       - Update `pin_test_tl866()` to collect bad pins into a `Vec` instead of `eprintln!`-ing them
+       - Update `pin_contact_check()` in `operations.rs` to return `Result<PinTestResult>` instead of `Result<()>`
+       - Update CLI `-z` handler to print bad pins from the returned struct (preserve existing output format)
+       - Update TL866A `pin_test` implementation the same way
+       - T56/T76: `pin_test` returns `UnsupportedOperation` (no change — they use FPGA algorithms, not direct ZIF pin testing)
+    2. **Backend: new `do_pin_test` Tauri command**
+       - In `commands.rs`: `do_pin_test(icspMode: String, state: State<'_, Arc<AppState>>)` → returns `PinTestResultDto { bad_pins: Vec<u16> }`
+       - Follows existing `try_acquire` / `spawn_blocking` / `take_handle` pattern
+       - Calls `begin_transaction` → `pin_contact_check` → returns bad pins
+       - No transaction needed beyond begin/end (pin test is read-only)
+       - Register in `lib.rs`
+    3. **Frontend: enable Pin Test button in DiagnosticsPanel**
+       - Replace disabled button with active button
+       - Disable when: no programmer connected, no device selected, device has `pin_map == 0` (no contact-test data), or an operation is running
+       - On click: call `do_pin_test`, store result in a new `pinTestResult` store (transient, not persisted)
+       - Show toast/log with summary: "Pin test passed" or "Pin test failed: N bad pin(s)"
+    4. **Frontend: highlight bad pins on ZifSocketDiagram**
+       - Add optional `badPins` prop to `ZifSocketDiagram.svelte` (defaults to empty array)
+       - When `badPins` is non-empty, render those pin slots in red (or amber) with a warning indicator
+       - Good pins in the occupied set render in green (or keep default color)
+       - Show pin number labels on bad pins so user knows which physical pin to check
+       - Clear highlighting when a new test is run or when the device/programmer changes
+       - Wire `pinTestResult` store to the diagram via App.svelte
+    5. **Frontend: pin test result panel**
+       - Below the ZIF diagram (or in DiagnosticsPanel), show a compact result list:
+         - "✓ All pins OK" (green) when `bad_pins` is empty
+         - "✗ Bad contact on pins: 1, 10, 11" (red) when bad pins exist
+       - "Clear" button to dismiss results and reset diagram to normal
+  - **Design considerations:**
+    - Pin test requires a selected device (needs `pin_map` from database) — button disabled when no device selected
+    - Pin test is only meaningful in ZIF mode (not ICSP) — button disabled when `icspMode != "zif"`
+    - TL866A/CS and TL866II+/T48 have pin test support; T56/T76 do not (FPGA-based) — button disabled for those models
+    - The test briefly drives ZIF pins — should we warn the user before running? XGPro runs it automatically before operations when "Pin Detect" is checked. We could add an optional "auto pin check before operations" setting later.
+    - Bad pins are reported as device pin numbers (1-based), not ZIF socket positions — the diagram maps device pins to ZIF positions using the same logic as `occupiedPins`
+  - **Future extension (not in this task):**
+    - Optional auto pin-check before read/write/erase operations (XGPro's "Pin Detect" checkbox)
+    - Pin-contact pre-check before SPI autodetect (upstream optionally runs `minipro_pin_test` on TL866II+ before autodetect — noted in the SPI autodetect roadmap item above)
+  - **Priority: medium** — core logic exists, XGPro has this feature, prevents the most common cause of failed programming (poor contact / misaligned chip). The structured-result refactor is the main effort; the GUI work is straightforward once the backend returns a bad-pin list.
+  - **Status:** not started
+
 
