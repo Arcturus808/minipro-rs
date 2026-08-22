@@ -85,16 +85,18 @@
   let configExpanded = $state(false);
   let showBatchHelp = $state(false);
   let showFuseWriteConfirm = $state(false);
+  let showLogicHelp = $state(false);
 
   // Close help/confirm modals on Escape (global listener — modals don't receive focus on open)
   $effect(() => {
-    if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm) return;
+    if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm && !showLogicHelp) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         showConfigHelp = false;
         showBatchHelp = false;
         showFuseWriteConfirm = false;
+        showLogicHelp = false;
       }
     };
     document.addEventListener("keydown", handler);
@@ -1030,6 +1032,16 @@
                       </select>
                     </div>
                   {/if}
+                  <button
+                    class="opacity-50 hover:opacity-100 transition-opacity p-1 rounded border border-transparent hover:border-surface-200-800"
+                    onclick={() => showLogicHelp = true}
+                    title="Logic test vector symbols help"
+                    aria-label="Logic test vector symbols help"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                  </button>
                 </div>
               {/if}
               {#if $activeOperation === "config"}
@@ -1642,6 +1654,57 @@
           <li>Overflow detection warns if the serial value exceeds the width's maximum (e.g., 0xFFFF for 2-byte) and blocks batch start.</li>
           <li>Empty address or invalid start value blocks batch start with an error in the terminal log.</li>
         </ul>
+
+        <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
+          Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showLogicHelp}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
+    <div
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showLogicHelp = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 360px; max-width: 460px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="font-size: 15px; font-weight: 600;">Logic Test Vector Symbols</div>
+          <button
+            style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
+            onclick={() => showLogicHelp = false}
+            title="Close"
+          >✕</button>
+        </div>
+
+        <p style="font-size: 12px; line-height: 1.5; margin: 0 0 14px 0; opacity: 0.7;">
+          The test result table uses single-character symbols to represent the expected state of each pin per test vector. A red symbol with a dash (<span style="font-family: 'Hack', 'Consolas', monospace; color: #e53e3e;">X- </span>) indicates a mismatch — the pin did not match the expected state.
+        </p>
+
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--modal-border-color, #ccc);">
+              <th style="text-align: left; padding: 4px 8px; width: 60px;">Symbol</th>
+              <th style="text-align: left; padding: 4px 8px;">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">0</td><td style="padding: 4px 8px;">Input Low (drive pin LOW)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">1</td><td style="padding: 4px 8px;">Input High (drive pin HIGH)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">L</td><td style="padding: 4px 8px;">Output Low (expect pin to read LOW)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">H</td><td style="padding: 4px 8px;">Output High (expect pin to read HIGH)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">C</td><td style="padding: 4px 8px;">Pulse Input (clock strobe)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">Z</td><td style="padding: 4px 8px;">High Impedance (open-collector; HIGH with pull-up, LOW with pull-down)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">X</td><td style="padding: 4px 8px;">Ignore (don't test this pin)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">G</td><td style="padding: 4px 8px;">GND (ground pin)</td></tr>
+            <tr><td style="padding: 4px 8px; font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">V</td><td style="padding: 4px 8px;">VCC (power pin)</td></tr>
+          </tbody>
+        </table>
+
+        <p style="font-size: 11px; line-height: 1.5; margin: 14px 0 0 0; opacity: 0.5;">
+          Only <span style="font-family: 'Hack', 'Consolas', monospace;">L</span>, <span style="font-family: 'Hack', 'Consolas', monospace;">H</span>, and <span style="font-family: 'Hack', 'Consolas', monospace;">Z</span> pins are tested. Input, power, ground, and ignored pins are never marked as errors.
+        </p>
 
         <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
           Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
