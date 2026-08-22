@@ -722,8 +722,8 @@ This is a living list of features and improvements planned for minipro-rs.
        - Update `pin_test_tl866()` to collect bad pins into a `Vec` instead of `eprintln!`-ing them
        - Update `pin_contact_check()` in `operations.rs` to return `Result<PinTestResult>` instead of `Result<()>`
        - Update CLI `-z` handler to print bad pins from the returned struct (preserve existing output format)
-       - Update TL866A `pin_test` implementation the same way
-       - T56/T76: `pin_test` returns `UnsupportedOperation` (no change — they use FPGA algorithms, not direct ZIF pin testing)
+       - T48 and T76 inherit/delegate to `pin_test_tl866` — no change needed beyond the shared function's return type
+       - TL866A/CS, T56: `pin_test` returns `UnsupportedOperation` (no change — hardware doesn't support direct ZIF pin testing)
     2. **Backend: new `do_pin_test` Tauri command**
        - In `commands.rs`: `do_pin_test(icspMode: String, state: State<'_, Arc<AppState>>)` → returns `PinTestResultDto { bad_pins: Vec<u16> }`
        - Follows existing `try_acquire` / `spawn_blocking` / `take_handle` pattern
@@ -750,7 +750,13 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Design considerations:**
     - Pin test requires a selected device (needs `pin_map` from database) — button disabled when no device selected
     - Pin test is only meaningful in ZIF mode (not ICSP) — button disabled when `icspMode != "zif"`
-    - TL866A/CS and TL866II+/T48 have pin test support; T56/T76 do not (FPGA-based) — button disabled for those models
+    - **Model support:**
+      - TL866II+: supported (`tl866iiplus_pin_test`)
+      - T48: supported — our Rust code aliases `T48Protocol` to `Tl866iiPlusProtocol`, so T48 inherits `pin_test` automatically. The T48 hardware has the same bit-banging commands (0x2D-0x36) as the TL866II+. XGPro supports pin detect on T48. Note: upstream C minipro does NOT set `minipro_pin_test` for T48 (it's a gap — upstream warns "T48 support is not yet complete"), but this is a software gap, not a hardware limitation. Our code is more correct than upstream here.
+      - T76: supported (`t76_pin_test`, delegates to `pin_test_tl866`)
+      - TL866A/CS: **not supported** — upstream does not implement pin test for TL866A/CS. Our Rust code returns `UnsupportedOperation` (default trait impl). The TL866A/CS lacks the bit-banging command set used by the pin test.
+      - T56: **not supported** — upstream does not implement pin test for T56. Our Rust code returns `UnsupportedOperation`. T56 uses FPGA-based algorithms, not direct ZIF pin manipulation.
+    - Button disabled for TL866A/CS and T56 with tooltip "Pin test not supported on this programmer model"
     - The test briefly drives ZIF pins — should we warn the user before running? XGPro runs it automatically before operations when "Pin Detect" is checked. We could add an optional "auto pin check before operations" setting later.
     - Bad pins are reported as device pin numbers (1-based), not ZIF socket positions — the diagram maps device pins to ZIF positions using the same logic as `occupiedPins`
   - **Future extension (not in this task):**
