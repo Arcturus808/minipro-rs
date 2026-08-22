@@ -45,6 +45,10 @@ export interface DeviceInfo {
   /** Raw pin_map value from the database (lower byte = index into <maps>).
    *  0 means no contact-test data (use pin_count fallback for placement). */
   pin_map: number;
+  /** True if chip has off_protect_before flag (needs unprotect before write). */
+  off_protect_before: boolean;
+  /** True if chip has protect_after flag (can be write-protected after write). */
+  protect_after: boolean;
 }
 
 export interface PinMap {
