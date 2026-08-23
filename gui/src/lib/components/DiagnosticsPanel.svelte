@@ -1,8 +1,10 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { programmer, refreshProgrammer } from "../stores/device";
+  import { programmer, refreshProgrammer, selectedDevice } from "../stores/device";
   import { logs } from "../stores/logs";
   import { doFirmwareUpdate } from "../stores/operations";
+  import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
+  import { settings } from "../stores/settings";
   import { pickOpenFile, confirmDialog } from "../file-dialog";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
@@ -20,6 +22,15 @@
     "T76",
   ]);
 
+  // Pin test is supported on TL866II+, T48, and T76.
+  // T48 inherits from TL866II+ protocol (alias). TL866A/CS and T56 lack
+  // the bit-banging hardware required for contact detection.
+  const PIN_TEST_SUPPORTED = new Set([
+    "TL866II+",
+    "T48",
+    "T76",
+  ]);
+
   $: hardwareCheckSupported = $programmer
     ? HARDWARE_CHECK_SUPPORTED.has($programmer.model)
     : false;
@@ -27,6 +38,18 @@
   $: firmwareUpdateSupported = $programmer
     ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model)
     : false;
+
+  $: pinTestSupported = $programmer
+    ? PIN_TEST_SUPPORTED.has($programmer.model)
+    : false;
+
+  // Pin test requires a device with pin_map data and ZIF mode
+  $: pinTestEnabled = pinTestSupported
+    && $programmer !== null
+    && $selectedDevice !== null
+    && $selectedDevice.pin_map !== 0
+    && $settings.icspMode === "zif"
+    && !$pinTestRunning;
 
   async function updateFirmware() {
     const path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
@@ -65,6 +88,10 @@
       await refreshProgrammer();
     }
   }
+
+  async function runPinTest() {
+    await doPinTest($settings.icspMode);
+  }
 </script>
 
 <div class="border border-surface-200-800 p-2">
@@ -92,7 +119,22 @@
       {:else}
         <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Firmware Update</button>
       {/if}
-      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not yet implemented">Pin Test (unsupported)</button>
+      {#if pinTestSupported}
+        <button
+          class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
+          onclick={runPinTest}
+          disabled={!pinTestEnabled}
+          title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : "Run ZIF socket pin-contact test"}
+        >
+          {#if $pinTestRunning}
+            Pin Test (running...)
+          {:else}
+            Pin Test
+          {/if}
+        </button>
+      {:else}
+        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Test</button>
+      {/if}
     </div>
   </details>
 </div>

@@ -110,12 +110,7 @@ impl MiniproHandle {
     /// `with_vcc = true` sets `ICSP_ENABLE | ICSP_VCC` (0x81);
     /// `with_vcc = false` sets `ICSP_ENABLE` (0x80).
     pub fn set_icsp(&mut self, with_vcc: bool) {
-        self.icsp = crate::device::ICSP_ENABLE
-            | if with_vcc {
-                crate::device::ICSP_VCC
-            } else {
-                0
-            };
+        self.icsp = crate::device::ICSP_ENABLE | if with_vcc { crate::device::ICSP_VCC } else { 0 };
     }
 
     /// Set the active chip device and send `begin_transaction` to the hardware.

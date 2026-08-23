@@ -10,6 +10,15 @@ use crate::{
     usb::UsbDevice,
 };
 
+/// Result of a pin-contact test.
+///
+/// `bad_pins` contains device pin numbers (1-based) that failed contact.
+/// Empty means all pins contacted successfully.
+#[derive(Debug, Clone, Default)]
+pub struct PinTestResult {
+    pub bad_pins: Vec<u16>,
+}
+
 /// Data buffer + addressing info for a single block read/write.
 #[derive(Debug)]
 pub struct DataSet {
@@ -165,8 +174,14 @@ pub trait Protocol: Send + Sync {
     /// resistors on the remaining pins in two passes, reads back the states,
     /// and verifies that every pin in `pin_map.mask` makes contact.
     ///
-    /// On success returns `Ok(())`.  Reports bad-pin details via `eprintln!`.
-    fn pin_test(&self, usb: &UsbDevice, device: &Device, pin_map: &PinMap) -> Result<()> {
+    /// Returns `Ok(PinTestResult)` with the list of bad device pin numbers
+    /// (empty if all pins contacted successfully).
+    fn pin_test(
+        &self,
+        usb: &UsbDevice,
+        device: &Device,
+        pin_map: &PinMap,
+    ) -> Result<PinTestResult> {
         let _ = (usb, device, pin_map);
         Err(MiniproError::UnsupportedOperation)
     }

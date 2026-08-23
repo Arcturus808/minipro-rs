@@ -1008,15 +1008,19 @@ pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
 ///
 /// `infoic_path` must point to `infoic.xml` so that the programmer-independent
 /// pin-map table (`<maps>`) can be located.  If the device has `pin_map == 0`
-/// (no contact-test data in the database) this returns `Ok(())` immediately.
-pub fn pin_contact_check(handle: &mut MiniproHandle, infoic_path: &std::path::Path) -> Result<()> {
+/// (no contact-test data in the database) this returns `Ok(PinTestResult { bad_pins: vec![] })`
+/// immediately.
+pub fn pin_contact_check(
+    handle: &mut MiniproHandle,
+    infoic_path: &std::path::Path,
+) -> Result<crate::protocol::PinTestResult> {
     let device = handle.device()?.clone();
     let index = device.pin_map & 0xFF;
     let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
         Some(pm) => pm,
         None => {
             eprintln!("Pin contact check not available for this device.");
-            return Ok(());
+            return Ok(crate::protocol::PinTestResult::default());
         }
     };
     handle.protocol.pin_test(&handle.usb, &device, &pin_map)
@@ -1087,11 +1091,7 @@ pub fn spi_autodetect_and_lookup(
         1 => 16,
         _ => 0, // wildcard — shouldn't happen with valid CLI input
     };
-    let matches = crate::database::find_devices_by_chip_id(
-        paths,
-        jedec_id,
-        pin_count,
-        handle.info.model,
-    )?;
+    let matches =
+        crate::database::find_devices_by_chip_id(paths, jedec_id, pin_count, handle.info.model)?;
     Ok(SpiAutodetectResult { jedec_id, matches })
 }

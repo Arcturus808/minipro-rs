@@ -1152,7 +1152,7 @@ impl Protocol for Tl866iiPlusProtocol {
         usb: &UsbDevice,
         device: &Device,
         pin_map: &crate::database::PinMap,
-    ) -> Result<()> {
+    ) -> Result<crate::protocol::PinTestResult> {
         pin_test_tl866(usb, device, pin_map)
     }
 
@@ -1478,14 +1478,13 @@ pub(super) fn logic_ic_test_tl866(
 /// Pin-contact test shared by TL866II+ and T76.
 ///
 /// Mirrors `tl866iiplus_pin_test` from the upstream C source.
-/// On success prints "Pin test passed." and returns `Ok(())`.
-/// Bad-contact pins are printed as they are found; the function returns
-/// `Err(MiniproError::PinContactFailed)` if any pin fails.
+/// Returns `Ok(PinTestResult)` with a list of bad device pin numbers
+/// (empty if all pins contacted successfully).
 pub(super) fn pin_test_tl866(
     usb: &UsbDevice,
     device: &Device,
     pin_map: &crate::database::PinMap,
-) -> Result<()> {
+) -> Result<crate::protocol::PinTestResult> {
     let p_pins: usize = ZIF_PINS; // 40 ZIF positions
     let d_pins = device.package_details.pin_count as usize;
     let x_pin = d_pins / 2; // split: left / right halves
@@ -1573,22 +1572,16 @@ pub(super) fn pin_test_tl866(
     usb.msg_send(&end)?;
 
     // ── Step 14: Check contact for each masked pin ────────────────────────
-    let mut ok = true;
+    let mut bad_pins = Vec::new();
     for &p_pin in &pin_map.mask {
         let p = p_pin as usize;
         let d_pin = if p > x_pin { p - pno } else { p };
         if (1..=40).contains(&p) && pins[p - 1] == 0 {
-            eprintln!("Bad contact on pin: {}", d_pin);
-            ok = false;
+            bad_pins.push(d_pin as u16);
         }
     }
 
-    if ok {
-        eprintln!("Pin test passed.");
-        Ok(())
-    } else {
-        Err(MiniproError::PinContactFailed)
-    }
+    Ok(crate::protocol::PinTestResult { bad_pins })
 }
 
 pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {

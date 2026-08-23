@@ -59,9 +59,6 @@ pub enum MiniproError {
 
     #[error("Algorithm CRC mismatch")]
     AlgorithmCrc,
-
-    #[error("Pin contact test failed")]
-    PinContactFailed,
 }
 
 pub type Result<T> = std::result::Result<T, MiniproError>;

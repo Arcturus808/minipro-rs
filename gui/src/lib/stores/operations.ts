@@ -325,3 +325,42 @@ export interface LockStatus {
 export async function checkLockProtection(icspMode: string): Promise<LockStatus> {
   return await invoke<LockStatus>("check_lock_protection", { icspMode });
 }
+
+// ── Pin contact test ────────────────────────────────────────────────────────
+
+export interface PinTestResult {
+  supported: boolean;
+  pass: boolean;
+  bad_pins: number[];
+  message: string;
+}
+
+/** Current pin-test result. null = no test run yet. */
+export const pinTestResult = writable<PinTestResult | null>(null);
+/** True while the pin test is executing. */
+export const pinTestRunning = writable(false);
+
+export async function doPinTest(icspMode: string): Promise<void> {
+  pinTestRunning.set(true);
+  try {
+    const result = await invoke<PinTestResult>("do_pin_test", { icspMode });
+    pinTestResult.set(result);
+    if (result.supported && result.pass) {
+      logs.info("Pin test: all pins OK");
+    } else if (result.supported && !result.pass) {
+      logs.warn(`Pin test: bad contact on ${result.bad_pins.length} pin(s): ${result.bad_pins.join(", ")}`);
+    } else {
+      logs.warn(`Pin test: ${result.message}`);
+    }
+  } catch (e) {
+    logs.error(`Pin test failed: ${e}`);
+    pinTestResult.set(null);
+    await refreshProgrammer();
+  } finally {
+    pinTestRunning.set(false);
+  }
+}
+
+export function clearPinTestResult(): void {
+  pinTestResult.set(null);
+}

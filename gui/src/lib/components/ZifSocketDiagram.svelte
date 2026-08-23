@@ -1,6 +1,12 @@
 <script lang="ts">
   import { selectedDevice, programmer } from "../stores/device";
 
+  // ── Props ────────────────────────────────────────────────────────────────
+  // badPins: device pin numbers (1-based) that failed contact test.
+  // Empty = no test run or all pins OK. When non-empty, those pins are
+  // highlighted red on the ZIF diagram.
+  let { badPins = [] }: { badPins?: number[] } = $props();
+
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
   // Pin 1 is always at the TOP of the diagram (ZIF pin 1 = top).
@@ -96,6 +102,28 @@
     $selectedDevice ? ($selectedDevice.name.split("@")[1] || $selectedDevice.package_type) : ""
   );
   let isDip = $derived(packageName.toUpperCase().startsWith("DIP"));
+
+  // ── Pin test state ──────────────────────────────────────────────────────
+  // Map device pin numbers to ZIF socket pin numbers for highlighting.
+  // Device pins 1..HALF map to ZIF pins 1..HALF (left side).
+  // Device pins HALF+1..N map to ZIF pins (socketSize - HALF + 1)..socketSize (right side).
+  let badZifPins = $derived.by(() => {
+    if (!badPins || badPins.length === 0 || !$selectedDevice) return new Set<number>();
+    const pc = $selectedDevice.pin_count;
+    const half = Math.floor(pc / 2);
+    const set = new Set<number>();
+    for (const dPin of badPins) {
+      if (dPin <= half) {
+        set.add(dPin);
+      } else {
+        set.add(socketSize - half + (dPin - half));
+      }
+    }
+    return set;
+  });
+
+  // Whether pin test results are active (any bad pins or explicit pass state)
+  let pinTestActive = $derived(badPins !== null && badPins !== undefined && badPins.length >= 0 && $selectedDevice !== null);
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
@@ -163,18 +191,36 @@
       <!-- Pin slots (socket holes) -->
       {#each allPins as pin}
         {@const coord = pinToCoord(pin, socketSize)}
+        {@const isBad = badZifPins.has(pin)}
+        {@const isOccupied = occupiedPins.includes(pin)}
+        {@const isGood = isOccupied && !isBad && pinTestActive && badPins.length === 0}
         <rect
           x={coord.x}
           y={coord.y}
           width={SLOT_W}
           height={SLOT_H}
           rx="1"
-          fill="black"
-          fill-opacity="0.15"
-          stroke="currentColor"
+          fill={isBad ? "#f38ba8" : isGood ? "#a6e3a1" : "black"}
+          fill-opacity={isBad ? "0.9" : isGood ? "0.5" : "0.15"}
+          stroke={isBad ? "#f38ba8" : isGood ? "#a6e3a1" : "currentColor"}
           stroke-width="1.5"
-          opacity="0.5"
+          opacity={isBad || isGood ? "1" : "0.5"}
         />
+        {#if isBad}
+          {@const isLeft = pin <= socketSize / 2}
+          {@const labelX = isLeft ? coord.x - 4 : coord.x + SLOT_W + 4}
+          {@const labelAnchor = isLeft ? "end" : "start"}
+          {@const half = Math.floor(($selectedDevice?.pin_count ?? 0) / 2)}
+          {@const dPin = pin <= half ? pin : pin - (socketSize - half) + half}
+          <text
+            x={labelX}
+            y={coord.y + SLOT_H + 1}
+            font-size="9"
+            fill="#f38ba8"
+            font-weight="bold"
+            text-anchor={labelAnchor}
+          >PIN {dPin}</text>
+        {/if}
       {/each}
 
       <!-- Chip pins (fixed-width stubs extending from chip body) -->
@@ -225,27 +271,18 @@
           fill="var(--bg-color, #fff)"
           stroke="rgb(99, 102, 241)" stroke-width="1.5" />
 
-        <!-- "ZIF PIN 1" label: to the left of pin 1, outside the socket body -->
-        {@const pin1Coord = pinToCoord(1, socketSize)}
-        <text
-          x={pin1Coord.x - 8}
-          y={pin1Coord.y + SLOT_H + 1}
-          font-size="10"
-          fill="rgb(99, 102, 241)"
-          font-weight="bold"
-          text-anchor="end"
-        >ZIF PIN 1</text>
-
-        <!-- "ZIF PIN N" label: to the right of the last pin, outside the socket body -->
-        {@const lastPinCoord = pinToCoord(socketSize, socketSize)}
-        <text
-          x={lastPinCoord.x + SLOT_W + 8}
-          y={lastPinCoord.y + SLOT_H + 1}
-          font-size="10"
-          fill="rgb(99, 102, 241)"
-          font-weight="bold"
-          text-anchor="start"
-        >ZIF PIN {socketSize}</text>
+        <!-- "ZIF PIN 1" label: hidden if pin 1 is bad (red PIN 1 label takes its place) -->
+        {#if !badZifPins.has(1)}
+          {@const pin1Coord = pinToCoord(1, socketSize)}
+          <text
+            x={pin1Coord.x - 8}
+            y={pin1Coord.y + SLOT_H + 1}
+            font-size="10"
+            fill="rgb(99, 102, 241)"
+            font-weight="bold"
+            text-anchor="end"
+          >ZIF PIN 1</text>
+        {/if}
       {/if}
       </g>
     </svg>

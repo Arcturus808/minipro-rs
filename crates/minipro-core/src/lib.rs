@@ -49,8 +49,8 @@ pub use batch::{
     SerialChecksum, SerialConfig, SerialEndian, SerialFormat,
 };
 pub use database::{
-    find_device, find_device_any, find_devices_by_chip_id, list_devices,
-    list_devices_for_model, DatabasePaths,
+    find_device, find_device_any, find_devices_by_chip_id, list_devices, list_devices_for_model,
+    DatabasePaths,
 };
 pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,
@@ -63,7 +63,7 @@ pub use diff::{
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
 pub use operations::{
-    firmware_update, hardware_check, logic_ic_test, pin_contact_check, read_fuses,
-    spi_autodetect, spi_autodetect_and_lookup, write_fuses, FuseValue, OpStats, SizeMismatch,
-    SpiAutodetectResult,
+    firmware_update, hardware_check, logic_ic_test, pin_contact_check, read_fuses, spi_autodetect,
+    spi_autodetect_and_lookup, write_fuses, FuseValue, OpStats, SizeMismatch, SpiAutodetectResult,
 };
+pub use protocol::PinTestResult;
