@@ -1542,7 +1542,7 @@
         {#if icspMode !== "zif"}
           <IcspConnectorDiagram />
         {:else}
-          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} />
+          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} />
           {#if $pinTestResult}
             <div class="border border-surface-200-800 p-2 mt-1">
               {#if $pinTestResult.supported && $pinTestResult.pass}
