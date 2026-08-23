@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- *No new features yet.*
+
+## [0.7.0] - 2026-08-23
+
+### Added
+
 - **GUI custom database directory** — Settings → Database now has a directory picker for custom `infoic.xml`, `logicic.xml`, and `algorithm.xml` files. The selected directory overrides the standard search path, persists across restarts, and reloads the device list immediately. `algorithm.xml` is optional — picked up if present, not required. If the saved directory is later moved or deleted, the app silently falls back to default search paths and shows a warning in Settings. The CLI's `--infoic` / `--logicic` / `--algorithms` flags and `MINIPRO_HOME` env var are now documented in the README alongside this GUI feature.
 - **GUI model-specific voltage override dropdowns** — the Advanced voltage section now shows only the voltage values supported by the connected programmer model and selected device, instead of a hardcoded list. VPP and VDD dropdowns are hidden for logic ICs. Custom-protocol devices on T56/T76 show "Voltage overrides not supported for this device" instead of invalid options. Override values reset when switching devices or reconnecting the programmer. The logic test panel now includes a VCC dropdown for logic ICs, with backend support for applying the override before testing.
 - **GUI ICSP connector pin-numbering diagram** — when ICSP mode is selected, the right sidebar shows a physical diagram of the ICSP connector with pin numbers instead of the ZIF socket diagram. Layouts are model-specific: TL866A/II+ (1×6 linear), T56 (1×8 linear), T48 (2×8 zigzag), T76 (2×14 zigzag). TL866CS shows "ICSP not supported." A note directs users to Xgpro for chip-specific signal assignment.
@@ -25,9 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **T76 pin-contact test removed** — the T76 is FPGA-based and lacks the direct ZIF pin bit-banging hardware (commands 0x2D-0x36) that the TL866II+/T48 use for contact testing. The T76's `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test. Running it standalone returns meaningless data and can corrupt subsequent reads by disrupting FPGA state. XGPro itself removed pin detect from the T76 UI. The upstream C minipro's `t76_pin_test` is also broken (never reads the response, reports every pin as bad). The xgecu-pro project confirmed on real hardware that it "measured nothing and corrupted every read." T76 now returns `UnsupportedOperation` for pin test, matching TL866A/CS and T56.
-
-### Fixed
-
 - **ICSP bitmask sent incorrectly as boolean** — `begin_transaction` was sending `icsp as u8` (0 or 1) instead of the upstream bitmask (0x80 = ICSP enable, 0x81 = ICSP with VCC). This meant ICSP mode was likely not activating correctly at the firmware level, and "ICSP no VCC" was indistinguishable from "ICSP with VCC". Now sends the correct bitmask matching upstream C minipro. Also adds auto-activation of ICSP for ICSP-only chips, a warning when ICSP is selected for ZIF-only chips, and skips pin contact check in ICSP mode (pin test drives ZIF socket pins, not ICSP header pins).
 
 ## [0.6.2] - 2026-08-13
