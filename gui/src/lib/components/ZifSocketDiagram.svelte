@@ -3,9 +3,10 @@
 
   // ── Props ────────────────────────────────────────────────────────────────
   // badPins: device pin numbers (1-based) that failed contact test.
-  // Empty = no test run or all pins OK. When non-empty, those pins are
-  // highlighted red on the ZIF diagram.
-  let { badPins = [] }: { badPins?: number[] } = $props();
+  // pinTestActive: true only when a pin test has been run and returned
+  //   results. When false, slots render in their default color regardless
+  //   of badPins content.
+  let { badPins = [], pinTestActive = false }: { badPins?: number[]; pinTestActive?: boolean } = $props();
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -122,8 +123,7 @@
     return set;
   });
 
-  // Whether pin test results are active (any bad pins or explicit pass state)
-  let pinTestActive = $derived(badPins !== null && badPins !== undefined && badPins.length >= 0 && $selectedDevice !== null);
+  // Whether pin test results are active (passed in as a prop from App.svelte)
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
