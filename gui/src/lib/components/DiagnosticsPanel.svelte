@@ -22,13 +22,15 @@
     "T76",
   ]);
 
-  // Pin test is supported on TL866II+, T48, and T76.
+  // Pin test is supported on TL866II+ and T48 only.
   // T48 inherits from TL866II+ protocol (alias). TL866A/CS and T56 lack
-  // the bit-banging hardware required for contact detection.
+  // the bit-banging hardware required for contact detection. T76 is FPGA-
+  // based with no dedicated contact-test bitstream; its 0x3E command is
+  // an adapter-init pin-driver configuration step, not a standalone test.
+  // XGPro itself removed pin detect from the T76 UI.
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
     "T48",
-    "T76",
   ]);
 
   $: hardwareCheckSupported = $programmer

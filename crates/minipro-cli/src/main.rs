@@ -454,7 +454,7 @@ fn do_operations(
         }
         if !matches!(
             handle.info.model,
-            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
+            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
         ) {
             eprintln!("Pin test is not supported on this programmer model.");
             return Ok(());

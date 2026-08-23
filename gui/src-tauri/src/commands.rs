@@ -2419,7 +2419,7 @@ pub async fn do_pin_test(
             // Check programmer model support
             if !matches!(
                 handle.info.model,
-                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
+                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
             ) {
                 let _ = state_task.store_handle(handle);
                 return Ok(PinTestResultDto {
