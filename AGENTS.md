@@ -281,6 +281,48 @@ The logic test help modal explains the single-character vector symbols
 (0, 1, L, H, C, Z, X, G, V) used in the test result table, matching the
 XGPro definitions.
 
+### Pin-contact test (GUI)
+
+The Diagnostics panel has a "Pin Test" button that runs the ZIF socket
+contact test and highlights bad pins on the ZIF socket diagram. This
+matches XGPro's "Pin Detect" feature.
+
+**Model support:** TL866II+, T48, and T76 only. T48 inherits pin test
+from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
+TL866A/CS and T56 lack the bit-banging hardware — button is disabled
+with a tooltip. Upstream C minipro does not implement pin test for T48
+either (a software gap, not hardware), but our code is more correct.
+
+**Button disabled when:** no programmer connected, no device selected,
+device has `pin_map == 0` (no contact-test data in database), ICSP mode
+active, unsupported programmer model, or a test is already running.
+
+**Backend:** `do_pin_test` Tauri command in `commands.rs` follows the
+existing `try_acquire` / `spawn_blocking` / `take_handle` pattern with
+a 10s timeout. Returns `PinTestResultDto { supported, pass, bad_pins,
+message }`. Core `Protocol::pin_test()` returns `Result<PinTestResult>`
+with `bad_pins: Vec<u16>` (device pin numbers, 1-based, empty = all
+good). The CLI `-z` handler prints from the returned struct, preserving
+the existing "Bad contact on pin: N" output format.
+
+**Frontend stores:** `pinTestResult` and `pinTestRunning` in
+`operations.ts`. `doPinTest()` invokes the Tauri command and logs
+results. `clearPinTestResult()` is called in an `$effect` in App.svelte
+when `$programmer` or `$selectedDevice` changes, preventing stale
+bad-pin highlights from a previous device.
+
+**ZIF diagram highlighting:** `ZifSocketDiagram.svelte` accepts a
+`badPins` prop (device pin numbers). Device pins are mapped to ZIF
+socket positions using the same logic as `occupiedPins`. Bad ZIF slots
+render red with "PIN N" labels. Good occupied slots render green when
+the test passes. The "ZIF PIN 1" label is hidden when pin 1 is bad to
+avoid overlap with the red "PIN 1" label. Chip pin stubs always use the
+chip color (never change for bad/good — only the socket slots change).
+
+**Result panel:** Below the ZIF diagram, a compact panel shows
+"✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
+pin list and a "Clear" button to dismiss results.
+
 ### Config panel state (`$effect.pre`)
 
 `configData` in `App.svelte` is initialized via `$effect.pre` (not `$effect`)
@@ -321,8 +363,8 @@ gui/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list
-        DiagnosticsPanel.svelte  — overcurrent, calibration, pin test (buttons collapsible)
-        ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif")
+        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test (buttons collapsible)
+        ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
         IcspConnectorDiagram.svelte — ICSP connector pin-numbering diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc")
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
         SettingsPanel.svelte     — theme, defaults, layout reset, custom database directory picker
