@@ -164,6 +164,7 @@ pub fn run() {
             commands::check_overcurrent,
             commands::read_calibration,
             commands::run_hardware_check,
+            commands::do_pin_test,
             commands::get_dynamic_window_size,
             commands::read_fuses,
             commands::write_fuses,

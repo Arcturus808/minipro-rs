@@ -293,7 +293,14 @@ pub fn find_devices_by_chip_id(
 ) -> Result<Vec<DeviceListItem>> {
     let mut items = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    collect_by_chip_id(&paths.infoic, chip_id, pin_count, model, &mut items, &mut seen)?;
+    collect_by_chip_id(
+        &paths.infoic,
+        chip_id,
+        pin_count,
+        model,
+        &mut items,
+        &mut seen,
+    )?;
     Ok(items)
 }
 
@@ -1540,8 +1547,11 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir =
-            std::env::temp_dir().join(format!("minipro-rs-chipid-test-{}-{}", std::process::id(), id));
+        let dir = std::env::temp_dir().join(format!(
+            "minipro-rs-chipid-test-{}-{}",
+            std::process::id(),
+            id
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let infoic = dir.join("infoic.xml");
         std::fs::write(&infoic, INFOIC_CHIPID_FIXTURE).unwrap();
@@ -1558,7 +1568,8 @@ mod tests {
     fn test_find_by_chip_id_basic_match() {
         let paths = chipid_fixture_paths();
         // W25Q80 has chip_id 0xef4014, 8-pin
-        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "W25Q80");
         assert_eq!(matches[0].manufacturer, "Winbond");
@@ -1568,7 +1579,8 @@ mod tests {
     fn test_find_by_chip_id_comma_separated_names() {
         let paths = chipid_fixture_paths();
         // W25Q128,W25Q128JV has chip_id 0xef4018, 16-pin
-        let matches = find_devices_by_chip_id(&paths, 0xef4018, 16, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4018, 16, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 2);
         let names: Vec<&str> = matches.iter().map(|m| m.name.as_str()).collect();
         assert!(names.contains(&"W25Q128"));
@@ -1579,7 +1591,8 @@ mod tests {
     fn test_find_by_chip_id_pin_count_filter() {
         let paths = chipid_fixture_paths();
         // W25Q128 has 16-pin package; searching with 8-pin should not match
-        let matches = find_devices_by_chip_id(&paths, 0xef4018, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4018, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 0);
     }
 
@@ -1587,14 +1600,16 @@ mod tests {
     fn test_find_by_chip_id_wildcard_pin_count() {
         let paths = chipid_fixture_paths();
         // pin_count=0 means wildcard — should match regardless of package
-        let matches = find_devices_by_chip_id(&paths, 0xef4018, 0, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4018, 0, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 2); // W25Q128 + W25Q128JV
     }
 
     #[test]
     fn test_find_by_chip_id_no_match() {
         let paths = chipid_fixture_paths();
-        let matches = find_devices_by_chip_id(&paths, 0xdeadbeef, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xdeadbeef, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 0);
     }
 
@@ -1620,12 +1635,14 @@ mod tests {
     fn test_find_by_chip_id_model_section_filter() {
         let paths = chipid_fixture_paths();
         // TL866II+ searches INFOIC2PLUS section — should NOT see W25Q80A (INFOIC) or W25Q80T76 (INFOICT76)
-        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert!(matches.iter().all(|m| m.name != "W25Q80A"));
         assert!(matches.iter().all(|m| m.name != "W25Q80T76"));
 
         // TL866A searches INFOIC section — should see W25Q80A but not W25Q80
-        let matches = find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866a).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xef4014, 8, ProgrammerModel::Tl866a).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "W25Q80A");
 
@@ -1639,7 +1656,8 @@ mod tests {
     fn test_find_by_chip_id_multiple_manufacturers() {
         let paths = chipid_fixture_paths();
         // Different manufacturers, different chip_ids — verify manufacturer is tracked
-        let matches = find_devices_by_chip_id(&paths, 0xc22014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0xc22014, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "MX25L8005");
         assert_eq!(matches[0].manufacturer, "Macronix");
@@ -1651,7 +1669,8 @@ mod tests {
         // PM25LV010 has chip_id 0x00009D7C (2 bytes) in the database.
         // Firmware autodetect returns 0x9D7C00 (3 bytes).
         // normalize_chip_id aligns them: 0x9D7C == 0x9D7C.
-        let matches = find_devices_by_chip_id(&paths, 0x9D7C00, 8, ProgrammerModel::Tl866iiPlus).unwrap();
+        let matches =
+            find_devices_by_chip_id(&paths, 0x9D7C00, 8, ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "PM25LV010");
         assert_eq!(matches[0].manufacturer, "ISSI");

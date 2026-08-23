@@ -439,9 +439,7 @@ fn do_operations(
         // and sends NAND geometry setup. Without it, READID returns 0x00000000.
         // Matches the C minipro flow where -D falls through to check_chip_id,
         // which calls begin_transaction before get_chip_id.
-        handle
-            .protocol
-            .begin_transaction(&handle.usb, &device, 0)?;
+        handle.protocol.begin_transaction(&handle.usb, &device, 0)?;
         let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device)?;
         handle.protocol.end_transaction(&handle.usb)?;
         println!("Chip ID: {:#010x}", chip_id);
@@ -454,7 +452,10 @@ fn do_operations(
             eprintln!("Pin test is not supported in ICSP mode.");
             return Ok(());
         }
-        if !matches!(handle.info.model, ProgrammerModel::Tl866iiPlus | ProgrammerModel::T76) {
+        if !matches!(
+            handle.info.model,
+            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
+        ) {
             eprintln!("Pin test is not supported on this programmer model.");
             return Ok(());
         }
@@ -463,7 +464,25 @@ fn do_operations(
         } else {
             eprint!("Running pin contact check... ");
         }
-        pin_contact_check(handle, &db_paths.infoic)?;
+        let result = pin_contact_check(handle, &db_paths.infoic)?;
+        if result.bad_pins.is_empty() {
+            if cli.verbose {
+                eprintln!("Pin test passed.");
+            } else {
+                eprintln!("OK");
+            }
+        } else {
+            if !cli.verbose {
+                eprintln!();
+            }
+            for pin in &result.bad_pins {
+                eprintln!("Bad contact on pin: {}", pin);
+            }
+            return Err(anyhow::anyhow!(
+                "Pin contact test failed: {} bad pin(s)",
+                result.bad_pins.len()
+            ));
+        }
         return Ok(());
     }
 
@@ -719,7 +738,9 @@ fn do_operations(
 
             // Warning if chip may be write-protected and user didn't request unprotect.
             if off_protect && !cli.protect_off && !is_t76 {
-                eprintln!("Note: This chip may be write-protected. Use -u to unprotect before writing.");
+                eprintln!(
+                    "Note: This chip may be write-protected. Use -u to unprotect before writing."
+                );
             }
 
             // Auto-erase before write (unless suppressed or chip doesn't

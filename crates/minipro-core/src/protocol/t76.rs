@@ -1236,7 +1236,7 @@ impl Protocol for T76Protocol {
         usb: &UsbDevice,
         device: &Device,
         pin_map: &crate::database::PinMap,
-    ) -> Result<()> {
+    ) -> Result<crate::protocol::PinTestResult> {
         // T76 uses the same ZIF-socket pin-test hardware as the TL866II+.
         super::tl866iiplus::pin_test_tl866(usb, device, pin_map)
     }

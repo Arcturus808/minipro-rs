@@ -11,7 +11,7 @@ use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, get_pin_map, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
-    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -2376,6 +2376,107 @@ pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<Hardw
             } else {
                 Err(e)
             }
+        }
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
+/// DTO for pin-contact test results returned to the frontend.
+#[derive(Debug, Serialize)]
+pub struct PinTestResultDto {
+    /// Whether the programmer model supports pin testing.
+    pub supported: bool,
+    /// Whether all contacted pins passed (true if `bad_pins` is empty).
+    pub pass: bool,
+    /// Device pin numbers (1-based) that failed contact.
+    pub bad_pins: Vec<u16>,
+    /// Human-readable status message.
+    pub message: String,
+}
+
+/// Run a ZIF socket pin-contact test.
+///
+/// Requires a selected device with pin-map data in the database.
+/// Only supported on TL866II+, T48, and T76 (models with bit-banging
+/// hardware). Returns structured bad-pin data for diagram highlighting.
+#[tauri::command]
+pub async fn do_pin_test(
+    icspMode: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<PinTestResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || -> Result<PinTestResultDto, String> {
+            let mut handle = state_task.take_handle()?;
+
+            // Check programmer model support
+            if !matches!(
+                handle.info.model,
+                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
+            ) {
+                let _ = state_task.store_handle(handle);
+                return Ok(PinTestResultDto {
+                    supported: false,
+                    pass: false,
+                    bad_pins: vec![],
+                    message: "Pin test not supported on this programmer model".into(),
+                });
+            }
+
+            // Pin test only works in ZIF mode
+            if icspMode != "zif" {
+                let _ = state_task.store_handle(handle);
+                return Ok(PinTestResultDto {
+                    supported: false,
+                    pass: false,
+                    bad_pins: vec![],
+                    message: "Pin test is only available in ZIF mode".into(),
+                });
+            }
+
+            let device = state_task.get_device()?;
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
+
+            let db_paths = get_db_paths(&state_task)?;
+            let infoic_path = db_paths.infoic.clone();
+
+            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            let test_result = pin_contact_check(&mut handle, &infoic_path);
+            let _ = handle.end_transaction();
+
+            let result = test_result.map_err(|e| e.to_string())?;
+            let _ = state_task.store_handle(handle);
+
+            let pass = result.bad_pins.is_empty();
+            let count = result.bad_pins.len();
+            Ok(PinTestResultDto {
+                supported: true,
+                pass,
+                bad_pins: result.bad_pins,
+                message: if pass {
+                    "All pins OK".into()
+                } else {
+                    format!("Bad contact on {} pin(s)", count)
+                },
+            })
+        }),
+    )
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(Ok(dto))) => Ok(dto),
+        Ok(Ok(Err(e))) => {
+            handle_usb_error(&state_clone, &e);
+            Err(e)
         }
         Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
         Err(_) => Err("Operation timed out".into()),
