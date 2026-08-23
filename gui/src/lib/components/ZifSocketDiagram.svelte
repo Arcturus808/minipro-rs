@@ -192,19 +192,17 @@
       {#each allPins as pin}
         {@const coord = pinToCoord(pin, socketSize)}
         {@const isBad = badZifPins.has(pin)}
-        {@const isOccupied = occupiedPins.includes(pin)}
-        {@const isGood = isOccupied && !isBad && pinTestActive && badPins.length === 0}
         <rect
           x={coord.x}
           y={coord.y}
           width={SLOT_W}
           height={SLOT_H}
           rx="1"
-          fill={isBad ? "#f38ba8" : isGood ? "#a6e3a1" : "black"}
-          fill-opacity={isBad ? "0.9" : isGood ? "0.5" : "0.15"}
-          stroke={isBad ? "#f38ba8" : isGood ? "#a6e3a1" : "currentColor"}
+          fill={isBad ? "#f38ba8" : "black"}
+          fill-opacity={isBad ? "0.9" : "0.15"}
+          stroke={isBad ? "#f38ba8" : "currentColor"}
           stroke-width="1.5"
-          opacity={isBad || isGood ? "1" : "0.5"}
+          opacity={isBad ? "1" : "0.5"}
         />
         {#if isBad}
           {@const isLeft = pin <= socketSize / 2}
