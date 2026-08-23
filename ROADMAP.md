@@ -708,7 +708,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium-high** — established ecosystem workflow, real user demand, CLI already has parity
   - **Status:** implemented
 
-- [ ] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
+- [x] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
   - **Problem:** The core pin-contact test exists (`pin_contact_check()` in `operations.rs`, `pin_test_tl866()` in `tl866iiplus.rs`) and the CLI exposes it via `-z` / `--pin_check`. But the GUI's DiagnosticsPanel has a disabled "Pin Test (unsupported)" button, and even if enabled, the test results go to `eprintln!` (stderr) — the GUI can't capture them. XGPro shows specific bad pins (e.g., "Bad Pin: ZIF1 - PIN#1") and the user can see exactly which socket positions have poor contact.
   - **Current state:**
     - `pin_test_tl866()` prints "Bad contact on pin: {d_pin}" to stderr and returns `Err(PinContactFailed)` — no structured result
@@ -763,6 +763,6 @@ This is a living list of features and improvements planned for minipro-rs.
     - Optional auto pin-check before read/write/erase operations (XGPro's "Pin Detect" checkbox)
     - Pin-contact pre-check before SPI autodetect (upstream optionally runs `minipro_pin_test` on TL866II+ before autodetect — noted in the SPI autodetect roadmap item above)
   - **Priority: medium** — core logic exists, XGPro has this feature, prevents the most common cause of failed programming (poor contact / misaligned chip). The structured-result refactor is the main effort; the GUI work is straightforward once the backend returns a bad-pin list.
-  - **Status:** not started
+  - **Status:** implemented
 
 
