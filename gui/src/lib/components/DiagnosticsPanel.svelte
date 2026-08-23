@@ -129,13 +129,13 @@
           title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : "Run ZIF socket pin-contact test"}
         >
           {#if $pinTestRunning}
-            Pin Test (running...)
+            Pin Contact Test (running...)
           {:else}
-            Pin Test
+            Pin Contact Test
           {/if}
         </button>
       {:else}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Test</button>
+        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Contact Test</button>
       {/if}
     </div>
   </details>
