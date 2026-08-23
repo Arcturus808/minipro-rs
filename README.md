@@ -61,6 +61,8 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 **MCU support:**
 - **Fuse and lock-bit editor** (Config tab): auto-populated from database defaults when a device is selected; read/write MCU configuration bytes with checkbox UI and direct hex input; fuses and lock bits displayed side-by-side
 - **Bit-level fuse decoder**: each fuse/config byte is displayed as a grid of clickable bit cells (MSB→LSB) with named fields and descriptions. Click a bit to toggle it — hex value updates automatically. Covers all 18 AVR config variants (sourced from avr-libc and Microchip datasheets) and all database-referenced PIC config variants (PIC10F/PIC12F5 baseline 12-bit, PIC12F/PIC16F mid-range 14-bit, PIC16F baseline 12-bit, PIC18F 16-bit packed words, sourced from gputils and Microchip datasheets). Dangerous bits (RSTDISBL, SPIEN, JTAGEN, DWEN) are highlighted in red. A few PIC configs with database/datasheet mask discrepancies fall back to hex-only input — see [XGPro Database Discrepancies](docs/XGPRO-DATABASE-DISCREPANCIES.md)
+
+![MINIPRO-RS GUI — Fuse Bit Decoder](docs/screenshots/minipro_rs_cnf_lt.png)
 - **OSCCAL calibration preservation**: for PIC microcontrollers with `osccal_save=1`, the factory RC oscillator calibration word is automatically saved before erase and restored afterward, preventing clock accuracy loss
 
 **Safety features:**
