@@ -287,11 +287,17 @@ The Diagnostics panel has a "Pin Test" button that runs the ZIF socket
 contact test and highlights bad pins on the ZIF socket diagram. This
 matches XGPro's "Pin Detect" feature.
 
-**Model support:** TL866II+, T48, and T76 only. T48 inherits pin test
+**Model support:** TL866II+ and T48 only. T48 inherits pin test
 from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
-TL866A/CS and T56 lack the bit-banging hardware — button is disabled
-with a tooltip. Upstream C minipro does not implement pin test for T48
-either (a software gap, not hardware), but our code is more correct.
+TL866A/CS, T56, and T76 are not supported — button is disabled with a
+tooltip. The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
+hardware (commands 0x2D-0x36). Its `0x3E` command is an adapter-init
+pin-driver configuration step, not a standalone contact test — running
+it standalone returns meaningless data and can corrupt subsequent reads.
+XGPro itself removed pin detect from the T76 UI. The upstream C minipro's
+`t76_pin_test` is also broken (never reads the response, reports every
+pin as bad). The xgecu-pro project confirmed on real hardware that it
+"measured nothing and corrupted every read."
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode

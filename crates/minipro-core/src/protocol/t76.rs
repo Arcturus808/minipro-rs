@@ -1233,12 +1233,29 @@ impl Protocol for T76Protocol {
 
     fn pin_test(
         &self,
-        usb: &UsbDevice,
-        device: &Device,
-        pin_map: &crate::database::PinMap,
+        _usb: &UsbDevice,
+        _device: &Device,
+        _pin_map: &crate::database::PinMap,
     ) -> Result<crate::protocol::PinTestResult> {
-        // T76 uses the same ZIF-socket pin-test hardware as the TL866II+.
-        super::tl866iiplus::pin_test_tl866(usb, device, pin_map)
+        // T76 pin-contact test is not supported.
+        //
+        // The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
+        // hardware (commands 0x2D-0x36) that the TL866II+/T48 use for
+        // contact testing. The T76's 0x3E command (T76_PIN_DETECTION) is
+        // an adapter-init pin-driver configuration step, not a standalone
+        // contact test — running it standalone returns meaningless data
+        // and can corrupt subsequent reads by disrupting FPGA state.
+        //
+        // XGPro itself removed pin detect from the T76 UI. The upstream C
+        // minipro's t76_pin_test is also broken (initializes value=0 and
+        // never reads the response, so every pin reports as bad). The
+        // xgecu-pro project confirmed on real hardware that it "measured
+        // nothing and corrupted every read."
+        //
+        // A true T76 contact test would require a dedicated FPGA bitstream
+        // that XGecu has never written. Use the default trait impl
+        // (UnsupportedOperation).
+        Err(MiniproError::UnsupportedOperation)
     }
 
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
