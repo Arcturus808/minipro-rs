@@ -122,8 +122,8 @@ pub fn run() {
                         }));
                         let _ = window.center();
                     }
-                    let _ = store.set("windowWidth", serde_json::json!(win_w));
-                    let _ = store.set("windowHeight", serde_json::json!(win_h));
+                    store.set("windowWidth", serde_json::json!(win_w));
+                    store.set("windowHeight", serde_json::json!(win_h));
                     let _ = store.save();
                 }
             }
