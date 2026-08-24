@@ -25,8 +25,9 @@
   // Pin test is supported on TL866II+ and T48 only.
   // T48 inherits from TL866II+ protocol (alias). TL866A/CS and T56 lack
   // the bit-banging hardware required for contact detection. T76 is FPGA-
-  // based with no dedicated contact-test bitstream; its 0x3E command is
-  // an adapter-init pin-driver configuration step, not a standalone test.
+  // based with no dedicated contact-test bitstream; Matt Brown's
+  // t76-improvements branch discovered that its 0x3E command is an
+  // adapter-init pin-driver configuration step, not a standalone test.
   // The xgecu-pro project confirmed on real hardware that it "measured
   // nothing and corrupted every read."
   const PIN_TEST_SUPPORTED = new Set([

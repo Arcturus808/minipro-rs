@@ -1241,16 +1241,21 @@ impl Protocol for T76Protocol {
         //
         // The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
         // hardware (commands 0x2D-0x36) that the TL866II+/T48 use for
-        // contact testing. The T76's 0x3E command (T76_PIN_DETECTION) is
+        // contact testing. Matt Brown's t76-improvements branch
+        // (https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements)
+        // discovered that the T76's 0x3E command (T76_PIN_DETECTION) is
         // an adapter-init pin-driver configuration step, not a standalone
-        // contact test — running it standalone returns meaningless data
-        // and can corrupt subsequent reads by disrupting FPGA state.
+        // contact test — his t76_adapter_init() uses it to configure
+        // socket pin drivers for the selected package before bitstream
+        // upload. Running it standalone returns meaningless data and can
+        // corrupt subsequent reads by disrupting FPGA state.
         //
-        // The upstream C minipro's t76_pin_test is broken (initializes
-        // value=0 and never reads the response, so every pin reports as
-        // bad). The xgecu-pro project (https://github.com/jfabienke/xgecu-pro)
-        // confirmed on real hardware that it "measured nothing and
-        // corrupted every read."
+        // The upstream C minipro's t76_pin_test receives the response
+        // but never parses it — `value` is initialized to 0 and never
+        // updated from the response buffer, so `if (!value)` is always
+        // true and every pin reports as bad. The xgecu-pro project
+        // (https://github.com/jfabienke/xgecu-pro) confirmed on real
+        // hardware that it "measured nothing and corrupted every read."
         //
         // A true T76 contact test would require a dedicated FPGA bitstream
         // that XGecu has never written. Use the default trait impl

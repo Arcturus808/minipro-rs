@@ -144,7 +144,7 @@ The core library (`minipro-core`) is protocol-agnostic and can be embedded in ot
 
 ### Pin contact test
 
-Supported on TL866II+ and T48 only. TL866A/CS and T56 lack the bit-banging command set (0x2D–0x36) used by the test. T76 is intentionally unsupported: its `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test. The upstream C `minipro`'s `t76_pin_test` is broken (never reads the response, reports every pin as bad). The [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
+Supported on TL866II+ and T48 only. TL866A/CS and T56 lack the bit-banging command set (0x2D–0x36) used by the test. T76 is intentionally unsupported: Matt Brown's [t76-improvements branch](https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements) discovered that the T76's `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test — his `t76_adapter_init()` uses it to configure socket pin drivers before bitstream upload. The upstream C `minipro`'s `t76_pin_test` receives the response but never parses it (`value` is initialized to 0 and never updated from the response buffer, so every pin reports as bad). The [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
 
 ### References
 
