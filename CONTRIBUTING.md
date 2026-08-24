@@ -4,7 +4,7 @@ Thanks for your interest in contributing! This is a community-driven project and
 
 ## Reporting Issues
 
-Open an issue on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/issues) or [GitHub](https://github.com/Arcturus808/minipro-rs/issues).
+Open an issue on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/issues). The [GitHub repo](https://github.com/Arcturus808/minipro-rs) is a mirror for release builds only — issues and merge requests should go to GitLab.
 
 **For bugs, please include:**
 - Programmer model (TL866A, TL866II+, T48, T56, T76)
