@@ -283,9 +283,20 @@ XGPro definitions.
 
 ### Pin-contact test (GUI)
 
-The Diagnostics panel has a "Pin Test" button that runs the ZIF socket
+The Diagnostics panel has a "Pin Contact Test" button that runs the ZIF socket
 contact test and highlights bad pins on the ZIF socket diagram. This
 matches XGPro's "Pin Detect" feature.
+
+**Pre-operation gate:** A "Pin Contact Check" checkbox in the operations
+panel runs the pin test automatically before read, write, verify, erase,
+blank check, chip ID, and config (fuse read/write) operations. When
+checked (default, matching XGPro), the test runs after `begin_transaction`
+and before the operation-specific command. If bad pins are found, the
+operation is aborted and the bad pins are highlighted on the ZIF diagram.
+The checkbox is disabled on unsupported models, in ICSP mode, or when
+the device has no pin-map data. SPI autodetect runs the pin check
+automatically on supported models (no checkbox) — autodetect is aborted
+if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
 **Model support:** TL866II+ and T48 only. T48 inherits pin test
 from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
@@ -303,31 +314,64 @@ pin as bad). The xgecu-pro project confirmed on real hardware that it
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
 active, unsupported programmer model, or a test is already running.
 
+**Checkbox disabled when:** no programmer connected, no device selected,
+ICSP mode active, unsupported programmer model, or device has
+`pin_map == 0`. The checkbox is located right of "Chip ID check" for
+read/write/verify/erase, replaces "No options for this operation." for
+blank check and chip ID, and appears in a thin options row above the
+collapsible fuse editor for config. Logic test has no checkbox (uses
+test vectors, not pin-contact mechanism).
+
 **Backend:** `do_pin_test` Tauri command in `commands.rs` follows the
 existing `try_acquire` / `spawn_blocking` / `take_handle` pattern with
 a 10s timeout. Returns `PinTestResultDto { supported, pass, bad_pins,
 message }`. Core `Protocol::pin_test()` returns `Result<PinTestResult>`
 with `bad_pins: Vec<u16>` (device pin numbers, 1-based, empty = all
 good). The CLI `-z` handler prints from the returned struct, preserving
-the existing "Bad contact on pin: N" output format.
+the existing "Bad contact on pin: N" output format. The pre-operation
+gate uses `run_pin_check_if_enabled` helper which silently skips on
+unsupported models/ICSP/no-pin-map, and emits bad-pin data via
+`pin-test-result` event for diagram highlighting on failure.
+
+**`OperationOptions.pin_check`:** Added `pin_check: bool` field (serde
+default `true`) to `OperationOptions` in `commands.rs`. Operations that
+take `OperationOptions` (`do_read`, `read_chip_to_bytes`, `do_write`,
+`do_write_bytes`, `do_batch_write_chip`, `do_verify`) pass it to the
+helper. Operations that take `icspMode` directly (`do_erase`,
+`do_blank_check`, `do_chip_id`, `read_fuses`, `write_fuses`) now also
+take `pinCheck: bool` and `window: Window` parameters.
+
+**`do_spi_autodetect`:** Now takes `window: Window`. On TL866II+/T48 in
+ZIF mode, constructs a temporary `Device` with `pin_map` based on
+`idType` (8-pin=0x01, 16-pin=0x03), sets `handle.device`, runs
+`pin_contact_check`, then clears `handle.device` before proceeding with
+autodetect. Matches upstream minipro's `auto_detect` function.
 
 **Frontend stores:** `pinTestResult` and `pinTestRunning` in
 `operations.ts`. `doPinTest()` invokes the Tauri command and logs
 results. `clearPinTestResult()` is called in an `$effect` in App.svelte
 when `$programmer` or `$selectedDevice` changes, preventing stale
-bad-pin highlights from a previous device.
+bad-pin highlights from a previous device. `initPinTestListener()`
+listens for `pin-test-result` events emitted by the backend during
+pre-operation pin checks, updating the store for diagram highlighting.
 
 **ZIF diagram highlighting:** `ZifSocketDiagram.svelte` accepts a
 `badPins` prop (device pin numbers). Device pins are mapped to ZIF
 socket positions using the same logic as `occupiedPins`. Bad ZIF slots
-render red with "PIN N" labels. Good occupied slots render green when
-the test passes. The "ZIF PIN 1" label is hidden when pin 1 is bad to
+render red with "PIN N" labels. Good occupied slots keep their default
+styling (no green). The "ZIF PIN 1" label is hidden when pin 1 is bad to
 avoid overlap with the red "PIN 1" label. Chip pin stubs always use the
 chip color (never change for bad/good — only the socket slots change).
 
 **Result panel:** Below the ZIF diagram, a compact panel shows
 "✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
 pin list and a "Clear" button to dismiss results.
+
+**CLI pre-operation gate:** The `-z` / `--pin-check` flag now doubles as
+both a standalone test and a pre-operation gate, matching upstream
+minipro. When combined with `-w`/`-r`/`-E`/`-m`/`-b`/`-D`/`-a`, the pin
+test runs first and the operation only proceeds if all pins are good.
+If `-z` is the only flag, the test runs standalone and exits.
 
 ### Config panel state (`$effect.pre`)
 

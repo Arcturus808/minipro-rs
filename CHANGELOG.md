@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *No new features yet.*
+- **Pre-operation pin contact check (CLI + GUI)** — the CLI `-z` / `--pin-check` flag now doubles as both a standalone test and a pre-operation gate, matching upstream C minipro. When combined with `-w`/`-r`/`-E`/`-m`/`-b`/`-D`/`-a`, the pin test runs first and the operation only proceeds if all pins are good. The GUI adds a "Pin Contact Check" checkbox in the operations panel (default on, matching XGPro's "Pin Detect"). When checked, the pin test runs after `begin_transaction` and before the operation. If bad pins are found, the operation is aborted and the bad pins are highlighted on the ZIF diagram. The checkbox is disabled on unsupported models (TL866A/CS, T56, T76), in ICSP mode, or when the device has no pin-map data. Located right of "Chip ID check" for read/write/verify/erase; replaces "No options for this operation." for blank check and chip ID; thin options row above the fuse editor for config. Logic test has no checkbox (uses test vectors, not pin-contact mechanism).
+- **Automatic pin check before SPI autodetect** — on TL866II+/T48 in ZIF mode, a pin contact check runs automatically before SPI autodetect (no checkbox needed). If bad pins are found, autodetect is aborted with a clear diagnostic message instead of returning a garbage JEDEC ID. Matches upstream minipro's `auto_detect` function behavior.
+
+### Changed
+
+- **CLI `-z` flag behavior** — previously exited immediately after the pin test regardless of other flags. Now falls through to operation handlers after a successful test, allowing `-z` to gate subsequent operations. Standalone `-z` (no other operation) still exits after the test.
 
 ## [0.7.0] - 2026-08-23
 

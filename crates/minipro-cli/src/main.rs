@@ -447,6 +447,11 @@ fn do_operations(
     }
 
     // ── Pin contact check ─────────────────────────────────────────────────────
+    // When -z is passed, the pin contact test runs before any operation.
+    // If the test fails, the operation is aborted. If no other operation is
+    // selected, the test runs standalone and exits. This matches upstream
+    // minipro's behavior where -z doubles as both a standalone test and a
+    // pre-operation gate (main.c line 3523-3537).
     if cli.pin_check {
         if handle.icsp != 0 {
             eprintln!("Pin test is not supported in ICSP mode.");
@@ -483,7 +488,8 @@ fn do_operations(
                 result.bad_pins.len()
             ));
         }
-        return Ok(());
+        // Fall through to operation handlers below. If -z is the only flag,
+        // no operation blocks match and do_operations returns Ok(()).
     }
 
     // ── Logic IC test ─────────────────────────────────────────────────────────

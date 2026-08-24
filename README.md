@@ -69,6 +69,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Lock-bit protection safeguards**: warns before read/write when lock bits indicate protection is active
 - **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
 - **No-chip-ID warning**: yellow banner when the selected device lacks chip ID support, reminding user to verify correct chip insertion
+- **Pin contact check** — tests ZIF socket contact before operations (read, write, verify, erase, blank check, chip ID, config/fuse read/write). Bad pins are highlighted on the ZIF socket diagram and the operation is aborted. CLI: `-z` / `--pin-check` runs before the requested operation (e.g., `minipro -p ATmega328P -w firmware.hex -z`). GUI: "Pin Contact Check" checkbox in the operations panel (default on, matching XGPro's "Pin Detect"). Supported on TL866II+ and T48 only; disabled on TL866A/CS, T56, and T76, and in ICSP mode. SPI autodetect runs the check automatically on supported models — autodetect is aborted if bad pins are found, since poor contact produces garbage JEDEC IDs
 - **USB reconnect hints** — connection button tooltip and error messages advise replugging on USB-related failures (Windows Selective Suspend, Linux autosuspend, macOS sleep power management)
 
 **UI & usability:**

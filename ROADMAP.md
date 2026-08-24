@@ -760,8 +760,8 @@ This is a living list of features and improvements planned for minipro-rs.
     - The test briefly drives ZIF pins — should we warn the user before running? XGPro runs it automatically before operations when "Pin Detect" is checked. We could add an optional "auto pin check before operations" setting later.
     - Bad pins are reported as device pin numbers (1-based), not ZIF socket positions — the diagram maps device pins to ZIF positions using the same logic as `occupiedPins`
   - **Future extension (not in this task):**
-    - Optional auto pin-check before read/write/erase operations (XGPro's "Pin Detect" checkbox)
-    - Pin-contact pre-check before SPI autodetect (upstream optionally runs `minipro_pin_test` on TL866II+ before autodetect — noted in the SPI autodetect roadmap item above)
+    - ~~Optional auto pin-check before read/write/erase operations (XGPro's "Pin Detect" checkbox)~~ — **implemented** in 0.7.1 (unreleased). CLI `-z` now gates subsequent operations. GUI has "Pin Contact Check" checkbox (default on).
+    - ~~Pin-contact pre-check before SPI autodetect (upstream optionally runs `minipro_pin_test` on TL866II+ before autodetect — noted in the SPI autodetect roadmap item above)~~ — **implemented** in 0.7.1 (unreleased). Automatic pin check runs on TL866II+/T48 in ZIF mode before autodetect.
   - **Priority: medium** — core logic exists, XGPro has this feature, prevents the most common cause of failed programming (poor contact / misaligned chip). The structured-result refactor is the main effort; the GUI work is straightforward once the backend returns a bad-pin list.
   - **Status:** implemented
 
