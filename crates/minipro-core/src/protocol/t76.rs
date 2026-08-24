@@ -1239,9 +1239,9 @@ impl Protocol for T76Protocol {
     ) -> Result<crate::protocol::PinTestResult> {
         // T76 pin-contact test is not supported.
         //
-        // The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
-        // hardware (commands 0x2D-0x36) that the TL866II+/T48 use for
-        // contact testing. Matt Brown's t76-improvements branch
+        // The T76 is FPGA-based and the C minipro source does not define
+        // the bit-banging commands (0x2D-0x36) that the TL866II+/T48 use
+        // for contact testing. Matt Brown's t76-improvements branch
         // (https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements)
         // discovered that the T76's 0x3E command (T76_PIN_DETECTION) is
         // an adapter-init pin-driver configuration step, not a standalone

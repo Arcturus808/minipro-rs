@@ -301,17 +301,20 @@ if bad pins are found, since poor contact produces garbage JEDEC IDs.
 **Model support:** TL866II+ and T48 only. T48 inherits pin test
 from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
 TL866A/CS, T56, and T76 are not supported — button is disabled with a
-tooltip. The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
-hardware (commands 0x2D-0x36). Its `0x3E` command is an adapter-init
-pin-driver configuration step, not a standalone contact test — running
-it standalone returns meaningless data and can corrupt subsequent reads.
-This was discovered by Matt Brown's t76-improvements branch, whose
-t76_adapter_init() uses 0x3E to configure socket pin drivers before
-bitstream upload. The upstream C minipro's `t76_pin_test` receives the
-response but never parses it — `value` is initialized to 0 and never
-updated from the response buffer, so every pin reports as bad. The
-xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed on
-real hardware that it "measured nothing and corrupted every read."
+tooltip. The C `minipro` source does not define the bit-banging commands
+(0x2D-0x36) for any of these models. The T76's `0x3E` command is an
+adapter-init pin-driver configuration step, not a standalone contact
+test — running it standalone returns meaningless data and can corrupt
+subsequent reads. This was discovered by Matt Brown's t76-improvements
+branch, whose t76_adapter_init() uses 0x3E to configure socket pin
+drivers before bitstream upload. The upstream C minipro's `t76_pin_test`
+receives the response but never parses it — `value` is initialized to 0
+and never updated from the response buffer, so every pin reports as bad.
+The xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
+on real hardware that it "measured nothing and corrupted every read."
+The T56 defines the same `0x3E` command but has no `t56_pin_test`
+function — it may share the T76's situation, but this has not been
+verified on T56 hardware.
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
