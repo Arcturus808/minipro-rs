@@ -51,6 +51,88 @@ fn emit_log(window: &Window, level: &str, message: &str) {
     }));
 }
 
+/// Emit pin-test results to the frontend for ZIF diagram highlighting.
+fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
+    let _ = window.emit("pin-test-result", serde_json::json!({
+        "supported": dto.supported,
+        "pass": dto.pass,
+        "bad_pins": dto.bad_pins,
+        "message": dto.message,
+    }));
+}
+
+/// Run a pin contact check before an operation if enabled.
+///
+/// Silently returns `Ok(())` when:
+/// - `pin_check` is false (user unchecked the box)
+/// - Programmer model is not TL866II+/T48
+/// - ICSP mode is active (pin test is ZIF-only)
+/// - Device has `pin_map == 0` (no contact-test data in database)
+///
+/// On failure: emits bad-pin data to the frontend for diagram highlighting,
+/// emits a log line, and returns `Err` so the calling operation aborts.
+fn run_pin_check_if_enabled(
+    handle: &mut MiniproHandle,
+    enabled: bool,
+    icsp_mode: &str,
+    window: &Window,
+    infoic_path: &std::path::Path,
+) -> Result<(), String> {
+    if !enabled {
+        return Ok(());
+    }
+    if !matches!(
+        handle.info.model,
+        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+    ) {
+        return Ok(());
+    }
+    if icsp_mode != "zif" {
+        return Ok(());
+    }
+    let device = handle.device().map_err(|e| e.to_string())?.clone();
+    if device.pin_map & 0xFF == 0 {
+        return Ok(());
+    }
+
+    emit_log(window, "info", "Running pin contact check...");
+    let result = pin_contact_check(handle, infoic_path).map_err(|e| e.to_string())?;
+    let pass = result.bad_pins.is_empty();
+    let count = result.bad_pins.len();
+    let dto = PinTestResultDto {
+        supported: true,
+        pass,
+        bad_pins: result.bad_pins.clone(),
+        message: if pass {
+            "All pins OK".into()
+        } else {
+            format!("Bad contact on {} pin(s)", count)
+        },
+    };
+
+    if pass {
+        emit_log(window, "info", "Pin contact check passed");
+    } else {
+        let pin_list = result
+            .bad_pins
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        emit_log(
+            window,
+            "warn",
+            &format!("Pin contact check failed: bad contact on pin(s) {}. Operation aborted.", pin_list),
+        );
+        emit_pin_test_result(window, &dto);
+        return Err(format!(
+            "Pin contact check failed: bad contact on {} pin(s): {}",
+            count, pin_list
+        ));
+    }
+    Ok(())
+}
+
 // ── Data transfer objects ───────────────────────────────────────────────────
 
 /// Serial number configuration for batch programming (sent from frontend).
@@ -249,6 +331,9 @@ pub struct OperationOptions {
     /// Re-protect chip after write (if device supports protect_after).
     #[serde(default)]
     pub protect_after_op: bool,
+    /// Run pin contact check before the operation (matches XGPro "Pin Detect").
+    #[serde(default = "default_true")]
+    pub pin_check: bool,
 }
 
 fn default_icsp_mode() -> String { "zif".into() }
@@ -772,6 +857,16 @@ pub async fn do_read(
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             if options_clone.check_device_id {
                 match check_chip_id(&mut handle) {
                     Ok(()) => {
@@ -874,6 +969,16 @@ pub async fn read_chip_to_bytes(
 
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
 
             let stats = read_chip(
                 &mut handle,
@@ -1048,6 +1153,16 @@ pub async fn do_write(
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             if options_clone.check_device_id {
                 match check_chip_id(&mut handle) {
                     Ok(()) => {
@@ -1104,7 +1219,7 @@ pub async fn do_write(
 
             if !options_clone.skip_verify {
                 let verify_window = window_clone.clone();
-                let _ = verify_chip(
+                verify_chip(
                     &mut handle,
                     Path::new(&path_clone),
                     page,
@@ -1204,6 +1319,16 @@ pub async fn do_batch_write_chip(
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             if options_clone.check_device_id {
                 match check_chip_id(&mut handle) {
                     Ok(()) => {
@@ -1284,7 +1409,7 @@ pub async fn do_batch_write_chip(
 
                 if !options_clone.skip_verify {
                     let verify_window = window_clone.clone();
-                    let _ = verify_chip_bytes(
+                    verify_chip_bytes(
                         &mut handle,
                         buf,
                         page,
@@ -1338,7 +1463,7 @@ pub async fn do_batch_write_chip(
 
             if !options_clone.skip_verify {
                 let verify_window = window_clone.clone();
-                let _ = verify_chip(
+                verify_chip(
                     &mut handle,
                     Path::new(&path_clone),
                     page,
@@ -1428,6 +1553,16 @@ pub async fn do_write_bytes(
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
 
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             if options_clone.check_device_id {
                 match check_chip_id(&mut handle) {
                     Ok(()) => {
@@ -1482,7 +1617,7 @@ pub async fn do_write_bytes(
 
             if !options_clone.skip_verify {
                 let verify_window = window_clone.clone();
-                let _ = verify_chip_bytes(
+                verify_chip_bytes(
                     &mut handle,
                     verify_bytes,
                     page,
@@ -1556,6 +1691,16 @@ pub async fn do_verify(
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                options_clone.pin_check,
+                &options_clone.icsp_mode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             if options_clone.check_device_id {
                 match check_chip_id(&mut handle) {
                     Ok(()) => {
@@ -1610,7 +1755,7 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(icspMode: String, checkDeviceId: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(icspMode: String, checkDeviceId: bool, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1625,6 +1770,16 @@ pub async fn do_erase(icspMode: String, checkDeviceId: bool, window: Window, sta
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
 
             if checkDeviceId {
                 match check_chip_id(&mut handle) {
@@ -1669,13 +1824,14 @@ pub struct BlankCheckResultDto {
 /// Blank-check the chip.
 /// Returns Ok(is_blank=true) if blank, Ok(is_blank=false, address) if not blank.
 #[tauri::command]
-pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<BlankCheckResultDto, String> {
+pub async fn do_blank_check(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<BlankCheckResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
@@ -1683,6 +1839,17 @@ pub async fn do_blank_check(icspMode: String, state: State<'_, Arc<AppState>>) -
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             blank_check(&mut handle).map_err(|e| e.to_string())?;
             Ok::<BlankCheckResultDto, String>(BlankCheckResultDto { is_blank: true, address: 0 })
         })();
@@ -1721,13 +1888,14 @@ pub struct ChipIdResultDto {
 
 /// Read the chip ID.
 #[tauri::command]
-pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<ChipIdResultDto, String> {
+pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<ChipIdResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
         let device = state_task.get_device()?;
@@ -1735,6 +1903,17 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
             handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
             let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device).map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
             // chip that don't match what the firmware returns for that variant's protocol.
@@ -1746,7 +1925,7 @@ pub async fn do_chip_id(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
                 device.name.clone()
             };
             let expected = device.chip_id;
-            let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.max(1).min(4) };
+            let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.clamp(1, 4) };
             let mask = match bytes {
                 1 => 0xFFu32,
                 2 => 0xFFFF,
@@ -1822,6 +2001,7 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
                         size_mismatch: "error".to_string(),
                         unprotect_before: false,
                         protect_after_op: false,
+                        pin_check: false,
                     };
                     apply_voltage_overrides(&mut dev, &options, Some(model))
                         .map_err(|e| e.to_string())?;
@@ -1883,19 +2063,70 @@ pub struct SpiAutodetectResultDto {
 /// `idType` selects the package: 0 = 8-pin, 1 = 16-pin.
 /// Does NOT require a device to be selected — autodetect is a standalone firmware
 /// command (0x37) that needs no transaction context.
+///
+/// On TL866II+/T48 in ZIF mode, a pin contact check is run automatically before
+/// autodetect. If bad pins are found, autodetect is aborted with a clear
+/// diagnostic message — matching upstream minipro's `-z` + `-a` behavior.
 #[tauri::command]
-pub async fn do_spi_autodetect(idType: u8, state: State<'_, Arc<AppState>>) -> Result<SpiAutodetectResultDto, String> {
+pub async fn do_spi_autodetect(idType: u8, window: Window, state: State<'_, Arc<AppState>>) -> Result<SpiAutodetectResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::task::spawn_blocking(move || {
         let mut handle = state_task.take_handle()?;
 
         let result = (|| {
             let db = get_db_paths(&state_task)?;
+
+            // Automatic pin contact check before autodetect on supported models.
+            // Constructs a temporary device with pin_map based on package type,
+            // matching upstream minipro's auto_detect function (main.c line 482-503).
+            if matches!(
+                handle.info.model,
+                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+            ) && handle.icsp == 0
+            {
+                let pin_count = if idType == 0 { 8 } else { 16 };
+                let temp_device = Arc::new(Device {
+                    pin_map: if idType == 0 { 0x01 } else { 0x03 },
+                    package_details: PackageDetails {
+                        pin_count,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                });
+                handle.device = Some(temp_device);
+                let pin_result = pin_contact_check(&mut handle, &db.infoic);
+                handle.device = None;
+                match pin_result {
+                    Ok(r) if r.bad_pins.is_empty() => {
+                        emit_log(&window_clone, "info", "Pin contact check passed");
+                    }
+                    Ok(r) => {
+                        let count = r.bad_pins.len();
+                        let pin_list = r.bad_pins.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
+                        let msg = format!("Pin contact check failed: bad contact on pin(s) {}. Autodetect aborted.", pin_list);
+                        emit_log(&window_clone, "warn", &msg);
+                        emit_pin_test_result(&window_clone, &PinTestResultDto {
+                            supported: true,
+                            pass: false,
+                            bad_pins: r.bad_pins,
+                            message: format!("Bad contact on {} pin(s)", count),
+                        });
+                        return Err(msg);
+                    }
+                    Err(e) => {
+                        let msg = format!("Pin contact check error: {}. Autodetect aborted.", e);
+                        emit_log(&window_clone, "warn", &msg);
+                        return Err(msg);
+                    }
+                }
+            }
+
             let autodetect = spi_autodetect_and_lookup(&mut handle, &db, idType)
                 .map_err(|e| e.to_string())?;
             let matches = autodetect
@@ -2135,13 +2366,14 @@ pub struct ConfigDataDto {
 
 /// Read all fuse / lock / user / calibration data from the chip.
 #[tauri::command]
-pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<ConfigDataDto, String> {
+pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<ConfigDataDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
@@ -2151,6 +2383,16 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
             let result = (|| {
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
+
+                // Pin contact check (pre-operation gate)
+                let db_paths = get_db_paths(&state_task)?;
+                run_pin_check_if_enabled(
+                    &mut handle,
+                    pinCheck,
+                    &icspMode,
+                    &window_clone,
+                    &db_paths.infoic,
+                )?;
 
                 // Read named CFG fuses + LOCK bits
                 let named = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
@@ -2196,13 +2438,14 @@ pub async fn read_fuses(icspMode: String, state: State<'_, Arc<AppState>>) -> Re
 
 /// Write fuse / lock bytes to the chip.
 #[tauri::command]
-pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
     }
 
     let state_task = state_clone.clone();
+    let window_clone = window.clone();
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         tokio::task::spawn_blocking(move || {
@@ -2212,6 +2455,16 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
             let result = (|| {
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+
+                // Pin contact check (pre-operation gate)
+                let db_paths = get_db_paths(&state_task)?;
+                run_pin_check_if_enabled(
+                    &mut handle,
+                    pinCheck,
+                    &icspMode,
+                    &window_clone,
+                    &db_paths.infoic,
+                )?;
 
                 // Write CFG + LOCK via high-level function
                 let mut all: Vec<minipro_core::operations::FuseValue> = cfgFuses.iter()

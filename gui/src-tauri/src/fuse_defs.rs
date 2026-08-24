@@ -1882,8 +1882,7 @@ mod tests {
         let pic18f: &[&str] = &["pic_28", "pic_29", "pic_30", "pic_31", "pic_32", "pic_33", "pic_34", "pic_35", "pic_36", "pic_37", "pic_38", "pic_39", "pic_40", "pic_41", "pic_42", "pic_43", "pic_49"];
         for (name, def) in CONFIG_TABLE {
             if !name.starts_with("pic_") { continue; }
-            let expected = if baseline.contains(name) { 12 }
-                else if baseline16f.contains(name) { 12 }
+            let expected = if baseline.contains(name) || baseline16f.contains(name) { 12 }
                 else if midrange.contains(name) { 14 }
                 else if pic18f.contains(name) { 16 }
                 else { continue; };

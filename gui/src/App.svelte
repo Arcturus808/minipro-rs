@@ -12,6 +12,7 @@
   import {
     initProgressListener,
     initLogListener,
+    initPinTestListener,
     isRunning,
     activeOperation,
     doRead,
@@ -59,6 +60,7 @@
   let skipVerify = $state(false);
   let skipBlank = $state(false);
   let checkDeviceId = $state(true);
+  let pinCheck = $state(true);
   let unprotectBefore = $state(true);
   let protectAfterOp = $state(false);
   let showAdvanced = $state(false);
@@ -197,6 +199,23 @@
   let hasHexData = $derived(!!$hexMeta?.data && $hexMeta.data.length > 0);
   let hasPendingHexEdits = $derived($hexEdits.size > 0);
 
+  // Pin contact check checkbox disabled state — only available on TL866II+/T48
+  // in ZIF mode with a device that has pin-map data.
+  let pinCheckDisabled = $derived(
+    !$programmer ||
+    !$selectedDevice ||
+    icspMode !== "zif" ||
+    !["TL866II+", "T48"].includes($programmer.model) ||
+    !$selectedDevice.pin_map
+  );
+  let pinCheckTooltip = $derived(
+    !$programmer ? "No programmer connected" :
+    icspMode !== "zif" ? "Not available in ICSP mode" :
+    !["TL866II+", "T48"].includes($programmer?.model ?? "") ? "Not supported on this programmer model" :
+    !$selectedDevice?.pin_map ? "Device has no pin-map data" :
+    "Test pin contact before operation"
+  );
+
   // Panel widths as fractions of window width (persisted as percentages)
   let leftPercent = $state(0.20);
   let rightPercent = $state(0.25);
@@ -248,6 +267,7 @@
     });
     initProgressListener();
     initLogListener();
+    initPinTestListener();
     initSettings().then(() => {
       const s = $settings;
       skipErase = s.skipErase;
@@ -344,7 +364,7 @@
     if (!configData) return;
     showFuseWriteConfirm = false;
     try {
-      await writeFuses(configData.cfg_fuses, configData.lock_bits, icspMode);
+      await writeFuses(configData.cfg_fuses, configData.lock_bits, icspMode, pinCheck);
       logs.info("Config written to chip");
     } catch (e) {
       logs.error(`Config write failed: ${e}`);
@@ -382,6 +402,7 @@
       size_mismatch: sizeMismatch,
       unprotect_before: unprotectBefore,
       protect_after_op: protectAfterOp,
+      pin_check: pinCheck,
     };
   }
 
@@ -545,7 +566,7 @@
         logs.info("Chip erased successfully");
         break;
       case "blank_check": {
-        const bcResult = await doBlankCheck(icspMode);
+        const bcResult = await doBlankCheck(icspMode, pinCheck);
         if (bcResult) {
           if (bcResult.is_blank) {
             logs.info("Chip is blank");
@@ -556,7 +577,7 @@
         break;
       }
       case "chip_id": {
-        const chipResult = await doChipId(icspMode);
+        const chipResult = await doChipId(icspMode, pinCheck);
         if (chipResult) {
           if (chipResult.is_variant) {
             logs.info(`Chip ID mismatch for ${$selectedDevice.name}: read ${chipResult.id}, expected ${chipResult.expected}. For chip ID verification, select "${chipResult.base_name}" instead.`);
@@ -578,7 +599,7 @@
         break;
       case "config":
         try {
-          const read = await readFuses(icspMode);
+          const read = await readFuses(icspMode, pinCheck);
           if (configData) {
             // Merge read values into existing configData (preserving field order)
             const mergedCfg = configData.cfg_fuses.map((fv) => {
@@ -922,6 +943,10 @@
                     <input type="checkbox" class="checkbox" bind:checked={checkDeviceId} />
                     Chip ID check
                   </label>
+                  <label class="flex items-center gap-2" title={pinCheckTooltip}>
+                    <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
+                    Pin Contact Check
+                  </label>
                 </div>
               {/if}
               <!-- Row 2: Checkboxes + Advanced toggle -->
@@ -1019,10 +1044,19 @@
                     <input type="checkbox" class="checkbox" bind:checked={checkDeviceId} />
                     Chip ID check
                   </label>
+                  <label class="flex items-center gap-2" title={pinCheckTooltip}>
+                    <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
+                    Pin Contact Check
+                  </label>
                 </div>
               {/if}
               {#if $activeOperation === "blank_check" || $activeOperation === "chip_id"}
-                <p class="text-sm opacity-50 col-span-2">No options for this operation.</p>
+                <div class="flex flex-wrap items-center gap-6 text-sm">
+                  <label class="flex items-center gap-2" title={pinCheckTooltip}>
+                    <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
+                    Pin Contact Check
+                  </label>
+                </div>
               {/if}
               {#if $activeOperation === "logic_test"}
                 <div class="flex flex-wrap items-center gap-6 text-sm">
@@ -1051,6 +1085,12 @@
               {/if}
               {#if $activeOperation === "config"}
                 {#if $selectedDevice?.config && $selectedDevice.config.type === "Mcu" && configData}
+                  <div class="flex flex-wrap items-center gap-6 text-sm mb-2">
+                    <label class="flex items-center gap-2" title={pinCheckTooltip}>
+                      <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
+                      Pin Contact Check
+                    </label>
+                  </div>
                   <div class="col-span-2 space-y-3">
                     {#if $selectedDevice.invert_fuse_bits && configExpanded}
                       <div class="bg-primary-500/10 border border-primary-500/20 rounded-md px-3 py-2">

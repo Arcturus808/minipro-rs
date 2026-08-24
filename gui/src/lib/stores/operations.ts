@@ -25,6 +25,7 @@ export interface OperationOptions {
   size_mismatch: string;
   unprotect_before: boolean;
   protect_after_op: boolean;
+  pin_check: boolean;
 }
 
 export const isRunning = writable(false);
@@ -96,6 +97,7 @@ function defaultOptions(): OperationOptions {
     page: "code",
     format: "auto",
     size_mismatch: "error",
+    pin_check: true,
   };
 }
 
@@ -247,7 +249,7 @@ export async function doVerify(path: string, options: OperationOptions = default
 }
 
 export async function doErase(options: OperationOptions = defaultOptions()) {
-  await runOp("Erase", () => invoke("do_erase", { icspMode: options.icsp_mode, checkDeviceId: options.check_device_id }));
+  await runOp("Erase", () => invoke("do_erase", { icspMode: options.icsp_mode, checkDeviceId: options.check_device_id, pinCheck: options.pin_check }));
 }
 
 export interface BlankCheckResult {
@@ -255,9 +257,9 @@ export interface BlankCheckResult {
   address: number;
 }
 
-export async function doBlankCheck(icspMode: string = "zif") {
+export async function doBlankCheck(icspMode: string = "zif", pinCheck: boolean = true) {
   return await runOp("Blank check", () =>
-    invoke<BlankCheckResult>("do_blank_check", { icspMode })
+    invoke<BlankCheckResult>("do_blank_check", { icspMode, pinCheck })
   );
 }
 
@@ -269,9 +271,9 @@ export interface ChipIdResult {
   base_name: string;
 }
 
-export async function doChipId(icspMode: string = "zif"): Promise<ChipIdResult | undefined> {
+export async function doChipId(icspMode: string = "zif", pinCheck: boolean = true): Promise<ChipIdResult | undefined> {
   return await runOp("Chip ID", async () => {
-    const result = await invoke<ChipIdResult>("do_chip_id", { icspMode });
+    const result = await invoke<ChipIdResult>("do_chip_id", { icspMode, pinCheck });
     return result;
   });
 }
@@ -309,12 +311,12 @@ export interface ConfigData {
   calibration: number[];
 }
 
-export async function readFuses(icspMode: string): Promise<ConfigData> {
-  return await invoke<ConfigData>("read_fuses", { icspMode });
+export async function readFuses(icspMode: string, pinCheck: boolean = true): Promise<ConfigData> {
+  return await invoke<ConfigData>("read_fuses", { icspMode, pinCheck });
 }
 
-export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: string): Promise<void> {
-  await invoke("write_fuses", { cfgFuses: cfg, lockBits: lock, icspMode });
+export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: string, pinCheck: boolean = true): Promise<void> {
+  await invoke("write_fuses", { cfgFuses: cfg, lockBits: lock, icspMode, pinCheck });
 }
 
 export interface LockStatus {
@@ -363,4 +365,23 @@ export async function doPinTest(icspMode: string): Promise<void> {
 
 export function clearPinTestResult(): void {
   pinTestResult.set(null);
+}
+
+// Listen for pin-test-result events emitted by the backend during pre-operation
+// pin checks. This updates the ZIF diagram highlighting when bad pins are found
+// during an operation (not just from the manual Diagnostics button).
+let unlistenPinTest: (() => void) | null = null;
+
+export async function initPinTestListener() {
+  if (unlistenPinTest) return;
+  unlistenPinTest = await listen<PinTestResult>("pin-test-result", (event) => {
+    pinTestResult.set(event.payload);
+  });
+}
+
+export function stopPinTestListener() {
+  if (unlistenPinTest) {
+    unlistenPinTest();
+    unlistenPinTest = null;
+  }
 }
