@@ -150,6 +150,7 @@ Supported on TL866II+ and T48 only. TL866A/CS and T56 lack the bit-banging comma
 
 - The C `minipro` source ([GitLab](https://gitlab.com/DavidGriffith/minipro)) and [Matt Brown's t76-improvements branch](https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements) are the primary references for protocol behavior.
 - [radiomanV/TL866](https://github.com/radiomanV/TL866) — **InfoIcDump**, the utility that extracts the proprietary `infoic.dll`/`infoic2plus.dll` databases into the XML format this project uses. radiomanV also contributed the XML database structure, calibration byte support, TL866A logic test, and bit-banging support to the C `minipro` ([MR !213](https://gitlab.com/DavidGriffith/minipro/-/merge_requests/213)) — the bit-banging work is the basis for the pin contact test.
+- [radiomanV/Xgecu_T76](https://github.com/radiomanV/Xgecu_T76) — T76 hardware reverse engineering: schematics (`cpu_fpga_schematic.pdf`), CH569 MCU and Anlogic EG4 FPGA datasheets/pinouts, and bitstream format documentation. Foundational to understanding the T76 platform.
 
 ### Porting guidelines
 
