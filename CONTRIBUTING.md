@@ -137,14 +137,23 @@ The core library (`minipro-core`) is protocol-agnostic and can be embedded in ot
 
 ## Protocol Implementation Notes
 
-If you're working on programmer protocol code:
+### Model support
 
-- **TL866A/CS, TL866II+, T48** — well-established, documented in the C `minipro` source. T48 aliases the TL866II+ protocol (`T48Protocol = Tl866iiPlusProtocol`) — they share the same USB command set
-- **T56, T76** — FPGA-based, require `algorithm.xml` bitstream loading. See `crates/minipro-core/src/algorithm.rs`
-- **Pin contact test** — supported on TL866II+ and T48 only. T76 is intentionally unsupported: its `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test. The upstream C `minipro`'s `t76_pin_test` is broken (never reads the response, reports every pin as bad). The [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read." TL866A/CS and T56 also lack the bit-banging command set used by the pin test
-- The C `minipro` source ([GitLab](https://gitlab.com/DavidGriffith/minipro)) and [Matt Brown's t76-improvements branch](https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements) are the primary references for protocol behavior
-- [radiomanV/TL866](https://github.com/radiomanV/TL866) — **InfoIcDump**, the utility that extracts the proprietary `infoic.dll`/`infoic2plus.dll` databases into the XML format this project uses. radiomanV also contributed the new XML database structure, calibration byte support, TL866A logic test, and bit-banging support to the C `minipro` ([MR !213](https://gitlab.com/DavidGriffith/minipro/-/merge_requests/213)) — the bit-banging work is the basis for the pin contact test
-- When porting from C, match the exact byte-level protocol — do not "improve" the protocol flow
+- **TL866A/CS, TL866II+, T48** — well-established, documented in the C `minipro` source. T48 aliases the TL866II+ protocol (`T48Protocol = Tl866iiPlusProtocol`); they share the same USB command set.
+- **T56, T76** — FPGA-based; require `algorithm.xml` bitstream loading. See `crates/minipro-core/src/algorithm.rs`.
+
+### Pin contact test
+
+Supported on TL866II+ and T48 only. TL866A/CS and T56 lack the bit-banging command set (0x2D–0x36) used by the test. T76 is intentionally unsupported: its `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test. The upstream C `minipro`'s `t76_pin_test` is broken (never reads the response, reports every pin as bad). The [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
+
+### References
+
+- The C `minipro` source ([GitLab](https://gitlab.com/DavidGriffith/minipro)) and [Matt Brown's t76-improvements branch](https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements) are the primary references for protocol behavior.
+- [radiomanV/TL866](https://github.com/radiomanV/TL866) — **InfoIcDump**, the utility that extracts the proprietary `infoic.dll`/`infoic2plus.dll` databases into the XML format this project uses. radiomanV also contributed the XML database structure, calibration byte support, TL866A logic test, and bit-banging support to the C `minipro` ([MR !213](https://gitlab.com/DavidGriffith/minipro/-/merge_requests/213)) — the bit-banging work is the basis for the pin contact test.
+
+### Porting guidelines
+
+- When porting from C, match the exact byte-level protocol — do not "improve" the protocol flow.
 
 ## What We Need Help With
 
