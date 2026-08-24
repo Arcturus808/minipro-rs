@@ -27,7 +27,8 @@
   // the bit-banging hardware required for contact detection. T76 is FPGA-
   // based with no dedicated contact-test bitstream; its 0x3E command is
   // an adapter-init pin-driver configuration step, not a standalone test.
-  // XGPro itself removed pin detect from the T76 UI.
+  // The xgecu-pro project confirmed on real hardware that it "measured
+  // nothing and corrupted every read."
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
     "T48",

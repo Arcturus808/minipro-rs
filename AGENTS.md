@@ -305,10 +305,10 @@ tooltip. The T76 is FPGA-based and lacks the direct ZIF pin bit-banging
 hardware (commands 0x2D-0x36). Its `0x3E` command is an adapter-init
 pin-driver configuration step, not a standalone contact test — running
 it standalone returns meaningless data and can corrupt subsequent reads.
-XGPro itself removed pin detect from the T76 UI. The upstream C minipro's
-`t76_pin_test` is also broken (never reads the response, reports every
-pin as bad). The xgecu-pro project confirmed on real hardware that it
-"measured nothing and corrupted every read."
+The upstream C minipro's `t76_pin_test` is also broken (never reads the
+response, reports every pin as bad). The xgecu-pro project
+(https://github.com/jfabienke/xgecu-pro) confirmed on real hardware that
+it "measured nothing and corrupted every read."
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode

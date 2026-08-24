@@ -1246,11 +1246,11 @@ impl Protocol for T76Protocol {
         // contact test — running it standalone returns meaningless data
         // and can corrupt subsequent reads by disrupting FPGA state.
         //
-        // XGPro itself removed pin detect from the T76 UI. The upstream C
-        // minipro's t76_pin_test is also broken (initializes value=0 and
-        // never reads the response, so every pin reports as bad). The
-        // xgecu-pro project confirmed on real hardware that it "measured
-        // nothing and corrupted every read."
+        // The upstream C minipro's t76_pin_test is broken (initializes
+        // value=0 and never reads the response, so every pin reports as
+        // bad). The xgecu-pro project (https://github.com/jfabienke/xgecu-pro)
+        // confirmed on real hardware that it "measured nothing and
+        // corrupted every read."
         //
         // A true T76 contact test would require a dedicated FPGA bitstream
         // that XGecu has never written. Use the default trait impl
