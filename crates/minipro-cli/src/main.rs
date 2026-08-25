@@ -78,6 +78,55 @@ fn parse_usize(s: &str) -> Result<usize> {
     .map_err(|e| anyhow::anyhow!("invalid value '{s}': {e}"))
 }
 
+/// Format a `LogicTestResult` as colored text, matching the upstream C
+/// minipro output format.  Each row is a test vector; each column is a pin.
+/// Errors are shown in red with a dash suffix.
+fn format_logic_test_output(result: &minipro_core::LogicTestResult) -> String {
+    const PSTATE: &[u8] = b"01LHCZXGV";
+    let pin_count = result.pin_count as usize;
+    let vec_count = result.vector_count as usize;
+    let has_two_pass = !result.step2.is_empty();
+
+    let mut out = String::new();
+    out.push_str("      ");
+    for pin in 1..=pin_count {
+        out.push_str(&format!("{:<3}", pin));
+    }
+    out.push('\n');
+
+    for v in 0..vec_count {
+        out.push_str(&format!("{:04}: ", v));
+        for p in 0..pin_count {
+            let idx = v * pin_count + p;
+            let state = result.vectors[idx];
+            let s1 = result.step1[idx];
+            let s2 = if has_two_pass { result.step2[idx] } else { 0 };
+            let err = if has_two_pass {
+                match state {
+                    2 => s1 != 0 || s2 != 0, // LOGIC_L
+                    3 => s1 == 0 || s2 == 0, // LOGIC_H
+                    5 => s1 == 0 || s2 != 0, // LOGIC_Z
+                    _ => false,
+                }
+            } else {
+                match state {
+                    2 => s1 != 0,     // LOGIC_L
+                    3 | 5 => s1 == 0, // LOGIC_H, LOGIC_Z
+                    _ => false,
+                }
+            };
+            let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
+            if err {
+                out.push_str(&format!("\x1b[0;91m{}- ", ch));
+            } else {
+                out.push_str(&format!("\x1b[0m{}  ", ch));
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -494,24 +543,26 @@ fn do_operations(
 
     // ── Logic IC test ─────────────────────────────────────────────────────────
     if cli.logic_test {
-        let result = if let Some(ref out_path) = cli.logicic_out {
-            let mut f = std::fs::File::create(out_path).with_context(|| {
-                format!("cannot create logicic output file '{}'", out_path.display())
-            })?;
-            logic_ic_test(handle, &mut f)
-        } else {
-            logic_ic_test(handle, &mut std::io::stdout())
-        };
-        // The function prints its own "Logic test successful." or
-        // "Logic test failed: N errors encountered." to stderr.
-        // Suppress the default error handler to avoid a duplicate line.
-        if let Err(e) = result {
-            if let MiniproError::Protocol(ref msg) = e {
-                if msg.starts_with("Logic test failed") {
+        let result = logic_ic_test(handle);
+        match result {
+            Ok(test_result) => {
+                // Format the structured result as text, matching the
+                // upstream C minipro output format with ANSI colors.
+                let formatted = format_logic_test_output(&test_result);
+                if let Some(ref out_path) = cli.logicic_out {
+                    let mut f = std::fs::File::create(out_path).with_context(|| {
+                        format!("cannot create logicic output file '{}'", out_path.display())
+                    })?;
+                    use std::io::Write;
+                    f.write_all(formatted.as_bytes())?;
+                } else {
+                    print!("{}", formatted);
+                }
+                if !test_result.pass {
                     std::process::exit(1);
                 }
             }
-            return Err(e.into());
+            Err(e) => return Err(e.into()),
         }
         return Ok(());
     }

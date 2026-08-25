@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { Store } from "@tauri-apps/plugin-store";
-  import { selectedDevice, programmer } from "../stores/device";
+  import { selectedDevice, programmer, favorites, toggleFavorite } from "../stores/device";
 
   interface SearchResult {
     name: string;
@@ -40,47 +40,6 @@
   let searchSeq = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Device favorites — array of {name, manufacturer} persisted to localStorage.
-  interface FavoriteEntry {
-    name: string;
-    manufacturer: string;
-  }
-
-  const FAVORITES_KEY = "minipro_device_favorites";
-
-  function loadFavorites(): FavoriteEntry[] {
-    try {
-      const raw = localStorage.getItem(FAVORITES_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      // Migrate old format (array of strings) to new format
-      if (parsed.length > 0 && typeof parsed[0] === "string") {
-        return parsed.map((name: string) => ({ name, manufacturer: "" }));
-      }
-      return parsed as FavoriteEntry[];
-    } catch {
-      return [];
-    }
-  }
-
-  let favorites = $state<FavoriteEntry[]>(loadFavorites());
-
-  $effect(() => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-  });
-
-  function isFavorite(name: string): boolean {
-    return favorites.some((f) => f.name === name);
-  }
-
-  function toggleFavorite(name: string, manufacturer?: string) {
-    if (isFavorite(name)) {
-      favorites = favorites.filter((f) => f.name !== name);
-    } else {
-      favorites = [...favorites, { name, manufacturer: manufacturer ?? "" }];
-    }
-  }
-
   // Favorites section collapse state — persisted to localStorage.
   const FAV_COLLAPSED_KEY = "minipro_device_favorites_collapsed";
 
@@ -96,8 +55,11 @@
 
   // Favorite devices (sorted by name) for the pinned favorites section.
   let favoriteItems = $derived(
-    [...favorites].sort((a, b) => a.name.localeCompare(b.name))
+    [...$favorites].sort((a, b) => a.name.localeCompare(b.name))
   );
+
+  // Reactive set of favorite names for O(1) lookup in templates.
+  let favNames = $derived(new Set($favorites.map((f) => f.name)));
 
   async function doSearch(query: string) {
     const trimmed = query.trim();
@@ -189,6 +151,25 @@
     selectedDevice.set(null);
   }
 
+  // Sync local state when selectedDevice changes externally (e.g. from
+  // IdentifyResults selecting a device). When the selection came from outside
+  // (selectedName doesn't match the store), also search for the device name so
+  // it appears in the list and is visible to the user.
+  $effect(() => {
+    const dev = $selectedDevice;
+    if (dev) {
+      if (selectedName !== dev.name) {
+        // External selection — sync local state and search for the device
+        selectedName = dev.name;
+        selectedInfo = dev;
+        searchQuery = dev.name;
+      }
+    } else {
+      selectedName = null;
+      selectedInfo = null;
+    }
+  });
+
   let start = $derived(page * PAGE_SIZE);
   let pageItems = $derived(results.slice(start, start + PAGE_SIZE));
   let totalPages = $derived(Math.max(1, Math.ceil(results.length / PAGE_SIZE)));
@@ -272,15 +253,15 @@
         <button
           class="shrink-0 rounded p-0.5 hover:bg-surface-200-800"
           onclick={(e) => { e.stopPropagation(); toggleFavorite(name, manufacturer); }}
-          aria-label={isFavorite(name) ? 'Unfavorite' : 'Favorite'}
-          title={isFavorite(name) ? 'Remove from favorites' : 'Add to favorites'}
+          aria-label={favNames.has(name) ? 'Unfavorite' : 'Favorite'}
+          title={favNames.has(name) ? 'Remove from favorites' : 'Add to favorites'}
         >
           <svg
             class="h-4 w-4 transition-colors"
-            class:fill-yellow-400={isFavorite(name)}
-            class:text-yellow-400={isFavorite(name)}
-            class:fill-transparent={!isFavorite(name)}
-            class:text-gray-400={!isFavorite(name)}
+            class:fill-yellow-400={favNames.has(name)}
+            class:text-yellow-400={favNames.has(name)}
+            class:fill-transparent={!favNames.has(name)}
+            class:text-gray-400={!favNames.has(name)}
             viewBox="0 0 24 24"
             stroke="currentColor"
             stroke-width="2"

@@ -280,14 +280,13 @@ export async function doChipId(icspMode: string = "zif", pinCheck: boolean = tru
 
 export async function doLogicTest(icspMode: string = "zif", vcc: string | null = null) {
   await runOp("Logic test", async () => {
-    const result = await invoke<string>("do_logic_test", { icspMode, vcc: vcc || null });
-    const lines = result.split("\n").map(l => l.trimEnd()).filter(l => l.length > 0);
-    for (const line of lines) {
-      if (line.startsWith("[ERROR]")) {
-        deferLog("error", line.slice(7).trim());
-      } else {
-        deferLog("info", line);
-      }
+    const result = await invoke<LogicTestResult>("do_logic_test", { icspMode, vcc: vcc || null });
+    clearIdentifyResults();
+    logicTestResult.set(result);
+    if (result.pass) {
+      deferLog("info", `Logic test passed — ${result.vectorCount} vectors, ${result.pinCount} pins`);
+    } else {
+      deferLog("error", `Logic test failed — ${result.errors} error(s) across ${result.vectorCount} vectors`);
     }
     deferLog("info", "Logic test completed");
   });
@@ -335,6 +334,70 @@ export interface PinTestResult {
   pass: boolean;
   bad_pins: number[];
   message: string;
+}
+
+// ── Logic IC test ───────────────────────────────────────────────────────────
+
+export interface LogicTestResult {
+  pinCount: number;
+  vectorCount: number;
+  vectors: number[];
+  step1: number[];
+  step2: number[];
+  errors: number;
+  pass: boolean;
+}
+
+/** Current logic-test result. null = no test run yet. */
+export const logicTestResult = writable<LogicTestResult | null>(null);
+
+export function clearLogicTestResult(): void {
+  logicTestResult.set(null);
+}
+
+// ── Logic IC identify (auto-find) ───────────────────────────────────────────
+
+export interface IdentifyResult {
+  name: string;
+  manufacturer: string;
+  pass: boolean;
+  errors: number;
+}
+
+/** Current identify results. null = no scan run yet. */
+export const identifyResults = writable<IdentifyResult[] | null>(null);
+/** True while an identify scan is executing. */
+export const identifyRunning = writable(false);
+
+export function clearIdentifyResults(): void {
+  identifyResults.set(null);
+}
+
+/** Clear the results contents but keep the table visible (empty state). */
+export function clearIdentifyResultsContents(): void {
+  identifyResults.set([]);
+}
+
+export async function doIdentify(pinCount: number, vcc: string | null = null): Promise<void> {
+  identifyRunning.set(true);
+  try {
+    await runOp("Identify", async () => {
+      const results = await invoke<IdentifyResult[]>("do_logic_identify", {
+        pinCount,
+        vcc: vcc || null,
+      });
+      identifyResults.set(results);
+      const passCount = results.filter((r) => r.pass).length;
+      if (passCount > 0) {
+        deferLog("info", `Identify: ${passCount} of ${results.length} chip(s) matched`);
+      } else {
+        deferLog("warn", `Identify: no matches found (${results.length} chips tested)`);
+      }
+      deferLog("info", "Identify completed");
+    });
+  } finally {
+    identifyRunning.set(false);
+  }
 }
 
 /** Current pin-test result. null = no test run yet. */

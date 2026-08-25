@@ -1027,10 +1027,133 @@ pub fn pin_contact_check(
 }
 
 /// The device must have been opened with `begin_transaction` against a logic IC
-/// entry from `logicic.xml`.  Returns an error if the IC fails any vector.
-pub fn logic_ic_test(handle: &mut MiniproHandle, out: &mut dyn std::io::Write) -> Result<()> {
+/// entry from `logicic.xml`.  Returns a structured result with vectors, measured
+/// states, and error count.  Returns an error if the IC fails any vector.
+pub fn logic_ic_test(handle: &mut MiniproHandle) -> Result<crate::protocol::LogicTestResult> {
     let device = handle.device()?.clone();
-    handle.protocol.logic_ic_test(&handle.usb, &device, out)
+    handle.protocol.logic_ic_test(&handle.usb, &device)
+}
+
+/// A single result from the logic IC auto-identify (auto-find) scan.
+#[derive(Debug, Clone)]
+pub struct AutoFindEntry {
+    pub name: String,
+    pub manufacturer: String,
+    pub pass: bool,
+    pub errors: u32,
+}
+
+/// Test an unknown logic IC against all database entries with a matching pin
+/// count, returning a sorted list of results (passing entries first).
+///
+/// `vcc` is an optional VCC override (e.g. "3.3").  When `None`, each
+/// candidate's database-specified voltage is used.
+///
+/// `progress` is called as `(done, total)` after each candidate is tested,
+/// so the caller can report progress to the UI.
+///
+/// USB errors (chip removed, programmer disconnected) abort immediately.
+/// Per-candidate test errors (e.g. a candidate's vectors don't match) are
+/// recorded as failures and the scan continues.
+pub fn logic_auto_find(
+    handle: &mut MiniproHandle,
+    paths: &crate::database::DatabasePaths,
+    pin_count: u8,
+    vcc: Option<&str>,
+    model: ProgrammerModel,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<Vec<AutoFindEntry>> {
+    let candidates = crate::database::list_logic_ics_by_pin_count(paths, pin_count)?;
+    let total = candidates.len();
+    let mut results = Vec::with_capacity(total);
+
+    // Resolve VCC override once (applies to all candidates).
+    let vcc_code = if let Some(v) = vcc {
+        let table = crate::device::LOGIC_VCC_VOLTAGES;
+        crate::device::lookup_voltage(table, v).ok_or_else(|| {
+            MiniproError::Protocol(format!(
+                "VCC '{}' is not valid for logic ICs (valid: 1.8, 2.5, 3.3, 5)",
+                v
+            ))
+        })?
+    } else {
+        0xFF // sentinel: use device default
+    };
+
+    for (i, candidate) in candidates.iter().enumerate() {
+        if let Some(ref mut cb) = progress {
+            cb(i, total);
+        }
+
+        // Load the full device (with vectors) from the database.
+        let mut device = match crate::database::find_device(paths, &candidate.name, model) {
+            Ok(d) => d,
+            Err(_) => {
+                // Shouldn't happen (name came from the database), but skip
+                // gracefully if the lookup fails.
+                results.push(AutoFindEntry {
+                    name: candidate.name.clone(),
+                    manufacturer: candidate.manufacturer.clone(),
+                    pass: false,
+                    errors: u32::MAX,
+                });
+                continue;
+            }
+        };
+
+        // Apply VCC override if specified.
+        if vcc_code != 0xFF {
+            device.voltages.vcc = vcc_code;
+        }
+
+        let device_arc = std::sync::Arc::new(device);
+
+        // begin_transaction + logic_ic_test + end_transaction for each candidate.
+        let test_result = (|| {
+            handle.begin_transaction(device_arc)?;
+            let r = logic_ic_test(handle);
+            let _ = handle.end_transaction();
+            r
+        })();
+
+        match test_result {
+            Ok(tr) => results.push(AutoFindEntry {
+                name: candidate.name.clone(),
+                manufacturer: candidate.manufacturer.clone(),
+                pass: tr.pass,
+                errors: tr.errors,
+            }),
+            Err(MiniproError::Protocol(_)) => {
+                // Per-candidate test failure (vectors didn't match) — record
+                // as failed and continue.
+                results.push(AutoFindEntry {
+                    name: candidate.name.clone(),
+                    manufacturer: candidate.manufacturer.clone(),
+                    pass: false,
+                    errors: u32::MAX,
+                });
+            }
+            Err(e) => {
+                // USB or other hardware error — abort the entire scan.
+                return Err(e);
+            }
+        }
+    }
+
+    // Final progress callback.
+    if let Some(ref mut cb) = progress {
+        cb(total, total);
+    }
+
+    // Sort: PASS first, then by fewest errors, then alphabetically.
+    results.sort_by(|a, b| {
+        b.pass
+            .cmp(&a.pass)
+            .then_with(|| a.errors.cmp(&b.errors))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    Ok(results)
 }
 
 /// Flash new firmware from a binary image file.

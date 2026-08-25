@@ -31,12 +31,18 @@
   --bg-color: #ffffff;
   --modal-text-color: #1a1a1a;
   --modal-border-color: #ccc;
+  --caution-bg: rgba(180, 130, 10, 0.1);
+  --caution-border: rgba(180, 130, 10, 0.3);
+  --caution-text: #8a6500;
 }
 
 .dark {
   --bg-color: #1e1e2e;
   --modal-text-color: #e0e0e0;
   --modal-border-color: #3a3a4a;
+  --caution-bg: rgba(234, 179, 8, 0.1);
+  --caution-border: rgba(234, 179, 8, 0.25);
+  --caution-text: rgb(234, 179, 8);
 }
 
 /* Native <option> elements don't inherit Tailwind/Skeleton theme colors.
