@@ -176,6 +176,21 @@
     clearIdentifyResults();
   });
 
+  // Auto-switch to Logic Test when a logic IC is selected and a
+  // non-applicable operation tab is active. Separate effect to avoid
+  // making $activeOperation a dependency of the results-clearing effect.
+  $effect(() => {
+    $selectedDevice;
+    if (
+      isLogicDevice &&
+      ["read", "write", "verify", "erase", "blank_check", "chip_id"].includes(
+        $activeOperation,
+      )
+    ) {
+      selectOp("logic_test");
+    }
+  });
+
   // Active operation label for the options panel
   let opLabel = $derived($activeOperation ? $activeOperation.replace("_", " ") : "");
   // Serial overflow detection — returns error message if any chip in the batch overflows
@@ -222,6 +237,9 @@
       return `Chip 1 (unlimited): serial ${startVal}, ${v2}, ${v3}, ... ${fmtLabel} at ${addrLabel}`;
     }
   });
+  // Logic ICs only support logic test — disable other operation tabs
+  let isLogicDevice = $derived($selectedDevice?.chip_type === "Logic");
+
   // Custom start button label per operation
   let startButtonLabel = $derived(
     $activeOperation === "config" ? "Read Config from Chip" :
@@ -820,8 +838,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("read")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "read"}
             class:ring-2={$activeOperation === "read"}
             class:ring-primary-400={$activeOperation === "read"}
@@ -832,8 +851,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("write")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "write"}
             class:ring-2={$activeOperation === "write"}
             class:ring-primary-400={$activeOperation === "write"}
@@ -844,8 +864,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("verify")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "verify"}
             class:ring-2={$activeOperation === "verify"}
             class:ring-primary-400={$activeOperation === "verify"}
@@ -856,8 +877,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("erase")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "erase"}
             class:ring-2={$activeOperation === "erase"}
             class:ring-primary-400={$activeOperation === "erase"}
@@ -868,8 +890,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("blank_check")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "blank_check"}
             class:ring-2={$activeOperation === "blank_check"}
             class:ring-primary-400={$activeOperation === "blank_check"}
@@ -880,8 +903,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("chip_id")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isLogicDevice}
+            class:opacity-60={!$selectedDevice || isLogicDevice}
+            title={isLogicDevice ? "Not applicable for logic ICs" : undefined}
             class:preset-filled-primary={$activeOperation === "chip_id"}
             class:ring-2={$activeOperation === "chip_id"}
             class:ring-primary-400={$activeOperation === "chip_id"}
