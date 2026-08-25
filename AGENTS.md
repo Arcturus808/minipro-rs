@@ -390,6 +390,16 @@ to stderr. Passing matches are printed as `name  manufacturer` to stdout
 Supported pin counts: 8, 14, 16, 20, 24, 28, 40. No `-p` device required —
 the flag iterates candidates itself. Standalone action, exits after completion.
 
+### Logic IC tab gating (GUI)
+
+When a logic IC is selected (`chip_type === "Logic"`), the Read, Write,
+Verify, Erase, Blank Check, and Chip ID tabs are disabled and dimmed
+with a "Not applicable for logic ICs" tooltip. Only Logic Test and
+Config (self-gates via `!config`) remain enabled. A dedicated `$effect`
+auto-switches to Logic Test if a non-applicable tab was active when the
+logic IC was selected. The effect is separate from the results-clearing
+effect to avoid making `$activeOperation` a dependency of it.
+
 ### Logic IC identify (GUI)
 
 The Logic Test tab is always enabled. When no Logic device is selected,
