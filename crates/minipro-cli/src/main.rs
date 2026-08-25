@@ -332,8 +332,16 @@ fn run() -> Result<()> {
         let vcc = cli.vcc.as_deref();
         let model = handle.info.model;
         eprintln!("Identifying logic IC (pin count {pin_count})...");
+        let pb = ProgressBar::new(0);
+        pb.set_style(
+            ProgressStyle::with_template("Identifying [{bar:40}] {pos}/{len}  {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
         let mut progress = |done: usize, total: usize| {
-            eprint!("\rTesting candidates... {done}/{total}");
+            if pb.length().unwrap_or(0) != total as u64 {
+                pb.set_length(total as u64);
+            }
+            pb.set_position(done as u64);
         };
         let results = logic_auto_find(
             &mut handle,
@@ -343,7 +351,7 @@ fn run() -> Result<()> {
             model,
             Some(&mut progress),
         )?;
-        eprintln!(); // newline after progress counter
+        pb.finish_and_clear();
 
         let matches: Vec<_> = results.iter().filter(|r| r.pass).collect();
         if matches.is_empty() {
