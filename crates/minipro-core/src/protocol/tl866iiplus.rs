@@ -1428,11 +1428,6 @@ pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<Lo
     }
 
     let pass = errors == 0;
-    if pass {
-        eprintln!("Logic test successful.");
-    } else {
-        eprintln!("Logic test failed: {} errors encountered.", errors);
-    }
 
     Ok(LogicTestResult {
         pin_count: pin_count as u16,

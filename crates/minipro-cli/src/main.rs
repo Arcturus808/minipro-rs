@@ -602,7 +602,13 @@ fn do_operations(
                 } else {
                     print!("{}", formatted);
                 }
-                if !test_result.pass {
+                if test_result.pass {
+                    eprintln!("Logic test successful.");
+                } else {
+                    eprintln!(
+                        "Logic test failed: {} errors encountered.",
+                        test_result.errors
+                    );
                     std::process::exit(1);
                 }
             }
