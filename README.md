@@ -344,6 +344,15 @@ The selected directory persists across restarts. If the directory is later moved
 
 **macOS binaries are built by [GitHub Actions](https://github.com/Arcturus808/minipro-rs/releases)** — download the `.dmg` (GUI) or `minipro-cli-macos-aarch64` (CLI) from the GitHub Releases page. Apple Silicon (M1/M2/M3) is supported.
 
+> **"MINIPRO-RS-GUI" is damaged and can't be opened** — this is macOS Gatekeeper, not actual file corruption. The DMG is unsigned (we don't have an Apple Developer Program membership). When a browser downloads an unsigned app, macOS marks it with a quarantine attribute and shows the "damaged" alert. To fix it:
+>
+> ```bash
+> # Remove the quarantine attribute from the app inside the mounted DMG:
+> xattr -cr /Volumes/MINIPRO-RS-GUI/MINIPRO-RS-GUI.app
+> ```
+>
+> Then drag the app to your Applications folder as normal. Alternatively, build from source (below) — a locally-built app won't have the quarantine attribute.
+
 **Mac users** can also build from source:
 
 ```sh

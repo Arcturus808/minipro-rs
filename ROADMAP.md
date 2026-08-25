@@ -708,6 +708,9 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium-high** — established ecosystem workflow, real user demand, CLI already has parity
   - **Status:** implemented
 
+- [ ] **Code signing and notarization** — the macOS `.dmg` is currently unsigned, which triggers macOS Gatekeeper's "'MINIPRO-RS-GUI' is damaged and can't be opened" alert when downloaded via a browser (the app is not actually damaged — Gatekeeper rejects unsigned apps with a quarantine attribute). The workaround is `xattr -cr` to strip the quarantine attribute (documented in README and release notes). The proper fix requires an Apple Developer Program membership ($99/year) to obtain a Developer ID certificate and notarize the app. Windows code signing is a separate but related issue (antivirus false positives on unsigned/cross-compiled binaries). Neither is currently feasible without funding or sponsorship.
+  - **Priority: medium** — poor first-run experience for macOS users, but workaround is documented and build-from-source is available
+
 - [x] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
   - **Problem:** The core pin-contact test exists (`pin_contact_check()` in `operations.rs`, `pin_test_tl866()` in `tl866iiplus.rs`) and the CLI exposes it via `-z` / `--pin_check`. But the GUI's DiagnosticsPanel has a disabled "Pin Test (unsupported)" button, and even if enabled, the test results go to `eprintln!` (stderr) — the GUI can't capture them. XGPro shows specific bad pins (e.g., "Bad Pin: ZIF1 - PIN#1") and the user can see exactly which socket positions have poor contact.
   - **Current state:**
