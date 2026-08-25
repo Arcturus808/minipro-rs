@@ -148,6 +148,15 @@ struct Cli {
     #[arg(long = "logicic-out", alias = "logicic_out", value_name = "FILE")]
     logicic_out: Option<PathBuf>,
 
+    /// Identify an unknown logic IC by testing all database entries
+    /// with the given pin count. Requires --pin-count.
+    #[arg(long = "logic-identify", action = ArgAction::SetTrue)]
+    logic_identify: bool,
+
+    /// Pin count for --logic-identify (8, 14, 16, 20, 24, 28, or 40)
+    #[arg(long = "pin-count", value_name = "N")]
+    pin_count: Option<u8>,
+
     /// Update programmer firmware from binary file (update.dat / UpdateII.dat / updateT76.dat)
     #[arg(short = 'F', long = "firmware-update", alias = "update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,

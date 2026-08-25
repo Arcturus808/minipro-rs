@@ -506,7 +506,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Progress reporting: `"progress"` events emitted per candidate with operation label
     - Results persist after selection; Clear button empties contents without hiding table
   - **Scope:**
-    - Phase 1: CLI only (`--logic-autofind`), no pin-count filter (test all), prints passing candidates — NOT implemented
+    - Phase 1: CLI `--logic-identify --pin-count N` with pin-count filter, prints passing candidates — implemented
     - Phase 2: GUI "Identify" button with progress and clickable results — implemented
     - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion) — user selects pin count manually
   - **Priority: low-medium** — useful feature not available in upstream minipro, but niche (most users program MCUs/memory, not logic ICs). XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.

@@ -380,6 +380,16 @@ minipro. When combined with `-w`/`-r`/`-E`/`-m`/`-b`/`-D`/`-a`, the pin
 test runs first and the operation only proceeds if all pins are good.
 If `-z` is the only flag, the test runs standalone and exits.
 
+### Logic IC identify (CLI)
+
+`--logic-identify --pin-count N` tests an unknown logic IC against all
+`logicic.xml` entries with the matching pin count. Calls `logic_auto_find()`
+in `operations.rs` with a progress callback that prints `Testing candidates... N/M`
+to stderr. Passing matches are printed as `name  manufacturer` to stdout
+(same format as SPI autodetect). Optional `--vcc` overrides the test voltage.
+Supported pin counts: 8, 14, 16, 20, 24, 28, 40. No `-p` device required —
+the flag iterates candidates itself. Standalone action, exits after completion.
+
 ### Logic IC identify (GUI)
 
 The Logic Test tab is always enabled. When no Logic device is selected,
