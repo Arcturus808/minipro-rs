@@ -346,18 +346,14 @@ The selected directory persists across restarts. If the directory is later moved
 
 > **"MINIPRO-RS-GUI" is damaged and can't be opened** — this is macOS Gatekeeper, not actual file corruption. The DMG is unsigned (we don't have an Apple Developer Program membership). When a browser downloads an unsigned app, macOS marks it with a quarantine attribute and shows the "damaged" alert. To fix it:
 >
-> ```bash
-> # Option 1: strip the quarantine attribute from the DMG before mounting:
-> xattr -d com.apple.quarantine ~/Downloads/minipro-rs-gui-*.dmg
-> # Then open the DMG and drag the app to Applications normally.
+> 1. Mount the DMG and drag MINIPRO-RS-GUI to your Applications folder
+> 2. Open Terminal and run:
+>    ```bash
+>    xattr -cr /Applications/MINIPRO-RS-GUI.app
+>    ```
+> 3. Launch the app normally
 >
-> # Option 2: if you already mounted the DMG, copy the app to Applications first,
-> # then strip the quarantine attribute (DMGs are read-only, so xattr won't work
-> # inside /Volumes/...):
-> xattr -cr /Applications/MINIPRO-RS-GUI.app
-> ```
->
-> Alternatively, build from source (below) — a locally-built app won't have the quarantine attribute.
+> This strips the quarantine attribute that Gatekeeper checks. (You can't run `xattr` inside the mounted DMG because DMGs are read-only.) Alternatively, build from source (below) — a locally-built app won't have the quarantine attribute.
 
 **Mac users** can also build from source:
 
