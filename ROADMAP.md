@@ -484,34 +484,31 @@ This is a living list of features and improvements planned for minipro-rs.
   - Users who need to insert bytes in a firmware file should use a dedicated binary editor (HxD, hexcurse) before loading the file into the programmer.
   - A PR for this would need to address the fundamental address-shift problem before being considered.
 
-- [ ] **Logic Test GUI panel** — replace raw text output with a visual grid for testing logic ICs
-  - Current state: backend returns ANSI-colored text table (vectors × pins). The GUI just dumps this to the terminal.
-  - Design challenges:
-    - Backend outputs unstructured text with ANSI codes; needs structured DTO (JSON with per-cell pass/fail/expected/actual)
-    - Grid scales with pin count and vector count (e.g., 74HC00 = 14 pins × 8 vectors = 112 cells; larger ICs = more)
-    - Need visual encoding for 8+ state types: L=Low, H=High, Z=Hi-Z, G=GND, V=VCC, C=Clock, X=Don't care, 0/1=Logic levels
-    - Two-pass test data (pull-up vs pull-down) — show both or just conclusion?
-    - Error highlighting must be prominent (red cells, summary banner)
-  - Requires: new backend DTO, dedicated `LogicTestPanel.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
+- [x] **Logic Test GUI panel** — replace raw text output with a visual grid for testing logic ICs
+  - Implemented as `LogicTestGrid.svelte` — zoomable color-coded grid (Ctrl+Scroll) with input/output/mismatch/ignore cell colors matching the vector symbols (0, 1, L, H, C, Z, X, G, V). Header is outside the scroll container to prevent sticky-header overlap. Copy button exports TSV for spreadsheets/forums. Backend returns structured `LogicTestResult` DTO (vectors, step1, step2, errors, pass) instead of ANSI text.
+  - Design challenges resolved:
+    - Backend now returns structured DTO (`LogicTestResult` with per-cell data) instead of ANSI text
+    - Grid scales with pin count and vector count using CSS grid with `table-fixed` layout
+    - Visual encoding: blue=input, green=output-pass, red=output-fail, gray=ignore; mismatched cells show `-` suffix
+    - Two-pass test data (pull-up vs pull-down) handled in `cellInfo()` — both passes checked for output validation
+    - Error highlighting: red cells with `-` suffix, summary banner with PASS/FAIL badge and error count
+  - Requires: new backend DTO, dedicated `LogicTestGrid.svelte` component, device support check (must be from `logicic.xml` with `vector_count > 0`)
   - Priority: medium — useful for debugging logic ICs, but most users program MCUs and memory chips
 
-- [ ] **Logic IC auto-find ("Auto Find")** — automatically identify an unknown logic IC by iterating test vectors
+- [x] **Logic IC auto-find ("Identify")** — automatically identify an unknown logic IC by iterating test vectors
   - **Problem:** When a user has an unmarked or unknown logic IC, they must manually guess the part number and select it before running a logic test. XGPro's "Auto Find" feature iterates through all logic ICs in the database, runs each one's test vectors, and reports which ones pass — no manual selection needed.
   - **Upstream parity note:** The C minipro does NOT implement this. Upstream's `-a` / `--auto_detect` is SPI flash only (JEDEC ID read via firmware command 0x37). The `compare_device()` function in `database.c` explicitly skips logic ICs (`if (sm->db_version == LOGIC_DATABASE) return EXIT_SUCCESS;`). Logic ICs have no chip ID — they only have test vectors. XGPro's Auto Find is a software-level loop, not a firmware command.
-  - **Implementation approach:**
-    1. **CLI:** `minipro --logic-autofind [--pin-count N]` — iterates all `logicic.xml` entries (optionally filtered by pin count), runs `logic_ic_test` for each, prints passing candidates
-    2. **Core:** new `logic_ic_autofind()` function in `operations.rs` — takes a callback for progress reporting and candidate reporting. Reuses existing `logic_ic_test` per candidate. Must handle `begin_transaction` / `end_transaction` per device.
-    3. **GUI:** "Auto Find" button in the Logic Test options panel (visible only when no device is selected, or when a logic IC device type is selected). Shows progress ("Testing 74HC00... pass / Testing 74HC02... fail"). Results list with clickable entries that select the device.
-  - **Design considerations:**
-    - Pin count filter is important: testing a 14-pin IC against 16-pin vectors wastes time and can report false passes
-    - Some logic ICs share the same pin count and similar pinouts — multiple candidates may pass. The results list should show all passing candidates, not just the first.
-    - Each candidate requires a fresh `begin_transaction` with that device's parameters (voltages, pin map, etc.)
-    - Progress reporting is important — the database has thousands of logic IC entries, and each test takes ~1-2 seconds
-    - Should be cancelable (user may want to stop after finding a match)
+  - **Implementation:** GUI-only (no CLI flag). `logic_auto_find()` in `operations.rs` iterates `list_logic_ics_by_pin_count()` results, runs `logic_ic_test` per candidate with `begin_transaction`/`end_transaction`, reports progress via callback. `do_logic_identify` Tauri command emits progress events. `IdentifyResults.svelte` shows passing matches only, with Select and favorite-star buttons. Selecting a result syncs the DeviceSelector. User-facing label is "Identify" (not "Auto Find") to describe purpose rather than mechanism.
+  - **Design considerations addressed:**
+    - Pin count filter: user selects pin count (8/14/16/20/24/28/40) before clicking Identify
+    - Multiple candidates: results show all passing matches, not just the first
+    - Per-candidate transaction: `begin_transaction`/`end_transaction` for each, with cleanup on error
+    - Progress reporting: `"progress"` events emitted per candidate with operation label
+    - Results persist after selection; Clear button empties contents without hiding table
   - **Scope:**
-    - Phase 1: CLI only (`--logic-autofind`), no pin-count filter (test all), prints passing candidates
-    - Phase 2: GUI "Auto Find" button with progress and clickable results
-    - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion)
+    - Phase 1: CLI only (`--logic-autofind`), no pin-count filter (test all), prints passing candidates — NOT implemented
+    - Phase 2: GUI "Identify" button with progress and clickable results — implemented
+    - Phase 3: Pin-count auto-detection (ask user to enter pin count, or detect from chip insertion) — user selects pin count manually
   - **Priority: low-medium** — useful feature not available in upstream minipro, but niche (most users program MCUs/memory, not logic ICs). XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
 
 - [x] **GUI SPI flash autodetect button** — "Auto Detect" button in the device selector area that reads the JEDEC ID from an inserted SPI flash and shows matching devices from the database

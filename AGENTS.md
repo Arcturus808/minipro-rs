@@ -159,6 +159,7 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
 | `write_fuses` | `cfg_fuses`, `lock_bits`, `icsp_mode` | `cfgFuses`, `lockBits`, `icspMode` |
 | `save_bytes_to_file` | `base64Data` | `base64Data` |
 | `do_erase`, `do_blank_check`, `do_chip_id`, `do_logic_test`, `read_fuses`, `check_lock_protection` | `icspMode` | `icspMode` (already camelCase in JS) |
+| `do_logic_identify` | `pinCount`, `vcc` | `pinCount`, `vcc` |
 
 ## Data Handling
 
@@ -379,6 +380,77 @@ minipro. When combined with `-w`/`-r`/`-E`/`-m`/`-b`/`-D`/`-a`, the pin
 test runs first and the operation only proceeds if all pins are good.
 If `-z` is the only flag, the test runs standalone and exits.
 
+### Logic IC identify (GUI)
+
+The Logic Test tab is always enabled. When no Logic device is selected,
+a "Select a logic IC" panel shows pin count buttons (8/14/16/20/24/28/40),
+a VCC selector, and an Identify button. Clicking Identify tests the
+inserted chip against all `logicic.xml` entries with the matching pin
+count via `logic_auto_find()` in `operations.rs`. The `do_logic_identify`
+Tauri command emits `"progress"` events per candidate and returns sorted
+`LogicIdentifyResultDto` entries (passing first, then by fewest errors,
+then alphabetically).
+
+**Results table** (`IdentifyResults.svelte`): shows only passing matches.
+Each row has a favorite star (shared `favorites` store in `device.ts`),
+device name, manufacturer, and a Select button. Selecting a result calls
+`selectDevice(name)`, which syncs the DeviceSelector via an `$effect`
+that searches for the device name and highlights it. The "✓ Selected"
+indicator is clickable to deselect. A Clear button empties the results
+contents (`clearIdentifyResultsContents()` sets `[]`) without hiding the
+table. The full clear (`clearIdentifyResults()` sets `null`) is called
+only on programmer disconnect.
+
+**Identify results clearing**: Two separate functions —
+`clearIdentifyResults()` (sets to `null`, used on programmer change) and
+`clearIdentifyResultsContents()` (sets to `[]`, used by the Clear button).
+The `$effect` that clears identify results fires on `$programmer` change
+only, NOT on `$selectedDevice` change, so selecting a device from the
+results list doesn't clear the results.
+
+**With a Logic device selected**: The operations panel shows the normal
+VCC selector, help button, and an "Identify unknown logic IC" link that
+calls `deselectDevice()` to return to identify mode.
+
+**DeviceSelector sync**: An `$effect` in `DeviceSelector.svelte` watches
+`$selectedDevice`. When the name doesn't match local `selectedName`
+(external selection), it syncs local state and sets `searchQuery` to the
+device name, triggering the debounced search so the device appears in the
+list with highlight and favorite controls.
+
+### Logic test grid (GUI)
+
+`LogicTestGrid.svelte` renders the logic test result as a color-coded
+grid instead of raw ANSI text. The backend returns a structured
+`LogicTestResult` DTO (`pinCount`, `vectorCount`, `vectors`, `step1`,
+`step2`, `errors`, `pass`). Cell classification in `cellInfo()` maps
+each cell to input (blue), output-pass (green), output-fail (red with
+`-` suffix), or ignore (gray). Two-pass test data (pull-up/pull-down)
+is checked for output validation.
+
+**Zoom**: Ctrl+Scroll adjusts cell size (20–44px), persisted via
+`settings.logicTestZoom`. Non-passive wheel listener with
+`preventDefault`.
+
+**Copy**: A Copy button exports the full grid as TSV (tab-separated
+values) using `plugin:clipboard-manager|write_text`. Header row has
+`Vec` + `Pin1..PinN`, one row per vector with symbols and `-` suffix
+for mismatches. Pastes directly into spreadsheet cells.
+
+**Layout**: Header is outside the scroll container in a `shrink-0` div
+to prevent sticky-header overlap. Both header and body tables use
+matching `<colgroup>` with `table-fixed` for column alignment.
+
+### Shared favorites store
+
+Device favorites were extracted from `DeviceSelector.svelte` to a shared
+`favorites` writable store in `device.ts`. Both `DeviceSelector` and
+`IdentifyResults` import `favorites`, `isFavorite`, and `toggleFavorite`.
+The store auto-persists to `localStorage` via a `subscribe()` call.
+Templates use a reactive `$derived` Set (`favNames`) for O(1) lookups
+instead of calling `isFavorite()` directly (which uses `get()` and isn't
+reactive).
+
 ### Config panel state (`$effect.pre`)
 
 `configData` in `App.svelte` is initialized via `$effect.pre` (not `$effect`)
@@ -413,16 +485,18 @@ gui/
         operations.ts          — chip read/write/verify/erase/blank-check/chip-id/logic-test/config
         batch.ts               — batch programming state (chip counter, pass/fail, Next Chip flow, serial number injection config)
         logs.ts                — terminal log entries
-        device.ts              — connected programmer + IC database
+        device.ts              — connected programmer + IC database + shared favorites store
         settings.ts            — persisted app preferences (includes panel widths)
       components/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
-        DeviceSelector.svelte    — search + paginated IC list
+        DeviceSelector.svelte    — search + paginated IC list (syncs from external selection via $effect)
         DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
         IcspConnectorDiagram.svelte — ICSP connector pin-numbering diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc")
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
+        LogicTestGrid.svelte    — zoomable color-coded logic test result grid (Ctrl+Scroll zoom, copy-to-clipboard TSV)
+        IdentifyResults.svelte  — logic IC identify results table (passing matches only, Select/favorite/deselect buttons)
         SettingsPanel.svelte     — theme, defaults, layout reset, custom database directory picker
         ProgressPanel.svelte     — operation progress + cancel
       file-dialog.ts             — Tauri dialog wrappers (file open/save, directory picker)
