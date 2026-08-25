@@ -247,8 +247,8 @@
         class={`w-full text-left py-2 px-3 transition-colors flex items-center gap-2 ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
         role="button"
         tabindex="0"
-        onclick={() => onSelect(name)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(name); } }}
+        onclick={() => selectedName === name ? onDeselect() : onSelect(name)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedName === name ? onDeselect() : onSelect(name); } }}
       >
         <button
           class="shrink-0 rounded p-0.5 hover:bg-surface-200-800"
