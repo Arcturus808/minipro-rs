@@ -25,8 +25,9 @@ use minipro_core::{
     find_device, find_device_any, list_devices, list_devices_for_model,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
-        logic_ic_test, pin_contact_check, read_chip, read_chip_calibration, read_fuses,
-        spi_autodetect_and_lookup, verify_chip, write_chip, write_fuses, FuseValue, SizeMismatch,
+        logic_auto_find, logic_ic_test, pin_contact_check, read_chip, read_chip_calibration,
+        read_fuses, spi_autodetect_and_lookup, verify_chip, write_chip, write_fuses, FuseValue,
+        SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -311,6 +312,49 @@ fn run() -> Result<()> {
             }
             return Ok(());
         }
+    }
+
+    // ── Logic IC identify (no device context needed) ────────────────────────
+    if cli.logic_identify {
+        let pin_count = cli
+            .pin_count
+            .context("--logic-identify requires --pin-count (8, 14, 16, 20, 24, 28, or 40)")?;
+        if ![8, 14, 16, 20, 24, 28, 40].contains(&pin_count) {
+            anyhow::bail!(
+                "Invalid pin count {pin_count}. Supported values: 8, 14, 16, 20, 24, 28, 40"
+            );
+        }
+        let db_paths = DatabasePaths::resolve(
+            cli.infoic_path.as_deref(),
+            cli.logicic_path.as_deref(),
+            cli.algorithms_path.as_deref(),
+        )?;
+        let vcc = cli.vcc.as_deref();
+        let model = handle.info.model;
+        eprintln!("Identifying logic IC (pin count {pin_count})...");
+        let mut progress = |done: usize, total: usize| {
+            eprint!("\rTesting candidates... {done}/{total}");
+        };
+        let results = logic_auto_find(
+            &mut handle,
+            &db_paths,
+            pin_count,
+            vcc,
+            model,
+            Some(&mut progress),
+        )?;
+        eprintln!(); // newline after progress counter
+
+        let matches: Vec<_> = results.iter().filter(|r| r.pass).collect();
+        if matches.is_empty() {
+            eprintln!("No matching logic ICs found.");
+        } else {
+            for r in &matches {
+                println!("{:<20} {}", r.name, r.manufacturer);
+            }
+            eprintln!("{} match(es) found.", matches.len());
+        }
+        return Ok(());
     }
 
     // ── Device required from here on ─────────────────────────────────────────
