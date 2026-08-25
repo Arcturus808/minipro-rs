@@ -11,7 +11,7 @@ use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, get_pin_map, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
-    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -1963,11 +1963,23 @@ pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state:
     }
 }
 
+/// Structured logic IC test result for the GUI.
+#[derive(Serialize)]
+pub struct LogicTestResultDto {
+    pub pinCount: u16,
+    pub vectorCount: u16,
+    pub vectors: Vec<u8>,
+    pub step1: Vec<u8>,
+    pub step2: Vec<u8>,
+    pub errors: u32,
+    pub pass: bool,
+}
+
 /// Test a logic IC against its built-in test vectors.
-/// Returns the test result table as a string.
+/// Returns a structured result for the GUI grid rendering.
 /// `vcc` is an optional VCC override (e.g. "3.3") for logic ICs.
 #[tauri::command]
-pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'_, Arc<AppState>>) -> Result<LogicTestResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2014,16 +2026,16 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
             };
 
             handle.begin_transaction(device).map_err(|e| e.to_string())?;
-            let mut output = Vec::new();
-            let test_result = logic_ic_test(&mut handle, &mut output);
-            let mut text = String::from_utf8_lossy(&output).into_owned();
-            if let Err(ref e) = test_result {
-                if !text.is_empty() && !text.ends_with('\n') {
-                    text.push('\n');
-                }
-                text.push_str(&format!("[ERROR] {}", e));
-            }
-            Ok::<String, String>(text)
+            let test_result = logic_ic_test(&mut handle).map_err(|e| e.to_string())?;
+            Ok::<LogicTestResultDto, String>(LogicTestResultDto {
+                pinCount: test_result.pin_count,
+                vectorCount: test_result.vector_count,
+                vectors: test_result.vectors,
+                step1: test_result.step1,
+                step2: test_result.step2,
+                errors: test_result.errors,
+                pass: test_result.pass,
+            })
         })();
 
         let _ = handle.end_transaction();
@@ -2038,7 +2050,91 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
     state_clone.release();
 
     match result {
-        Ok(Ok(text)) => Ok(text),
+        Ok(Ok(dto)) => Ok(dto),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+// ── Logic IC identify (auto-find) ───────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct LogicIdentifyResultDto {
+    pub name: String,
+    pub manufacturer: String,
+    pub pass: bool,
+    pub errors: u32,
+}
+
+/// Test an unknown logic IC against all database entries with a matching pin
+/// count.  Returns a sorted list of results (passing entries first).
+/// `vcc` is an optional VCC override (e.g. "3.3") for logic ICs.
+#[tauri::command]
+pub async fn do_logic_identify(
+    pinCount: u8,
+    vcc: Option<String>,
+    state: State<'_, Arc<AppState>>,
+    window: Window,
+) -> Result<Vec<LogicIdentifyResultDto>, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let db = get_db_paths(&state_task)?;
+        let model = handle.info.model;
+
+        let result = (|| {
+            let mut progress_cb = |done: usize, total: usize| {
+                let _ = window_clone.emit(
+                    "progress",
+                    ProgressPayload {
+                        done,
+                        total,
+                        operation: "identify".to_string(),
+                    },
+                );
+            };
+
+            let entries = logic_auto_find(
+                &mut handle,
+                &db,
+                pinCount,
+                vcc.as_deref(),
+                model,
+                Some(&mut progress_cb),
+            )
+            .map_err(|e| e.to_string())?;
+
+            Ok::<Vec<LogicIdentifyResultDto>, String>(
+                entries
+                    .into_iter()
+                    .map(|e| LogicIdentifyResultDto {
+                        name: e.name,
+                        manufacturer: e.manufacturer,
+                        pass: e.pass,
+                        errors: e.errors,
+                    })
+                    .collect(),
+            )
+        })();
+
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(dtos)) => Ok(dtos),
         Ok(Err(e)) => Err(e),
         Err(e) => Err(format!("Task panicked: {}", e)),
     }

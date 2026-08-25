@@ -194,3 +194,46 @@ export async function reloadDatabase(): Promise<void> {
   await deselectDevice();
   deviceList.set([]);
 }
+
+// ── Device favorites (shared between DeviceSelector and IdentifyResults) ────
+
+export interface FavoriteEntry {
+  name: string;
+  manufacturer: string;
+}
+
+const FAVORITES_KEY = "minipro_device_favorites";
+
+function loadFavorites(): FavoriteEntry[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Migrate old format (array of strings) to new format
+    if (parsed.length > 0 && typeof parsed[0] === "string") {
+      return parsed.map((name: string) => ({ name, manufacturer: "" }));
+    }
+    return parsed as FavoriteEntry[];
+  } catch {
+    return [];
+  }
+}
+
+export const favorites = writable<FavoriteEntry[]>(loadFavorites());
+
+// Persist to localStorage whenever favorites change
+favorites.subscribe((favs) => {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+});
+
+export function isFavorite(name: string): boolean {
+  return get(favorites).some((f) => f.name === name);
+}
+
+export function toggleFavorite(name: string, manufacturer?: string): void {
+  if (isFavorite(name)) {
+    favorites.update((favs) => favs.filter((f) => f.name !== name));
+  } else {
+    favorites.update((favs) => [...favs, { name, manufacturer: manufacturer ?? "" }]);
+  }
+}

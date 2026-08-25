@@ -28,7 +28,7 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
-use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -491,15 +491,10 @@ impl Protocol for Tl866aProtocol {
         Err(MiniproError::UnsupportedOperation)
     }
 
-    fn logic_ic_test(
-        &self,
-        usb: &UsbDevice,
-        device: &Device,
-        out: &mut dyn std::io::Write,
-    ) -> Result<()> {
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
         // End any active transaction before bit-banging (matches upstream C)
         self.end_transaction(usb)?;
-        tl866a_logic_ic_test(usb, device, out)
+        tl866a_logic_ic_test(usb, device)
     }
 
     fn firmware_update(&self, _usb: &UsbDevice, _firmware: &[u8]) -> Result<()> {
@@ -1303,11 +1298,7 @@ fn do_ic_test(usb: &UsbDevice, device: &Device) -> Result<Vec<u8>> {
 }
 
 /// Run the full logic-IC test, print a pass/fail table, and report errors.
-pub fn tl866a_logic_ic_test(
-    usb: &UsbDevice,
-    device: &Device,
-    out: &mut dyn std::io::Write,
-) -> Result<()> {
+pub fn tl866a_logic_ic_test(usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
     let pin_count = device.package_details.pin_count as usize;
     if pin_count % 2 != 0 {
         return Err(MiniproError::Protocol("Invalid pin count!".into()));
@@ -1318,57 +1309,35 @@ pub fn tl866a_logic_ic_test(
 
     let result = do_ic_test(usb, device)?;
 
-    // Printable character for each logic state
-    const PST: &[u8] = b"01LHCZXGV";
-    let mut n = 0usize;
-
-    writeln!(
-        out,
-        "      {}",
-        (1..=pin_count)
-            .map(|p| format!("{:<3}", p))
-            .collect::<Vec<_>>()
-            .join("")
-    )
-    .map_err(|e| MiniproError::Protocol(format!("write error: {}", e)))?;
-
-    let mut errors = 0usize;
-    for i in 0..vector_count {
-        write!(out, "{:04}: ", i)
-            .map_err(|e| MiniproError::Protocol(format!("write error: {}", e)))?;
-        for _pin in 0..pin_count {
-            let expected = vectors[n];
-            let actual = result[n];
-            let err = match expected {
-                LOGIC_L => actual != 0,
-                LOGIC_H | LOGIC_Z => actual == 0,
-                _ => false,
-            };
-            if err {
-                errors += 1;
-            }
-            write!(
-                out,
-                "{}{}{} ",
-                if err { "\x1b[0;91m" } else { "\x1b[0m" },
-                PST[expected as usize] as char,
-                if err { "-" } else { " " }
-            )
-            .map_err(|e| MiniproError::Protocol(format!("write error: {}", e)))?;
-            n += 1;
+    // Count errors
+    let mut errors = 0u32;
+    for n in 0..vector_count * pin_count {
+        let expected = vectors[n];
+        let actual = result[n];
+        let err = match expected {
+            LOGIC_L => actual != 0,
+            LOGIC_H | LOGIC_Z => actual == 0,
+            _ => false,
+        };
+        if err {
+            errors += 1;
         }
-        writeln!(out, "\x1b[0m")
-            .map_err(|e| MiniproError::Protocol(format!("write error: {}", e)))?;
     }
 
-    if errors > 0 {
-        eprintln!("Logic test failed: {} errors encountered.", errors);
-        Err(MiniproError::Protocol(format!(
-            "Logic test failed: {} errors encountered",
-            errors
-        )))
-    } else {
+    let pass = errors == 0;
+    if pass {
         eprintln!("Logic test successful.");
-        Ok(())
+    } else {
+        eprintln!("Logic test failed: {} errors encountered.", errors);
     }
+
+    Ok(LogicTestResult {
+        pin_count: pin_count as u16,
+        vector_count: vector_count as u16,
+        vectors: vectors.to_vec(),
+        step1: result,
+        step2: vec![],
+        errors,
+        pass,
+    })
 }

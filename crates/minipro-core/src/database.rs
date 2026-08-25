@@ -238,6 +238,58 @@ pub fn list_devices(paths: &DatabasePaths, filter: Option<&str>) -> Result<Vec<D
     Ok(items)
 }
 
+/// List all logic ICs in `logicic.xml` with a specific pin count.
+///
+/// Used by the "Identify" (auto-find) feature to enumerate candidate
+/// devices to test against an unknown chip.  Returns deduplicated entries
+/// with manufacturer names.
+pub fn list_logic_ics_by_pin_count(
+    paths: &DatabasePaths,
+    pin_count: u8,
+) -> Result<Vec<DeviceListItem>> {
+    let xml = read_file(&paths.logicic)?;
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut items = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut current_manufacturer = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) => {
+                let tag = e.name();
+                if tag.as_ref() == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
+                    continue;
+                }
+                if tag.as_ref() == b"ic" {
+                    let pins = get_attr_u32(e, b"pins").unwrap_or(0) as u8;
+                    if pins != pin_count {
+                        continue;
+                    }
+                    if let Some(raw_name) = get_attr_str(e, b"name") {
+                        for part in raw_name.split(',') {
+                            let part = part.trim();
+                            if seen.insert(part.to_ascii_lowercase()) {
+                                items.push(DeviceListItem {
+                                    name: part.to_string(),
+                                    manufacturer: current_manufacturer.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(items)
+}
+
 /// List device names compatible with a specific programmer model.
 ///
 /// Logic ICs (shared across all models) are always included.

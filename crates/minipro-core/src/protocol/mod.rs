@@ -19,6 +19,23 @@ pub struct PinTestResult {
     pub bad_pins: Vec<u16>,
 }
 
+/// Structured result of a logic IC test.
+///
+/// `vectors` contains the expected states from the device database
+/// (vector_count * pin_count entries, row-major).  `step1` and `step2`
+/// are the two measurement passes (pull-up and pull-down, or the single
+/// pass for TL866A).  `errors` is the number of pin mismatches.
+#[derive(Debug, Clone, Default)]
+pub struct LogicTestResult {
+    pub pin_count: u16,
+    pub vector_count: u16,
+    pub vectors: Vec<u8>,
+    pub step1: Vec<u8>,
+    pub step2: Vec<u8>,
+    pub errors: u32,
+    pub pass: bool,
+}
+
 /// Data buffer + addressing info for a single block read/write.
 #[derive(Debug)]
 pub struct DataSet {
@@ -158,13 +175,8 @@ pub trait Protocol: Send + Sync {
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()>;
 
     /// Test a logic IC against its test vectors.
-    fn logic_ic_test(
-        &self,
-        usb: &UsbDevice,
-        device: &Device,
-        out: &mut dyn std::io::Write,
-    ) -> Result<()> {
-        let _ = (usb, device, out);
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
+        let _ = (usb, device);
         Err(MiniproError::UnsupportedOperation)
     }
 

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import pkg from "../package.json";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, checkDatabase, voltageOptions, loadVoltageOptions, fuseBitDefs, loadFuseBitDefs } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, deselectDevice, checkDatabase, voltageOptions, loadVoltageOptions, fuseBitDefs, loadFuseBitDefs, isConnected } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexLoading, loadFile, hexMeta, getHexData, hexEdits, applyHexEdits, confirmOverwriteEdits } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
@@ -30,6 +30,12 @@
     clearPinTestResult,
     pinTestResult,
     pinTestRunning,
+    logicTestResult,
+    clearLogicTestResult,
+    identifyResults,
+    identifyRunning,
+    clearIdentifyResults,
+    doIdentify,
     type FuseValue,
     type ConfigData,
   } from "./lib/stores/operations";
@@ -40,6 +46,8 @@
   import IcspConnectorDiagram from "./lib/components/IcspConnectorDiagram.svelte";
   import ProgressPanel from "./lib/components/ProgressPanel.svelte";
   import HexViewer from "./lib/components/HexViewer.svelte";
+  import LogicTestGrid from "./lib/components/LogicTestGrid.svelte";
+  import IdentifyResults from "./lib/components/IdentifyResults.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import FuseBitDecoder from "./lib/components/FuseBitDecoder.svelte";
   import {
@@ -92,6 +100,11 @@
   let showFuseWriteConfirm = $state(false);
   let showLogicHelp = $state(false);
 
+  // Identify (auto-find) state
+  let identifyPinCount = $state<number | null>(null);
+  let identifyVcc = $state("5");
+  const IDENTIFY_PIN_OPTIONS = [8, 14, 16, 20, 24, 28, 40];
+
   // Close help/confirm modals on Escape (global listener — modals don't receive focus on open)
   $effect(() => {
     if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm && !showLogicHelp) return;
@@ -102,6 +115,19 @@
         showBatchHelp = false;
         showFuseWriteConfirm = false;
         showLogicHelp = false;
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  });
+
+  // F1 opens logic test help when logic test panel is active
+  $effect(() => {
+    if ($activeOperation !== "logic_test") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        showLogicHelp = !showLogicHelp;
       }
     };
     document.addEventListener("keydown", handler);
@@ -136,8 +162,18 @@
     overrideVpp = "";
     overrideVcc = "";
     overrideVdd = "";
-    // Clear stale pin-test results when device or programmer changes
+    // Clear stale pin-test and logic-test results when device or programmer changes.
+    // Identify results are NOT cleared here — selecting a device from the
+    // identify results list triggers this effect, and we want results to persist.
     clearPinTestResult();
+    clearLogicTestResult();
+  });
+
+  // Clear identify results only when the programmer changes (connect/disconnect),
+  // not when the device changes (e.g. selecting from identify results).
+  $effect(() => {
+    $programmer;
+    clearIdentifyResults();
   });
 
   // Active operation label for the options panel
@@ -856,7 +892,7 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("logic_test")}
-            disabled={$isRunning || ($selectedDevice !== null && $selectedDevice.chip_type !== "Logic")}
+            disabled={$isRunning}
             class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "logic_test"}
             class:ring-2={$activeOperation === "logic_test"}
@@ -889,7 +925,47 @@
         <!-- Options -->
         {#if $activeOperation}
           <div class="border-t border-surface-200-800 pt-3">
-            {#if $selectedDevice && ($activeOperation !== "logic_test" || $selectedDevice.chip_type === "Logic") && ($activeOperation !== "config" || $selectedDevice.config)}
+            {#if $activeOperation === "logic_test" && (!$selectedDevice || $selectedDevice.chip_type !== "Logic")}
+              <!-- logic_test with no Logic device selected: show Identify UI -->
+              <div class="border border-dashed border-surface-300-600 rounded-lg p-4">
+                <p class="text-sm font-medium opacity-70 mb-1">Select a logic IC</p>
+                <p class="text-xs opacity-50 mb-3">To automatically identify a logic IC, insert it into the ZIF socket (pin 1 aligned with lever), then select its pin count and VCC below and click Identify. Matching results will appear in the table below — click "Select" on a result to choose that device.</p>
+                <div class="flex flex-wrap items-end gap-4">
+                  <div>
+                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">Pin Count</label>
+                    <div class="flex flex-wrap gap-1.5">
+                      {#each IDENTIFY_PIN_OPTIONS as p}
+                        <button
+                          class="px-2.5 py-1 text-xs rounded border transition-all {identifyPinCount === p ? 'bg-primary-500 border-primary-500 text-white font-semibold' : 'border-surface-300-600 hover:border-primary-400 hover:bg-primary-500/10'}"
+                          onclick={() => identifyPinCount = p}
+                          disabled={$isRunning || $identifyRunning}
+                        >{p}</button>
+                      {/each}
+                    </div>
+                  </div>
+                  <div>
+                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">VCC</label>
+                    <select class="select text-xs w-24" bind:value={identifyVcc} disabled={$isRunning || $identifyRunning}>
+                      <option value="5">5V</option>
+                      <option value="3.3">3.3V</option>
+                      <option value="2.5">2.5V</option>
+                      <option value="1.8">1.8V</option>
+                    </select>
+                  </div>
+                  <button
+                    class="btn preset-filled-primary px-3 py-1.5 text-sm font-semibold disabled:opacity-40"
+                    onclick={() => doIdentify(identifyPinCount!, identifyVcc)}
+                    disabled={!identifyPinCount || !$isConnected || $isRunning || $identifyRunning}
+                    title={!identifyPinCount ? "Select a pin count" : !$isConnected ? "No programmer connected" : "Test chip against all matching logic ICs"}
+                  >
+                    {$identifyRunning ? "Identifying..." : "Identify"}
+                  </button>
+                </div>
+                {#if !$isConnected}
+                  <p class="text-xs text-amber-700-200 mt-2">Connect a programmer to use Identify.</p>
+                {/if}
+              </div>
+            {:else if $selectedDevice && ($activeOperation !== "config" || $selectedDevice.config)}
             {#if $activeOperation !== "config"}
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
@@ -1074,13 +1150,24 @@
                   <button
                     class="opacity-50 hover:opacity-100 transition-opacity p-1 rounded border border-transparent hover:border-surface-200-800"
                     onclick={() => showLogicHelp = true}
-                    title="Logic test vector symbols help"
-                    aria-label="Logic test vector symbols help"
+                    title="Logic test help (F1)"
+                    aria-label="Logic test help"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
                     </svg>
                   </button>
+                  {#if $selectedDevice?.chip_type === "Logic"}
+                    <div class="flex-1"></div>
+                    <button
+                      class="text-xs px-2.5 py-1 opacity-60 hover:opacity-100 underline transition-opacity"
+                      onclick={() => deselectDevice()}
+                      disabled={$isRunning || $identifyRunning}
+                      title="Deselect this device to identify an unknown logic IC"
+                    >
+                      Identify unknown logic IC
+                    </button>
+                  {/if}
                 </div>
               {/if}
               {#if $activeOperation === "config"}
@@ -1533,9 +1620,6 @@
                 {#if !$selectedDevice}
                   <p class="text-sm font-medium opacity-70 mb-1">No device selected</p>
                   <p class="text-xs opacity-50">Search for your chip in the Device Selector (left panel) to enable this operation.</p>
-                {:else if $activeOperation === "logic_test" && $selectedDevice.chip_type !== "Logic"}
-                  <p class="text-sm font-medium opacity-70 mb-1">Not a logic IC</p>
-                  <p class="text-xs opacity-50">Logic test is only available for logic IC devices. Select a logic IC in the Device Selector to use this operation.</p>
                 {:else if $activeOperation === "config" && !$selectedDevice.config}
                   <p class="text-sm font-medium opacity-70 mb-1">No configuration available</p>
                   <p class="text-xs opacity-50">This device does not have fuses or lock bits. Select an MCU or PLD in the Device Selector to use this operation.</p>
@@ -1553,9 +1637,43 @@
         <ProgressPanel />
       </div>
 
-      <!-- Hex viewer -->
+      <!-- Hex viewer / Logic test grid / Identify results -->
       <div class="flex-1 min-h-0">
-        <HexViewer />
+        {#if $activeOperation === "logic_test"}
+          {#if !$selectedDevice || $selectedDevice.chip_type !== "Logic"}
+            <!-- "Select a logic IC" mode: results table always visible -->
+            {#if $identifyResults && $identifyResults.length > 0}
+              <div class="card preset-filled-surface-100-900 border border-surface-200-800 h-full overflow-hidden">
+                <IdentifyResults results={$identifyResults} />
+              </div>
+            {:else}
+              <div class="card preset-filled-surface-100-900 border border-surface-200-800 h-full overflow-hidden">
+                <IdentifyResults results={[]} />
+              </div>
+            {/if}
+          {:else if $identifyResults}
+            <!-- Logic device selected but identify results still visible -->
+            <div class="card preset-filled-surface-100-900 border border-surface-200-800 h-full overflow-hidden">
+              <IdentifyResults results={$identifyResults} />
+            </div>
+          {:else if $logicTestResult}
+            <div class="card preset-filled-surface-100-900 border border-surface-200-800 h-full overflow-hidden">
+              <LogicTestGrid result={$logicTestResult} />
+            </div>
+          {:else}
+            <div class="card preset-filled-surface-100-900 border border-surface-200-800 h-full flex items-center justify-center">
+              <div class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v5.25M21 3v5.25M3.75 13.5h16.5M3.75 18.75h16.5M3 9v9M21 9v9" />
+                </svg>
+                <p class="text-sm font-medium opacity-70 mb-1">No test results yet</p>
+                <p class="text-xs opacity-50">Click "Start Logic Test" above to run the test vector suite.</p>
+              </div>
+            </div>
+          {/if}
+        {:else}
+          <HexViewer />
+        {/if}
       </div>
     </section>
 
@@ -1741,7 +1859,7 @@
     >
       <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 360px; max-width: 460px; max-height: 80vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <div style="font-size: 15px; font-weight: 600;">Logic Test Vector Symbols</div>
+          <div style="font-size: 15px; font-weight: 600;">Logic Test Help</div>
           <button
             style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
             onclick={() => showLogicHelp = false}
@@ -1750,7 +1868,7 @@
         </div>
 
         <p style="font-size: 12px; line-height: 1.5; margin: 0 0 14px 0; opacity: 0.7;">
-          The test result table uses single-character symbols to represent the expected state of each pin per test vector. A red symbol with a dash (<span style="font-family: 'Hack', 'Consolas', monospace; color: #e53e3e;">X- </span>) indicates a mismatch — the pin did not match the expected state.
+          The test result grid uses single-character symbols to represent the expected state of each pin per test vector. A red cell with a dash suffix (e.g. <span style="font-family: 'Hack', 'Consolas', monospace; color: #e53e3e;">H-</span>) indicates a mismatch — the pin did not match the expected state.
         </p>
 
         <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
@@ -1777,8 +1895,34 @@
           Only <span style="font-family: 'Hack', 'Consolas', monospace;">L</span>, <span style="font-family: 'Hack', 'Consolas', monospace;">H</span>, and <span style="font-family: 'Hack', 'Consolas', monospace;">Z</span> pins are tested. Input, power, ground, and ignored pins are never marked as errors.
         </p>
 
+        <div style="font-size: 12px; font-weight: 600; margin: 14px 0 6px 0; opacity: 0.8;">Color Legend</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px;">
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 16px; border-radius: 3px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: rgb(59, 130, 246); font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">0</span>
+            Input
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 16px; border-radius: 3px; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: rgb(34, 197, 94); font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">H</span>
+            Output OK
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 16px; border-radius: 3px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: rgb(239, 68, 68); font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">L-</span>
+            Mismatch
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 16px; border-radius: 3px; background: rgba(100, 116, 139, 0.08); border: 1px solid rgba(100, 116, 139, 0.15); color: rgba(100, 116, 139, 0.6); font-family: 'Hack', 'Consolas', monospace; font-weight: 600;">X</span>
+            Ignore
+          </div>
+        </div>
+
+        <div style="margin-top: 14px; padding: 10px 12px; border-radius: 5px; background: var(--caution-bg, rgba(234, 179, 8, 0.1)); border: 1px solid var(--caution-border, rgba(234, 179, 8, 0.25));">
+          <p style="font-size: 11px; line-height: 1.5; margin: 0; color: var(--caution-text, rgb(234, 179, 8));">
+            <strong>Functional test only.</strong> The logic test verifies that outputs match the expected truth table — it does not measure timing, voltage levels, or supply current. A chip that passes may still be out of datasheet spec (e.g. running at an unsupported voltage or with degraded drive strength). Use the VCC override to test at the chip's rated voltage for best results.
+          </p>
+        </div>
+
         <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
-          Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+          <span style="font-family: 'Hack', 'Consolas', monospace;">F1</span> to toggle · <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close · <span style="font-family: 'Hack', 'Consolas', monospace;">Ctrl+Scroll</span> to zoom grid
         </div>
       </div>
     </div>

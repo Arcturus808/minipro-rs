@@ -26,7 +26,7 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Bootloader erase             |
 
-use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -83,9 +83,6 @@ const UPDATE_FILE_VERSION: u32 = 0xf8cc_0000;
 const LOGIC_L: u8 = 2; // expected output Low
 const LOGIC_H: u8 = 3; // expected output High
 const LOGIC_Z: u8 = 5; // expected High-Z (pull-up=H, pull-down=L)
-
-/// Printable character for each logic state (matches C `pst[]`).
-const PSTATE: &[u8] = b"01LHCZXGV";
 
 // Memory page types
 const MP_CODE: u8 = 0x00;
@@ -1160,13 +1157,8 @@ impl Protocol for Tl866iiPlusProtocol {
         firmware_update_tl866(usb, firmware)
     }
 
-    fn logic_ic_test(
-        &self,
-        usb: &UsbDevice,
-        device: &Device,
-        out: &mut dyn std::io::Write,
-    ) -> Result<()> {
-        logic_ic_test_tl866(usb, device, out)
+    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
+        logic_ic_test_tl866(usb, device)
     }
 
     fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {
@@ -1393,11 +1385,7 @@ pub(super) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> R
 }
 
 /// Run the full two-pass logic-IC test and print a pass/fail table.
-pub(super) fn logic_ic_test_tl866(
-    usb: &UsbDevice,
-    device: &Device,
-    out: &mut dyn std::io::Write,
-) -> Result<()> {
+pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
     let vectors = match device.vectors.as_deref() {
         Some(v) if !v.is_empty() => v,
         _ => {
@@ -1419,51 +1407,42 @@ pub(super) fn logic_ic_test_tl866(
     // Step 2: pull-downs active (pull = 1)
     let step2 = do_ic_test_pass(usb, device, true)?;
 
-    // Print header
-    write!(out, "      ").ok();
-    for pin in 1..=pin_count {
-        write!(out, "{:<3}", pin).ok();
-    }
-    writeln!(out).ok();
-
-    let mut errors = 0usize;
-
+    // Count errors
+    let mut errors = 0u32;
     for v in 0..vec_count {
-        write!(out, "{:04}: ", v).ok();
         for p in 0..pin_count {
             let idx = v * pin_count + p;
             let state = vectors[idx];
             let s1 = step1[idx];
             let s2 = step2[idx];
-
             let err = match state {
-                LOGIC_L => s1 != 0 || s2 != 0, // must be LOW in both passes
-                LOGIC_H => s1 == 0 || s2 == 0, // must be HIGH in both passes
-                LOGIC_Z => s1 == 0 || s2 != 0, // HIGH when pulled up, LOW when pulled down
-                _ => false,                    // G, V, C, X, 0, 1 — no comparison
+                LOGIC_L => s1 != 0 || s2 != 0,
+                LOGIC_H => s1 == 0 || s2 == 0,
+                LOGIC_Z => s1 == 0 || s2 != 0,
+                _ => false,
             };
-            let ch = PSTATE.get(state as usize).copied().unwrap_or(b'?') as char;
-            // Match C format: "\e[0;91m%c- " (error) or "\e[0m%c  " (ok)
             if err {
-                write!(out, "\x1b[0;91m{}- ", ch).ok();
                 errors += 1;
-            } else {
-                write!(out, "\x1b[0m{}  ", ch).ok();
             }
         }
-        writeln!(out).ok();
     }
 
-    if errors > 0 {
-        eprintln!("Logic test failed: {} errors encountered.", errors);
-        Err(MiniproError::Protocol(format!(
-            "Logic test failed: {} errors encountered",
-            errors
-        )))
-    } else {
+    let pass = errors == 0;
+    if pass {
         eprintln!("Logic test successful.");
-        Ok(())
+    } else {
+        eprintln!("Logic test failed: {} errors encountered.", errors);
     }
+
+    Ok(LogicTestResult {
+        pin_count: pin_count as u16,
+        vector_count: vec_count as u16,
+        vectors: vectors.to_vec(),
+        step1,
+        step2,
+        errors,
+        pass,
+    })
 }
 
 // ── Firmware update (TL866II+ / T48) ─────────────────────────────────────────
