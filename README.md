@@ -40,6 +40,8 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
 - **Logic IC identify**: automatically identify an unknown logic IC by testing it against all database entries with a matching pin count. CLI: `minipro --logic-identify --pin-count 14 [--vcc 3.3]`. GUI: "Select a logic IC" mode in the Logic Test tab with pin count selector, VCC dropdown, and Identify button — results show only passing matches with Select and favorite buttons
 - **Structured logic test grid**: color-coded zoomable grid (Ctrl+Scroll) for logic IC test results — blue=input, green=output-pass, red=mismatch, gray=ignore. Copy button exports TSV for spreadsheets or forum posts. CLI: `minipro -p 74HC00 -T` prints a formatted text table
+
+![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `-x` / `--skip-id` CLI flag to skip in read mode (rejected for write/erase, matching upstream); `-y` / `--continue-id` to warn but continue on mismatch; GUI checkbox to bypass
