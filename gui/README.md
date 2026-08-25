@@ -14,6 +14,8 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Erase** | Done | Erase the selected chip |
 | **Blank Check** | Done | Verify the chip is blank |
 | **Chip ID** | Done | Read and display the chip ID |
+| **Logic Test** | Done | Test logic ICs against built-in test vectors; structured color-coded grid (Ctrl+Scroll zoom) with input/output/mismatch/ignore cell colors; copy-to-clipboard as TSV; CLI: `minipro -p 74HC00 -T` |
+| **Logic IC Identify** | Done | Automatically identify an unknown logic IC by pin count; "Select a logic IC" mode with pin count buttons, VCC selector, and Identify button; results table shows only passing matches with Select/favorite/deselect; syncs with DeviceSelector; CLI: `minipro --logic-identify --pin-count N` |
 | **Hex Viewer** | Done | Virtualized scrolling — instant load/clear of large files (e.g. 256KB); adjustable font size (10-16px via dropdown or Ctrl+mousewheel); Save/Open Folder/Clear buttons; in-place editing with standard hotkeys (Ctrl+S/C/V/A/Z, Ctrl+G, Ctrl+F, F3); entropy indicator; smart diff; trim/pad |
 | **File Dialogs** | Done | Native OS open/save dialogs with last-used-directory persistence; save defaults to device name |
 | **Progress** | Done | Live progress bar with bytes-read/written and CRC32 |
