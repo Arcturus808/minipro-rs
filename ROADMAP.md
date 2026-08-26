@@ -731,6 +731,37 @@ This is a living list of features and improvements planned for minipro-rs.
     - Phase 3: Custom pinout definition for PROM bit-banging (advanced — requires understanding of `prom_table` indices)
   - **Priority: low-medium** — useful for users with obscure or new chip variants not yet in the database, but niche. Most users use chips already in the database. XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
 
+- [ ] **GUI logic test vector editor** — add/edit/delete custom logic IC test vectors from the GUI, with `.lgc` import/export for XGPro compatibility
+  - **Problem:** Upstream minipro supports custom logic test vectors by manual XML editing of `logicic.xml`. Community tools exist (`pld2vect`, `xgpro-logic`, `iclu`) but require external workflows. XGPro's Logic Test dialog has built-in create/edit/delete/copy buttons for device entries and `.lgc` import/export — all within the GUI. Our project supports custom `logicic.xml` via `--logicic` CLI flag and the GUI Settings → Database directory picker, but there's no in-app vector editor.
+  - **Upstream parity:** Upstream C minipro has no GUI and no vector editor. XGPro has a full GUI vector editor with `.lgc` import/export. This feature would be an enhancement over upstream and parity with XGPro.
+  - **UI design required:** This feature needs a design exploration pass before implementation. The vector table editor is a mini-spreadsheet with cell-type constraints — significantly more complex than the custom chip metadata form.
+  - **UI design challenges:**
+    - **Pin definition table** — assign each pin a type (input, output, GND, VCC, clock, ignore) and position. How does the user define the pin layout? Dropdown per pin? Visual pin diagram click-to-assign?
+    - **Vector table grid** — each row is a test vector, each column is a pin. Cells hold state symbols (0, 1, L, H, C, Z, X, G, V). How does the user enter values? Click to cycle through valid states for that pin type? Dropdown per cell? Type-ahead?
+    - **Scaling** — 8-pin ICs have 8 columns (manageable), 40-pin ICs have 40 columns (needs horizontal scroll, sticky pin-number column). Reuse `LogicTestGrid.svelte` zoom/layout patterns?
+    - **Cell-type validation** — vectors must be consistent with pin types. Input pins accept 0/1/C/X. Output pins accept L/H/Z/X. GND pins accept G. VCC pins accept V. How are invalid entries prevented or highlighted?
+    - **Vector ordering** — vectors are executed in order. Does the user need to reorder? Drag rows? Insert/delete at arbitrary positions?
+    - **Two-pass test awareness** — some output states (Z) require both pull-up and pull-down measurements. Should the editor surface this, or is it transparent?
+    - **Test execution** — run the test against an inserted chip to verify vectors work before saving. Reuse existing `do_logic_test` / `do_logic_identify` infrastructure?
+    - **Metadata fields** — chip name, manufacturer, voltage (1.8/2.5/3.3/5V), pin count, chip type (the `type` attribute in `logicic.xml`)
+  - **Implementation approach:**
+    1. **Backend:** `add_custom_logic_ic` / `update_custom_logic_ic` / `delete_custom_logic_ic` Tauri commands — generate valid `<ic>` XML elements within `<custom>` section of `logicic.xml`. Validate vector count > 0, pin types consistent, GND/VCC pins present.
+    2. **Frontend:** `LogicVectorEditor.svelte` component — pin definition table + vector grid + metadata fields + test button. Accessed from Logic Test tab when no device selected (alongside Identify) or from a dedicated "Edit Custom Vectors" button.
+    3. **Import/export:** `.lgc` file parser/writer for XGPro compatibility. Reuse `xgpro-logic` format knowledge.
+    4. **Integration:** Custom logic ICs appear in identify results and can be selected for testing like built-in chips. "User-defined" badge distinguishes them.
+  - **Design considerations:**
+    - Must not modify the bundled `logicic.xml` — only the user's custom database directory
+    - Requires a custom database directory to be set in Settings (prompt user if not set)
+    - Should support editing/deleting/copying previously added custom logic ICs
+    - `.lgc` import/export for sharing with XGPro users
+    - Validation: chip name uniqueness, pin count matches vectors, at least one GND and one VCC pin, vector states consistent with pin types
+    - Reuse `LogicTestGrid.svelte` zoom/scroll/sticky-column patterns for the vector grid
+  - **Scope:**
+    - Phase 1: GUI form for adding custom logic ICs with pin definitions and vector table, save to custom `logicic.xml`
+    - Phase 2: Edit/delete/copy existing custom entries, test-before-save
+    - Phase 3: `.lgc` import/export
+  - **Priority: low-medium** — useful for users creating custom test vectors (especially GAL/PLD developers), but niche. XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro. The UI design complexity (vector grid editor) is the main effort.
+
 - [x] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
   - **Problem:** The core pin-contact test exists (`pin_contact_check()` in `operations.rs`, `pin_test_tl866()` in `tl866iiplus.rs`) and the CLI exposes it via `-z` / `--pin_check`. But the GUI's DiagnosticsPanel has a disabled "Pin Test (unsupported)" button, and even if enabled, the test results go to `eprintln!` (stderr) — the GUI can't capture them. XGPro shows specific bad pins (e.g., "Bad Pin: ZIF1 - PIN#1") and the user can see exactly which socket positions have poor contact.
   - **Current state:**
