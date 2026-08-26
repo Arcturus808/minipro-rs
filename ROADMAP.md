@@ -708,6 +708,29 @@ This is a living list of features and improvements planned for minipro-rs.
 - [ ] **Code signing and notarization** — the macOS `.dmg` is currently unsigned, which triggers macOS Gatekeeper's "'MINIPRO-RS-GUI' is damaged and can't be opened" alert when downloaded via a browser (the app is not actually damaged — Gatekeeper rejects unsigned apps with a quarantine attribute). The workaround is `xattr -cr` to strip the quarantine attribute (documented in README and release notes). The proper fix requires an Apple Developer Program membership ($99/year) to obtain a Developer ID certificate and notarize the app. Windows code signing is a separate but related issue (antivirus false positives on unsigned/cross-compiled binaries). Neither is currently feasible without funding or sponsorship.
   - **Priority: medium** — poor first-run experience for macOS users, but workaround is documented and build-from-source is available
 
+- [ ] **GUI user-defined chip editor** — add a GUI form for creating custom chip definitions without editing `infoic.xml` by hand
+  - **Problem:** Upstream minipro supports custom chips by manual XML editing of `infoic.xml` (documented in the man page). The user must understand the XML schema, protocol IDs, and pinout indices. XGPro provides a GUI form where users can define custom chips with metadata (reference name, package, memory size, programmer model support, chip model, manufacturer, device ID, user name, note) and set programming parameters (VPP, VCC verify, VDD write, pulse delay). Our project supports custom `infoic.xml` via `--infoic` CLI flag, `MINIPRO_HOME` env var, and the GUI Settings → Database directory picker — but there's no in-app form for adding chips.
+  - **Upstream parity:** Upstream C minipro documents custom chip addition in its man page but offers no GUI. XGPro has a full GUI chip editor. This feature would be an enhancement over upstream and parity with XGPro.
+  - **Technical constraints:**
+    - Pinouts are hardcoded in firmware — custom pinouts require bit-banging (PROM-type reads only) with `protocol_id = 0x80000001` and a pinout index from the `prom_table` array in `prom.c`
+    - Custom programming algorithms can't be added — only existing protocol IDs can be referenced
+    - The user-defined chip must clone an existing chip's protocol and modify metadata (memory size, voltages, chip ID, etc.)
+  - **Implementation approach:**
+    1. **Backend:** `add_custom_chip` Tauri command — takes chip metadata + parameters, generates a valid `<chip>` XML element, appends it to the user's custom `infoic.xml` (or creates one). Validates protocol_id exists, memory sizes are sane, voltages are within programmer limits.
+    2. **Frontend:** `CustomChipEditor.svelte` component — form with fields for chip name, manufacturer, package/pin count, memory sizes (code/data), protocol reference chip (dropdown of existing chips to clone from), chip ID, voltages (VPP/VCC/VDD dropdowns), pulse delay. Live validation. Saves to the custom database directory (requires one to be set in Settings).
+    3. **Integration:** Custom chips appear in the DeviceSelector search results alongside built-in chips. A "User-defined" badge distinguishes them.
+  - **Design considerations:**
+    - Must not modify the bundled `infoic.xml` — only the user's custom database directory
+    - Requires a custom database directory to be set in Settings (prompt user if not set)
+    - Should support editing/deleting previously added custom chips
+    - Export/import of custom chip definitions (share with other users)
+    - Validation: chip name uniqueness, protocol_id validity, voltage ranges for selected programmer model
+  - **Scope:**
+    - Phase 1: GUI form for adding custom chips by cloning an existing chip's protocol and modifying metadata
+    - Phase 2: Edit/delete custom chips, export/import
+    - Phase 3: Custom pinout definition for PROM bit-banging (advanced — requires understanding of `prom_table` indices)
+  - **Priority: low-medium** — useful for users with obscure or new chip variants not yet in the database, but niche. Most users use chips already in the database. XGPro has this, so it's a parity gap vs XGPro but not vs upstream minipro.
+
 - [x] **GUI pin-contact test with ZIF diagram highlighting** — run the pin-contact test from the GUI and visually indicate bad pins on the ZIF socket diagram, matching XGPro's behavior
   - **Problem:** The core pin-contact test exists (`pin_contact_check()` in `operations.rs`, `pin_test_tl866()` in `tl866iiplus.rs`) and the CLI exposes it via `-z` / `--pin_check`. But the GUI's DiagnosticsPanel has a disabled "Pin Test (unsupported)" button, and even if enabled, the test results go to `eprintln!` (stderr) — the GUI can't capture them. XGPro shows specific bad pins (e.g., "Bad Pin: ZIF1 - PIN#1") and the user can see exactly which socket positions have poor contact.
   - **Current state:**
