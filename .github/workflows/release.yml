@@ -183,7 +183,7 @@ jobs:
             echo ''
             echo '- **Linux**: `.deb` (Debian/Ubuntu)'
             echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
-            echo '- **macOS users**: If you see "MINIPRO-RS-GUI is damaged and can\'t be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.'
+            echo '- **macOS users**: If you see "MINIPRO-RS-GUI is damaged and can'"'"'t be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.'
             echo ''
             echo '## CLI Binaries'
             echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
