@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.8.0] - 2026-08-25
+
 ### Added
 
 - **Logic IC identify operation (GUI)** — automatically identify an unknown logic IC by testing it against all database entries with a matching pin count. The Logic Test tab is now always enabled; when no Logic device is selected, a "Select a logic IC" panel shows pin count buttons, VCC selector, and an Identify button. Results show only passing matches in a table with Select and favorite-star buttons. Selecting a result syncs the main DeviceSelector (searches for the device name and highlights it). An "Identify unknown logic IC" link returns to identify mode from a selected-device state. The results table persists after selection and has a Clear button that empties contents without hiding the table.
@@ -24,9 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pre-operation pin contact check (CLI + GUI)** — the CLI `-z` / `--pin-check` flag now doubles as both a standalone test and a pre-operation gate, matching upstream C minipro. When combined with `-w`/`-r`/`-E`/`-m`/`-b`/`-D`/`-a`, the pin test runs first and the operation only proceeds if all pins are good. The GUI adds a "Pin Contact Check" checkbox in the operations panel (default on, matching XGPro's "Pin Detect"). When checked, the pin test runs after `begin_transaction` and before the operation. If bad pins are found, the operation is aborted and the bad pins are highlighted on the ZIF diagram. The checkbox is disabled on unsupported models (TL866A/CS, T56, T76), in ICSP mode, or when the device has no pin-map data. Located right of "Chip ID check" for read/write/verify/erase; replaces "No options for this operation." for blank check and chip ID; thin options row above the fuse editor for config. Logic test has no checkbox (uses test vectors, not pin-contact mechanism).
 - **Automatic pin check before SPI autodetect** — on TL866II+/T48 in ZIF mode, a pin contact check runs automatically before SPI autodetect (no checkbox needed). If bad pins are found, autodetect is aborted with a clear diagnostic message instead of returning a garbage JEDEC ID. Matches upstream minipro's `auto_detect` function behavior.
 
+- **Symmetric operation tab gating** — when a logic IC is selected, Read/Write/Verify/Erase/Blank Check/Chip ID tabs are disabled with "Not applicable for logic ICs" tooltip. When a non-Logic device is selected, the Logic Test tab is disabled with "Not applicable for this device type" tooltip. A dedicated `$effect` auto-switches to the appropriate tab when the device type changes.
+
+- **Click-to-deselect in DeviceSelector** — clicking an already-selected device row toggles it off, providing an intuitive way to deselect without using the Clear button. Keyboard (Enter/Space) also toggles.
+
 ### Changed
 
 - **CLI `-z` flag behavior** — previously exited immediately after the pin test regardless of other flags. Now falls through to operation handlers after a successful test, allowing `-z` to gate subsequent operations. Standalone `-z` (no other operation) still exits after the test.
+
+- **CLI `--logic-identify` progress bar** — uses indicatif progress bar instead of manual `\r` counter, matching the style of read/write/verify operations. Bar clears on completion.
+
+### Fixed
+
+- **Suppress per-candidate logic test noise during identify scans** — removed `eprintln!` calls from the protocol layer's `logic_ic_test` in `tl866iiplus.rs` and `tl866a.rs`. These fired on every candidate during an identify scan, producing 100+ lines of noise. The structured `LogicTestResult` already contains pass/fail and error count — the caller decides what to print. The CLI `--logic-test` handler now prints the summary message itself.
 
 ## [0.7.0] - 2026-08-23
 
