@@ -176,9 +176,9 @@
     clearIdentifyResults();
   });
 
-  // Auto-switch to Logic Test when a logic IC is selected and a
-  // non-applicable operation tab is active. Separate effect to avoid
-  // making $activeOperation a dependency of the results-clearing effect.
+  // Auto-switch tabs when device type changes to an incompatible operation.
+  // Separate effect to avoid making $activeOperation a dependency of the
+  // results-clearing effect.
   $effect(() => {
     $selectedDevice;
     if (
@@ -188,6 +188,8 @@
       )
     ) {
       selectOp("logic_test");
+    } else if (isNonLogicDevice && $activeOperation === "logic_test") {
+      selectOp("read");
     }
   });
 
@@ -239,6 +241,8 @@
   });
   // Logic ICs only support logic test — disable other operation tabs
   let isLogicDevice = $derived($selectedDevice?.chip_type === "Logic");
+  // Non-Logic devices can't use logic test — disable that tab
+  let isNonLogicDevice = $derived($selectedDevice !== null && $selectedDevice.chip_type !== "Logic");
 
   // Custom start button label per operation
   let startButtonLabel = $derived(
@@ -916,8 +920,9 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("logic_test")}
-            disabled={$isRunning}
-            class:opacity-60={!$selectedDevice}
+            disabled={$isRunning || isNonLogicDevice}
+            class:opacity-60={!$selectedDevice || isNonLogicDevice}
+            title={isNonLogicDevice ? "Not applicable for this device type" : undefined}
             class:preset-filled-primary={$activeOperation === "logic_test"}
             class:ring-2={$activeOperation === "logic_test"}
             class:ring-primary-400={$activeOperation === "logic_test"}
