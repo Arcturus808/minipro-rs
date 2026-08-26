@@ -395,10 +395,18 @@ the flag iterates candidates itself. Standalone action, exits after completion.
 When a logic IC is selected (`chip_type === "Logic"`), the Read, Write,
 Verify, Erase, Blank Check, and Chip ID tabs are disabled and dimmed
 with a "Not applicable for logic ICs" tooltip. Only Logic Test and
-Config (self-gates via `!config`) remain enabled. A dedicated `$effect`
-auto-switches to Logic Test if a non-applicable tab was active when the
-logic IC was selected. The effect is separate from the results-clearing
-effect to avoid making `$activeOperation` a dependency of it.
+Config (self-gates via `!config`) remain enabled.
+
+Conversely, when a non-Logic device is selected, the Logic Test tab is
+disabled with a "Not applicable for this device type" tooltip. With no
+device selected, Logic Test remains enabled (shows the identify panel).
+
+A dedicated `$effect` auto-switches tabs when the device type changes
+to an incompatible operation: switches to Logic Test when a logic IC is
+selected with a non-applicable tab active, and switches to Read when a
+non-Logic device is selected with Logic Test active. The effect is
+separate from the results-clearing effect to avoid making
+`$activeOperation` a dependency of it.
 
 ### Logic IC identify (GUI)
 
