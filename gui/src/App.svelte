@@ -243,6 +243,11 @@
   let isLogicDevice = $derived($selectedDevice?.chip_type === "Logic");
   // Non-Logic devices can't use logic test — disable that tab
   let isNonLogicDevice = $derived($selectedDevice !== null && $selectedDevice.chip_type !== "Logic");
+  // Lever position: TL866A/CS/II+ have lever at top (pin 1 end);
+  // T48/T56/T76 have lever at bottom (opposite pin 1).
+  let leverAtTop = $derived(
+    !$programmer || ["TL866A", "TL866CS", "TL866II+"].includes($programmer.model)
+  );
 
   // Custom start button label per operation
   let startButtonLabel = $derived(
@@ -958,7 +963,7 @@
               <!-- logic_test with no Logic device selected: show Identify UI -->
               <div class="border border-dashed border-surface-300-600 rounded-lg p-4">
                 <p class="text-sm font-medium opacity-70 mb-1">Select a logic IC</p>
-                <p class="text-xs opacity-50 mb-3">To automatically identify a logic IC, insert it into the ZIF socket (pin 1 aligned with lever), then select its pin count and VCC below and click Identify. Matching results will appear in the table below — click "Select" on a result to choose that device.</p>
+                <p class="text-xs opacity-50 mb-3">To automatically identify a logic IC, insert it into the ZIF socket (pin 1 at the top{leverAtTop ? ", aligned with the lever" : ", opposite the lever"}), then select its pin count and VCC below and click Identify. Matching results will appear in the table below — click "Select" on a result to choose that device.</p>
                 <div class="flex flex-wrap items-end gap-4">
                   <div>
                     <label class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">Pin Count</label>
