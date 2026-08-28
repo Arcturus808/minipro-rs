@@ -6,7 +6,7 @@
   // pinTestActive: true only when a pin test has been run and returned
   //   results. When false, slots render in their default color regardless
   //   of badPins content.
-  let { badPins = [], pinTestActive = false, previewPinCount = null }: { badPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null } = $props();
+  let { badPins = [], pinTestActive = false, previewPinCount = null, identifyMode = false }: { badPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null; identifyMode?: boolean } = $props();
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -129,7 +129,7 @@
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
   <h3 class="text-sm font-semibold mb-1 self-start">ZIF Socket Placement</h3>
-  {#if !$selectedDevice && !previewPinCount}
+  {#if !$selectedDevice && !previewPinCount && !identifyMode}
     <p class="text-sm opacity-50 py-4">Select a device to see placement.</p>
   {:else if $selectedDevice && !isDip}
     <p class="text-xs opacity-60 py-3 text-center">
