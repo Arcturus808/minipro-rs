@@ -269,19 +269,19 @@
         <circle cx={chipRect.x + 7} cy={chipRect.y + 10} r="4"
           fill="var(--bg-color, #fff)"
           stroke="rgb(99, 102, 241)" stroke-width="1.5" />
+      {/if}
 
-        <!-- "ZIF PIN 1" label: hidden if pin 1 is bad (red PIN 1 label takes its place) -->
-        {#if !badZifPins.has(1)}
-          {@const pin1Coord = pinToCoord(1, socketSize)}
-          <text
-            x={pin1Coord.x - 8}
-            y={pin1Coord.y + SLOT_H + 1}
-            font-size="10"
-            fill="rgb(99, 102, 241)"
-            font-weight="bold"
-            text-anchor="end"
-          >ZIF PIN 1</text>
-        {/if}
+      <!-- "ZIF PIN 1" label: always shown (hidden only if pin 1 is bad — red label takes its place) -->
+      {#if !badZifPins.has(1)}
+        {@const pin1Coord = pinToCoord(1, socketSize)}
+        <text
+          x={pin1Coord.x - 8}
+          y={pin1Coord.y + SLOT_H + 1}
+          font-size="10"
+          fill="rgb(99, 102, 241)"
+          font-weight="bold"
+          text-anchor="end"
+        >ZIF PIN 1</text>
       {/if}
       </g>
     </svg>
