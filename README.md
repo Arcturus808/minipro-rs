@@ -99,6 +99,8 @@ Pre-built GUI installers are available on the [GitHub Releases](https://github.c
 | **Linux** | `.AppImage` (universal) or `.deb` (Debian/Ubuntu) |
 | **macOS** | `.dmg` (Apple Silicon — M1/M2/M3) |
 
+> **Linux WebKitGTK note:** The GUI uses WebKitGTK for its webview. The `.AppImage` (~79MB) is self-contained and bundles WebKitGTK — no system dependencies required. The `.deb` (~6MB) is much smaller because it relies on the system-installed `libwebkit2gtk-4.1`, which `apt install` pulls in automatically. On minimal installs, you may need to install it manually: `sudo apt install libwebkit2gtk-4.1`
+
 > **Note:** The GUI releases are built from a [GitHub mirror](https://github.com/Arcturus808/minipro-rs) of this repository. The CLI releases remain on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/releases).
 
 ### Quick start
