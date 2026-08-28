@@ -6,7 +6,7 @@
   // pinTestActive: true only when a pin test has been run and returned
   //   results. When false, slots render in their default color regardless
   //   of badPins content.
-  let { badPins = [], pinTestActive = false }: { badPins?: number[]; pinTestActive?: boolean } = $props();
+  let { badPins = [], pinTestActive = false, previewPinCount = null }: { badPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null } = $props();
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -45,8 +45,9 @@
   // A DIP-8 chip uses ZIF pins 1-4 (left) and 45-48 (right).
   let occupiedPins = $derived.by(() => {
     const dev = $selectedDevice;
-    if (!dev) return [];
-    const pc = dev.pin_count;
+    // Use preview pin count when no device is selected (identify mode)
+    const pc = dev?.pin_count ?? previewPinCount;
+    if (!pc) return [];
     const half = Math.floor(pc / 2);
     const pins: number[] = [];
     for (let i = 1; i <= half; i++) pins.push(i);
@@ -128,9 +129,9 @@
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
   <h3 class="text-sm font-semibold mb-1 self-start">ZIF Socket Placement</h3>
-  {#if !$selectedDevice}
+  {#if !$selectedDevice && !previewPinCount}
     <p class="text-sm opacity-50 py-4">Select a device to see placement.</p>
-  {:else if !isDip}
+  {:else if $selectedDevice && !isDip}
     <p class="text-xs opacity-60 py-3 text-center">
       {packageName} — adapter required.<br>
       Diagram available for DIP packages only.
