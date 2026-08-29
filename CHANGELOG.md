@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ZIF socket diagram in logic identify mode** — the ZIF socket diagram now shows in "Select a logic IC" mode, with an empty socket (including lever position and ZIF PIN 1 label) before a pin count is selected, and a chip outline in the correct position once a pin count is chosen. Helps users orient the chip before clicking Identify.
+
+- **Always-visible ZIF PIN 1 label** — the "ZIF PIN 1" label now renders whenever the socket diagram is shown, not only when a chip overlay is present. Pin 1 is a property of the socket, not the chip.
+
+### Fixed
+
+- **Model-aware pin 1 instruction in logic identify panel** — the instruction text now correctly reflects lever position per programmer model. TL866A/CS/TL866II+ (lever at top): "pin 1 at the top, aligned with the lever". T48/T56/T76 (lever at bottom): "pin 1 at the top, opposite the lever". Previously the instruction always said "pin 1 aligned with lever", which was wrong for T48/T56/T76.
+
 ---
 
 ## [0.8.1] - 2026-08-26
