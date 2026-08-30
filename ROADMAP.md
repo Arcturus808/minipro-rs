@@ -400,6 +400,64 @@ This is a living list of features and improvements planned for minipro-rs.
     **Location:** `crates/minipro-core/src/usb.rs` (missing function),
     `crates/minipro-core/src/protocol/t76.rs:837-865`
 
+  ### Bugs — correctness gaps vs upstream
+
+  - [ ] **PIC config word truncation to 8 bits** — all PIC config words
+    (12/14/16-bit) are silently truncated to 8 bits throughout the fuse
+    read/write stack. AVR fuses are unaffected (they are genuinely 1 byte).
+
+    **Root cause:** `FuseValue.value` is `u8` in `minipro-core`, and all
+    fuse I/O uses a 1-byte stride regardless of device family. The upstream
+    C minipro uses `handle->device->flags.word_size` as the fuse stride,
+    which is 2 for PIC (correct) and also 2 for AVR (incorrect — that's
+    upstream bug #382). Our code avoids #382 by always using 1 byte, but
+    introduces the inverse bug for PIC.
+
+    **Affected layers:**
+    - `FuseValue.value` — `u8`, should be `u16` or width-aware
+    - `read_fuses()` in `operations.rs` — passes `fuse_count` as byte
+      length, should pass `fuse_count * element_size` where element size
+      is 2 for PIC configs
+    - `write_fuses()` in `operations.rs` — same stride issue
+    - `FuseValueDto.value` in `commands.rs` — `u8`, Tauri command layer
+    - CLI `parse_fuse_file()` — parses as `u8`, can't accept values > 0xFF
+    - CLI format — `{:#04x}`, displays 2 hex digits, should be 4 for PIC
+    - GUI fuse editor — `padStart(2, '0')`, displays 2 hex digits
+
+    **Infrastructure already in place:**
+    - `FuseField.mask` is already `u16` in `device.rs` — database parsing
+      already preserves 16-bit masks (e.g., `0x3fff` for PIC16F628A)
+    - `fuse_defs.rs` already has correct `width` values (12 for baseline
+      PIC, 14 for midrange, 16 for PIC18F) for all defined PIC configs
+    - Config name prefix (`avr_` vs `pic_`) is already used to distinguish
+      fuse bit conventions and is available as a discriminator
+    - `FuseByteDef.width` in the GUI fuse bit definitions already declares
+      the correct bit width per config word
+
+    **Suggested fix approach:**
+    Give the config page its own element size rather than reusing the
+    device `word_size`. Use the config name prefix (`pic_` → 2 bytes,
+    `avr_` → 1 byte) as the discriminator, or carry a per-field width
+    from the `FuseField.mask` (masks > 0xFF imply 2-byte config words).
+    Change `FuseValue.value` to `u16`, update the protocol layer to
+    pass `fuse_count * element_size` as the byte length, update CLI/GUI
+    formatting to use 4 hex digits for PIC and 2 for AVR, and update
+    `parse_fuse_file()` to parse as `u16`.
+
+    **Impact:** PIC config reads return only the low byte of each config
+    word. Write-back writes only the low byte. Config bits above bit 7
+    (e.g., LVP, BOREN, FOSC<2:0> upper bits on PIC18F) are silently
+    dropped. A read-modify-write cycle can clear config bits the user
+    never intended to change.
+
+    **Related upstream issue:** Gitlab work item #382 in the C minipro
+    project is the inverse bug — AVR fuses over-read as 16-bit due to
+    `word_size` being 2 for AVR. Our code does not have #382.
+
+    **Priority:** Medium. PIC support is less commonly used than AVR in
+    this project, but the bug is silent (no error, just wrong data) and
+    can cause config corruption on write-back.
+
   ### Hardware validation (separate from code parity)
 
   These items are not code gaps — the code is written to match the C source
