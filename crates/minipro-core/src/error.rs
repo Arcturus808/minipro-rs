@@ -68,3 +68,110 @@ impl From<nusb::Error> for MiniproError {
         MiniproError::Usb(e)
     }
 }
+
+impl MiniproError {
+    /// Returns `true` if this error represents a USB communication failure
+    /// (device gone, timed out, suspended, etc.) rather than a logic-level
+    /// protocol mismatch.
+    ///
+    /// USB errors wrapped in `Protocol(String)` are detected by keyword
+    /// matching, since the USB layer wraps nusb errors and timeouts as
+    /// `Protocol(format!(...))`.
+    pub fn is_usb_communication_error(&self) -> bool {
+        match self {
+            MiniproError::Usb(_) => true,
+            MiniproError::NoProgrammerFound => true,
+            MiniproError::Protocol(msg) => {
+                const KEYWORDS: &[&str] = &[
+                    "STALL",
+                    "NoDevice",
+                    "LIBUSB_ERROR_NO_DEVICE",
+                    "LIBUSB_ERROR_IO",
+                    "LIBUSB_ERROR_PIPE",
+                    "DeviceNotFound",
+                    "endpoint",
+                    "USB error",
+                    "No programmer connected",
+                    "unknown error",
+                    "timed out",
+                    "cannot open",
+                    "cannot claim",
+                ];
+                KEYWORDS.iter().any(|&kw| msg.contains(kw))
+            }
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_usb_variant_is_usb_error() {
+        // We can't easily construct nusb::Error, but Usb(_) should always
+        // be detected. Use a fake error via the From impl.
+        // nusb::Error doesn't have a public constructor, so we test via
+        // the Protocol path which is the common case in our codebase.
+    }
+
+    #[test]
+    fn test_no_programmer_found_is_usb_error() {
+        assert!(MiniproError::NoProgrammerFound.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_timeout_is_usb_error() {
+        let err = MiniproError::Protocol(
+            "USB transfer timed out — the programmer may be in a bad state. Unplug and replug."
+                .into(),
+        );
+        assert!(err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_no_device_is_usb_error() {
+        let err = MiniproError::Protocol("LIBUSB_ERROR_NO_DEVICE".into());
+        assert!(err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_stall_is_usb_error() {
+        let err = MiniproError::Protocol("endpoint STALL".into());
+        assert!(err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_unknown_error_is_usb_error() {
+        let err = MiniproError::Protocol("unknown error".into());
+        assert!(err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_non_usb_is_not_usb_error() {
+        let err = MiniproError::Protocol("Invalid pin count!".into());
+        assert!(!err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_protocol_generic_message_is_not_usb_error() {
+        let err = MiniproError::Protocol("unexpected response byte 0x42".into());
+        assert!(!err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_verify_failed_is_not_usb_error() {
+        let err = MiniproError::VerifyFailed {
+            address: 0x1000,
+            expected: 0xAA,
+            actual: 0xBB,
+        };
+        assert!(!err.is_usb_communication_error());
+    }
+
+    #[test]
+    fn test_unsupported_is_not_usb_error() {
+        assert!(!MiniproError::UnsupportedOperation.is_usb_communication_error());
+    }
+}

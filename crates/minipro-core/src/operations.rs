@@ -1123,19 +1123,22 @@ pub fn logic_auto_find(
                 pass: tr.pass,
                 errors: tr.errors,
             }),
-            Err(MiniproError::Protocol(_)) => {
-                // Per-candidate test failure (vectors didn't match) — record
-                // as failed and continue.
+            Err(e) => {
+                if e.is_usb_communication_error() {
+                    // USB communication failure (device suspended,
+                    // disconnected, timed out) — abort the entire scan
+                    // with a clear error instead of silently recording
+                    // every candidate as "no match."
+                    return Err(e);
+                }
+                // Non-USB protocol error (e.g. database bug, unexpected
+                // response format) — record as failed and continue.
                 results.push(AutoFindEntry {
                     name: candidate.name.clone(),
                     manufacturer: candidate.manufacturer.clone(),
                     pass: false,
                     errors: u32::MAX,
                 });
-            }
-            Err(e) => {
-                // USB or other hardware error — abort the entire scan.
-                return Err(e);
             }
         }
     }

@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Model-aware pin 1 instruction in logic identify panel** — the instruction text now correctly reflects lever position per programmer model. TL866A/CS/TL866II+ (lever at top): "pin 1 at the top, aligned with the lever". T48/T56/T76 (lever at bottom): "pin 1 at the top, opposite the lever". Previously the instruction always said "pin 1 aligned with lever", which was wrong for T48/T56/T76.
 
+- **Logic identify silently returns "no matches" when USB is suspended** — after laptop sleep/wake, the programmer's USB connection can be suspended without the GUI detecting it (the status badge still shows green). Clicking Identify would silently test all candidates against a dead USB connection and return "no matches found" instead of an error. USB communication errors now abort the scan immediately with a clear error message, and the stale programmer state is cleared so the user knows to replug.
+
 ---
 
 ## [0.8.1] - 2026-08-26
