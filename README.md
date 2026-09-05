@@ -152,12 +152,14 @@ The distributed binary is a **single self-contained `.exe`** — no Cygwin, no M
 **Database setup for CLI users:**
 
 1. Download `infoic.xml` and `logicic.xml` from the [release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) (included in the `.deb` / `.rpm` packages, or available in the repo's `data/` directory).
-2. Place them in one of these locations (searched in order):
-   - Current working directory
-   - Same directory as `minipro.exe`
-   - `%PROGRAMDATA%\minipro-rs\` (recommended for system-wide use)
-   - `%PROGRAMDATA%\minipro\` (if you already have the C `minipro` installed)
-   - Or set the `MINIPRO_HOME` environment variable to a directory containing both files
+2. Place both files in **any one** of these locations:
+   - `%PROGRAMDATA%\minipro-rs\` — recommended for system-wide use
+   - Same directory as `minipro.exe` — good for portable setups
+   - Current working directory — quick but not persistent
+   - A directory pointed to by the `MINIPRO_HOME` environment variable
+   - `%PROGRAMDATA%\minipro\` — fallback if you already have the C `minipro` installed; note this uses the C version's database, which may be older or differ from the one shipped with this project
+
+   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `%PROGRAMDATA%\minipro-rs\` → `MINIPRO_HOME` → `%PROGRAMDATA%\minipro\`.
 
 > **GUI users don't need this step** — the `.msi` / `.exe` installer bundles the full chip database.
 
