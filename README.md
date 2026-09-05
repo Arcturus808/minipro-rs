@@ -38,7 +38,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 **Core operations:**
 - Read / Write / Verify / Erase / Blank Check / Chip ID / Logic Test / Config
-- **Logic IC identify**: automatically identify an unknown logic IC by testing it against all database entries with a matching pin count. CLI: `minipro --logic-identify --pin-count 14 [--vcc 3.3]`. GUI: "Select a logic IC" mode in the Logic Test tab with pin count selector, VCC dropdown, and Identify button — results show only passing matches with Select and favorite buttons
+- **Logic IC identify**: automatically identify an unknown logic IC by testing it against all database entries with a matching pin count. CLI: `minipro --logic-identify --pin-count 14 [--vcc 3.3]` (VCC optional — defaults to each candidate's database value). GUI: "Select a logic IC" mode in the Logic Test tab with pin count selector, VCC dropdown, and Identify button — results show only passing matches with Select and favorite buttons
 - **Structured logic test grid**: color-coded zoomable grid (Ctrl+Scroll) for logic IC test results — blue=input, green=output-pass, red=mismatch, gray=ignore. Copy button exports TSV for spreadsheets or forum posts. CLI: `minipro -p 74HC00 -T` prints a formatted text table
 
 ![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
