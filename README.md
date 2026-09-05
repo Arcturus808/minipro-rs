@@ -168,7 +168,7 @@ This is a one-time step per machine.  It is the same requirement the original C 
 | `cargo build --release` | `libusb`, `pkg-config`, or any C library |
 | Zadig (one-time, per machine) | |
 
-> **MSVC Build Tools:** rustup on Windows defaults to the `x86_64-pc-windows-msvc` target, which requires the MSVC linker (`link.exe`) and Windows SDK. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (free) and select the "Desktop development with C++" workload. This is needed for the Rust linker, not for compiling C code — the project has no C dependencies.
+> **MSVC Build Tools:** rustup on Windows defaults to the `x86_64-pc-windows-msvc` target, which requires the MSVC linker (`link.exe`) and Windows SDK. You do **not** need the Visual Studio IDE — install only the [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (free, includes the linker and SDK) and select the "Desktop development with C++" workload. Any editor works with this setup (VS Code, Vim, etc.). This is needed for the Rust linker, not for compiling C code — the project has no C dependencies. Alternatively, `rustup-init` can install the prerequisites automatically, but it installs the full Visual Studio Community edition which is heavier than necessary.
 
 The USB layer uses [`nusb`](https://crates.io/crates/nusb) — a pure-Rust library that calls the Windows WinUSB API directly through Rust's `windows-sys` bindings.  There is no C FFI, no `.dll` to bundle, and no system-level package manager step.
 
