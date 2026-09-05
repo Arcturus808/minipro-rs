@@ -147,7 +147,19 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ### For end users
 
-The distributed binary is a **single self-contained `.exe`** with no installation required beyond placing it on `PATH`.  No Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`.
+The distributed binary is a **single self-contained `.exe`** — no Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`. However, the CLI requires chip database files (`infoic.xml` and `logicic.xml`) to function. These are **not bundled** with the standalone CLI binary.
+
+**Database setup for CLI users:**
+
+1. Download `infoic.xml` and `logicic.xml` from the [release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) (included in the `.deb` / `.rpm` packages, or available in the repo's `data/` directory).
+2. Place them in one of these locations (searched in order):
+   - Current working directory
+   - Same directory as `minipro.exe`
+   - `%PROGRAMDATA%\minipro-rs\` (recommended for system-wide use)
+   - `%PROGRAMDATA%\minipro\` (if you already have the C `minipro` installed)
+   - Or set the `MINIPRO_HOME` environment variable to a directory containing both files
+
+> **GUI users don't need this step** — the `.msi` / `.exe` installer bundles the full chip database.
 
 **One-time USB driver step** — Windows associates USB devices with a driver that persists across reboots.  The programmer's interface must be associated with Microsoft's built-in **WinUSB** driver before first use:
 
