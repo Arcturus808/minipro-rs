@@ -76,8 +76,11 @@
     if (seq !== searchSeq) return;
     results = r;
     page = 0;
-    selectedName = null;
-    selectedInfo = null;
+    // Don't clear selectedName/selectedInfo here — the selection should
+    // persist across searches. If the selected device is still in the
+    // results, it stays highlighted; if not, it's simply not visible.
+    // Clearing them here caused the selection to be lost when the
+    // $selectedDevice → searchQuery sync effect triggered a re-search.
   }
 
   // Debounced live search: fires 200ms after the user stops typing.

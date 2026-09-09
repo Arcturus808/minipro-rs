@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Pasted text in device search field reverted to previous value** — the `$effect` syncing `searchQuery` from `$selectedDevice` also reacted to `selectedName` changes. When `doSearch` cleared `selectedName` (line 79), the effect re-ran and overwrote `searchQuery` with the old device name. Now only reacts to `$selectedDevice` changes via a `lastSyncedDevice` guard.
 
+- **Device selection lost when search results refresh** — `doSearch` cleared `selectedName` and `selectedInfo` after every search, causing the selection highlight to disappear when the `$selectedDevice` → `searchQuery` sync effect triggered a re-search (e.g. selecting from IdentifyResults, or clicking a device whose name triggers a new search). The selection should persist across searches; `doSearch` no longer clears selection state.
+
 ---
 
 ## [0.8.1] - 2026-08-26
