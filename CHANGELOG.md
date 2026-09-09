@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **FuseBitDecoder hex input limited to 3 digits for 12-bit PIC** — the hex input field in the expanded fuse bit decoder used `width <= 12 ? 3` for the maxlength, preventing entry of 4-digit values like `0xFFFE` for 12-bit PIC config words. PIC config values are stored as 2-byte values with unused upper bits filled to 1s via mask normalization, so they always need 4 hex digits. Now uses 4 for any width > 8.
 
+- **Pasted text in device search field reverted to previous value** — the `$effect` syncing `searchQuery` from `$selectedDevice` also reacted to `selectedName` changes. When `doSearch` cleared `selectedName` (line 79), the effect re-ran and overwrote `searchQuery` with the old device name. Now only reacts to `$selectedDevice` changes via a `lastSyncedDevice` guard.
+
 ---
 
 ## [0.8.1] - 2026-08-26
