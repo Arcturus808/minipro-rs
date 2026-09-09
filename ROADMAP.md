@@ -402,170 +402,44 @@ This is a living list of features and improvements planned for minipro-rs.
 
   ### Bugs — correctness gaps vs upstream
 
-  - [ ] **PIC config word truncation to 8 bits** — all PIC config words
-    (12/14/16-bit) are silently truncated to 8 bits throughout the fuse
+  - [x] **PIC config word truncation to 8 bits** — all PIC config words
+    (12/14/16-bit) were silently truncated to 8 bits throughout the fuse
     read/write stack. AVR fuses are unaffected (they are genuinely 1 byte).
 
-    **Root cause:** `FuseValue.value` is `u8` in `minipro-core`, and all
-    fuse I/O uses a 1-byte stride regardless of device family. The upstream
+    **Root cause:** `FuseValue.value` was `u8` in `minipro-core`, and all
+    fuse I/O used a 1-byte stride regardless of device family. The upstream
     C minipro uses `handle->device->flags.word_size` as the fuse stride,
     which is 2 for PIC (correct) and also 2 for AVR (incorrect — that's
-    upstream bug #382). Our code avoids #382 by always using 1 byte, but
-    introduces the inverse bug for PIC.
+    upstream bug #382). Our code avoided #382 by always using 1 byte, but
+    introduced the inverse bug for PIC.
 
-    **Affected layers:**
-    - `FuseValue.value` — `u8`, should be `u16` or width-aware
-    - `read_fuses()` in `operations.rs` — passes `fuse_count` as byte
-      length, should pass `fuse_count * element_size` where element size
-      is 2 for PIC configs
-    - `write_fuses()` in `operations.rs` — same stride issue
-    - `FuseValueDto.value` in `commands.rs` — `u8`, Tauri command layer
-    - CLI `parse_fuse_file()` — parses as `u8`, can't accept values > 0xFF
-    - CLI format — `{:#04x}`, displays 2 hex digits, should be 4 for PIC
-    - GUI fuse editor — `padStart(2, '0')`, displays 2 hex digits
+    **Fix applied:**
+    - `FuseValue.value` widened to `u16`
+    - `fuse_element_size(config_name)` helper: 2 for `pic_` prefix, 1 otherwise
+    - Read/write paths use `element_size`-byte little-endian stride
+    - `items_count` for locks uses `element_size` (matching upstream)
+    - Write-side normalization: `value |= ~mask`, `value &= compare_mask`,
+      `value &= 0xff` for 1-byte (matching upstream C `minipro`)
+    - TL866A `write_fuses` packet: sets `[4..6] = code_memory_size - 0x38`
+      (upstream firmware bug workaround)
+    - TL866A `read_fuses` packet: sets `[4..6] = code_memory_size`
+    - GUI `FuseBitDecoder.maxValue`: `0xFF` for 8-bit, `0xFFFF` for wider
+      (was `(1 << width) - 1`, which rejected valid PIC values with
+      unused upper bits set to 1s)
+    - GUI collapsed/fallback fuse inputs: `maxlength={fuseHexDigits()}`
+      and dynamic width (was hardcoded `maxlength="2"`, truncating
+      4-digit PIC hex values)
+    - CLI format: width-aware (`{:#04x}` for 1-byte, `{:#06x}` for 2-byte)
+    - Tauri DTOs: `FuseValueDto.value` → `u16`, `ConfigDataDto.element_size`
 
-    **Infrastructure already in place:**
-    - `FuseField.mask` is already `u16` in `device.rs` — database parsing
-      already preserves 16-bit masks (e.g., `0x3fff` for PIC16F628A)
-    - `fuse_defs.rs` already has correct `width` values (12 for baseline
-      PIC, 14 for midrange, 16 for PIC18F) for all defined PIC configs
-    - Config name prefix (`avr_` vs `pic_`) is already used to distinguish
-      fuse bit conventions and is available as a discriminator
-    - `FuseByteDef.width` in the GUI fuse bit definitions already declares
-      the correct bit width per config word
-
-    **Suggested fix approach:**
-    Give the config page its own element size rather than reusing the
-    device `word_size`. Use the config name prefix (`pic_` → 2 bytes,
-    `avr_` → 1 byte) as the discriminator. The `FuseField.mask` approach
-    (masks > 0xFF imply 2-byte) was rejected because some PIC configs
-    have masks that fit in 8 bits (e.g., `pic_1` mask `0x001c`) while
-    the hardware still returns 2 bytes per config word.
-
-    Change `FuseValue.value` to `u16`, update the protocol layer to
-    pass `fuse_count * element_size` as the byte length, update CLI/GUI
-    formatting to use 4 hex digits for PIC and 2 for AVR, and update
-    `parse_fuse_file()` to parse as `u16`.
-
-    **Implementation plan:**
+    **Hardware validated** on TL866A with PIC16F628A (pic_21, 14-bit,
+    mask 0x21FF, DIP18):
+    - Read config: `0xFFFF` (erased state, correctly normalized)
+    - Write `0xFFFE` (bit 0 = FOSC0, safe to change): persisted ✓
+    - Unchanged writeback: persisted ✓
+    - Read back: `0xFFFE` ✓
 
     Branch: `fix/pic-config-word-width`
-
-    1. **Failing test** — add a unit test in `operations.rs` that
-       constructs a PIC device config and verifies `read_fuses` requests
-       `fuse_count * 2` bytes (not `fuse_count`). Fails with current code.
-
-    2. **Core changes** (`minipro-core`):
-       - `FuseValue.value`: `u8` → `u16`
-       - Add `fuse_element_size(config_name: &str) -> usize` helper:
-         returns 2 for `pic_` prefix, 1 otherwise
-       - `read_fuses()`: pass `fuse_count * element_size` as byte
-         length; parse buffer as `element_size`-byte little-endian values
-       - `write_fuses()`: same stride logic; pack values as
-         `element_size`-byte little-endian
-       - Fix `items_count` for locks to match upstream (use
-         `element_size`, not `lock_count`)
-       - Apply mask handling: `value |= ~mask` to fill unused bits with
-         1s, matching upstream behavior for PIC 12-bit configs where
-         bits 13-15 should read as 1s
-
-    3. **Tauri DTO** (`commands.rs`):
-       - `FuseValueDto.value`: `u8` → `u16`
-       - Add `element_size: u8` to `ConfigDataDto`, computed from config
-         name in the backend (single source of truth for GUI)
-
-    4. **CLI** (`main.rs`):
-       - `parse_fuse_file()`: parse as `u16`
-       - Format: width-aware (`{:#04x}` for 1-byte, `{:#06x}` for 2-byte)
-
-    5. **GUI** (`App.svelte`):
-       - Compact fuse inputs: use `configData.element_size` for hex
-         padding (2 vs 4 digits)
-       - `FuseBitDecoder.svelte`: no changes needed (already width-aware
-         via `FuseByteDef.width` from `fuse_defs.rs`)
-
-    6. **Verify:**
-       - `cargo fmt --all -- --check`
-       - `cargo clippy --all-targets -- -D warnings`
-       - `cargo test --all --locked`
-       - `cargo tauri build` (Svelte/TS files changed)
-
-    7. **Commit & merge:**
-       - Commit with `[skip ci]`
-       - Merge to main with `--no-ff` and `[skip ci]`
-       - Delete branch
-       - Update `CHANGELOG.md` under `[Unreleased]` / `Fixed`
-
-    **Config families verified** (all 122 configs in `infoic.xml`):
-    - `avr_` — 1-byte fuses (AVR)
-    - `pic_` — 2-byte config words (PIC10/12/16/18)
-    - `at89_` — 1-byte fuses (AT89S series, masks <= 0xFF)
-    - `at90_` — 1-byte fuses (AT90S series, masks <= 0xFF)
-    - `*_acw` — PLD (GAL) configs, handled by `GalConfig`, not
-      `FuseConfig` — not affected
-
-    **Known risks (require hardware validation):**
-
-    1. **`items_count` protocol parameter** — upstream passes
-       `num_fuses` for fuses but `word_size` for locks. The firmware
-       behavior for this parameter is not documented. Changing it
-       without hardware risks breaking the protocol handshake.
-
-    2. **Mask handling** — upstream does `value |= ~mask` to fill
-       unused bits with 1s, then `value &= 0xff` for byte-sized fuses.
-       We currently do neither. For PIC 12-bit configs (mask `0x1fff`),
-       bits 13-15 should read as 1s. Without this, the decoder would
-       show garbage in the upper bits.
-
-    3. **User ID section** — upstream also uses `word_size` as the
-       stride for user IDs. We may have the same truncation issue
-       there, but this has not been investigated.
-
-    4. **No PIC hardware** — unit tests can verify buffer parsing and
-       formatting, but cannot verify the actual hardware round-trip.
-       A bug in the stride calculation could corrupt PIC config words
-       on write-back — the exact thing we're trying to fix.
-
-    **Mitigation:** Implement the type widening and application-layer
-    changes first (low-risk, clearly correct). The protocol stride and
-    `items_count` changes are the part that needs hardware validation.
-    The type widening alone fixes the truncation at the application
-    layer even if the protocol details need later tuning.
-
-    **Hardware validation plan:**
-
-    Wait for PIC chips before merging the protocol stride changes.
-    Validation set (all DIP, all TL866A-supported, all `model=all`):
-
-    | Chip | Config | Width | Mask | Package | What it tests |
-    |------|--------|-------|------|---------|---------------|
-    | PIC16F628A | pic_21 | 14-bit | 0x21ff | DIP18 | Bits 9-13 truncated (FOSC, LVP) |
-    | PIC18F1220 | pic_32 | 16-bit | 0xffff | DIP18 | Full 16-bit, multiple protection blocks |
-    | PIC12F1822 | pic_13 | 14-bit, 2 words | 0x03ff | DIP8 | Multi-word stride — second word must not overlap first |
-    | PIC12F508 | pic_6 | 12-bit | 0x001f | DIP8 | Baseline 12-bit, mask fits in 8 bits (validates stride doesn't break narrow devices) |
-
-    Validation procedure per chip:
-    1. Read config with current (unfixed) code — note truncated values
-    2. Apply fix, rebuild, read config again — verify full-width values
-    3. Compare against XGPro or upstream C minipro read of the same chip
-    4. Write config back unchanged, read again — verify round-trip
-    5. Toggle a bit in the upper byte, write, read — verify it sticks
-
-    **Impact:** PIC config reads return only the low byte of each config
-    word. Write-back writes only the low byte. Config bits above bit 7
-    (e.g., LVP, BOREN, FOSC<2:0> upper bits on PIC18F) are silently
-    dropped. A read-modify-write cycle can clear config bits the user
-    never intended to change.
-
-    **Related upstream issue:** Gitlab work item #382 in the C minipro
-    project is the inverse bug — AVR fuses over-read as 16-bit due to
-    `word_size` being 2 for AVR. Our code does not have #382.
-
-    **Priority:** Medium. PIC support is less commonly used than AVR in
-    this project, but the bug is silent (no error, just wrong data) and
-    can cause config corruption on write-back.
-
-    **Status:** Blocked on hardware. PIC chips ordered for validation.
 
   ### Hardware validation (separate from code parity)
 

@@ -867,7 +867,172 @@ pub const MP_FUSE_LOCK: u8 = 0x02;
 #[derive(Debug, Clone)]
 pub struct FuseValue {
     pub name: String,
-    pub value: u8,
+    pub value: u16,
+}
+
+/// Determine the fuse element size in bytes for a given config name.
+///
+/// PIC config words are 12, 14, or 16 bits wide and require 2-byte elements.
+/// AVR, AT89, and AT90 fuses are genuinely 1 byte.  Using `device.word_size()`
+/// instead would be wrong because AVR code memory can be word-organised
+/// (`word_size == 2`) while AVR fuses remain byte-sized — this is upstream
+/// issue #382.
+pub fn fuse_element_size(config_name: &str) -> usize {
+    if config_name.starts_with("pic_") {
+        2
+    } else {
+        1
+    }
+}
+
+/// Parse a single fuse element from a byte buffer at the given index.
+///
+/// For 1-byte elements (AVR etc.) reads one byte.  For 2-byte elements (PIC)
+/// reads two bytes little-endian.  Returns `0xff` (or `0xffff`) when the index
+/// is out of range, matching the upstream "default to erased" behaviour.
+pub fn parse_fuse_element(buf: &[u8], index: usize, element_size: usize) -> u16 {
+    let offset = index * element_size;
+    match element_size {
+        2 => {
+            if offset + 1 < buf.len() {
+                u16::from_le_bytes([buf[offset], buf[offset + 1]])
+            } else if offset < buf.len() {
+                u16::from(buf[offset])
+            } else {
+                0xffff
+            }
+        }
+        _ => buf.get(offset).map(|&b| u16::from(b)).unwrap_or(0xff),
+    }
+}
+
+/// Pack a single fuse value into a byte buffer (little-endian).
+pub fn pack_fuse_element(value: u16, element_size: usize) -> Vec<u8> {
+    match element_size {
+        2 => value.to_le_bytes().to_vec(),
+        _ => vec![value as u8],
+    }
+}
+
+/// Normalise a fuse value for display: fill unused bits (outside the mask)
+/// with 1s, then constrain to the element width.
+///
+/// Matches upstream C minipro:
+/// ```c
+/// value |= ~(fuse.mask);
+/// if (word_size == 1) value &= 0xff;
+/// ```
+pub fn normalize_fuse_value(value: u16, mask: u16, element_size: usize) -> u16 {
+    let mut v = value | !mask;
+    if element_size == 1 {
+        v &= 0xff;
+    }
+    v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fuse_element_size() {
+        assert_eq!(fuse_element_size("pic_21"), 2);
+        assert_eq!(fuse_element_size("pic_6"), 2);
+        assert_eq!(fuse_element_size("pic_13"), 2);
+        assert_eq!(fuse_element_size("avr_11"), 1);
+        assert_eq!(fuse_element_size("at89_51"), 1);
+        assert_eq!(fuse_element_size("at90_11"), 1);
+        assert_eq!(fuse_element_size("unknown"), 1);
+    }
+
+    #[test]
+    fn test_parse_fuse_element_one_byte() {
+        let buf = [0x3f, 0xff, 0x00];
+        assert_eq!(parse_fuse_element(&buf, 0, 1), 0x003f);
+        assert_eq!(parse_fuse_element(&buf, 1, 1), 0x00ff);
+        assert_eq!(parse_fuse_element(&buf, 2, 1), 0x0000);
+        // Out of range defaults to 0xff
+        assert_eq!(parse_fuse_element(&buf, 3, 1), 0x00ff);
+    }
+
+    #[test]
+    fn test_parse_fuse_element_two_bytes() {
+        // Two PIC config words: 0x21ff, 0x3fff
+        let buf = [0xff, 0x21, 0xff, 0x3f];
+        assert_eq!(parse_fuse_element(&buf, 0, 2), 0x21ff);
+        assert_eq!(parse_fuse_element(&buf, 1, 2), 0x3fff);
+        // Out of range defaults to 0xffff
+        assert_eq!(parse_fuse_element(&buf, 2, 2), 0xffff);
+    }
+
+    #[test]
+    fn test_parse_fuse_element_truncated_buffer() {
+        // 3-byte buffer: first 2-byte element is complete, second has only 1 byte.
+        let buf = [0xff, 0x21, 0x3f];
+        assert_eq!(parse_fuse_element(&buf, 0, 2), 0x21ff);
+        // Only 1 byte available for index 1 — reads as u8 extended
+        assert_eq!(parse_fuse_element(&buf, 1, 2), 0x003f);
+        // No bytes available for index 2 — defaults to 0xffff
+        assert_eq!(parse_fuse_element(&buf, 2, 2), 0xffff);
+    }
+
+    #[test]
+    fn test_pack_fuse_element() {
+        assert_eq!(pack_fuse_element(0x3f, 1), vec![0x3f]);
+        assert_eq!(pack_fuse_element(0x21ff, 2), vec![0xff, 0x21]);
+        assert_eq!(pack_fuse_element(0xffff, 2), vec![0xff, 0xff]);
+    }
+
+    #[test]
+    fn test_normalize_fuse_value_one_byte() {
+        // Full mask: no-op after truncation
+        assert_eq!(normalize_fuse_value(0x3f, 0xff, 1), 0x3f);
+        // Partial mask: unused bits filled with 1
+        assert_eq!(normalize_fuse_value(0x03, 0x07, 1), 0xfb);
+        // Upper byte cleared by truncation
+        assert_eq!(normalize_fuse_value(0x10ff, 0xff, 1), 0x00ff);
+    }
+
+    #[test]
+    fn test_normalize_fuse_value_two_bytes() {
+        // PIC 14-bit config, mask 0x21ff.  !mask = 0xde00.
+        // 0x0180 | 0xde00 = 0xdf80 (unused bits filled with 1).
+        assert_eq!(normalize_fuse_value(0x0180, 0x21ff, 2), 0xdf80);
+        // Full 16-bit mask
+        assert_eq!(normalize_fuse_value(0x1234, 0xffff, 2), 0x1234);
+        // Narrow mask: unused upper bits filled with 1
+        assert_eq!(normalize_fuse_value(0x0001, 0x001f, 2), 0xffe1);
+    }
+
+    #[test]
+    fn test_pic_config_round_trip() {
+        // Simulate a 4-byte buffer containing 2 PIC config words
+        let element_size = 2;
+        let values = [0x21ff_u16, 0x3fff];
+        let mut buf = Vec::new();
+        for &v in &values {
+            buf.extend(pack_fuse_element(v, element_size));
+        }
+        assert_eq!(buf, vec![0xff, 0x21, 0xff, 0x3f]);
+        for (i, &expected) in values.iter().enumerate() {
+            assert_eq!(parse_fuse_element(&buf, i, element_size), expected);
+        }
+    }
+
+    #[test]
+    fn test_avr_config_round_trip() {
+        // Simulate a 3-byte buffer containing 3 AVR fuse values
+        let element_size = 1;
+        let values = [0x3f_u16, 0xff, 0x00];
+        let mut buf = Vec::new();
+        for &v in &values {
+            buf.extend(pack_fuse_element(v, element_size));
+        }
+        assert_eq!(buf, vec![0x3f, 0xff, 0x00]);
+        for (i, &expected) in values.iter().enumerate() {
+            assert_eq!(parse_fuse_element(&buf, i, element_size), expected);
+        }
+    }
 }
 
 /// Read all fuse bytes from the chip and map them to named fields.
@@ -884,23 +1049,27 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
         _ => return Err(MiniproError::UnsupportedOperation),
     };
 
-    let fuse_count = config.fuses.len() as u8;
-    let lock_count = config.locks.len() as u8;
+    let element_size = fuse_element_size(&config.name);
+    let fuse_count = config.fuses.len();
+    let lock_count = config.locks.len();
 
     let device_ref = &device;
-    // Read CFG fuses
+    // Read CFG fuses — request fuse_count * element_size bytes so the
+    // firmware returns the full 12/14/16-bit PIC config words.
     let cfg_bytes = handle
         .protocol
         .read_fuses(
             &handle.usb,
             device_ref,
             MP_FUSE_CFG,
-            fuse_count as usize,
-            fuse_count,
+            fuse_count * element_size,
+            fuse_count as u8,
         )
         .unwrap_or_default();
 
-    // Read LOCK bits (optional — not all devices have them)
+    // Read LOCK bits (optional — not all devices have them).
+    // Upstream uses items_count = word_size for locks; we use element_size
+    // which is 2 for PIC (matching upstream) and 1 for AVR (avoiding #382).
     let lock_bytes = if lock_count > 0 {
         handle
             .protocol
@@ -908,26 +1077,30 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
                 &handle.usb,
                 device_ref,
                 MP_FUSE_LOCK,
-                lock_count as usize,
-                lock_count,
+                lock_count * element_size,
+                element_size as u8,
             )
             .unwrap_or_default()
     } else {
         vec![]
     };
 
-    let mut result = Vec::with_capacity(config.fuses.len() + config.locks.len());
+    let mut result = Vec::with_capacity(fuse_count + lock_count);
 
     for (i, field) in config.fuses.iter().enumerate() {
+        let raw = parse_fuse_element(&cfg_bytes, i, element_size);
+        let value = normalize_fuse_value(raw, field.mask, element_size);
         result.push(FuseValue {
             name: field.name.clone(),
-            value: cfg_bytes.get(i).copied().unwrap_or(0xff),
+            value,
         });
     }
     for (i, field) in config.locks.iter().enumerate() {
+        let raw = parse_fuse_element(&lock_bytes, i, element_size);
+        let value = normalize_fuse_value(raw, field.mask, element_size);
         result.push(FuseValue {
             name: field.name.clone(),
-            value: lock_bytes.get(i).copied().unwrap_or(0xff),
+            value,
         });
     }
     Ok(result)
@@ -946,16 +1119,44 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
         _ => return Err(MiniproError::UnsupportedOperation),
     };
 
+    let element_size = fuse_element_size(&config.name);
     let fuse_count = config.fuses.len();
-    let lock_count = config.locks.len();
+    let _lock_count = config.locks.len();
 
-    let cfg_data: Vec<u8> = fuses.iter().take(fuse_count).map(|f| f.value).collect();
+    // Normalize fuse values before packing, matching upstream C minipro:
+    //   value |= ~mask;           // fill unused bits with 1s
+    //   if compare_mask > 0xff: value &= compare_mask;  // mask to chip width
+    //   if word_size == 1: value &= 0xff;
+    let normalize_write = |field: &crate::device::FuseField, value: u16| -> u16 {
+        let mut v = value | !field.mask;
+        if device.compare_mask > 0xff {
+            v &= device.compare_mask;
+        }
+        if element_size == 1 {
+            v &= 0xff;
+        }
+        v
+    };
+
+    // Pack each fuse value as 1 or 2 little-endian bytes.
+    let cfg_data: Vec<u8> = fuses
+        .iter()
+        .take(fuse_count)
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let v = normalize_write(&config.fuses[i], f.value);
+            pack_fuse_element(v, element_size)
+        })
+        .collect();
 
     let lock_data: Vec<u8> = fuses
         .iter()
         .skip(fuse_count)
-        .take(lock_count)
-        .map(|f| f.value)
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let v = normalize_write(&config.locks[i], f.value);
+            pack_fuse_element(v, element_size)
+        })
         .collect();
 
     let device_ref = &device;
@@ -965,18 +1166,20 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
             &handle.usb,
             device_ref,
             MP_FUSE_CFG,
-            fuse_count,
+            cfg_data.len(),
             fuse_count as u8,
             &cfg_data,
         )?;
     }
     if !lock_data.is_empty() {
+        // Upstream uses items_count = word_size for locks; we use element_size
+        // which is 2 for PIC (matching upstream) and 1 for AVR (avoiding #382).
         handle.protocol.write_fuses(
             &handle.usb,
             device_ref,
             MP_FUSE_LOCK,
-            lock_count,
-            lock_count as u8,
+            lock_data.len(),
+            element_size as u8,
             &lock_data,
         )?;
     }

@@ -2449,7 +2449,7 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FuseValueDto {
     name: String,
-    value: u8,
+    value: u16,
 }
 
 #[derive(Serialize)]
@@ -2458,6 +2458,7 @@ pub struct ConfigDataDto {
     lock_bits: Vec<FuseValueDto>,
     user_fuses: Vec<u8>,
     calibration: Vec<u8>,
+    element_size: usize,
 }
 
 /// Read all fuse / lock / user / calibration data from the chip.
@@ -2494,7 +2495,11 @@ pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state:
                 let named = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
 
                 let dev = handle.device().map_err(|e| e.to_string())?;
-                let fuse_len = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config { cfg.fuses.len() } else { 0 };
+                let (fuse_len, element_size) = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+                    (cfg.fuses.len(), minipro_core::operations::fuse_element_size(&cfg.name))
+                } else {
+                    (0, 1)
+                };
 
                 // Read chip calibration bytes (OSCCAL word for PIC devices)
                 let calibration = minipro_core::operations::read_chip_calibration(&mut handle)
@@ -2509,6 +2514,7 @@ pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state:
                         .collect(),
                     user_fuses: vec![],  // TODO: TL866A user fuse read hangs firmware
                     calibration,
+                    element_size,
                 })
             })();
 
@@ -2568,6 +2574,7 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
                     .collect();
                 all.extend(lockBits.iter()
                     .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value }));
+
                 minipro_core::operations::write_fuses(&mut handle, &all).map_err(|e| e.to_string())?;
 
                 Ok::<(), String>(())
@@ -2596,7 +2603,7 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
 #[derive(Serialize)]
 pub struct LockStatusDto {
     is_protected: bool,
-    lock_byte: u8,
+    lock_byte: u16,
 }
 
 /// Quick check whether the chip's lock bits indicate read/write protection.
@@ -2618,20 +2625,21 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
                 handle.begin_transaction(device).map_err(|e| e.to_string())?;
 
-                let lock_count = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
-                    cfg.locks.len() as u8
-                } else { 0 };
+                let (lock_count, element_size) = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
+                    (cfg.locks.len() as u8, minipro_core::operations::fuse_element_size(&cfg.name))
+                } else { (0, 1) };
 
                 let lock_byte = if lock_count > 0 {
                     handle.protocol.read_fuses(
                         &handle.usb,
                         handle.device().map_err(|e| e.to_string())?,
                         minipro_core::operations::MP_FUSE_LOCK,
-                        lock_count as usize,
-                        lock_count,
-                    ).map(|b| b.first().copied().unwrap_or(0xff)).unwrap_or(0xff)
+                        lock_count as usize * element_size,
+                        element_size as u8,
+                    ).map(|b| minipro_core::operations::parse_fuse_element(&b, 0, element_size))
+                     .unwrap_or(0xffff)
                 } else {
-                    0xff
+                    0xffff
                 };
 
                 // Determine whether lock bits indicate external read/write
@@ -2658,8 +2666,11 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                     // 11 = no protection, 10 = further programming disabled,
                     // 00 = programming and verification disabled.
                     (lock_byte & 0x03) != 0x03
+                } else if element_size == 2 {
+                    // PIC: 2-byte lock word — any non-erased value may indicate protection.
+                    lock_byte != 0xffff
                 } else {
-                    // Non-AVR: conservative default — any non-erased lock byte
+                    // Other 1-byte: conservative default — any non-erased lock byte
                     // may indicate protection.
                     lock_byte != 0xff
                 };

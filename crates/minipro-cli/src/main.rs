@@ -977,9 +977,14 @@ fn do_operations(
     if let Some(ref path) = cli.read {
         if page == PageType::Config {
             let values = read_fuses(handle)?;
+            let element_size = fuse_element_size_from_handle(handle);
             let mut text = String::new();
             for fv in &values {
-                text.push_str(&format!("{}={:#04x}\n", fv.name, fv.value));
+                text.push_str(&format!(
+                    "{}={}\n",
+                    fv.name,
+                    format_fuse_value(fv.value, element_size)
+                ));
             }
             std::fs::write(path, &text)
                 .with_context(|| format!("cannot write config file {:?}", path))?;
@@ -1067,9 +1072,14 @@ fn do_operations(
     // ── Read fuses ────────────────────────────────────────────────────────────
     if let Some(ref out_path) = cli.read_fuses {
         let values = read_fuses(handle)?;
+        let element_size = fuse_element_size_from_handle(handle);
         let mut text = String::new();
         for fv in &values {
-            text.push_str(&format!("{}={:#04x}\n", fv.name, fv.value));
+            text.push_str(&format!(
+                "{}={}\n",
+                fv.name,
+                format_fuse_value(fv.value, element_size)
+            ));
         }
         match out_path {
             Some(path) => {
@@ -1156,9 +1166,35 @@ fn print_device_info(dev: &minipro_core::Device) {
 }
 
 // ── Fuse file parser ──────────────────────────────────────────────────────────
-///
-/// Each non-blank, non-comment line must have the form `NAME=VALUE` where
-/// VALUE is a decimal or `0x`-prefixed hex integer.
+// Each non-blank, non-comment line must have the form `NAME=VALUE` where
+// VALUE is a decimal or `0x`-prefixed hex integer.
+
+/// Get the fuse element size (1 or 2 bytes) from the handle's device config.
+/// PIC configs use 2-byte elements; all others use 1-byte.
+fn fuse_element_size_from_handle(handle: &MiniproHandle) -> usize {
+    handle
+        .device()
+        .ok()
+        .and_then(|d| d.config.as_ref())
+        .and_then(|c| match c {
+            minipro_core::device::ChipConfig::Mcu(fc) => {
+                Some(minipro_core::operations::fuse_element_size(&fc.name))
+            }
+            _ => None,
+        })
+        .unwrap_or(1)
+}
+
+/// Format a fuse value as hex, using 2 digits for 1-byte elements and 4 digits
+/// for 2-byte elements (PIC config words).
+fn format_fuse_value(value: u16, element_size: usize) -> String {
+    if element_size == 2 {
+        format!("{:#06x}", value)
+    } else {
+        format!("{:#04x}", value)
+    }
+}
+
 fn parse_fuse_file(text: &str) -> anyhow::Result<Vec<FuseValue>> {
     let mut values = Vec::new();
     for (lineno, line) in text.lines().enumerate() {
@@ -1175,11 +1211,11 @@ fn parse_fuse_file(text: &str) -> anyhow::Result<Vec<FuseValue>> {
         })?;
         let raw = raw.trim();
         let value = if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
-            u8::from_str_radix(hex, 16).map_err(|_| {
+            u16::from_str_radix(hex, 16).map_err(|_| {
                 anyhow::anyhow!("fuse file line {}: invalid hex value {:?}", lineno + 1, raw)
             })?
         } else {
-            raw.parse::<u8>().map_err(|_| {
+            raw.parse::<u16>().map_err(|_| {
                 anyhow::anyhow!(
                     "fuse file line {}: invalid decimal value {:?}",
                     lineno + 1,

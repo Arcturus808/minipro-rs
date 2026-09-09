@@ -31,8 +31,11 @@
   /** Number of bits in this config word (8, 12, 14, or 16). */
   let width = $derived(byteDef.width || 8);
 
-  /** Maximum value for this width. */
-  let maxValue = $derived((1 << width) - 1);
+  // Maximum storable value: based on element size, not bit width.
+  // PIC config words have unused upper bits filled with 1s (mask
+  // normalization), so valid values can exceed (1 << width) - 1.
+  // 8-bit configs: 0xFF, 12/14/16-bit configs: 0xFFFF.
+  let maxValue = $derived(width <= 8 ? 0xFF : 0xFFFF);
 
   /** Number of hex digits needed to display the value. */
   let hexDigits = $derived(width <= 8 ? 2 : width <= 12 ? 3 : width <= 16 ? 4 : 4);
