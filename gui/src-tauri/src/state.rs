@@ -1,8 +1,8 @@
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc, Mutex};
 
 use minipro_core::{
-    database::{list_devices, DatabasePaths, DeviceListItem},
-    device::{Device, ProgrammerInfo},
+    database::{list_devices, list_devices_for_model, DatabasePaths, DeviceListItem},
+    device::{Device, ProgrammerInfo, ProgrammerModel},
     MiniproHandle,
 };
 
@@ -98,10 +98,33 @@ impl AppState {
     }
 
     /// Load all device names from the database (called once at startup).
+    /// When no programmer is connected, loads devices from all database
+    /// sections.  When a programmer is connected, filters to only devices
+    /// supported by that model.
     pub fn load_device_names(&self) -> Result<(), String> {
+        let model = {
+            let guard = self.programmer_info.lock().map_err(|e| e.to_string())?;
+            guard.as_ref().map(|info| info.model)
+        };
         let guard = self.db_paths.lock().map_err(|e| e.to_string())?;
         let db = guard.as_ref().ok_or("Database not loaded")?;
-        let items = list_devices(db, None).map_err(|e| e.to_string())?;
+        let items = if let Some(m) = model {
+            list_devices_for_model(db, None, m).map_err(|e| e.to_string())?
+        } else {
+            list_devices(db, None).map_err(|e| e.to_string())?
+        };
+        drop(guard);
+        let mut guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
+        *guard = items;
+        Ok(())
+    }
+
+    /// Reload device names filtered by the given programmer model.
+    /// Called after a programmer is (re)connected.
+    pub fn reload_device_names_for_model(&self, model: ProgrammerModel) -> Result<(), String> {
+        let guard = self.db_paths.lock().map_err(|e| e.to_string())?;
+        let db = guard.as_ref().ok_or("Database not loaded")?;
+        let items = list_devices_for_model(db, None, model).map_err(|e| e.to_string())?;
         drop(guard);
         let mut guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
         *guard = items;

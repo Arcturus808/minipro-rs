@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Logic identify silently returns "no matches" when USB is suspended** — after laptop sleep/wake, the programmer's USB connection can be suspended without the GUI detecting it (the status badge still shows green). Clicking Identify would silently test all candidates against a dead USB connection and return "no matches found" instead of an error. USB communication errors now abort the scan immediately with a clear error message, and the stale programmer state is cleared so the user knows to replug.
 
+- **Device list showed chips unsupported by the connected programmer** — the GUI loaded device names from all database sections (INFOIC, INFOIC2PLUS, INFOICT76) instead of filtering by the connected programmer's model. This allowed selecting chips that the firmware cannot program (e.g. PIC12F1822 on TL866A), resulting in silent write failures. The device list is now reloaded with model-specific filtering when a programmer connects, and `select_device` no longer falls back to searching all database sections when the model-specific lookup fails.
+
 ---
 
 ## [0.8.1] - 2026-08-26
