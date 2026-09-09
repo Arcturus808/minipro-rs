@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Device list showed chips unsupported by the connected programmer** — the GUI loaded device names from all database sections (INFOIC, INFOIC2PLUS, INFOICT76) instead of filtering by the connected programmer's model. This allowed selecting chips that the firmware cannot program (e.g. PIC12F1822 on TL866A), resulting in silent write failures. The device list is now reloaded with model-specific filtering when a programmer connects, and `select_device` no longer falls back to searching all database sections when the model-specific lookup fails.
 
+- **FuseBitDecoder hex input limited to 3 digits for 12-bit PIC** — the hex input field in the expanded fuse bit decoder used `width <= 12 ? 3` for the maxlength, preventing entry of 4-digit values like `0xFFFE` for 12-bit PIC config words. PIC config values are stored as 2-byte values with unused upper bits filled to 1s via mask normalization, so they always need 4 hex digits. Now uses 4 for any width > 8.
+
 ---
 
 ## [0.8.1] - 2026-08-26

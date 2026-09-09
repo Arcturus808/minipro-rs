@@ -37,8 +37,11 @@
   // 8-bit configs: 0xFF, 12/14/16-bit configs: 0xFFFF.
   let maxValue = $derived(width <= 8 ? 0xFF : 0xFFFF);
 
-  /** Number of hex digits needed to display the value. */
-  let hexDigits = $derived(width <= 8 ? 2 : width <= 12 ? 3 : width <= 16 ? 4 : 4);
+  /** Number of hex digits needed to display the value.
+   *  PIC config words (12/14/16-bit) are stored as 2-byte values with
+   *  unused upper bits filled to 1s via mask normalization, so they
+   *  always need 4 hex digits (e.g. 0xFFFF), not 3 for 12-bit. */
+  let hexDigits = $derived(width <= 8 ? 2 : 4);
 
   /** Sorted fields (MSB first) — $derived tracks byteDef reactivity. */
   let sortedFields = $derived(

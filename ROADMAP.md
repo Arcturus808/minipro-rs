@@ -445,8 +445,14 @@ This is a living list of features and improvements planned for minipro-rs.
     INFOICT76 (T76). The TL866A firmware silently accepts the write
     packet but does not program config for variant 0xa233. Multi-word
     PIC config validation on TL866A requires a chip that is actually
-    supported by the TL866A firmware (e.g. PIC16F1826, variant 0xa234,
-    pic_13, 2 config words).
+    supported by the TL866A firmware (e.g. PIC16F87, variant 0x54,
+    pic_14, 2 config words; or PIC16F886, pic_20, 2 config words).
+
+    **12-bit validation** on TL866A with PIC12F508 (pic_6, 12-bit,
+    mask 0x001F, DIP8):
+    - Read config: `0xFFFF` (erased state, correctly normalized)
+    - Write `0xFFFE` (bit 0 = FOSC0, safe to change): persisted ✓
+    - Read back: `0xFFFE` ✓
 
     Branch: `fix/pic-config-word-width`
 
@@ -468,6 +474,18 @@ This is a living list of features and improvements planned for minipro-rs.
     - `get_device_info` also uses model-specific lookup when model is known
 
     Branch: `fix/pic12f1822-config-write`
+
+  - [x] **FuseBitDecoder hex input limited to 3 digits for 12-bit PIC** —
+    the expanded fuse bit decoder used `width <= 12 ? 3` for maxlength,
+    preventing entry of 4-digit values like `0xFFFE` for 12-bit PIC
+    config words. PIC config values are stored as 2-byte values with
+    unused upper bits filled to 1s, so they always need 4 hex digits.
+    Now uses 4 for any width > 8.
+
+    **Hardware validated** on TL866A with PIC12F508 (pic_6, 12-bit,
+    mask 0x001F, DIP8): write `0xFFFE` persisted, readback `0xFFFE` ✓
+
+    Branch: `fix/fuse-hex-digits-12bit-pic`
 
   ### Hardware validation (separate from code parity)
 
