@@ -579,6 +579,10 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
             *guard = Some(handle);
         }
 
+        // Reload device list filtered by this programmer's model so that
+        // only chips supported by the connected hardware are shown.
+        let _ = state.reload_device_names_for_model(info.model);
+
         return Ok(ProgrammerInfoDto {
             model: info.model.to_string(),
             firmware: info.firmware_str,
@@ -668,6 +672,8 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
                     let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
                     *guard = Some(handle);
                 }
+                // Reload device list filtered by this programmer's model.
+                let _ = state.reload_device_names_for_model(info.model);
                 return Ok(ProgrammerInfoDto {
                     model: info.model.to_string(),
                     firmware: info.firmware_str,
@@ -735,7 +741,11 @@ pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> R
     };
 
     tokio::task::spawn_blocking(move || {
-        let dev = find_device_any(&db, &name_clone).map_err(|e| e.to_string())?;
+        let dev = if let Some(m) = model {
+            find_device(&db, &name_clone, m).map_err(|e| e.to_string())?
+        } else {
+            find_device_any(&db, &name_clone).map_err(|e| e.to_string())?
+        };
         Ok::<DeviceInfoDto, String>(device_to_dto(&dev, model))
     })
     .await
@@ -784,9 +794,7 @@ pub async fn select_device(name: String, state: State<'_, Arc<AppState>>) -> Res
     let name_clone = name.clone();
     let (dto, device) = tokio::task::spawn_blocking(move || {
         let dev = if let Some(m) = model {
-            find_device(&db, &name_clone, m)
-                .or_else(|_| find_device_any(&db, &name_clone))
-                .map_err(|e| e.to_string())?
+            find_device(&db, &name_clone, m).map_err(|e| e.to_string())?
         } else {
             find_device_any(&db, &name_clone).map_err(|e| e.to_string())?
         };

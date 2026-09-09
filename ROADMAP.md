@@ -439,7 +439,35 @@ This is a living list of features and improvements planned for minipro-rs.
     - Unchanged writeback: persisted ✓
     - Read back: `0xFFFE` ✓
 
+    **Multi-word validation note:** PIC12F1822 (pic_13, 2 config words)
+    was attempted but the chip is not in the TL866A/CS database section
+    (INFOIC) — it only appears in INFOIC2PLUS (TL866II+/T48/T56) and
+    INFOICT76 (T76). The TL866A firmware silently accepts the write
+    packet but does not program config for variant 0xa233. Multi-word
+    PIC config validation on TL866A requires a chip that is actually
+    supported by the TL866A firmware (e.g. PIC16F1826, variant 0xa234,
+    pic_13, 2 config words).
+
     Branch: `fix/pic-config-word-width`
+
+  - [x] **Device list showed chips unsupported by connected programmer** —
+    the GUI loaded device names from all database sections (INFOIC,
+    INFOIC2PLUS, INFOICT76) instead of filtering by the connected
+    programmer's model. This allowed selecting chips the firmware cannot
+    program (e.g. PIC12F1822 on TL866A), causing silent write failures.
+
+    **Fix applied:**
+    - `AppState::load_device_names` uses `list_devices_for_model` when
+      programmer model is known, `list_devices` (all) when no programmer
+      connected
+    - `AppState::reload_device_names_for_model` added — called after
+      programmer (re)connect in `get_programmer_info` and `force_reconnect`
+    - `select_device` no longer falls back to `find_device_any` when
+      model-specific `find_device` fails — prevents selecting unsupported
+      chips
+    - `get_device_info` also uses model-specific lookup when model is known
+
+    Branch: `fix/pic12f1822-config-write`
 
   ### Hardware validation (separate from code parity)
 
