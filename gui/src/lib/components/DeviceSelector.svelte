@@ -155,16 +155,23 @@
   // IdentifyResults selecting a device). When the selection came from outside
   // (selectedName doesn't match the store), also search for the device name so
   // it appears in the list and is visible to the user.
+  //
+  // Only reacts to $selectedDevice changes — NOT to selectedName changes
+  // caused by doSearch clearing it. Without this guard, pasting into the
+  // search field triggers doSearch → selectedName=null → this effect
+  // re-runs → searchQuery reverted to the old device name.
+  let lastSyncedDevice: string | null = null;
   $effect(() => {
     const dev = $selectedDevice;
     if (dev) {
-      if (selectedName !== dev.name) {
-        // External selection — sync local state and search for the device
+      if (lastSyncedDevice !== dev.name) {
+        lastSyncedDevice = dev.name;
         selectedName = dev.name;
         selectedInfo = dev;
         searchQuery = dev.name;
       }
     } else {
+      lastSyncedDevice = null;
       selectedName = null;
       selectedInfo = null;
     }
