@@ -1,8 +1,8 @@
-# PIC Validation Chip Shopping List
+# PIC and AVR Validation Chip Shopping List
 
-Reference for purchasing PIC microcontrollers to validate the config
-word read/write path across all supported programmer models and PIC
-config variants.
+Reference for purchasing PIC and AVR microcontrollers to validate the
+config word / fuse read/write path across all supported programmer
+models and config variants.
 
 ---
 
@@ -23,10 +23,24 @@ protocol implementation across all programmer models.
 
 ## Already Validated
 
+### PIC config words
+
 | Programmer | Chip | Config | Width | Words | Proto | Status |
 |---|---|---|---|---|---|---|
 | TL866A | PIC16F628A | pic_21 | 14-bit | 1 | 0x18 | ✓ |
 | TL866A | PIC12F508 | pic_6 | 12-bit | 1 | 0x65 | ✓ |
+
+### AVR fuses
+
+| Programmer | Chip | Config | Fuses | Bytes/fuse | Proto | Status |
+|---|---|---|---|---|---|---|
+| TL866A | ATtiny85V | avr_6 | 3 (lfuse/hfuse/efuse) + lock | 1 | 0x73 | ✓ |
+| TL866A | ATmega328P | avr_14 | 3 (lfuse/hfuse/efuse) + lock | 1 | 0x71 | ✓ |
+
+AVR fuses are 1-byte (element_size=1) — the path unaffected by the PIC
+config word widening fix. Both chips validated the 3-fuse write path
+(lfuse/hfuse/efuse packed in one write packet) and lock byte readback.
+CKDIV8 (lfuse bit 7) toggled on both — persisted correctly.
 
 ---
 
@@ -199,6 +213,74 @@ For each chip/programmer combination:
 - ISP only — requires ICSP adapter cable
 - Common (~$5-8)
 - Datasheet: Microchip DS39933C
+
+---
+
+## AVR Validation
+
+AVR fuses are 1-byte (element_size=1) — the path unaffected by the PIC
+config word widening fix. All AVR configs use the same 1-byte stride, so
+there is no width variation to test. The main variation is fuse count
+(1, 2, or 3 fuses) and lock byte handling.
+
+### AVR config variant matrix
+
+| Config | Fuses | Lock | Example chips |
+|---|---|---|---|
+| avr_1, avr_2, avr_3 | 1 | yes | ATtiny13, ATtiny2313 (legacy) |
+| avr_4, avr_6, avr_10-14, avr_16, avr_17 | 3 | yes | ATmega328, ATtiny85 |
+| avr_5, avr_7, avr_8, avr_9, avr_15, avr_18 | 2 | yes | ATmega8, ATmega32 |
+
+### Already validated
+
+| Programmer | Chip | Config | Fuses | Proto | Status |
+|---|---|---|---|---|---|
+| TL866A | ATtiny85V | avr_6 | 3 + lock | 0x73 | ✓ CKDIV8 toggle |
+| TL866A | ATmega328P | avr_14 | 3 + lock | 0x71 | ✓ CKDIV8 toggle |
+
+### Remaining AVR gaps
+
+AVR validation is **lower priority** than PIC because:
+- AVR fuses are 1-byte — the path that was already working before the
+  PIC fix and was never affected by the truncation bug
+- All AVR configs use the same 1-byte stride — no width variation
+- The `write_fuses` USB packet format is the same for all chip families
+  on a given programmer; only the firmware-side algorithm differs
+
+The main remaining gaps are:
+- **TL866II+/T48/T56/T76** — separate `write_fuses` implementations, not
+  yet validated with AVR chips
+- **2-fuse configs** (avr_5, avr_7, avr_8, avr_9, avr_15, avr_18) —
+  different fuse count than the 3-fuse chips already tested
+- **Lock byte write** — only lock byte readback has been tested; writing
+  lock bits is more destructive and should be tested carefully
+
+### Recommended AVR chips (optional)
+
+If you want to extend AVR validation beyond the two chips already
+tested, the most useful additions would be:
+
+| Priority | Chip | Config | Fuses | Why |
+|---|---|---|---|---|
+| 1 | **ATmega8** (DIP28) | avr_15 | 2 + lock | 2-fuse config, very common |
+| 2 | **ATtiny13** (DIP8) | avr_1 | 1 + lock | 1-fuse config (simplest case) |
+
+These are cheap (~$2-3 each) and cover the 1-fuse and 2-fuse AVR config
+variants. The 3-fuse variant is already validated with ATtiny85 and
+ATmega328P.
+
+### AVR safe test values
+
+| Chip | Fuse | Bit | Name | Safe? |
+|---|---|---|---|---|
+| ATtiny85 | lfuse | 7 | CKDIV8 | ✓ reversible |
+| ATtiny85 | lfuse | 6 | CKOUT | ✓ reversible |
+| ATtiny85 | hfuse | 7 | RSTDISBL | ✗ disables reset |
+| ATtiny85 | hfuse | 5 | SPIEN | ✗ disables SPI programming |
+| ATmega328P | lfuse | 7 | CKDIV8 | ✓ reversible |
+| ATmega328P | lfuse | 6 | CKOUT | ✓ reversible |
+| ATmega328P | hfuse | 5 | SPIEN | ✗ disables SPI programming |
+| ATmega328P | hfuse | 0 | RSTDISBL | ✗ disables reset |
 
 ---
 
