@@ -1121,20 +1121,42 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
 
     let element_size = fuse_element_size(&config.name);
     let fuse_count = config.fuses.len();
-    let lock_count = config.locks.len();
+    let _lock_count = config.locks.len();
+
+    // Normalize fuse values before packing, matching upstream C minipro:
+    //   value |= ~mask;           // fill unused bits with 1s
+    //   if compare_mask > 0xff: value &= compare_mask;  // mask to chip width
+    //   if word_size == 1: value &= 0xff;
+    let normalize_write = |field: &crate::device::FuseField, value: u16| -> u16 {
+        let mut v = value | !field.mask;
+        if device.compare_mask > 0xff {
+            v &= device.compare_mask;
+        }
+        if element_size == 1 {
+            v &= 0xff;
+        }
+        v
+    };
 
     // Pack each fuse value as 1 or 2 little-endian bytes.
     let cfg_data: Vec<u8> = fuses
         .iter()
         .take(fuse_count)
-        .flat_map(|f| pack_fuse_element(f.value, element_size))
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let v = normalize_write(&config.fuses[i], f.value);
+            pack_fuse_element(v, element_size)
+        })
         .collect();
 
     let lock_data: Vec<u8> = fuses
         .iter()
         .skip(fuse_count)
-        .take(lock_count)
-        .flat_map(|f| pack_fuse_element(f.value, element_size))
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let v = normalize_write(&config.locks[i], f.value);
+            pack_fuse_element(v, element_size)
+        })
         .collect();
 
     let device_ref = &device;

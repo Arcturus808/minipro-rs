@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **PIC config word truncation to 8 bits** — PIC 12-, 14-, and 16-bit configuration words were silently truncated to 8 bits on read and write. The fuse element size is now determined from the config name (`pic_*` = 2 bytes), `FuseValue.value` is widened to `u16`, and the read/write paths pack/unpack 2-byte little-endian values for PIC devices. AVR one-byte fuse behavior is unchanged.
+
+- **TL866A config write did not persist** — the TL866A `write_fuses` packet was missing the `code_memory_size - 0x38` field at bytes `[4..6]` (upstream firmware bug workaround). The write packet now matches upstream `tl866a.c` exactly. The read packet also now sets `[4..6] = code_memory_size` per upstream.
+
+- **Write-side fuse value normalization** — fuse values are now normalized before writing (`value |= ~mask`, `value &= compare_mask`, `value &= 0xff` for 1-byte), matching upstream C `minipro`. Without this, values with bits set outside the device mask or chip width were sent raw and rejected by the firmware.
+
+- **FuseBitDecoder rejected valid PIC config values** — `maxValue` was `(1 << width) - 1` (e.g. `0x3FFF` for 14-bit PIC), but PIC config words have unused upper bits filled with 1s via mask normalization, so valid values like `0xFDFF` were silently rejected. Now `maxValue` is `0xFF` for 8-bit configs and `0xFFFF` for all wider configs.
+
+- **Collapsed fuse input truncated PIC 4-digit hex** — the collapsed config panel and fallback hex inputs had `maxlength="2"` hardcoded, truncating `FDFF` to `FD` for PIC devices. Now uses `fuseHexDigits()` (4 for 2-byte elements) and dynamic input width.
+
 - **Model-aware pin 1 instruction in logic identify panel** — the instruction text now correctly reflects lever position per programmer model. TL866A/CS/TL866II+ (lever at top): "pin 1 at the top, aligned with the lever". T48/T56/T76 (lever at bottom): "pin 1 at the top, opposite the lever". Previously the instruction always said "pin 1 aligned with lever", which was wrong for T48/T56/T76.
 
 - **Logic identify silently returns "no matches" when USB is suspended** — after laptop sleep/wake, the programmer's USB connection can be suspended without the GUI detecting it (the status badge still shows green). Clicking Identify would silently test all candidates against a dead USB connection and return "no matches found" instead of an error. USB communication errors now abort the scan immediately with a clear error message, and the stale programmer state is cleared so the user knows to replug.

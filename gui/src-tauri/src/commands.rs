@@ -2574,6 +2574,7 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
                     .collect();
                 all.extend(lockBits.iter()
                     .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value }));
+
                 minipro_core::operations::write_fuses(&mut handle, &all).map_err(|e| e.to_string())?;
 
                 Ok::<(), String>(())

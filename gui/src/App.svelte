@@ -418,6 +418,11 @@
     return configData?.element_size === 2 ? 0xFFFF : 0xFF;
   }
 
+  // Input width in ch units: 2-digit hex needs ~4ch, 4-digit needs ~6ch.
+  function fuseInputWidth(): string {
+    return configData?.element_size === 2 ? "6ch" : "4ch";
+  }
+
   function formatFuseHex(value: number): string {
     return value.toString(16).padStart(fuseHexDigits(), '0').toUpperCase();
   }
@@ -1282,14 +1287,15 @@
                                 <span class="text-xs font-mono opacity-50">{$selectedDevice.config.fuses[i].display_name}:</span>
                                 <input
                                   type="text"
-                                  class="input text-xs font-mono w-12 px-1 py-0.5"
+                                  class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                   value={formatFuseHex(field.value)}
                                   onchange={(e) => {
                                     const v = parseInt(e.currentTarget.value, 16);
                                     if (!isNaN(v) && v >= 0 && v <= fuseMaxValue()) setCfgValue(i, v);
                                   }}
                                   onclick={(e) => e.stopPropagation()}
-                                  maxlength="2"
+                                  maxlength={fuseHexDigits()}
                                 />
                               </div>
                             {/each}
@@ -1298,14 +1304,15 @@
                                 <span class="text-xs font-mono opacity-50">{$selectedDevice.config.locks[i].display_name}:</span>
                                 <input
                                   type="text"
-                                  class="input text-xs font-mono w-12 px-1 py-0.5"
+                                  class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                   value={formatFuseHex(field.value)}
                                   onchange={(e) => {
                                     const v = parseInt(e.currentTarget.value, 16);
                                     if (!isNaN(v) && v >= 0 && v <= fuseMaxValue()) setLockValue(i, v);
                                   }}
                                   onclick={(e) => e.stopPropagation()}
-                                  maxlength="2"
+                                  maxlength={fuseHexDigits()}
                                 />
                               </div>
                             {/each}
@@ -1342,13 +1349,14 @@
                                             <span class="text-xs font-mono opacity-50">0x</span>
                                             <input
                                               type="text"
-                                              class="input text-xs font-mono w-12 px-1 py-0.5"
+                                              class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                               value={formatFuseHex(field.value)}
                                               onchange={(e) => {
                                                 const v = parseInt(e.currentTarget.value, 16);
                                                 if (!isNaN(v) && v >= 0 && v <= fuseMaxValue()) setCfgValue(i, v);
                                               }}
-                                              maxlength="2"
+                                              maxlength={fuseHexDigits()}
                                             />
                                           </div>
                                         </div>
@@ -1378,13 +1386,14 @@
                                             <span class="text-xs font-mono opacity-50">0x</span>
                                             <input
                                               type="text"
-                                              class="input text-xs font-mono w-12 px-1 py-0.5"
+                                              class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                               value={formatFuseHex(field.value)}
                                               onchange={(e) => {
                                                 const v = parseInt(e.currentTarget.value, 16);
                                                 if (!isNaN(v) && v >= 0 && v <= fuseMaxValue()) setLockValue(i, v);
                                               }}
-                                              maxlength="2"
+                                              maxlength={fuseHexDigits()}
                                             />
                                           </div>
                                         </div>
@@ -1403,7 +1412,8 @@
                                       <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
                                       <input
                                         type="text"
-                                        class="input text-xs font-mono w-12 px-1 py-0.5"
+                                        class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                         value={formatFuseHex(field.value)}
                                         onchange={(e) => {
                                           const v = parseInt(e.currentTarget.value, 16);
@@ -1426,7 +1436,8 @@
                                       <span class="text-xs font-mono font-semibold opacity-70 w-12">{field.name}</span>
                                       <input
                                         type="text"
-                                        class="input text-xs font-mono w-12 px-1 py-0.5"
+                                        class="input text-xs font-mono px-1 py-0.5"
+                                  style:width={fuseInputWidth()}
                                         value={formatFuseHex(field.value)}
                                         onchange={(e) => {
                                           const v = parseInt(e.currentTarget.value, 16);

@@ -337,7 +337,7 @@ impl Protocol for Tl866aProtocol {
     fn read_fuses(
         &self,
         usb: &UsbDevice,
-        _device: &Device,
+        device: &Device,
         fuse_type: u8,
         _length: usize,
         items_count: u8,
@@ -348,11 +348,13 @@ impl Protocol for Tl866aProtocol {
             MP_FUSE_LOCK => CMD_READ_LOCK,
             other => return Err(MiniproError::Protocol(format!("unknown fuse type {other}"))),
         };
-        let mut msg = [0u8; 18];
+        let mut msg = [0u8; 64];
         msg[0] = cmd;
         msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         msg[2] = items_count;
-        usb.msg_send(&msg)?;
+        // Upstream tl866a_read_fuses sets [4..6] = code_memory_size (24-bit LE).
+        put_le(&mut msg[4..], device.code_memory_size, 3);
+        usb.msg_send(&msg[..18])?;
         let resp = usb.msg_recv(64)?;
         Ok(resp.get(7..).unwrap_or_default().to_vec())
     }
@@ -360,7 +362,7 @@ impl Protocol for Tl866aProtocol {
     fn write_fuses(
         &self,
         usb: &UsbDevice,
-        _device: &Device,
+        device: &Device,
         fuse_type: u8,
         _length: usize,
         items_count: u8,
@@ -376,6 +378,15 @@ impl Protocol for Tl866aProtocol {
         msg[0] = cmd;
         msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         msg[2] = items_count;
+        // Upstream tl866a_write_fuses sets [4..6] = code_memory_size - 0x38
+        // (24-bit LE).  The "- 0x38" is a firmware bug workaround noted in
+        // the upstream C source.  Without this field, the TL866A firmware
+        // does not commit the write.
+        put_le(
+            &mut msg[4..],
+            device.code_memory_size.saturating_sub(0x38),
+            3,
+        );
         let n = data.len().min(57);
         msg[7..7 + n].copy_from_slice(&data[..n]);
         usb.msg_send(&msg)?;
