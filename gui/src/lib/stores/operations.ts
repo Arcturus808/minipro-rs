@@ -308,6 +308,13 @@ export interface ConfigData {
   lock_bits: FuseValue[];
   user_fuses: number[];
   calibration: number[];
+  element_size: number;
+}
+
+/// Determine the fuse element size (1 or 2 bytes) from the config name.
+/// PIC configs use 2-byte elements; all others use 1-byte.
+export function fuseElementSize(configName: string | null | undefined): number {
+  return configName?.startsWith("pic_") ? 2 : 1;
 }
 
 export async function readFuses(icspMode: string, pinCheck: boolean = true): Promise<ConfigData> {
