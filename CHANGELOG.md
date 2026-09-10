@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- *(nothing yet)*
+
+### Fixed
+
+- *(nothing yet)*
+
+---
+
+## [0.8.2] - 2026-09-09
+
+### Added
+
 - **ZIF socket diagram in logic identify mode** — the ZIF socket diagram now shows in "Select a logic IC" mode, with an empty socket (including lever position and ZIF PIN 1 label) before a pin count is selected, and a chip outline in the correct position once a pin count is chosen. Helps users orient the chip before clicking Identify.
 
 - **Always-visible ZIF PIN 1 label** — the "ZIF PIN 1" label now renders whenever the socket diagram is shown, not only when a chip overlay is present. Pin 1 is a property of the socket, not the chip.
