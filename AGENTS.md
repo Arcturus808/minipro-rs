@@ -240,30 +240,14 @@ return btoa(result);
 
 ### Versioning & releases
 
-All four version fields must match the release tag — the release workflow's
-`verify-versions` job fails the build on mismatch:
-
-| File | Field |
-|------|-------|
-| `Cargo.toml` (workspace root) | `version` |
-| `gui/src-tauri/Cargo.toml` | `version` |
-| `gui/src-tauri/tauri.conf.json` | `version` |
-| `gui/package.json` | `version` |
-
-Release checklist:
-1. Bump all four fields; add `## [X.Y.Z]` to `CHANGELOG.md` (CI extracts it
-   for release notes).
-2. `cargo generate-lockfile`; stage both lockfiles.
-3. Supply-chain audit (local-only, conserves CI minutes):
-   `cargo deny check` at repo root, and
-   `cd gui/src-tauri && cargo deny --config ../../deny.toml check`.
-   Config: `deny.toml`. Evaluate advisories before releasing; document
-   accepted low-severity ones in release notes; false positives go in
-   `ignore = []` with a comment.
-4. Commit `chore(release): bump version to X.Y.Z`, tag `vX.Y.Z`.
-5. Push commit + tag to `origin` (GitLab, primary). GitHub is a push
-   mirror with delay — to trigger GitHub Actions immediately:
-   `git push github vX.Y.Z`.
+- All four version fields must stay in sync: root `Cargo.toml`,
+  `gui/src-tauri/Cargo.toml`, `gui/src-tauri/tauri.conf.json`,
+  `gui/package.json`. The `verify-versions` CI job fails on mismatch.
+- **Never push tags casually** — each tag triggers both GitLab CI and
+  GitHub Actions release builds.
+- **Full release procedure: `docs/RELEASE.md`** — read it before preparing
+  any release (version bump checklist, `cargo deny` audit, tag push order,
+  MSRV-bump file list).
 
 ### CI compute conservation
 
@@ -322,3 +306,5 @@ Read the relevant doc before working in that area:
   related code; several fixes encode upstream C minipro behavior that must
   be preserved (voltage tables, chip-ID parsing, `-x`/`-y` semantics,
   `can_erase`).
+- `docs/RELEASE.md` — full release-prep procedure (version sync, cargo-deny
+  audit, tag push order, MSRV bump file list).
