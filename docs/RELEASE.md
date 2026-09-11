@@ -29,6 +29,77 @@ triggers builds for both the CLI and GUI. If versions drift:
 version fields match the tag name. If any file is out of sync, the build
 fails immediately with a clear error message.
 
+## Local Linux verification (run before the checklist)
+
+Before tagging, verify the CLI workspace builds and passes tests on Linux.
+This catches MSRV regressions, missing system deps, and `cfg(unix)` issues
+before they burn release-pipeline minutes. This is a maintainer
+optimization — external contributors never trigger our CI (GitLab runs on
+`main` pushes, GitHub Actions on tags), so it is not a contribution gate.
+
+**Scope:** this validates the CLI/core workspace only. The Tauri GUI's
+Linux build has heavier system dependencies and is covered separately
+below as an optional step.
+
+Pick whichever recipe matches your platform:
+
+### Native Linux
+
+```bash
+cargo +1.85 check --all --locked && cargo test --all --locked && \
+  cargo clippy --all-targets -- -D warnings
+```
+
+### WSL (Windows — default distro)
+
+Build inside the WSL filesystem, not `/mnt/c`: `/mnt` paths are slow (9P
+bridge) and inherit Windows case-insensitivity, which can mask path-case
+bugs that would fail on real Linux. For release verification, clone the
+repo inside WSL — this also validates the committed tree (what CI sees)
+rather than a possibly-dirty working copy.
+
+```bash
+# one-time setup:
+wsl -d Ubuntu -u root -- apt install -y build-essential pkg-config libssl-dev
+wsl -d Ubuntu -- curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+wsl -d Ubuntu -- bash -c "source ~/.cargo/env && rustup install 1.85"
+
+# the check itself:
+wsl -d Ubuntu -- bash -c "source ~/.cargo/env && \
+  git clone /mnt/<your-repo-path> ~/minipro-rs-check && \
+  cd ~/minipro-rs-check && \
+  cargo +1.85 check --all --locked && \
+  cargo test --all --locked && \
+  cargo clippy --all-targets -- -D warnings"
+```
+
+### Docker (any platform with Docker Desktop / Engine)
+
+```bash
+docker run --rm -v "$PWD:/src" -w /src rust:1.85 \
+  sh -c "cargo check --all --locked && cargo test --all --locked && \
+         cargo clippy --all-targets -- -D warnings"
+```
+
+Uses the same `rust:1.85` image as the GitLab `msrv` job, so results match
+CI closely. (On Windows/macOS the bind mount is slower than a native
+filesystem — for a pure release check, cloning inside the container is
+equally valid.)
+
+### Optional: GUI workspace check
+
+The `gui/src-tauri` workspace needs Tauri's Linux system dependencies
+(webkit2gtk, appindicator — see `gui/README.md` for the current package
+list, which drifts between distros). With those installed:
+
+```bash
+cargo check --locked --manifest-path gui/src-tauri/Cargo.toml
+```
+
+Best-effort: it validates code, not the .deb/.AppImage bundling. Worth
+running when GUI dependencies or Linux packaging have changed; safe to
+skip otherwise — the release pipeline covers it.
+
 ## Release checklist
 
 1. Update all four version fields above.
