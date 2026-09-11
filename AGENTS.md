@@ -283,14 +283,9 @@ system packages.
 `Cargo.toml`, `gui/src-tauri/Cargo.toml`, `README.md`, `gui/README.md`,
 this file, and `.gitlab-ci.yml` (msrv job image tag).
 
-WSL checks (one-time setup: build-essential, pkg-config, libssl-dev,
-rustup + 1.85):
-
-```bash
-wsl -d Ubuntu -- bash -c "source ~/.cargo/env && cd /mnt/<repo> && \
-  cargo +1.85 check --all --locked && cargo test --all --locked && \
-  cargo clippy --all-targets -- -D warnings"
-```
+Local Linux verification (WSL/Docker/native recipes, incl. MSRV check):
+see `docs/RELEASE.md` — run it before releases and before merging
+build-affecting changes.
 
 ## Feature internals — in docs/
 
