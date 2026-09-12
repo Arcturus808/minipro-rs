@@ -86,19 +86,31 @@ CI closely. (On Windows/macOS the bind mount is slower than a native
 filesystem — for a pure release check, cloning inside the container is
 equally valid.)
 
-### Optional: GUI workspace check
+### GUI workspace check (conditional — evaluate mechanically)
 
 The `gui/src-tauri` workspace needs Tauri's Linux system dependencies
 (webkit2gtk, appindicator — see `gui/README.md` for the current package
-list, which drifts between distros). With those installed:
+list, which drifts between distros).
+
+**Decide whether to run this by checking what changed since the last
+release tag** — do not treat it as discretionary:
 
 ```bash
-cargo check --locked --manifest-path gui/src-tauri/Cargo.toml
+git diff --name-only v<last-tag>..HEAD -- \
+  gui/src-tauri/Cargo.toml gui/src-tauri/Cargo.lock \
+  gui/package.json gui/src-tauri/tauri.conf.json \
+  .github/workflows/ .gitlab-ci.yml
 ```
 
-Best-effort: it validates code, not the .deb/.AppImage bundling. Worth
-running when GUI dependencies or Linux packaging have changed; safe to
-skip otherwise — the release pipeline covers it.
+- **Diff empty** → skip; the release pipeline covers GUI bundling anyway.
+- **Diff non-empty AND Tauri system deps already installed** → run:
+  `cargo check --locked --manifest-path gui/src-tauri/Cargo.toml`
+- **Diff non-empty AND deps not installed** → do NOT install the Tauri dep
+  stack just for this check (large detour). Note it in the release commit
+  and let CI validate the GUI build.
+
+This check validates code compilation, not .deb/.AppImage bundling — the
+release pipeline remains the authority on packaging.
 
 ## Release checklist
 
