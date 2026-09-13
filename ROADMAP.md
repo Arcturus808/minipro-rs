@@ -732,6 +732,8 @@ This is a living list of features and improvements planned for minipro-rs.
     | 0x03/0x04 | 88 | SyncMOS SM39/SM59 ICP |
     | 0x0e | 22 | AT17 FPGA config EEPROM |
     | 0x0c | 2 | KB90xx EC |
+
+    **Class bytes are family-relative (verified).** The same index can mean a different chip pinout in a different `<database>` section: class 0x05 is AT45DB DataFlash (pinout: 1=SI 2=SCK 4=/CS 6=VCC 7=GND 8=SO) in the legacy INFOIC section but SPI NAND (standard 25-series pinout) in INFOIC2PLUS/INFOICT76. The legacy INFOIC section also has **no class 0x09** — SPI NOR ICSP was never offered on TL866A/CS by the vendor, so `icsp=0` for W25Q32 on a TL866A is correct, not a missing table. INFOIC's only nonzero classes are 0x01–0x08 (~320 devices); its ICSP-capable SPI parts are separate `AT45DBxxx@ICSP` entries (class 0x05).
   - **Phase 2: ICSP connector pin-numbering diagram (fallback for unmapped classes):**
     When ICSP mode is selected, show a physical diagram of the ICSP connector with pin numbers only (no signal labels). This helps users identify pin 1 (for ribbon cable red-stripe alignment) and cross-reference pin numbers with Xgpro's chip-specific "[View ICSP Connection]" diagram.
     A note will direct users to Xgpro for chip-specific signal assignment: "ICSP mode active. Pin numbering shown for reference. For chip-specific signal assignment (VCC, GND, MISO, MOSI, SCK, RST), use Xgpro's [View ICSP Connection] button."
@@ -760,13 +762,13 @@ This is a living list of features and improvements planned for minipro-rs.
     - **Ground truth per class:** chip datasheets (standard interfaces — SPI, I²C, Microwire, PIC ICSP, AVR ISP, eMMC 1-bit) + `radiomanV/TL866` schematics (`docs/TL866.pdf`) for TL866A/CS header wiring + community-documented header pinouts for T48/T56/T76. Xgpro's ICP images may be *viewed* as reference while authoring original SVGs (wiring facts are not copyrightable expression); the JPEGs themselves are never shipped or bundled.
     - **Verification:** each class table must be verified on real hardware (one representative chip + continuity check between header pin and target pad) before being marked shipped — a wrong VPP/VCC mapping can damage the target chip. ~13 verifications total, not thousands. Unverified classes fall back to pin-numbering only.
     - **Rollout:**
-      - Phase 4a: plumbing + one pilot class end-to-end (0x09 SPI NOR — most common, well-documented interface)
+      - Phase 4a: plumbing + one pilot class end-to-end (0x09 SPI NOR — most common, well-documented interface) — **DONE**: `icsp.rs` tables (0x09 for TL866A/II+ 1×6 and T76 2×14; 0x05 AT45DB for TL866A; 0x05 SPI NAND for TL866II+), `DeviceInfoDto.icsp`, `get_icsp_wiring` command, signal-labeled SVG in `IcspConnectorDiagram.svelte`, CLI `-d` prints `ICP%03d.JPG` + ASCII table with `--programmer`
       - Phase 4b: top five classes (0x09, 0x05, 0x02, 0x0b, 0x0a) — ~95% of ICSP-capable devices
       - Phase 4c: AVR variants (0x01, 0x06–0x08) + eMMC (0x40)
       - Phase 4d: long tail (0x03, 0x04, 0x0c, 0x0e — ~110 devices combined); may remain as pin-numbering fallback
-    - **Open questions:** whether the same class index implies identical header wiring across programmer families (verify 0x09 on TL866II+ vs T48 vs T76); whether in-class package variants need sub-variants (AVR's three indices suggest the index already encodes package); eMMC VCC/VCCQ handling on the diagram.
+    - **Open questions:** whether the same class index implies identical header wiring across programmer families (verify 0x09 on TL866II+ vs T48 vs T76 — answered in part: class *chip-side* semantics are family-relative, see note above); whether in-class package variants need sub-variants (AVR's three indices suggest the index already encodes package); eMMC VCC/VCCQ handling on the diagram.
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
-  - **Status:** Phase 1 complete, Phase 2 complete (pin-numbering fallback), Phase 3 not started, Phase 4 planned
+  - **Status:** Phase 1 complete, Phase 2 complete (pin-numbering fallback), Phase 3 not started, Phase 4a complete (verified on TL866A + AT45DB class 0x05)
 
 - [x] **GUI voltage override dropdowns** — replace hardcoded voltage option lists with model-specific dropdowns
   - **Problem:** The GUI Advanced section used hardcoded VPP/VCC option lists that only matched the XG (T48/T56) tables. TL866A and TL866II+ users saw invalid options, logic ICs showed VPP/VDD dropdowns that shouldn't exist, and T56/T76 custom-protocol devices showed options when overrides aren't supported.
