@@ -664,10 +664,10 @@ This is a living list of features and improvements planned for minipro-rs.
     - `package_type` — DIP{N} or PLCC{N} (derived from `package_details`)
     - `adapter` — adapter type index (TSOP48, SOP44, etc.) — for adapter-based devices
     - `pin_map` — index into infoic.xml `<maps>` section; the `mask` array tells which ZIF pins are occupied, implicitly encoding placement position
-    - `icsp` — ICSP mode flags from `package_details`
+    - `icsp` — ICSP **wiring-class index** from `package_details` bits 8–15 (selects the per-class ICSP wiring diagram; also sent to firmware inside `package_details` at begin_transaction bytes 40–43)
   - **Data NOT available (must be derived or static):**
     - No explicit "insert at position X" field — derive from `pin_map` mask data, or fallback to pin_count-based placement (pin 1 at ZIF pin 1, chip at top of socket)
-    - ICSP wiring diagrams cannot be derived from the database — need static SVG images per programmer model showing VCC/GND/SCK/MISO/MOSI/RESET pin assignments
+    - Per-class ICSP pin mappings are not in the database — `icsp` gives only the class index. Each class's header-pin↔chip-pin table must be authored and verified manually (see Phase 4 below). ~13 classes cover all ICSP-capable devices.
   - **Design decisions (RESOLVED):**
     - **Chip placement:** identical for all models — pin 1 at top (ZIF pin 1). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
     - **Diagram rendering:** always render pin 1 at top. Draw lever at top (TL866A/CS/II+) or bottom (T48/T56/T76) based on `programmer.model`. Two SVG templates: 40-pin and 48-pin
@@ -711,13 +711,28 @@ This is a living list of features and improvements planned for minipro-rs.
     - Should the diagram update in real-time when the user toggles ICSP mode, or only when a device is selected?
   - **Scope:**
     - Phase 1: DIP packages only (most common), derive placement from pin_map mask (fallback to pin_count), render SVG ZIF socket with chip overlay and lever indicator — **DONE**
-    - Phase 2: ICSP connector pin-numbering diagram (see details below)
+    - Phase 2: ICSP connector pin-numbering diagram (see details below) — **DONE**
     - Phase 3: Adapter-based packages (TSOP, SOP, PLCC) — more complex, lower priority
-  - **ICSP wiring diagrams with signal labels — dropped:**
-    ICSP pin assignment is not in `infoic.xml` — the `pin_map` field is for ZIF socket pin-contact testing, not ICSP header pinout. The ICSP signal routing is handled entirely in the programmer's firmware: `begin_transaction` sends an ICSP bitmask in byte 3 (0x80 = enable, 0x01 = VCC), and the firmware internally multiplexes the ICSP header pins based on `protocol_id` and chip family. The same physical ICSP pin carries different signals (VPP, VCC, GND, MISO, MOSI, SCK, SDA, CLK) depending on which chip is selected.
-    A static per-model diagram with signal labels would be actively dangerous — showing "pin 1 = VCC" would be wrong for some chip families and could cause users to apply VPP to the wrong line, damaging the target chip or the programmer. Only Xgpro's "[View ICSP Connection]" feature generates chip-specific wiring diagrams, and that logic is embedded in Xgpro's binary, not derivable from the XML database.
-    Reverse-engineering Xgpro to extract the pinout logic was considered and rejected due to legal risk (EULA prohibitions on RE), safety risk (RE errors could lead to hardware damage), and technical uncertainty (the pinout may be algorithmically generated, not a simple lookup table).
-  - **Phase 2: ICSP connector pin-numbering diagram (replaces signal-label diagrams):**
+    - Phase 4: Per-class ICSP signal-labeled wiring diagrams, scratch-built SVG (see details below) — **PLANNED**
+  - **ICSP wiring diagrams — revived (previously dropped):**
+    The earlier conclusion ("not derivable from the XML database") was wrong in one important way. `package_details.icsp` is a **wiring-class index**, not a flag: upstream `main.c` prints it verbatim as `ICSP: ICP%03d.JPG` — it selects which canned `ICP%03d.JPG` image Xgpro's "[View ICSP Connection]" displays. The same byte reaches the firmware inside `package_details` (begin_transaction bytes 40–43), where it acts as the ICSP routing-class selector; on T56/T76 the user's ICSP flag additionally switches the FPGA bitstream name (e.g. ATmega → `11S`, AT89C → `2S`, per `get_algorithm()` in upstream `database.c`).
+    Because it is a class index, ~30k devices collapse into ~13 wiring classes — no per-chip empirical mapping and no Xgpro binary reverse-engineering needed. Observed distribution in `data/infoic.xml`:
+
+    | `icsp` | Devices | Wiring class |
+    |--------|---------|--------------|
+    | 0x00 | 19,876 | none (ZIF only) |
+    | 0x09 | 4,298 | 25-series SPI NOR, 8-pin |
+    | 0x02 | 1,480 | PIC ICSP (VPP/PGD/PGC) |
+    | 0x05 | 1,459 | SPI NAND / wide SPI (proto 0x2d/0x03) |
+    | 0x0b | 1,242 | 24xx I²C EEPROM |
+    | 0x0a | 1,023 | 93xx Microwire |
+    | 0x40 | 188 | eMMC ISP (CLK/CMD/D0) |
+    | 0x01 | 109 | AT89S/8051 ISP |
+    | 0x06–0x08 | 104 | AVR ISP, per-package variants |
+    | 0x03/0x04 | 88 | SyncMOS SM39/SM59 ICP |
+    | 0x0e | 22 | AT17 FPGA config EEPROM |
+    | 0x0c | 2 | KB90xx EC |
+  - **Phase 2: ICSP connector pin-numbering diagram (fallback for unmapped classes):**
     When ICSP mode is selected, show a physical diagram of the ICSP connector with pin numbers only (no signal labels). This helps users identify pin 1 (for ribbon cable red-stripe alignment) and cross-reference pin numbers with Xgpro's chip-specific "[View ICSP Connection]" diagram.
     A note will direct users to Xgpro for chip-specific signal assignment: "ICSP mode active. Pin numbering shown for reference. For chip-specific signal assignment (VCC, GND, MISO, MOSI, SCK, RST), use Xgpro's [View ICSP Connection] button."
     **ICSP header physical layouts:**
@@ -738,8 +753,20 @@ This is a living list of features and improvements planned for minipro-rs.
     - Note text below diagram directing to Xgpro for signal assignment
     - No backend changes needed (layouts are hardcoded constants)
     - TL866CS: show "ICSP not supported on this model" instead of a diagram
+  - **Phase 4 plan: per-class signal-labeled wiring diagrams (scratch-built SVG):**
+    - **Data model:** wiring tables live in `minipro-core` (`crates/minipro-core/src/icsp.rs`), not the GUI — single source of truth shared by CLI text output, GUI SVG rendering, and any future TUI. Static table keyed by `(programmer family, icsp class)` → `{ title, chip_package, connections: [{ header_pin, signal, chip_pin, chip_pin_label }] }`. Per-family keying is required — the class index is only guaranteed consistent within each source DB family (infoic / infoic2plus / infoic76); the same index may wire differently on a 6-pin TL866II+ header vs a 28-pin T76 header.
+    - **Diagram:** extend `IcspConnectorDiagram.svelte` — reuse the existing per-model header geometry, add per-pin signal labels, draw a chip package outline with labeled pins, connect header pins to chip pins. Mapped class → full wiring diagram; unmapped class → existing pin-numbering fallback with a "wiring diagram not yet available for this device class" note (retain the Xgpro pointer until coverage is complete).
+    - **Backend:** add `icsp` (u8 from `device.package_details.icsp`) to `DeviceInfoDto` in `commands.rs`, plus a `get_icsp_wiring` command returning the resolved connection list for the selected device + connected programmer. CLI parity: print `ICSP: ICP%03d.JPG` in `minipro -d` device info output, matching upstream `main.c` — and exceed it by also printing the resolved wiring as an ASCII table/box-drawing diagram (no TUI framework needed; plain stdout keeps it scriptable and SSH-friendly).
+    - **Ground truth per class:** chip datasheets (standard interfaces — SPI, I²C, Microwire, PIC ICSP, AVR ISP, eMMC 1-bit) + `radiomanV/TL866` schematics (`docs/TL866.pdf`) for TL866A/CS header wiring + community-documented header pinouts for T48/T56/T76. Xgpro's ICP images may be *viewed* as reference while authoring original SVGs (wiring facts are not copyrightable expression); the JPEGs themselves are never shipped or bundled.
+    - **Verification:** each class table must be verified on real hardware (one representative chip + continuity check between header pin and target pad) before being marked shipped — a wrong VPP/VCC mapping can damage the target chip. ~13 verifications total, not thousands. Unverified classes fall back to pin-numbering only.
+    - **Rollout:**
+      - Phase 4a: plumbing + one pilot class end-to-end (0x09 SPI NOR — most common, well-documented interface)
+      - Phase 4b: top five classes (0x09, 0x05, 0x02, 0x0b, 0x0a) — ~95% of ICSP-capable devices
+      - Phase 4c: AVR variants (0x01, 0x06–0x08) + eMMC (0x40)
+      - Phase 4d: long tail (0x03, 0x04, 0x0c, 0x0e — ~110 devices combined); may remain as pin-numbering fallback
+    - **Open questions:** whether the same class index implies identical header wiring across programmer families (verify 0x09 on TL866II+ vs T48 vs T76); whether in-class package variants need sub-variants (AVR's three indices suggest the index already encodes package); eMMC VCC/VCCQ handling on the diagram.
   - **Priority: medium-high** — prevents the most common user error; the original XGECU software has this feature and users rely on it
-  - **Status:** Phase 1 complete, Phase 2 complete (pin-numbering only, no signal labels), Phase 3 not started
+  - **Status:** Phase 1 complete, Phase 2 complete (pin-numbering fallback), Phase 3 not started, Phase 4 planned
 
 - [x] **GUI voltage override dropdowns** — replace hardcoded voltage option lists with model-specific dropdowns
   - **Problem:** The GUI Advanced section used hardcoded VPP/VCC option lists that only matched the XG (T48/T56) tables. TL866A and TL866II+ users saw invalid options, logic ICs showed VPP/VDD dropdowns that shouldn't exist, and T56/T76 custom-protocol devices showed options when overrides aren't supported.
@@ -907,3 +934,9 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** implemented
 
 
+- [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI
+  - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.
+  - **Architecture note:** logic and data tables (including the Phase 4 ICSP wiring tables) live in `minipro-core`, so a TUI is an incremental frontend, not a rewrite — the wiring diagram would render as ASCII/box-drawing from the same `icsp.rs` table the CLI text output uses.
+  - **Scope if pursued:** device selector with fuzzy search, operation panels (read/write/verify/erase), progress display, hex viewer pane, ICSP wiring pane. Not justified by the ICSP diagram feature alone — plain stdout output covers that.
+  - **Priority: low** — speculative; expected demand is occasional rather than frequent. Revisit only if the community asks for it.
+  - **Status:** not started; parked pending user demand

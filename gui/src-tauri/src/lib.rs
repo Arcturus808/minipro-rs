@@ -137,6 +137,7 @@ pub fn run() {
             commands::search_devices,
             commands::get_device_info,
             commands::get_device_pin_map,
+            commands::get_icsp_wiring,
             commands::select_device,
             commands::deselect_device,
             commands::do_read,

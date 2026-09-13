@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { programmer } from "../stores/device";
+  import { programmer, selectedDevice, getIcspWiring } from "../stores/device";
+  import type { IcspWiring } from "../stores/device";
 
   // ── Connector layout definitions ──────────────────────────────────────────
   // Each layout describes the physical ICSP header for a programmer model.
-  // Pin numbering only — no signal labels (see note below diagram).
 
   interface LinearLayout {
     kind: "linear";
@@ -33,11 +33,76 @@
   const PAD = 18;            // padding around connector body
   const LABEL_FONT = 11;     // pin number label font size
 
+  // Wiring diagram geometry
+  const W_ROW_H = 26;        // height per chip-pin row
+  const W_PIN_SQ = 15;       // header pin-number square
+  const W_PIN_GAP = 3;
+  const W_CHIP_X = 205;      // chip body left edge
+  const W_CHIP_W = 120;
+  const W_STUB = 8;          // chip pin stub length
+  const W_GRP_END = 185;     // right edge of header-pin groups
+  const W_TOP = 10;
+
   let layout = $derived(
     $programmer ? LAYOUTS[$programmer.model] ?? null : null
   );
 
   let isTL866CS = $derived($programmer?.model === "TL866CS");
+
+  // ── Wiring lookup ─────────────────────────────────────────────────────────
+  let wiring = $state<IcspWiring | null>(null);
+  let wiringLoading = $state(false);
+  let wiringKey = "";
+
+  $effect(() => {
+    const model = $programmer?.model;
+    const cls = $selectedDevice?.icsp ?? 0;
+    if (!model || !cls) {
+      wiring = null;
+      wiringKey = "";
+      return;
+    }
+    const key = `${model}:${cls}`;
+    if (key === wiringKey) return;
+    wiringKey = key;
+    wiringLoading = true;
+    getIcspWiring(model, cls)
+      .then((w) => {
+        if (wiringKey === key) wiring = w;
+      })
+      .catch(() => {
+        if (wiringKey === key) wiring = null;
+      })
+      .finally(() => {
+        wiringLoading = false;
+      });
+  });
+
+  // One row per chip pin; header pins grouped per target pin.
+  interface WireRow {
+    chipPin: number;
+    label: string;
+    headerPins: number[];
+    signal: string;
+  }
+
+  let wireRows = $derived<WireRow[]>(
+    wiring
+      ? wiring.chip_labels.map((label, i) => {
+          const pin = i + 1;
+          const ws = wiring.wires.filter((w) => w.chip_pin === pin);
+          return {
+            chipPin: pin,
+            label,
+            headerPins: ws.map((w) => w.header_pin),
+            signal: ws[0]?.signal ?? "",
+          };
+        })
+      : []
+  );
+
+  let wireSvgH = $derived(wireRows.length * W_ROW_H + W_TOP * 2);
+  const WIRE_SVG_W = 345;
 
   // ── Linear layout geometry (1×N header) ───────────────────────────────────
   let linearWidth = $derived(
@@ -68,6 +133,7 @@
   // Pin number label color
   const LABEL_FILL = "rgb(99, 102, 241)";
   const BODY_FILL = "var(--bg-color, #f5f5f5)";
+  const WIRE_STROKE = "rgb(99, 102, 241)";
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
@@ -182,11 +248,119 @@
       {/each}
     </svg>
   {/if}
-  {#if $programmer && layout}
+
+  <!-- ── Per-class wiring diagram ────────────────────────────────────────── -->
+  {#if $programmer && layout && $selectedDevice}
+    {#if $selectedDevice.icsp === 0}
+      <p class="text-xs opacity-50 mt-2 text-center leading-tight">
+        {$selectedDevice.name} has no ICSP wiring class — use the ZIF socket.
+      </p>
+    {:else if wiringLoading}
+      <p class="text-xs opacity-50 mt-2">Loading wiring diagram…</p>
+    {:else if wiring}
+      <p class="text-xs font-semibold mt-2 self-start">
+        {wiring.title} — wiring for {$selectedDevice.name}
+      </p>
+      <svg
+        viewBox="0 0 {WIRE_SVG_W} {wireSvgH}"
+        class="w-full max-w-[360px]"
+        style="height: {wireSvgH}px;"
+      >
+        <!-- Chip body -->
+        <rect
+          x={W_CHIP_X}
+          y={W_TOP - 4}
+          width={W_CHIP_W}
+          height={wireRows.length * W_ROW_H + 8}
+          rx="3"
+          fill={BODY_FILL}
+          stroke="currentColor"
+          stroke-width="1.5"
+          opacity="0.7"
+        />
+        <circle cx={W_CHIP_X + 8} cy={W_TOP + 4} r="2" fill={LABEL_FILL} />
+        {#each wireRows as row, i}
+          {@const cy = W_TOP + i * W_ROW_H + W_ROW_H / 2}
+          <!-- Chip pin stub -->
+          <rect
+            x={W_CHIP_X - W_STUB}
+            y={cy - 5}
+            width={W_STUB}
+            height={10}
+            fill="black"
+            fill-opacity="0.12"
+            stroke="currentColor"
+            stroke-width="1"
+            opacity={row.headerPins.length ? 0.7 : 0.3}
+          />
+          <!-- Chip pin label: "1 /CS" -->
+          <text
+            x={W_CHIP_X + 10}
+            y={cy + 4}
+            font-size="11"
+            fill="currentColor"
+            opacity={row.headerPins.length ? 0.9 : 0.45}
+          ><tspan fill={LABEL_FILL} font-weight="bold">{row.chipPin}</tspan>  {row.label}</text>
+          {#if row.headerPins.length}
+            <!-- Wire -->
+            <line
+              x1={W_GRP_END}
+              y1={cy}
+              x2={W_CHIP_X - W_STUB}
+              y2={cy}
+              stroke={WIRE_STROKE}
+              stroke-width="1.5"
+            />
+            <!-- Header pin group, right-aligned at W_GRP_END -->
+            {@const sigW = row.signal.length * 7 + 6}
+            {@const grpW = row.headerPins.length * (W_PIN_SQ + W_PIN_GAP) - W_PIN_GAP + 6 + sigW}
+            {@const gx = W_GRP_END - grpW}
+            {#each row.headerPins as hp, j}
+              {@const px = gx + j * (W_PIN_SQ + W_PIN_GAP)}
+              <rect
+                x={px}
+                y={cy - W_PIN_SQ / 2}
+                width={W_PIN_SQ}
+                height={W_PIN_SQ}
+                rx="1"
+                fill="black"
+                fill-opacity="0.12"
+                stroke="currentColor"
+                stroke-width="1"
+                opacity="0.7"
+              />
+              <text
+                x={px + W_PIN_SQ / 2}
+                y={cy + 3.5}
+                font-size="9"
+                fill={LABEL_FILL}
+                font-weight="bold"
+                text-anchor="middle"
+              >{hp}</text>
+            {/each}
+            <text
+              x={gx + row.headerPins.length * (W_PIN_SQ + W_PIN_GAP) - W_PIN_GAP + 6}
+              y={cy + 4}
+              font-size="11"
+              fill="currentColor"
+              opacity="0.9"
+            >{row.signal}</text>
+          {/if}
+        {/each}
+      </svg>
+      {#each wiring.notes as note}
+        <p class="text-xs opacity-60 mt-1 self-start leading-tight">• {note}</p>
+      {/each}
+    {:else}
+      <p class="text-xs opacity-50 mt-2 text-center leading-tight">
+        ICSP class 0x{$selectedDevice.icsp.toString(16).padStart(2, "0")} —
+        no verified wiring diagram for {$programmer.model} yet.<br>
+        Connector pin numbering shown above for reference.
+      </p>
+    {/if}
+  {:else if $programmer && layout}
     <p class="text-xs opacity-50 mt-1 text-center leading-tight">
-      ICSP mode active. Pin numbering shown for reference.<br>
-      For chip-specific signal assignment (VCC, GND, MISO, MOSI, SCK, RST),<br>
-      use Xgpro's [View ICSP Connection] button.
+      Select a device to see its ICSP wiring.
     </p>
   {/if}
 </div>

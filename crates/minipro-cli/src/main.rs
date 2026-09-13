@@ -188,7 +188,15 @@ fn run() -> Result<()> {
         )?;
         let dev = find_device_any(&db_paths, device_name)
             .with_context(|| format!("unknown device '{device_name}'"))?;
-        print_device_info(&dev);
+        let model = cli
+            .programmer
+            .as_deref()
+            .map(|s| {
+                s.parse::<ProgrammerModel>()
+                    .map_err(|e: String| anyhow::anyhow!(e))
+            })
+            .transpose()?;
+        print_device_info(&dev, model);
         return Ok(());
     }
 
@@ -1135,7 +1143,7 @@ fn fmt_bytes(n: u32) -> String {
     }
 }
 
-fn print_device_info(dev: &minipro_core::Device) {
+fn print_device_info(dev: &minipro_core::Device, model: Option<ProgrammerModel>) {
     println!("Device:       {}", dev.name);
     println!("Code memory:  {}", fmt_bytes(dev.code_memory_size));
     if dev.data_memory_size > 0 {
@@ -1163,6 +1171,38 @@ fn print_device_info(dev: &minipro_core::Device) {
         );
     }
     println!("Protocol ID:  {:#04x}", dev.protocol_id);
+
+    let icsp_class = dev.package_details.icsp;
+    if icsp_class != 0 {
+        // Same reference string upstream C minipro prints.
+        println!("ICSP:         ICP{icsp_class:03}.JPG");
+        match model {
+            Some(m) => match minipro_core::icsp::icsp_wiring(m, icsp_class) {
+                Some(w) => print_icsp_wiring(m, w),
+                None => println!("              (no verified ICSP wiring diagram for {m} yet)"),
+            },
+            None => println!("              (pass --programmer MODEL for a wiring diagram)"),
+        }
+    }
+}
+
+/// Render an ASCII wiring table: header pin → signal → chip pin.
+fn print_icsp_wiring(model: ProgrammerModel, w: &minipro_core::icsp::IcspWiring) {
+    println!("ICSP wiring ({model}) — {}:", w.title);
+    for wire in w.wires {
+        let label = w
+            .chip_labels
+            .get(wire.chip_pin as usize - 1)
+            .copied()
+            .unwrap_or("");
+        println!(
+            "  header pin {:>2}  {:<10} → chip pin {:>2}  {}",
+            wire.header_pin, wire.signal, wire.chip_pin, label
+        );
+    }
+    for note in w.notes {
+        println!("  note: {note}");
+    }
 }
 
 // ── Fuse file parser ──────────────────────────────────────────────────────────

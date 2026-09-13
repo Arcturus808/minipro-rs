@@ -241,6 +241,51 @@ pub struct DeviceInfoDto {
     off_protect_before: bool,
     /// True if chip has protect_after flag (can be write-protected after write).
     protect_after: bool,
+    /// ICSP wiring-class index from `package_details` bits 8–15.
+    /// 0 = no ICSP. Nonzero selects a wiring diagram (see `icsp::icsp_wiring`).
+    icsp: u8,
+}
+
+#[derive(Serialize)]
+pub struct IcspWireDto {
+    header_pin: u8,
+    signal: &'static str,
+    chip_pin: u8,
+}
+
+#[derive(Serialize)]
+pub struct IcspWiringDto {
+    title: &'static str,
+    chip_labels: Vec<&'static str>,
+    wires: Vec<IcspWireDto>,
+    notes: Vec<&'static str>,
+}
+
+impl From<&'static minipro_core::icsp::IcspWiring> for IcspWiringDto {
+    fn from(w: &'static minipro_core::icsp::IcspWiring) -> Self {
+        Self {
+            title: w.title,
+            chip_labels: w.chip_labels.to_vec(),
+            wires: w
+                .wires
+                .iter()
+                .map(|x| IcspWireDto {
+                    header_pin: x.header_pin,
+                    signal: x.signal,
+                    chip_pin: x.chip_pin,
+                })
+                .collect(),
+            notes: w.notes.to_vec(),
+        }
+    }
+}
+
+/// Look up the verified ICSP wiring for a (programmer model, class) pair.
+/// Returns null when no verified table exists.
+#[tauri::command]
+pub async fn get_icsp_wiring(model: String, icspClass: u8) -> Result<Option<IcspWiringDto>, String> {
+    let model: ProgrammerModel = model.parse().map_err(|e: String| e)?;
+    Ok(minipro_core::icsp::icsp_wiring(model, icspClass).map(IcspWiringDto::from))
 }
 
 #[derive(Serialize)]
@@ -3079,6 +3124,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         pin_map: dev.pin_map,
         off_protect_before: dev.flags.off_protect_before,
         protect_after: dev.flags.protect_after,
+        icsp: dev.package_details.icsp,
     }
 }
 
