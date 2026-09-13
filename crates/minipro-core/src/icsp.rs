@@ -122,6 +122,69 @@ static SPI_NOR_T76: IcspWiring = IcspWiring {
     ],
 };
 
+// ── Class 0x05 — AT45DB DataFlash on TL866A/CS (SOIC-8 target) ───────────────
+//
+// NOTE: class 0x05 is family-dependent.  In the legacy INFOIC section
+// (TL866A/CS) it marks the `AT45DBxxx@ICSP` DataFlash entries; in INFOIC2PLUS
+// and INFOICT76 it marks SPI NAND (e.g. W25N-series) which uses the standard
+// 25-series SOIC-8 pinout.  The AT45DB pinout is entirely different:
+//   1 SI   2 SCK   3 /RESET   4 /CS   5 /WP   6 VCC   7 GND   8 SO
+// (AT45DB161D datasheet; the 6-pin header's signal roles are unchanged.)
+
+static AT45DB_6PIN: IcspWiring = IcspWiring {
+    title: "AT45DB DataFlash",
+    chip_labels: &["SI", "SCK", "/RESET", "/CS", "/WP", "VCC", "GND", "SO"],
+    wires: &[
+        IcspWire {
+            header_pin: 1,
+            signal: "/CS",
+            chip_pin: 4,
+        },
+        IcspWire {
+            header_pin: 2,
+            signal: "VCC",
+            chip_pin: 6,
+        },
+        IcspWire {
+            header_pin: 3,
+            signal: "GND",
+            chip_pin: 7,
+        },
+        IcspWire {
+            header_pin: 4,
+            signal: "MOSI",
+            chip_pin: 1,
+        },
+        IcspWire {
+            header_pin: 5,
+            signal: "MISO",
+            chip_pin: 8,
+        },
+        IcspWire {
+            header_pin: 6,
+            signal: "SCK",
+            chip_pin: 2,
+        },
+    ],
+    notes: &[
+        "/RESET (pin 3) and /WP (pin 5) are not driven — tie them to VCC on the target.",
+        "Chip pinout differs from 25-series SPI flash — do not mix up the wiring.",
+    ],
+};
+
+// ── Class 0x05 — SPI NAND on TL866II+/newer (SOIC-8 target) ──────────────────
+//
+// SPI NAND (W25N, GD5F, …) uses the standard 25-series SOIC-8 pinout, so the
+// wiring is identical to class 0x09 on the same header; only the title and
+// chip labels context differ.
+
+static SPI_NAND_6PIN: IcspWiring = IcspWiring {
+    title: "SPI NAND flash",
+    chip_labels: SPI_NOR_LABELS,
+    wires: SPI_NOR_6PIN.wires,
+    notes: SPI_NOR_6PIN.notes,
+};
+
 // ── Class 0x40 — eMMC ISP (T56, 1×8 header, partial) ─────────────────────────
 //
 // From the XGecu T56 guide ISP schematic the 8-pin header carries (pin 1 at
@@ -137,6 +200,10 @@ pub fn icsp_wiring(model: ProgrammerModel, class: u8) -> Option<&'static IcspWir
     match (model, class) {
         (ProgrammerModel::Tl866a | ProgrammerModel::Tl866iiPlus, 0x09) => Some(&SPI_NOR_6PIN),
         (ProgrammerModel::T76, 0x09) => Some(&SPI_NOR_T76),
+        // Class 0x05 means AT45DB DataFlash in the legacy TL866 DB, but
+        // SPI NAND (25-series pinout) in the newer databases.
+        (ProgrammerModel::Tl866a, 0x05) => Some(&AT45DB_6PIN),
+        (ProgrammerModel::Tl866iiPlus, 0x05) => Some(&SPI_NAND_6PIN),
         _ => None,
     }
 }
