@@ -145,6 +145,10 @@
   async function onSelect(name: string) {
     selectedName = name;
     selectedInfo = await invoke("select_device", { name });
+    // Mark as already synced so the $selectedDevice effect below does not
+    // overwrite searchQuery with the full device name — that would re-run
+    // the search and collapse the results list to just the selection.
+    lastSyncedDevice = name;
     selectedDevice.set(selectedInfo);
   }
 
