@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- *(nothing yet)*
+- **Device search results collapsed to just the selection** — selecting a device from the search results list overwrote the search field with the full device name and re-ran the search, hiding all other matches. Selections made inside DeviceSelector are now marked as already synced so the `$selectedDevice` → `searchQuery` sync effect only applies to external selections (e.g. IdentifyResults).
 
 ---
 
