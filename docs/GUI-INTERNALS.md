@@ -314,10 +314,15 @@ VCC selector, help button, and an "Identify unknown logic IC" link that
 calls `deselectDevice()` to return to identify mode.
 
 **DeviceSelector sync**: An `$effect` in `DeviceSelector.svelte` watches
-`$selectedDevice`. When the name doesn't match local `selectedName`
-(external selection), it syncs local state and sets `searchQuery` to the
-device name, triggering the debounced search so the device appears in the
-list with highlight and favorite controls.
+`$selectedDevice`. A `lastSyncedDevice` guard distinguishes external
+selections (e.g. IdentifyResults → `selectDevice()`): for those, the
+effect syncs local state and sets `searchQuery` to the device name,
+triggering the debounced search so the device appears in the list with
+highlight and favorite controls. Selections made inside the component via
+`onSelect` set `lastSyncedDevice` before publishing to the store, so the
+effect skips the `searchQuery` rewrite — otherwise the full device name
+would re-run the search and collapse the results list to just the
+selection.
 
 ### Logic test grid (GUI)
 

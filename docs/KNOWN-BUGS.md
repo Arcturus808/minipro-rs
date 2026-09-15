@@ -24,6 +24,22 @@ the warning is inline in the Settings panel only.
 the store is typed as `DeviceInfo | null`. Fixed by storing the full
 `DeviceInfo` object: `selectedDevice.set(selectedInfo)`.
 
+## DeviceSelector search results collapsed to just the selection (fixed)
+
+An `$effect` in `DeviceSelector.svelte` watches `$selectedDevice` and sets
+`searchQuery = dev.name` so devices selected *externally* (e.g. from
+IdentifyResults) appear highlighted in the list. But the effect also fired
+for selections made *inside* the component: `onSelect` →
+`selectedDevice.set()` → effect overwrote `searchQuery` with the full
+device name → the debounced re-search returned only that device,
+collapsing the results list.
+
+**Fix:** `onSelect` sets `lastSyncedDevice = name` before calling
+`selectedDevice.set()`, marking the selection as already synced so the
+effect skips the `searchQuery` rewrite. External selections still sync.
+Preserve the `lastSyncedDevice` guard — removing or reordering it
+reintroduces the bug.
+
 ## `do_write` called `erase_chip` before `begin_transaction`
 
 The handle had no active device, so the firmware returned "Protocol error:
