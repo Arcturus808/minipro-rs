@@ -61,7 +61,9 @@ export interface IcspWire {
 
 export interface IcspWiring {
   title: string;
-  /** Label per chip pin; index 0 is pin 1. */
+  /** False = generic MCU target; labels are signal names, not pin numbers. */
+  numbered: boolean;
+  /** Label per chip pin; index 0 is pin 1 (or signal row when !numbered). */
   chip_labels: string[];
   wires: IcspWire[];
   notes: string[];

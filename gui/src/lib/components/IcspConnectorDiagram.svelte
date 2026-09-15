@@ -293,14 +293,14 @@
             stroke-width="1"
             opacity={row.headerPins.length ? 0.7 : 0.3}
           />
-          <!-- Chip pin label: "1 /CS" -->
+          <!-- Chip pin label: "1 /CS", or just "/CS" for generic MCU targets -->
           <text
             x={W_CHIP_X + 10}
             y={cy + 4}
             font-size="11"
             fill="currentColor"
             opacity={row.headerPins.length ? 0.9 : 0.45}
-          ><tspan fill={LABEL_FILL} font-weight="bold">{row.chipPin}</tspan>  {row.label}</text>
+          >{#if wiring.numbered}<tspan fill={LABEL_FILL} font-weight="bold">{row.chipPin}</tspan>  {/if}{row.label}</text>
           {#if row.headerPins.length}
             <!-- Wire -->
             <line

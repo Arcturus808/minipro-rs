@@ -30,6 +30,12 @@ pub struct IcspWire {
 pub struct IcspWiring {
     /// Human-readable title, e.g. `"25-series SPI NOR"`.
     pub title: &'static str,
+    /// When true, `chip_labels[i]` is the label for physical chip pin `i + 1`
+    /// (fixed-pinout serial devices).  When false, the target is a generic
+    /// MCU whose pin positions vary by package — `chip_labels` are signal
+    /// names and `chip_pin` on a wire only selects a label row.  Callers
+    /// must not render the row index as a pin number.
+    pub numbered: bool,
     /// Label for each chip pin; index 0 is chip pin 1.  Pins with no wire are
     /// rendered as not-connected by callers.
     pub chip_labels: &'static [&'static str],
@@ -61,6 +67,7 @@ const SPI_NOR_LABELS: &[&str] = &[
 /// TL866A / TL866II+ 1×6 header: pin 1 at the /CS end.
 static SPI_NOR_6PIN: IcspWiring = IcspWiring {
     title: "25-series SPI NOR",
+    numbered: true,
     chip_labels: SPI_NOR_LABELS,
     wires: &[
         IcspWire {
@@ -103,6 +110,7 @@ static SPI_NOR_6PIN: IcspWiring = IcspWiring {
 /// T76 2×14 header: odd pins bottom row, even pins top row, pin 1 lower-left.
 static SPI_NOR_T76: IcspWiring = IcspWiring {
     title: "25-series SPI NOR",
+    numbered: true,
     chip_labels: SPI_NOR_LABELS,
     wires: &[
         IcspWire { header_pin: 14, signal: "/CS",       chip_pin: 1 },
@@ -133,6 +141,7 @@ static SPI_NOR_T76: IcspWiring = IcspWiring {
 
 static AT45DB_6PIN: IcspWiring = IcspWiring {
     title: "AT45DB DataFlash",
+    numbered: true,
     chip_labels: &["SI", "SCK", "/RESET", "/CS", "/WP", "VCC", "GND", "SO"],
     wires: &[
         IcspWire {
@@ -180,10 +189,180 @@ static AT45DB_6PIN: IcspWiring = IcspWiring {
 
 static SPI_NAND_6PIN: IcspWiring = IcspWiring {
     title: "SPI NAND flash",
+    numbered: true,
     chip_labels: SPI_NOR_LABELS,
     wires: SPI_NOR_6PIN.wires,
     notes: SPI_NOR_6PIN.notes,
 };
+
+// ── Class 0x01 — Atmel SPI ISP: AT89S, AT90S, ATmega (TL866A) ────────────────
+//
+// Verified against MiniPro ICP001.JPG (legacy TL866A/CS app img folder).
+// Header: 1=RST/nRST, 2=VCC, 3=GND, 4=MOSI, 5=MISO, 6=SCK.
+// Chip side is a generic MCU — pin positions vary by package:
+//   ATmega (PB5–7 variant): MOSI=PB5, MISO=PB6, SCK=PB7
+//   AT89S51/52:             MOSI=P1.5, MISO=P1.6, SCK=P1.7, RST=pin 9 (DIP-40)
+
+/// Shared 6-pin wiring for all AVR-style classes: the header always carries
+/// RST, VCC, GND, MOSI, MISO, SCK — only the chip-side port pins differ.
+static AVR_SPI_WIRES: &[IcspWire] = &[
+    IcspWire {
+        header_pin: 1,
+        signal: "/RST",
+        chip_pin: 2,
+    },
+    IcspWire {
+        header_pin: 2,
+        signal: "VCC",
+        chip_pin: 1,
+    },
+    IcspWire {
+        header_pin: 3,
+        signal: "GND",
+        chip_pin: 6,
+    },
+    IcspWire {
+        header_pin: 4,
+        signal: "MOSI",
+        chip_pin: 3,
+    },
+    IcspWire {
+        header_pin: 5,
+        signal: "MISO",
+        chip_pin: 4,
+    },
+    IcspWire {
+        header_pin: 6,
+        signal: "SCK",
+        chip_pin: 5,
+    },
+];
+
+const GENERIC_TARGET_NOTE: &str =
+    "Generic MCU target — connect by signal name; pin numbers vary by device and package.";
+
+static ATMEL_SPI_6PIN: IcspWiring = IcspWiring {
+    title: "Atmel SPI ISP (AT89S/AT90S/ATmega)",
+    numbered: false,
+    chip_labels: &[
+        "VCC",
+        "RST/nRST",
+        "MOSI (PB5/P1.5)",
+        "MISO (PB6/P1.6)",
+        "SCK (PB7/P1.7)",
+        "GND",
+    ],
+    wires: AVR_SPI_WIRES,
+    notes: &[
+        GENERIC_TARGET_NOTE,
+        "ATmega: MOSI=PB5, MISO=PB6, SCK=PB7 — AT89S: MOSI=P1.5, MISO=P1.6, SCK=P1.7.",
+    ],
+};
+
+// ── Class 0x02 — PIC ICSP, ICD2-compatible (TL866A) ──────────────────────────
+//
+// Verified against MiniPro ICP002.JPG and the community-documented TL866A
+// header pinout (microsin.net).  Header: 1=VPP/MCLR, 2=VCC, 3=GND, 4=PGD,
+// 5=PGC, 6=NC — same order as the Microchip ICD2 connector.
+
+static PIC_ICD2_6PIN: IcspWiring = IcspWiring {
+    title: "PIC ICSP (ICD2-compatible)",
+    numbered: false,
+    chip_labels: &["VDD", "VPP/MCLR", "PGD", "PGC", "VSS"],
+    wires: &[
+        IcspWire {
+            header_pin: 1,
+            signal: "VPP/MCLR",
+            chip_pin: 2,
+        },
+        IcspWire {
+            header_pin: 2,
+            signal: "VCC",
+            chip_pin: 1,
+        },
+        IcspWire {
+            header_pin: 3,
+            signal: "GND",
+            chip_pin: 5,
+        },
+        IcspWire {
+            header_pin: 4,
+            signal: "PGD",
+            chip_pin: 3,
+        },
+        IcspWire {
+            header_pin: 5,
+            signal: "PGC",
+            chip_pin: 4,
+        },
+    ],
+    notes: &[
+        GENERIC_TARGET_NOTE,
+        "Header pin 6 is not connected.",
+        "Low-voltage-programming parts may also need the LVP/PGM pin handled per the device datasheet.",
+    ],
+};
+
+// ── Classes 0x06/0x07/0x08 — AVR SPI variants (TL866A) ───────────────────────
+//
+// Verified against MiniPro ICP006/007/008.JPG.  The header map is identical
+// to class 0x01; the classes differ only in which chip port pins carry SPI:
+//   0x06: ATmega64/128 — MOSI=PE0, MISO=PE1, SCK=PB1
+//   0x07: "AVR SPI download 2" (ATmega8, AT90S) — MOSI=PB3, MISO=PB4, SCK=PB5
+//   0x08: "AVR SPI download 3" (ATmega8U2/16U2/32U2) — MOSI=PB2, MISO=PB3, SCK=PB1
+
+static ATMEGA64_SPI_6PIN: IcspWiring = IcspWiring {
+    title: "ATmega64/128 SPI ISP",
+    numbered: false,
+    chip_labels: &[
+        "VCC+AVCC",
+        "RST/nRST",
+        "MOSI (PE0)",
+        "MISO (PE1)",
+        "SCK (PB1)",
+        "GND",
+    ],
+    wires: AVR_SPI_WIRES,
+    notes: &[
+        GENERIC_TARGET_NOTE,
+        "ATmega64/128 route ISP data through PE0/PE1 — SCK stays on PB1.",
+        "AVCC must be powered alongside VCC.",
+    ],
+};
+
+static AVR_SPI_PB345_6PIN: IcspWiring = IcspWiring {
+    title: "AVR SPI ISP (PB3/4/5)",
+    numbered: false,
+    chip_labels: &[
+        "VCC",
+        "RST/nRST",
+        "MOSI (PB3)",
+        "MISO (PB4)",
+        "SCK (PB5)",
+        "GND",
+    ],
+    wires: AVR_SPI_WIRES,
+    notes: &[GENERIC_TARGET_NOTE],
+};
+
+static AVR_SPI_PB123_6PIN: IcspWiring = IcspWiring {
+    title: "AVR SPI ISP (PB1/2/3)",
+    numbered: false,
+    chip_labels: &[
+        "VCC",
+        "RST/nRST",
+        "MOSI (PB2)",
+        "MISO (PB3)",
+        "SCK (PB1)",
+        "GND",
+    ],
+    wires: AVR_SPI_WIRES,
+    notes: &[GENERIC_TARGET_NOTE],
+};
+
+// NOTE: legacy classes 0x03 (SyncMos SM39R/SM59R 2-wire) and 0x04 (SM59D
+// 3-wire) are documented in the MiniPro ICP003/004 images, but no device in
+// the current database references them — no table until a device needs it.
 
 // ── Class 0x40 — eMMC ISP (T56, 1×8 header, partial) ─────────────────────────
 //
@@ -204,6 +383,14 @@ pub fn icsp_wiring(model: ProgrammerModel, class: u8) -> Option<&'static IcspWir
         // SPI NAND (25-series pinout) in the newer databases.
         (ProgrammerModel::Tl866a, 0x05) => Some(&AT45DB_6PIN),
         (ProgrammerModel::Tl866iiPlus, 0x05) => Some(&SPI_NAND_6PIN),
+        // Legacy MiniPro ICP001/002/006/007/008 classes (TL866A 6-pin header).
+        // TL866II+ shares the physical header but its per-class signal muxing
+        // for these classes is not yet verified — keep it on the fallback path.
+        (ProgrammerModel::Tl866a, 0x01) => Some(&ATMEL_SPI_6PIN),
+        (ProgrammerModel::Tl866a, 0x02) => Some(&PIC_ICD2_6PIN),
+        (ProgrammerModel::Tl866a, 0x06) => Some(&ATMEGA64_SPI_6PIN),
+        (ProgrammerModel::Tl866a, 0x07) => Some(&AVR_SPI_PB345_6PIN),
+        (ProgrammerModel::Tl866a, 0x08) => Some(&AVR_SPI_PB123_6PIN),
         _ => None,
     }
 }

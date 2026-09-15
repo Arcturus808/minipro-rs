@@ -256,6 +256,8 @@ pub struct IcspWireDto {
 #[derive(Serialize)]
 pub struct IcspWiringDto {
     title: &'static str,
+    /// False = generic MCU target; labels are signal names, not pin numbers.
+    numbered: bool,
     chip_labels: Vec<&'static str>,
     wires: Vec<IcspWireDto>,
     notes: Vec<&'static str>,
@@ -265,6 +267,7 @@ impl From<&'static minipro_core::icsp::IcspWiring> for IcspWiringDto {
     fn from(w: &'static minipro_core::icsp::IcspWiring) -> Self {
         Self {
             title: w.title,
+            numbered: w.numbered,
             chip_labels: w.chip_labels.to_vec(),
             wires: w
                 .wires

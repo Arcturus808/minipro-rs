@@ -1186,7 +1186,8 @@ fn print_device_info(dev: &minipro_core::Device, model: Option<ProgrammerModel>)
     }
 }
 
-/// Render an ASCII wiring table: header pin → signal → chip pin.
+/// Render an ASCII wiring table: header pin → signal → chip pin (or signal
+/// name for generic MCU targets where `numbered` is false).
 fn print_icsp_wiring(model: ProgrammerModel, w: &minipro_core::icsp::IcspWiring) {
     println!("ICSP wiring ({model}) — {}:", w.title);
     for wire in w.wires {
@@ -1195,10 +1196,17 @@ fn print_icsp_wiring(model: ProgrammerModel, w: &minipro_core::icsp::IcspWiring)
             .get(wire.chip_pin as usize - 1)
             .copied()
             .unwrap_or("");
-        println!(
-            "  header pin {:>2}  {:<10} → chip pin {:>2}  {}",
-            wire.header_pin, wire.signal, wire.chip_pin, label
-        );
+        if w.numbered {
+            println!(
+                "  header pin {:>2}  {:<10} → chip pin {:>2}  {}",
+                wire.header_pin, wire.signal, wire.chip_pin, label
+            );
+        } else {
+            println!(
+                "  header pin {:>2}  {:<10} → {}",
+                wire.header_pin, wire.signal, label
+            );
+        }
     }
     for note in w.notes {
         println!("  note: {note}");

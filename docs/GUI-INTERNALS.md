@@ -244,8 +244,11 @@ missing table.
 
 - `icsp::icsp_wiring(model, class)` → `Option<&'static IcspWiring>`;
   `None` means unverified — callers must not guess.
-- `IcspWiring` = `{ title, chip_labels, wires, notes }`. `chip_labels`
-  is indexed by chip pin − 1 so unconnected pins still render (dimmed).
+- `IcspWiring` = `{ title, numbered, chip_labels, wires, notes }`.
+  `chip_labels` is indexed by chip pin − 1 so unconnected pins still
+  render (dimmed). When `numbered` is false the target is a generic MCU
+  whose pin positions vary by package — labels are signal names and the
+  row index is not a pin number (GUI hides it; CLI omits "chip pin N").
 - `DeviceInfoDto.icsp` carries the raw class byte; the stateless
   `get_icsp_wiring(model, icspClass)` command resolves the table. The
   component fetches in an `$effect` keyed on `$programmer.model` +
@@ -262,6 +265,15 @@ bullet warnings under the SVG.
 add a `static` table in `icsp.rs` and a match arm. Never ship a
 pinout from a class-number guess — a wrong VCC/VPP line can damage
 hardware.
+
+**Verified tables so far** (all on the TL866A/II+ 1×6 header unless
+noted): 0x09 SPI NOR (also T76 2×14), 0x05 AT45DB (TL866A) and SPI NAND
+(TL866II+), 0x01 Atmel SPI ISP, 0x02 PIC ICSP (ICD2-compatible:
+1=VPP/MCLR 2=VCC 3=GND 4=PGD 5=PGC 6=NC), 0x06/0x07/0x08 AVR SPI port
+variants. The MCU classes are `numbered: false` generic-signal targets
+sourced from the legacy MiniPro `ICP001`–`ICP008` reference images.
+Still unverified (fallback): 0x0a Microwire, 0x0b I²C, 0x40 eMMC, and
+every class on T48/T56/T76 headers.
 
 ### Logic IC tab gating (GUI)
 
