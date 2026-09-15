@@ -19,6 +19,12 @@ history live in `docs/` — see "Feature internals" at the bottom.
 - **Code changed? Verify locally before committing:**
   `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
   `cargo test --all --locked`.
+- **Keep docs & changelog in sync with the change:**
+  - User-facing change (fix, feature, behavior)? Add a `CHANGELOG.md`
+    `[Unreleased]` entry under Added/Changed/Fixed.
+  - Internals or subtle fix? Update the relevant `docs/*-INTERNALS.md`;
+    record non-obvious fixes in `docs/KNOWN-BUGS.md` so the behavior isn't
+    regressed later.
 
 ## Tech Stack
 
