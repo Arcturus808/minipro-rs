@@ -266,14 +266,25 @@ add a `static` table in `icsp.rs` and a match arm. Never ship a
 pinout from a class-number guess — a wrong VCC/VPP line can damage
 hardware.
 
-**Verified tables so far** (all on the TL866A/II+ 1×6 header unless
-noted): 0x09 SPI NOR (also T76 2×14), 0x05 AT45DB (TL866A) and SPI NAND
-(TL866II+), 0x01 Atmel SPI ISP, 0x02 PIC ICSP (ICD2-compatible:
-1=VPP/MCLR 2=VCC 3=GND 4=PGD 5=PGC 6=NC), 0x06/0x07/0x08 AVR SPI port
-variants. The MCU classes are `numbered: false` generic-signal targets
-sourced from the legacy MiniPro `ICP001`–`ICP008` reference images.
-Still unverified (fallback): 0x0a Microwire, 0x0b I²C, 0x40 eMMC, and
-every class on T48/T56/T76 headers.
+**Verified tables so far**, per programmer header:
+
+- TL866A + TL866II+ (1×6, identical pinout): 0x01 Atmel SPI, 0x02 PIC
+  (ICD2), 0x06/0x07/0x08 AVR variants, 0x09 SPI NOR; plus TL866A-only
+  0x05 AT45DB, and II+-only 0x05 SPI NAND, 0x0a Microwire, 0x0b I²C,
+  0x0c KB90xx.
+- T48 (2×8 zigzag): 0x01/0x02/0x06–0x09, 0x0a, 0x0b, 0x0c (VCC = pin 13,
+  GND = pin 16; 0x40 eMMC uses an external driver board — stays on
+  fallback).
+- T56 (1×8): all of the above plus 0x0e AT17LV and 0x40 eMMC (direct
+  8-pin wiring).
+- T76 (2×14 zigzag): all of the above plus 0x0e and full 8-bit 0x40
+  eMMC (VCC = pins 20/22/24, GND = 11/21/26/28, SGND = 1/15/27).
+
+Sources: legacy MiniPro `ICP001`–`ICP008` (TL866A) and the Xgpro V13.17
+`img/` set (`ICPnnn` = TL866II+, `T48ICPnnn`/`T56ICPnnn`/`T76ICPnnn` per
+model). The MCU classes are `numbered: false` generic-signal targets.
+Still unverified (fallback): 0x03/0x04 SyncMos (no DB devices reference
+them) and T48 0x0e/0x40 (adapter-board based, not a direct pinout).
 
 ### Logic IC tab gating (GUI)
 
