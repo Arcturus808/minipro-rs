@@ -261,6 +261,27 @@ fixed x), chip pin rows on the right in pin order, horizontal wires —
 no crossings. Unconnected chip pins render dimmed. `notes` render as
 bullet warnings under the SVG.
 
+**Panel behavior:** the header is a collapse toggle (state persisted in
+`localStorage["minipro_icsp_collapsed"]`); expanded content is capped at
+420 px and scrolls in both axes so tall tables (T76 eMMC) can't starve
+the terminal log. SVGs render at natural pixel size (no `w-full`
+scaling — that made labels unreadable) inside an `align-items:
+safe center` flex container, so wide diagrams scroll from the left edge
+instead of clipping both sides. Zigzag headers (T48/T76) use compact
+geometry (18 px pads) to fit the default sidebar width. The pin-1 dot
+sits above pin 1 on linear headers and below pin 1 on zigzag headers
+(odd pins are the bottom row); it is suppressed on `numbered: false`
+targets where it would imply a nonexistent physical pin 1. Pin numbers
+render in the same indigo on both diagrams (`LABEL_FILL`); numbered chip
+labels get a bold indigo pin number + `dx="7"` gap before the signal
+name. Text opacity convention: notes and actionable fallbacks at 80%,
+pure placeholders at 50–60%.
+
+**Testing without hardware:** `MINIPRO_FAKE_PROGRAMMER=<MODEL>` (see
+AGENTS.md) makes `get_programmer_info`/`force_reconnect` return a
+synthetic programmer — device search, device info, and both diagram
+panels work with no USB device attached.
+
 **Adding a new class:** verify against official docs or hardware, then
 add a `static` table in `icsp.rs` and a match arm. Never ship a
 pinout from a class-number guess — a wrong VCC/VPP line can damage

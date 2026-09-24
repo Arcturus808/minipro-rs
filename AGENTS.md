@@ -52,7 +52,9 @@ bumps — the GUI version badge reads `gui/package.json` at Vite build time.
 
 **Fast iteration (UI work with a real backend):** `cd gui && cargo tauri dev`
 — vite dev server + debug Rust backend. Svelte/CSS/TS changes hot-reload
-instantly AND Tauri commands work; Rust edits rebuild and relaunch.
+instantly AND Tauri commands work; `src-tauri` edits rebuild and relaunch.
+**Caveat:** only `gui/src-tauri` is watched — changes in `crates/` (e.g.
+`icsp.rs` wiring tables) require restarting `cargo tauri dev`.
 (`npm run dev` alone serves only the frontend — `invoke()` calls fail.)
 
 **Testing without hardware:** set `MINIPRO_FAKE_PROGRAMMER` to a model name
