@@ -401,6 +401,26 @@ Templates use a reactive `$derived` Set (`favNames`) for O(1) lookups
 instead of calling `isFavorite()` directly (which uses `get()` and isn't
 reactive).
 
+### Favorites vs. programmer-model device lists
+
+Favorite names are not portable across `infoic.xml` database sections: the
+TL866A section has bare names (`PIC16F628A`) while the T76 section only has
+package-qualified names (`PIC16F628A@DIP18`). A favorite saved under one
+model can therefore fail `select_device` under another.
+
+`DeviceSelector` calls `check_favorite_devices` whenever `$favorites` or
+`$programmer` changes. The command does a single-pass
+`list_devices_by_model()` scan of the database and returns, per name: which
+models' lists contain it, whether it resolves for the connected model, and
+same-base-name entries in that model's list. Unavailable favorites render
+dimmed with a warning badge (tooltip lists the models that do have it).
+Clicking one never hits `select_device` directly:
+
+- 1 same-base match → auto-selects it with a notice ("selected X instead").
+- N matches → populates the search box with the base name so results show
+  the equivalents.
+- 0 matches → notice explaining which models' lists contain the name.
+
 ### Config panel state (`$effect.pre`)
 
 `configData` in `App.svelte` is initialized via `$effect.pre` (not `$effect`)

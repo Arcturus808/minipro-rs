@@ -14,6 +14,16 @@
     matches: SearchResult[];
   }
 
+  // Per-favorite availability for the connected programmer's device list.
+  interface FavoriteStatus {
+    name: string;
+    available: boolean;
+    models: string[];
+    matches: string[];
+  }
+  let favStatus = $state<Record<string, FavoriteStatus>>({});
+  let favNotice = $state<string | null>(null);
+
   let searchQuery = $state("");
   let results = $state<SearchResult[]>([]);
   let page = $state(0);
@@ -60,6 +70,80 @@
 
   // Reactive set of favorite names for O(1) lookup in templates.
   let favNames = $derived(new Set($favorites.map((f) => f.name)));
+
+  // Favorite names are not portable across database sections — a name saved
+  // under TL866A may not exist in the T76 section. Re-check favorites against
+  // all models' device lists whenever favorites or the programmer change.
+  $effect(() => {
+    const favs = $favorites;
+    void $programmer; // dependency: re-check on model change
+    if (favs.length === 0) {
+      favStatus = {};
+      return;
+    }
+    let cancelled = false;
+    invoke<FavoriteStatus[]>("check_favorite_devices", {
+      names: favs.map((f) => f.name),
+    })
+      .then((list) => {
+        if (cancelled) return;
+        const map: Record<string, FavoriteStatus> = {};
+        for (const s of list) map[s.name] = s;
+        favStatus = map;
+      })
+      .catch(() => {
+        if (!cancelled) favStatus = {};
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // Strip a package/variant suffix, mirroring the backend's device_base_name.
+  function deviceBaseName(name: string): string {
+    return name.split(/[@(]/)[0].trimEnd();
+  }
+
+  function favTooltip(name: string): string {
+    const st = favStatus[name];
+    if (!st || st.available) return "";
+    const cur = $programmer?.model;
+    const where = st.models.length
+      ? `Only on ${st.models.join(", ")}`
+      : "Not found in the device database";
+    if (cur && st.matches.length > 0) {
+      return `${where} — click for ${cur} equivalents`;
+    }
+    return where;
+  }
+
+  // Row click: available names select normally; unavailable favorites get a
+  // base-name resolution instead of a silent select_device failure.
+  function onRowClick(name: string) {
+    const st = favStatus[name];
+    if (st && !st.available) {
+      const cur = $programmer?.model ?? "connected programmer";
+      if (st.matches.length === 1) {
+        // Unique same-base-name entry — select it directly.
+        favNotice = `'${name}' isn't in the ${cur} device list — selected '${st.matches[0]}' instead.`;
+        onSelect(st.matches[0]);
+      } else if (st.matches.length > 1) {
+        favNotice = `'${name}' isn't in the ${cur} device list — showing ${st.matches.length} same-family entries.`;
+        searchQuery = deviceBaseName(name);
+      } else {
+        favNotice = st.models.length
+          ? `'${name}' exists only in the ${st.models.join("/")} device list — no ${cur} equivalent found.`
+          : `'${name}' was not found in the device database.`;
+      }
+      return;
+    }
+    if (selectedName === name) {
+      onDeselect();
+    } else {
+      favNotice = null;
+      onSelect(name);
+    }
+  }
 
   async function doSearch(query: string) {
     const trimmed = query.trim();
@@ -199,6 +283,7 @@
       placeholder="Search devices..."
       class="w-full rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-surface-950-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
       onkeydown={(e) => { if (e.key === 'Enter') onSearch(); }}
+      oninput={() => favNotice = null}
     />
     {#if autodetectSupported}
       <div class="flex items-center gap-2 mt-2">
@@ -257,12 +342,14 @@
     {/if}
 
     {#snippet starRow(name: string, manufacturer?: string)}
+      {@const st = favStatus[name]}
+      {@const unavailable = st !== undefined && !st.available}
       <div
         class={`w-full text-left py-2 px-3 transition-colors flex items-center gap-2 ${selectedName === name ? 'bg-primary-500/10 border-l-4 border-primary-500' : 'hover:bg-surface-200-800 border-l-4 border-transparent'}`}
         role="button"
         tabindex="0"
-        onclick={() => selectedName === name ? onDeselect() : onSelect(name)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedName === name ? onDeselect() : onSelect(name); } }}
+        onclick={() => onRowClick(name)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(name); } }}
       >
         <button
           class="shrink-0 rounded p-0.5 hover:bg-surface-200-800"
@@ -287,9 +374,20 @@
             />
           </svg>
         </button>
-        <span class={`text-sm flex-1 ${selectedName === name ? 'font-semibold' : ''}`}>{name}</span>
+        <span class={`text-sm flex-1 ${selectedName === name ? 'font-semibold' : ''} ${unavailable ? 'opacity-60' : ''}`}>{name}</span>
+        {#if unavailable}
+          <span
+            class="shrink-0 text-warning-500-400"
+            title={favTooltip(name)}
+            aria-label={favTooltip(name)}
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </span>
+        {/if}
         {#if manufacturer}
-          <span class="text-xs opacity-60 truncate max-w-[120px]">{manufacturer}</span>
+          <span class={`text-xs opacity-60 truncate max-w-[120px] ${unavailable ? 'opacity-40' : ''}`}>{manufacturer}</span>
         {/if}
       </div>
     {/snippet}
@@ -314,6 +412,10 @@
           </ul>
         {/if}
       </div>
+    {/if}
+
+    {#if favNotice}
+      <p class="text-xs text-warning-500-400 px-1 mb-2">{favNotice}</p>
     {/if}
 
     {#if results.length === 0}

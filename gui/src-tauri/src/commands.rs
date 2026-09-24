@@ -9,7 +9,10 @@ use std::sync::Arc;
 
 use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
-    database::{find_device, find_device_any, get_pin_map, DatabasePaths},
+    database::{
+        find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths,
+        DeviceListItem,
+    },
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
         blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find,
@@ -933,6 +936,125 @@ pub async fn search_devices(
             manufacturer: item.manufacturer,
         })
         .collect())
+}
+
+/// Availability of a favorited device name for the connected programmer.
+#[derive(Serialize)]
+pub struct FavoriteStatusDto {
+    /// The stored favorite name.
+    name: String,
+    /// True when the name resolves for the connected programmer (or for any
+    /// programmer when none is connected).
+    available: bool,
+    /// Programmer models whose device list contains this exact name.
+    models: Vec<String>,
+    /// Same-base-name entries in the connected model's device list — e.g.
+    /// "PIC16F628A@DIP18" for a "PIC16F628A" favorite while a T76 is
+    /// connected.  Empty when the name is already available.
+    matches: Vec<String>,
+}
+
+/// Strip a package/variant suffix: "PIC16F628A@DIP18" → "PIC16F628A",
+/// "93C46(x16)" → "93C46".
+fn device_base_name(name: &str) -> &str {
+    let end = name.find(['@', '(']).unwrap_or(name.len());
+    name[..end].trim_end()
+}
+
+/// Check favorite names against every programmer model's device list.
+///
+/// Device names are not portable across database sections (e.g. the TL866A
+/// section has bare "PIC16F628A" while T76 only has "PIC16F628A@DIP18"), so
+/// a favorite saved under one model may not resolve under another.  The GUI
+/// uses this to flag such entries and suggest same-family equivalents.
+#[tauri::command]
+pub async fn check_favorite_devices(
+    names: Vec<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<FavoriteStatusDto>, String> {
+    if names.is_empty() {
+        return Ok(vec![]);
+    }
+    let db = get_db_paths(&state)?;
+    let model = {
+        let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
+
+    tokio::task::spawn_blocking(move || {
+        const ALL_MODELS: [ProgrammerModel; 6] = [
+            ProgrammerModel::Tl866a,
+            ProgrammerModel::Tl866cs,
+            ProgrammerModel::Tl866iiPlus,
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ];
+        let by_model = list_devices_by_model(&db).map_err(|e| e.to_string())?;
+        let sets: std::collections::HashMap<ProgrammerModel, std::collections::HashSet<String>> =
+            by_model
+                .iter()
+                .map(|(m, items)| (*m, items.iter().map(|i| i.name.to_lowercase()).collect()))
+                .collect();
+
+        // With no programmer connected, matches come from the union of all
+        // sections (same name space as find_device_any / the unfiltered list).
+        let merged: Vec<&DeviceListItem> = if model.is_none() {
+            let mut seen = std::collections::HashSet::new();
+            let mut v = Vec::new();
+            for m in ALL_MODELS {
+                for item in &by_model[&m] {
+                    if seen.insert(item.name.to_lowercase()) {
+                        v.push(item);
+                    }
+                }
+            }
+            v
+        } else {
+            Vec::new()
+        };
+
+        let out = names
+            .iter()
+            .map(|name| {
+                let lc = name.to_lowercase();
+                let containing: Vec<String> = ALL_MODELS
+                    .iter()
+                    .filter(|m| sets[m].contains(&lc))
+                    .map(|m| m.to_string())
+                    .collect();
+                let available = match model {
+                    Some(m) => sets[&m].contains(&lc),
+                    None => !containing.is_empty(),
+                };
+                let matches = if available {
+                    Vec::new()
+                } else {
+                    let base = device_base_name(name);
+                    let pool: Vec<&DeviceListItem> = match model {
+                        Some(m) => by_model[&m].iter().collect(),
+                        None => merged.clone(),
+                    };
+                    pool.iter()
+                        .filter(|i| {
+                            !i.name.eq_ignore_ascii_case(name)
+                                && device_base_name(&i.name).eq_ignore_ascii_case(base)
+                        })
+                        .map(|i| i.name.clone())
+                        .collect()
+                };
+                FavoriteStatusDto {
+                    name: name.clone(),
+                    available,
+                    models: containing,
+                    matches,
+                }
+            })
+            .collect();
+        Ok::<Vec<FavoriteStatusDto>, String>(out)
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
 }
 
 /// Get detailed info for a single device (no programmer required).

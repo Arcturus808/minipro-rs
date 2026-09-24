@@ -306,6 +306,115 @@ pub fn list_devices_for_model(
     Ok(items)
 }
 
+/// List device names grouped by programmer model in a single XML pass.
+///
+/// Logic ICs (from `logicic.xml`) are shared across all models and appear in
+/// every list. `infoic.xml` devices are grouped by `<database type>` section
+/// and `pin_map` model flags, matching `list_devices_for_model`.
+///
+/// Used to determine which models' device lists contain a given name — e.g.
+/// favorites saved while a different programmer was connected.
+pub fn list_devices_by_model(
+    paths: &DatabasePaths,
+) -> Result<HashMap<ProgrammerModel, Vec<DeviceListItem>>> {
+    use ProgrammerModel::*;
+    const ALL: [ProgrammerModel; 6] = [Tl866a, Tl866cs, Tl866iiPlus, T48, T56, T76];
+
+    let mut out: HashMap<ProgrammerModel, Vec<DeviceListItem>> =
+        ALL.iter().map(|m| (*m, Vec::new())).collect();
+    let mut seen: HashMap<ProgrammerModel, std::collections::HashSet<String>> = ALL
+        .iter()
+        .map(|m| (*m, std::collections::HashSet::new()))
+        .collect();
+
+    // Logic ICs are shared — every model gets them.
+    let mut logic_names = Vec::new();
+    let mut logic_seen = std::collections::HashSet::new();
+    collect_names(&paths.logicic, None, &mut logic_names, &mut logic_seen)?;
+    for m in ALL {
+        let entry = seen.get_mut(&m).unwrap();
+        for item in &logic_names {
+            if entry.insert(item.name.to_ascii_lowercase()) {
+                out.get_mut(&m).unwrap().push(item.clone());
+            }
+        }
+    }
+
+    let xml = read_file(&paths.infoic)?;
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    // Which models the current <database type="…"> section belongs to.
+    let mut section_models: &[ProgrammerModel] = &[];
+    let mut skip_section = false;
+    let mut current_manufacturer = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = e.name();
+                let tag = tag.as_ref();
+
+                if tag == b"database" {
+                    section_models = match get_attr_str(e, b"type") {
+                        Some(t) if t.eq_ignore_ascii_case(DB_ATTR_INFOIC) => &[Tl866a, Tl866cs],
+                        Some(t) if t.eq_ignore_ascii_case(DB_ATTR_INFOICT76) => &[T76],
+                        Some(t) if t.eq_ignore_ascii_case(DB_ATTR_INFOIC2) => {
+                            &[Tl866iiPlus, T48, T56]
+                        }
+                        _ => &[],
+                    };
+                    continue;
+                }
+
+                if tag == b"manufacturer" {
+                    current_manufacturer = get_attr_str(e, b"name").unwrap_or_default();
+                    continue;
+                }
+
+                if tag == b"configurations" {
+                    skip_section = true;
+                    continue;
+                }
+
+                if tag == b"ic" && !skip_section && !section_models.is_empty() {
+                    if let Some(raw_name) = get_attr_str(e, b"name") {
+                        for m in section_models {
+                            // pin_map flags only discriminate within INFOIC2PLUS;
+                            // for other models it always returns true.
+                            if !device_matches_model(e, *m) {
+                                continue;
+                            }
+                            let entry = seen.get_mut(m).unwrap();
+                            for part in raw_name.split(',') {
+                                let part = part.trim();
+                                if entry.insert(part.to_ascii_lowercase()) {
+                                    out.get_mut(m).unwrap().push(DeviceListItem {
+                                        name: part.to_string(),
+                                        manufacturer: current_manufacturer.clone(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"configurations" {
+                    skip_section = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(MiniproError::Xml(e.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Ok(out)
+}
+
 /// Find a device by name, trying all programmer models.
 ///
 /// Tries TL866II+, T48, T56, T76, TL866A, TL866CS in order and returns
@@ -1726,5 +1835,100 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "PM25LV010");
         assert_eq!(matches[0].manufacturer, "ISSI");
+    }
+
+    // ── list_devices_by_model tests ────────────────────────────────────────
+
+    const INFOIC_MODELS_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<infoic>
+  <database type="INFOIC">
+    <manufacturer name="Microchip">
+      <ic name="PIC16F628A" type="0" protocol_id="1" variant="0"
+         package_details="0x12000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+  <database type="INFOIC2PLUS">
+    <manufacturer name="Microchip">
+      <ic name="PIC16F628A@DIP18,PIC16F628A@SOIC18" type="0" protocol_id="1"
+         variant="0" pin_map="0x60000000"
+         package_details="0x12000000" voltages="0x0" />
+      <ic name="PIC16F877A@DIP40" type="0" protocol_id="1" variant="0"
+         pin_map="0x20000000" package_details="0x28000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+  <database type="INFOICT76">
+    <manufacturer name="Microchip">
+      <ic name="PIC16F628A@DIP18,PIC16F628A@SOIC18,PIC16F628A@SSOP20"
+         type="0" protocol_id="1" variant="0"
+         package_details="0x12000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+</infoic>
+"#;
+
+    fn models_fixture_paths() -> DatabasePaths {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!(
+            "minipro-rs-models-test-{}-{}",
+            std::process::id(),
+            id
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let infoic = dir.join("infoic.xml");
+        std::fs::write(&infoic, INFOIC_MODELS_FIXTURE).unwrap();
+        let logicic = dir.join("logicic.xml");
+        std::fs::write(&logicic, LOGICIC_FIXTURE).unwrap();
+        DatabasePaths {
+            infoic,
+            logicic,
+            algorithms: None,
+        }
+    }
+
+    #[test]
+    fn test_list_devices_by_model() {
+        let paths = models_fixture_paths();
+        let by_model = list_devices_by_model(&paths).unwrap();
+        let names = |m: ProgrammerModel| -> std::collections::HashSet<String> {
+            by_model[&m].iter().map(|i| i.name.clone()).collect()
+        };
+
+        // INFOIC section — bare name under TL866A and TL866CS only.
+        let a = names(ProgrammerModel::Tl866a);
+        assert!(a.contains("PIC16F628A"));
+        assert!(!a.contains("PIC16F628A@DIP18"));
+        assert_eq!(names(ProgrammerModel::Tl866cs), a);
+
+        // INFOICT76 — comma-joined aliases each become a name.
+        let t76 = names(ProgrammerModel::T76);
+        assert!(t76.contains("PIC16F628A@DIP18"));
+        assert!(t76.contains("PIC16F628A@SOIC18"));
+        assert!(t76.contains("PIC16F628A@SSOP20"));
+        assert!(!t76.contains("PIC16F628A"));
+
+        // INFOIC2PLUS pin_map flags — 0x60000000 = TL866II+|T48 (not T56),
+        // 0x20000000 = TL866II+ only.
+        let ii = names(ProgrammerModel::Tl866iiPlus);
+        let t48 = names(ProgrammerModel::T48);
+        let t56 = names(ProgrammerModel::T56);
+        assert!(ii.contains("PIC16F628A@DIP18"));
+        assert!(t48.contains("PIC16F628A@DIP18"));
+        assert!(!t56.contains("PIC16F628A@DIP18"));
+        assert!(ii.contains("PIC16F877A@DIP40"));
+        assert!(!t48.contains("PIC16F877A@DIP40"));
+
+        // Logic ICs are shared — present under every model.
+        for m in [
+            ProgrammerModel::Tl866a,
+            ProgrammerModel::Tl866cs,
+            ProgrammerModel::Tl866iiPlus,
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ] {
+            assert!(names(m).contains("74HC00"), "74HC00 missing for {m}");
+        }
     }
 }
