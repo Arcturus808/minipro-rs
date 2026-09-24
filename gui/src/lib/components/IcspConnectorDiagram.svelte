@@ -29,18 +29,25 @@
   // ── SVG geometry ──────────────────────────────────────────────────────────
   const PIN_SIZE = 24;       // pin pad size (square)
   const PIN_GAP = 5;         // gap between pins
-  const ROW_GAP = 10;        // gap between rows (zigzag)
   const PAD = 18;            // padding around connector body
-  const LABEL_FONT = 11;     // pin number label font size
+  const LABEL_FONT = 13;     // pin number label font size
+
+  // Compact geometry for 2×N zigzag headers (T48/T76) — a 28-pin header at
+  // the linear scale would be ~440px wide, wider than the sidebar.
+  const Z_PAD = 10;
+  const Z_PIN = 18;
+  const Z_GAP = 3;
+  const Z_RGAP = 6;
+  const Z_FONT = 11;
 
   // Wiring diagram geometry
   const W_ROW_H = 26;        // height per chip-pin row
-  const W_PIN_SQ = 15;       // header pin-number square
+  const W_PIN_SQ = 18;       // header pin-number square
   const W_PIN_GAP = 3;
-  const W_CHIP_X = 205;      // chip body left edge
-  const W_CHIP_W = 120;
+  const W_CHIP_X = 170;      // chip body left edge
+  const W_CHIP_W = 145;
   const W_STUB = 8;          // chip pin stub length
-  const W_GRP_END = 185;     // right edge of header-pin groups
+  const W_GRP_END = 150;     // right edge of header-pin groups
   const W_TOP = 10;
 
   let layout = $derived(
@@ -102,7 +109,7 @@
   );
 
   let wireSvgH = $derived(wireRows.length * W_ROW_H + W_TOP * 2);
-  const WIRE_SVG_W = 345;
+  const WIRE_SVG_W = 335;
 
   // ── Linear layout geometry (1×N header) ───────────────────────────────────
   let linearWidth = $derived(
@@ -115,11 +122,11 @@
   // ── Zigzag layout geometry (2×N IDC header) ───────────────────────────────
   let zigzagWidth = $derived(
     layout && layout.kind === "zigzag"
-      ? PAD * 2 + layout.cols * (PIN_SIZE + PIN_GAP) - PIN_GAP
+      ? Z_PAD * 2 + layout.cols * (Z_PIN + Z_GAP) - Z_GAP
       : 0
   );
   let zigzagHeight = $derived(
-    PAD * 2 + 2 * PIN_SIZE + ROW_GAP + LABEL_FONT + 4
+    Z_PAD * 2 + 2 * Z_PIN + Z_RGAP + Z_FONT + 4
   );
 
   // SVG dimensions
@@ -134,10 +141,29 @@
   const LABEL_FILL = "rgb(99, 102, 241)";
   const BODY_FILL = "var(--bg-color, #f5f5f5)";
   const WIRE_STROKE = "rgb(99, 102, 241)";
+
+  // Panel collapse state — persisted to localStorage (tall diagrams like
+  // T76 eMMC would otherwise shrink the terminal log to one row).
+  const COLLAPSED_KEY = "minipro_icsp_collapsed";
+  let collapsed = $state(localStorage.getItem(COLLAPSED_KEY) === "true");
+  $effect(() => {
+    localStorage.setItem(COLLAPSED_KEY, String(collapsed));
+  });
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
-  <h3 class="text-sm font-semibold mb-1 self-start">ICSP Connector</h3>
+  <button
+    class="w-full flex items-center gap-1 text-sm font-semibold mb-1 hover:opacity-80 transition-opacity"
+    onclick={() => (collapsed = !collapsed)}
+    aria-expanded={!collapsed}
+  >
+    <svg class="h-3 w-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style={collapsed ? '' : 'transform: rotate(90deg)'}>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+    ICSP Connector
+  </button>
+  {#if !collapsed}
+  <div class="w-full max-h-[420px] overflow-auto flex flex-col" style="align-items: safe center;">
   {#if !$programmer}
     <p class="text-sm opacity-50 py-4">Connect a programmer to see ICSP pinout.</p>
   {:else if isTL866CS}
@@ -152,8 +178,7 @@
     {@const pins = layout.pins}
     <svg
       viewBox="0 0 {svgW} {svgH}"
-      class="w-full max-w-[280px]"
-      style="height: {svgH}px;"
+      style="width: {svgW}px; height: {svgH}px; flex-shrink: 0;"
     >
       <!-- Connector body -->
       <rect
@@ -200,36 +225,35 @@
     {@const cols = layout.cols}
     <svg
       viewBox="0 0 {svgW} {svgH}"
-      class="w-full max-w-[280px]"
-      style="height: {svgH}px;"
+      style="width: {svgW}px; height: {svgH}px; flex-shrink: 0;"
     >
       <!-- Connector body -->
       <rect
-        x="{PAD - 4}"
-        y="{PAD - 4}"
-        width="{zigzagWidth - 2 * (PAD - 4)}"
-        height="{2 * PIN_SIZE + ROW_GAP + 8}"
+        x="{Z_PAD - 4}"
+        y="{Z_PAD - 4}"
+        width="{zigzagWidth - 2 * (Z_PAD - 4)}"
+        height="{2 * Z_PIN + Z_RGAP + 8}"
         rx="3"
         fill={BODY_FILL}
         stroke="currentColor"
         stroke-width="1.5"
         opacity="0.7"
       />
-      <!-- Pin 1 indicator (dot above pin 1, bottom-left) -->
-      <circle cx={PAD + PIN_SIZE / 2} cy={PAD - 8} r="2.5"
+      <!-- Pin 1 indicator (dot below pin 1, bottom-left) -->
+      <circle cx={Z_PAD + Z_PIN / 2} cy={Z_PAD + 2 * Z_PIN + Z_RGAP + 10} r="2.5"
         fill={LABEL_FILL} />
       <!-- Pins: odd pins bottom row, even pins top row -->
       {#each Array.from({ length: cols * 2 }, (_, i) => i) as i}
         {@const col = Math.floor(i / 2)}
         {@const isOdd = i % 2 === 0}  // i=0 → pin 1 (odd, bottom), i=1 → pin 2 (even, top)
         {@const pinNum = i + 1}
-        {@const x = PAD + col * (PIN_SIZE + PIN_GAP)}
-        {@const y = isOdd ? PAD + PIN_SIZE + ROW_GAP : PAD}
+        {@const x = Z_PAD + col * (Z_PIN + Z_GAP)}
+        {@const y = isOdd ? Z_PAD + Z_PIN + Z_RGAP : Z_PAD}
         <rect
           x={x}
           y={y}
-          width={PIN_SIZE}
-          height={PIN_SIZE}
+          width={Z_PIN}
+          height={Z_PIN}
           rx="1"
           fill="black"
           fill-opacity="0.12"
@@ -238,9 +262,9 @@
           opacity="0.6"
         />
         <text
-          x={x + PIN_SIZE / 2}
-          y={y + PIN_SIZE / 2 + LABEL_FONT / 2 - 1}
-          font-size={LABEL_FONT}
+          x={x + Z_PIN / 2}
+          y={y + Z_PIN / 2 + Z_FONT / 2 - 1}
+          font-size={Z_FONT}
           fill={LABEL_FILL}
           font-weight="bold"
           text-anchor="middle"
@@ -252,7 +276,7 @@
   <!-- ── Per-class wiring diagram ────────────────────────────────────────── -->
   {#if $programmer && layout && $selectedDevice}
     {#if $selectedDevice.icsp === 0}
-      <p class="text-xs opacity-50 mt-2 text-center leading-tight">
+      <p class="text-xs opacity-80 mt-2 text-center leading-tight">
         {$selectedDevice.name} has no ICSP wiring class — use the ZIF socket.
       </p>
     {:else if wiringLoading}
@@ -263,8 +287,7 @@
       </p>
       <svg
         viewBox="0 0 {WIRE_SVG_W} {wireSvgH}"
-        class="w-full max-w-[360px]"
-        style="height: {wireSvgH}px;"
+        style="width: {WIRE_SVG_W}px; height: {wireSvgH}px; flex-shrink: 0;"
       >
         <!-- Chip body -->
         <rect
@@ -278,7 +301,10 @@
           stroke-width="1.5"
           opacity="0.7"
         />
-        <circle cx={W_CHIP_X + 8} cy={W_TOP + 4} r="2" fill={LABEL_FILL} />
+        {#if wiring.numbered}
+          <!-- Pin-1 orientation marker (only meaningful for real package pinouts) -->
+          <circle cx={W_CHIP_X + 8} cy={W_TOP + 4} r="2" fill={LABEL_FILL} />
+        {/if}
         {#each wireRows as row, i}
           {@const cy = W_TOP + i * W_ROW_H + W_ROW_H / 2}
           <!-- Chip pin stub -->
@@ -300,7 +326,7 @@
             font-size="11"
             fill="currentColor"
             opacity={row.headerPins.length ? 0.9 : 0.45}
-          >{#if wiring.numbered}<tspan fill={LABEL_FILL} font-weight="bold">{row.chipPin}</tspan>  {/if}{row.label}</text>
+          >{#if wiring.numbered}<tspan fill={LABEL_FILL} font-weight="bold">{row.chipPin}</tspan><tspan dx="7">{row.label}</tspan>{:else}{row.label}{/if}</text>
           {#if row.headerPins.length}
             <!-- Wire -->
             <line
@@ -331,8 +357,8 @@
               />
               <text
                 x={px + W_PIN_SQ / 2}
-                y={cy + 3.5}
-                font-size="9"
+                y={cy + 4}
+                font-size="11"
                 fill={LABEL_FILL}
                 font-weight="bold"
                 text-anchor="middle"
@@ -349,10 +375,10 @@
         {/each}
       </svg>
       {#each wiring.notes as note}
-        <p class="text-xs opacity-60 mt-1 self-start leading-tight">• {note}</p>
+        <p class="text-xs opacity-80 mt-1 self-start leading-tight">• {note}</p>
       {/each}
     {:else}
-      <p class="text-xs opacity-50 mt-2 text-center leading-tight">
+      <p class="text-xs opacity-80 mt-2 text-center leading-tight">
         ICSP class 0x{$selectedDevice.icsp.toString(16).padStart(2, "0")} —
         no verified wiring diagram for {$programmer.model} yet.<br>
         Connector pin numbering shown above for reference.
@@ -362,5 +388,7 @@
     <p class="text-xs opacity-50 mt-1 text-center leading-tight">
       Select a device to see its ICSP wiring.
     </p>
+  {/if}
+  </div>
   {/if}
 </div>
