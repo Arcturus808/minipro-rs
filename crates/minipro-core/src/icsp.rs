@@ -1503,20 +1503,7 @@ static EMMC_T56: IcspWiring = IcspWiring {
 /// 3=D3, 6=D4, 2=D5, 10=D6, 9=D7, 12=DS, 14=CMD, 16=CLK, VCC=20/22/24,
 /// GND=11/21/26/28, SGND=1/15/27.
 const EMMC_T76_LABELS: &[&str] = &[
-    "VCCQ (1.8/3.0 V via regulator)",
-    "VCC",
-    "CLK",
-    "CMD",
-    "D0",
-    "D1",
-    "D2",
-    "D3",
-    "D4",
-    "D5",
-    "D6",
-    "D7",
-    "DS (strobe)",
-    "VDDI (2.2 µF to GND)",
+    "VCCQ", "VCC", "CLK", "CMD", "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "DS", "VDDI",
     "GND",
 ];
 
@@ -1545,7 +1532,7 @@ static EMMC_T76: IcspWiring = IcspWiring {
         IcspWire { header_pin: 28, signal: "GND", chip_pin: 15 },
     ],
     notes: &[
-        "Header VCC pins feed the eMMC VCC and the on-header regulator that generates VCCQ (1.8 V/3.0 V) — VCCQ is not a header pin.",
+        "Header VCC pins supply the eMMC VCC rail and also feed an external regulator circuit (on the target/adapter) that generates VCCQ (1.8 V/3.0 V) — VCCQ is not on the header.",
         "D0 is used in 1-bit mode; D1/D2/D3 join it in 4-bit mode.",
         "VDDI needs a 2.2 µF decoupling capacitor to GND. Keep the ribbon under ~25 cm.",
         "Header pins 1/15/27 are SGND (shield); use pins 11/21/26/28 for GND.",
