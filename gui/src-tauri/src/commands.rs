@@ -658,6 +658,10 @@ fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto
     let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
         return Ok(None);
     };
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
     let model = name.parse::<ProgrammerModel>()?;
     let info = minipro_core::device::ProgrammerInfo {
         model,
