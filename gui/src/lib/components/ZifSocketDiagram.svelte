@@ -132,7 +132,7 @@
   {#if !$selectedDevice && !previewPinCount && !identifyMode}
     <p class="text-sm opacity-50 py-4">Select a device to see placement.</p>
   {:else if $selectedDevice && !isDip}
-    <p class="text-xs opacity-60 py-3 text-center">
+    <p class="text-xs opacity-80 py-3 text-center">
       {packageName} — adapter required.<br>
       Diagram available for DIP packages only.
     </p>

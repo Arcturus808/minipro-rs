@@ -38,6 +38,7 @@ pub mod diff;
 pub mod error;
 pub mod format;
 pub mod handle;
+pub mod icsp;
 pub mod operations;
 pub mod protocol;
 pub mod usb;
@@ -62,6 +63,7 @@ pub use diff::{
 };
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
+pub use icsp::{icsp_wiring, IcspWire, IcspWiring};
 pub use operations::{
     firmware_update, hardware_check, logic_auto_find, logic_ic_test, pin_contact_check, read_fuses,
     spi_autodetect, spi_autodetect_and_lookup, write_fuses, AutoFindEntry, FuseValue, OpStats,

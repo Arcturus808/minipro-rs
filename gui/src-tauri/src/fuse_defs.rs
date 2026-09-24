@@ -72,87 +72,273 @@ pub fn lookup(config_name: &str, chip_name: &str) -> Option<&'static FuseConfigD
 
 /// Standard modern AVR lfuse: CKDIV8/CKOUT/SUT/CKSEL
 const LFUSE_CKDIV8: &[FuseBitField] = &[
-    FuseBitField { name: "CKDIV8", description: "Divide clock by 8", bit: 7 },
-    FuseBitField { name: "CKOUT",  description: "Clock output on PB0", bit: 6 },
-    FuseBitField { name: "SUT1",   description: "Select start-up time", bit: 5 },
-    FuseBitField { name: "SUT0",   description: "Select start-up time", bit: 4 },
-    FuseBitField { name: "CKSEL3", description: "Select clock source", bit: 3 },
-    FuseBitField { name: "CKSEL2", description: "Select clock source", bit: 2 },
-    FuseBitField { name: "CKSEL1", description: "Select clock source", bit: 1 },
-    FuseBitField { name: "CKSEL0", description: "Select clock source", bit: 0 },
+    FuseBitField {
+        name: "CKDIV8",
+        description: "Divide clock by 8",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "CKOUT",
+        description: "Clock output on PB0",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "SUT1",
+        description: "Select start-up time",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "SUT0",
+        description: "Select start-up time",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "CKSEL3",
+        description: "Select clock source",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "CKSEL2",
+        description: "Select clock source",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "CKSEL1",
+        description: "Select clock source",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CKSEL0",
+        description: "Select clock source",
+        bit: 0,
+    },
 ];
 
 /// Older AVR lfuse with BODEN/BODLEVEL (ATmega8/16/32/64/128/8515/8535)
 const LFUSE_BODEN: &[FuseBitField] = &[
-    FuseBitField { name: "BODLEVEL", description: "Brown-out trigger level", bit: 7 },
-    FuseBitField { name: "BODEN",    description: "Brown-out detect enable", bit: 6 },
-    FuseBitField { name: "SUT1",     description: "Select start-up time", bit: 5 },
-    FuseBitField { name: "SUT0",     description: "Select start-up time", bit: 4 },
-    FuseBitField { name: "CKSEL3",   description: "Select clock source", bit: 3 },
-    FuseBitField { name: "CKSEL2",   description: "Select clock source", bit: 2 },
-    FuseBitField { name: "CKSEL1",   description: "Select clock source", bit: 1 },
-    FuseBitField { name: "CKSEL0",   description: "Select clock source", bit: 0 },
+    FuseBitField {
+        name: "BODLEVEL",
+        description: "Brown-out trigger level",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "BODEN",
+        description: "Brown-out detect enable",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "SUT1",
+        description: "Select start-up time",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "SUT0",
+        description: "Select start-up time",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "CKSEL3",
+        description: "Select clock source",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "CKSEL2",
+        description: "Select clock source",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "CKSEL1",
+        description: "Select clock source",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CKSEL0",
+        description: "Select clock source",
+        bit: 0,
+    },
 ];
 
 /// HFUSE with JTAG: OCDEN/JTAGEN/SPIEN/CKOPT/EESAVE/BOOTSZ/BOOTRST (ATmega16/32/64/128)
 const HFUSE_JTAG_CKOPT: &[FuseBitField] = &[
-    FuseBitField { name: "OCDEN",   description: "OCD enable", bit: 7 },
-    FuseBitField { name: "JTAGEN",  description: "JTAG enable", bit: 6 },
-    FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 5 },
-    FuseBitField { name: "CKOPT",   description: "Clock oscillator option", bit: 4 },
-    FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 3 },
-    FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-    FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-    FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+    FuseBitField {
+        name: "OCDEN",
+        description: "OCD enable",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "JTAGEN",
+        description: "JTAG enable",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "SPIEN",
+        description: "Enable SPI programming",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "CKOPT",
+        description: "Clock oscillator option",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "EESAVE",
+        description: "Preserve EEPROM on chip erase",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BOOTSZ1",
+        description: "Boot size",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BOOTSZ0",
+        description: "Boot size",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "BOOTRST",
+        description: "Boot reset vector",
+        bit: 0,
+    },
 ];
 
 /// HFUSE with JTAG + WDTON (no CKOPT): OCDEN/JTAGEN/SPIEN/WDTON/EESAVE/BOOTSZ/BOOTRST
 const HFUSE_JTAG_WDTON: &[FuseBitField] = &[
-    FuseBitField { name: "OCDEN",   description: "OCD enable", bit: 7 },
-    FuseBitField { name: "JTAGEN",  description: "JTAG enable", bit: 6 },
-    FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 5 },
-    FuseBitField { name: "WDTON",   description: "Watchdog timer always on", bit: 4 },
-    FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 3 },
-    FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-    FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-    FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+    FuseBitField {
+        name: "OCDEN",
+        description: "OCD enable",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "JTAGEN",
+        description: "JTAG enable",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "SPIEN",
+        description: "Enable SPI programming",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "WDTON",
+        description: "Watchdog timer always on",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "EESAVE",
+        description: "Preserve EEPROM on chip erase",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BOOTSZ1",
+        description: "Boot size",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BOOTSZ0",
+        description: "Boot size",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "BOOTRST",
+        description: "Boot reset vector",
+        bit: 0,
+    },
 ];
 
 /// HFUSE with DWEN (no JTAG, no bootloader): RSTDISBL/DWEN/SPIEN/WDTON/EESAVE/BODLEVEL
 /// Used by ATmega48/88/168/328P, ATtiny24/44/84, ATtiny25/45/85
 const HFUSE_DWEN_BOD: &[FuseBitField] = &[
-    FuseBitField { name: "RSTDISBL",  description: "External reset disable", bit: 7 },
-    FuseBitField { name: "DWEN",      description: "debugWIRE enable", bit: 6 },
-    FuseBitField { name: "SPIEN",     description: "Enable SPI programming", bit: 5 },
-    FuseBitField { name: "WDTON",     description: "Watchdog timer always on", bit: 4 },
-    FuseBitField { name: "EESAVE",    description: "Preserve EEPROM on chip erase", bit: 3 },
-    FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 2 },
-    FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 1 },
-    FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 0 },
+    FuseBitField {
+        name: "RSTDISBL",
+        description: "External reset disable",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "DWEN",
+        description: "debugWIRE enable",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "SPIEN",
+        description: "Enable SPI programming",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "WDTON",
+        description: "Watchdog timer always on",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "EESAVE",
+        description: "Preserve EEPROM on chip erase",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BODLEVEL2",
+        description: "Brown-out trigger level",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BODLEVEL1",
+        description: "Brown-out trigger level",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "BODLEVEL0",
+        description: "Brown-out trigger level",
+        bit: 0,
+    },
 ];
 
 /// EFUSE with BODLEVEL only (bits 0-2)
 const EFUSE_BODLEVEL: &[FuseBitField] = &[
-    FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 2 },
-    FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 1 },
-    FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 0 },
+    FuseBitField {
+        name: "BODLEVEL2",
+        description: "Brown-out trigger level",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BODLEVEL1",
+        description: "Brown-out trigger level",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "BODLEVEL0",
+        description: "Brown-out trigger level",
+        bit: 0,
+    },
 ];
 
 /// EFUSE with SELFPRGEN (bit 0 only)
-const EFUSE_SELFPRGEN: &[FuseBitField] = &[
-    FuseBitField { name: "SELFPRGEN", description: "Self-programming enable", bit: 0 },
-];
+const EFUSE_SELFPRGEN: &[FuseBitField] = &[FuseBitField {
+    name: "SELFPRGEN",
+    description: "Self-programming enable",
+    bit: 0,
+}];
 
 /// Standard AVR lock bits
 const LOCK_STANDARD: &[FuseBitField] = &[
-    FuseBitField { name: "LB1", description: "Lock bit", bit: 1 },
-    FuseBitField { name: "LB0", description: "Lock bit", bit: 0 },
+    FuseBitField {
+        name: "LB1",
+        description: "Lock bit",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "LB0",
+        description: "Lock bit",
+        bit: 0,
+    },
 ];
 
 /// Macro to create a lock byte def inline (avoids the `&[&FuseByteDef]` typing issue).
 macro_rules! lock_byte {
     () => {
-        FuseByteDef { name: "lock", width: 8, fields: LOCK_STANDARD }
+        FuseByteDef {
+            name: "lock",
+            width: 8,
+            fields: LOCK_STANDARD,
+        }
     };
 }
 
@@ -164,14 +350,46 @@ const AVR_1: &FuseConfigDef = &FuseConfigDef {
         name: "lfuse",
         width: 8,
         fields: &[
-            FuseBitField { name: "BODLEVEL", description: "Brown-out trigger level", bit: 7 },
-            FuseBitField { name: "BODEN",    description: "Brown-out detect enable", bit: 6 },
-            FuseBitField { name: "SPIEN",    description: "Enable SPI programming", bit: 5 },
-            FuseBitField { name: "RSTDISBL", description: "External reset disable", bit: 4 },
-            FuseBitField { name: "CKSEL3",   description: "Select clock source", bit: 3 },
-            FuseBitField { name: "CKSEL2",   description: "Select clock source", bit: 2 },
-            FuseBitField { name: "CKSEL1",   description: "Select clock source", bit: 1 },
-            FuseBitField { name: "CKSEL0",   description: "Select clock source", bit: 0 },
+            FuseBitField {
+                name: "BODLEVEL",
+                description: "Brown-out trigger level",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BODEN",
+                description: "Brown-out detect enable",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "SPIEN",
+                description: "Enable SPI programming",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "RSTDISBL",
+                description: "External reset disable",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CKSEL3",
+                description: "Select clock source",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "CKSEL2",
+                description: "Select clock source",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "CKSEL1",
+                description: "Select clock source",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "CKSEL0",
+                description: "Select clock source",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[lock_byte!()],
@@ -183,12 +401,36 @@ const AVR_2: &FuseConfigDef = &FuseConfigDef {
         name: "lfuse",
         width: 8,
         fields: &[
-            FuseBitField { name: "BODLEVEL", description: "Brown-out trigger level", bit: 7 },
-            FuseBitField { name: "BODEN",    description: "Brown-out detect enable", bit: 6 },
-            FuseBitField { name: "SPIEN",    description: "Enable SPI programming", bit: 5 },
-            FuseBitField { name: "RSTDISBL", description: "External reset disable", bit: 4 },
-            FuseBitField { name: "CKSEL1",   description: "Select clock source", bit: 1 },
-            FuseBitField { name: "CKSEL0",   description: "Select clock source", bit: 0 },
+            FuseBitField {
+                name: "BODLEVEL",
+                description: "Brown-out trigger level",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BODEN",
+                description: "Brown-out detect enable",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "SPIEN",
+                description: "Enable SPI programming",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "RSTDISBL",
+                description: "External reset disable",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CKSEL1",
+                description: "Select clock source",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "CKSEL0",
+                description: "Select clock source",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[lock_byte!()],
@@ -200,11 +442,31 @@ const AVR_3: &FuseConfigDef = &FuseConfigDef {
         name: "lfuse",
         width: 8,
         fields: &[
-            FuseBitField { name: "INTCAP",  description: "Interrupt cap", bit: 4 },
-            FuseBitField { name: "CKSEL3",  description: "Select clock source", bit: 3 },
-            FuseBitField { name: "CKSEL2",  description: "Select clock source", bit: 2 },
-            FuseBitField { name: "CKSEL1",  description: "Select clock source", bit: 1 },
-            FuseBitField { name: "CKSEL0",  description: "Select clock source", bit: 0 },
+            FuseBitField {
+                name: "INTCAP",
+                description: "Interrupt cap",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CKSEL3",
+                description: "Select clock source",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "CKSEL2",
+                description: "Select clock source",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "CKSEL1",
+                description: "Select clock source",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "CKSEL0",
+                description: "Select clock source",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[lock_byte!()],
@@ -217,25 +479,77 @@ const AVR_5: &FuseConfigDef = &FuseConfigDef {
             name: "lfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 7 },
-                FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 6 },
-                FuseBitField { name: "WDTON",   description: "Watchdog timer always on", bit: 5 },
-                FuseBitField { name: "CKDIV8",  description: "Divide clock by 8", bit: 4 },
-                FuseBitField { name: "SUT1",    description: "Select start-up time", bit: 3 },
-                FuseBitField { name: "SUT0",    description: "Select start-up time", bit: 2 },
-                FuseBitField { name: "CKSEL1",  description: "Select clock source", bit: 1 },
-                FuseBitField { name: "CKSEL0",  description: "Select clock source", bit: 0 },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "CKDIV8",
+                    description: "Divide clock by 8",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "SUT1",
+                    description: "Select start-up time",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "SUT0",
+                    description: "Select start-up time",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "CKSEL1",
+                    description: "Select clock source",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "CKSEL0",
+                    description: "Select clock source",
+                    bit: 0,
+                },
             ],
         },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "SELFPRGEN", description: "Self-programming enable", bit: 4 },
-                FuseBitField { name: "DWEN",      description: "debugWIRE enable", bit: 3 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 1 },
-                FuseBitField { name: "RSTDISBL",  description: "External reset disable", bit: 0 },
+                FuseBitField {
+                    name: "SELFPRGEN",
+                    description: "Self-programming enable",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "DWEN",
+                    description: "debugWIRE enable",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "RSTDISBL",
+                    description: "External reset disable",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -249,25 +563,77 @@ const AVR_7: &FuseConfigDef = &FuseConfigDef {
             name: "lfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "PLLCK",  description: "PLL clock select", bit: 7 },
-                FuseBitField { name: "CKOPT",  description: "Clock oscillator option", bit: 6 },
-                FuseBitField { name: "SUT1",   description: "Select start-up time", bit: 5 },
-                FuseBitField { name: "SUT0",   description: "Select start-up time", bit: 4 },
-                FuseBitField { name: "CKSEL3", description: "Select clock source", bit: 3 },
-                FuseBitField { name: "CKSEL2", description: "Select clock source", bit: 2 },
-                FuseBitField { name: "CKSEL1", description: "Select clock source", bit: 1 },
-                FuseBitField { name: "CKSEL0", description: "Select clock source", bit: 0 },
+                FuseBitField {
+                    name: "PLLCK",
+                    description: "PLL clock select",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "CKOPT",
+                    description: "Clock oscillator option",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SUT1",
+                    description: "Select start-up time",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "SUT0",
+                    description: "Select start-up time",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "CKSEL3",
+                    description: "Select clock source",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "CKSEL2",
+                    description: "Select clock source",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "CKSEL1",
+                    description: "Select clock source",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "CKSEL0",
+                    description: "Select clock source",
+                    bit: 0,
+                },
             ],
         },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "RSTDISBL", description: "External reset disable", bit: 4 },
-                FuseBitField { name: "SPIEN",    description: "Enable SPI programming", bit: 3 },
-                FuseBitField { name: "EESAVE",   description: "Preserve EEPROM on chip erase", bit: 2 },
-                FuseBitField { name: "BODLEVEL", description: "Brown-out trigger level", bit: 1 },
-                FuseBitField { name: "BODEN",    description: "Brown-out detect enable", bit: 0 },
+                FuseBitField {
+                    name: "RSTDISBL",
+                    description: "External reset disable",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BODEN",
+                    description: "Brown-out detect enable",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -277,8 +643,16 @@ const AVR_7: &FuseConfigDef = &FuseConfigDef {
 // avr_8: ATmega16 — 2 fuse bytes
 const AVR_8: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_CKOPT },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_CKOPT,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -286,19 +660,55 @@ const AVR_8: &FuseConfigDef = &FuseConfigDef {
 // avr_9: ATmega8515 — 2 fuse bytes
 const AVR_9: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "S8515C",  description: "ATmega8515 compatibility", bit: 7 },
-                FuseBitField { name: "WDTON",   description: "Watchdog timer always on", bit: 6 },
-                FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "CKOPT",   description: "Clock oscillator option", bit: 4 },
-                FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 3 },
-                FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "S8515C",
+                    description: "ATmega8515 compatibility",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "CKOPT",
+                    description: "Clock oscillator option",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -308,9 +718,21 @@ const AVR_9: &FuseConfigDef = &FuseConfigDef {
 // avr_10: ATmega88/168 — 3 fuse bytes
 const AVR_10: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_SELFPRGEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_SELFPRGEN,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -318,9 +740,21 @@ const AVR_10: &FuseConfigDef = &FuseConfigDef {
 // avr_11: ATmega328/328P — 3 fuse bytes (same as avr_10 but efuse has BODLEVEL)
 const AVR_11: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_BODLEVEL },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_BODLEVEL,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -328,16 +762,40 @@ const AVR_11: &FuseConfigDef = &FuseConfigDef {
 // avr_12: ATmega162 — 3 fuse bytes
 const AVR_12: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_WDTON },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_WDTON,
+        },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "M161C",     description: "ATmega161 compatibility", bit: 4 },
-                FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 3 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 1 },
+                FuseBitField {
+                    name: "M161C",
+                    description: "ATmega161 compatibility",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "BODLEVEL2",
+                    description: "Brown-out trigger level",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
             ],
         },
     ],
@@ -347,15 +805,35 @@ const AVR_12: &FuseConfigDef = &FuseConfigDef {
 // avr_14: ATmega165/169/325/645 — 3 fuse bytes
 const AVR_14: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_WDTON },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_WDTON,
+        },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 3 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 1 },
+                FuseBitField {
+                    name: "BODLEVEL2",
+                    description: "Brown-out trigger level",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
             ],
         },
     ],
@@ -365,14 +843,30 @@ const AVR_14: &FuseConfigDef = &FuseConfigDef {
 // avr_16: ATmega64/128 — 3 fuse bytes
 const AVR_16: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_CKOPT },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_CKOPT,
+        },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "M103C",  description: "ATmega103 compatibility", bit: 1 },
-                FuseBitField { name: "WDTON",  description: "Watchdog timer always on", bit: 0 },
+                FuseBitField {
+                    name: "M103C",
+                    description: "ATmega103 compatibility",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -382,8 +876,16 @@ const AVR_16: &FuseConfigDef = &FuseConfigDef {
 // avr_18: ATmega32 — 2 fuse bytes (same as ATmega16)
 const AVR_18: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_CKOPT },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_CKOPT,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -393,9 +895,21 @@ const AVR_18: &FuseConfigDef = &FuseConfigDef {
 // avr_4: ATMEGA48 — 3 fuse bytes (same as avr_10)
 const AVR_4_MEGA48: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_SELFPRGEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_SELFPRGEN,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -403,9 +917,21 @@ const AVR_4_MEGA48: &FuseConfigDef = &FuseConfigDef {
 // avr_4: ATTINY24/44/84 — 3 fuse bytes
 const AVR_4_TINY24: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_SELFPRGEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_SELFPRGEN,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -413,9 +939,21 @@ const AVR_4_TINY24: &FuseConfigDef = &FuseConfigDef {
 // avr_6: ATTINY25/45/85 — 3 fuse bytes
 const AVR_6_TINY85: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_SELFPRGEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_SELFPRGEN,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -423,22 +961,62 @@ const AVR_6_TINY85: &FuseConfigDef = &FuseConfigDef {
 // avr_6: ATTINY2313/4313 — 3 fuse bytes (different hfuse bit order from ATtiny85!)
 const AVR_6_TINY2313: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "DWEN",      description: "debugWIRE enable", bit: 7 },
-                FuseBitField { name: "EESAVE",    description: "Preserve EEPROM on chip erase", bit: 6 },
-                FuseBitField { name: "SPIEN",     description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "WDTON",     description: "Watchdog timer always on", bit: 4 },
-                FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 3 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 1 },
-                FuseBitField { name: "RSTDISBL",  description: "External reset disable", bit: 0 },
+                FuseBitField {
+                    name: "DWEN",
+                    description: "debugWIRE enable",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "BODLEVEL2",
+                    description: "Brown-out trigger level",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "RSTDISBL",
+                    description: "External reset disable",
+                    bit: 0,
+                },
             ],
         },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_SELFPRGEN },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_SELFPRGEN,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -446,14 +1024,30 @@ const AVR_6_TINY2313: &FuseConfigDef = &FuseConfigDef {
 // avr_13: ATMEGA128A — 3 fuse bytes (older style, same as avr_16)
 const AVR_13_MEGA128: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_CKOPT },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_CKOPT,
+        },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "M103C",  description: "ATmega103 compatibility", bit: 1 },
-                FuseBitField { name: "WDTON",  description: "Watchdog timer always on", bit: 0 },
+                FuseBitField {
+                    name: "M103C",
+                    description: "ATmega103 compatibility",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -463,9 +1057,21 @@ const AVR_13_MEGA128: &FuseConfigDef = &FuseConfigDef {
 // avr_13: ATMEGA164/324/644/1284/329/649 family — 3 fuse bytes (modern style)
 const AVR_13_MEGA164: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_JTAG_WDTON },
-        FuseByteDef { name: "efuse", width: 8, fields: EFUSE_BODLEVEL },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_JTAG_WDTON,
+        },
+        FuseByteDef {
+            name: "efuse",
+            width: 8,
+            fields: EFUSE_BODLEVEL,
+        },
     ],
     lock_bytes: &[lock_byte!()],
 };
@@ -473,19 +1079,55 @@ const AVR_13_MEGA164: &FuseConfigDef = &FuseConfigDef {
 // avr_15: ATMEGA8 — 2 fuse bytes
 const AVR_15_MEGA8: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "RSTDISBL", description: "External reset disable", bit: 7 },
-                FuseBitField { name: "WDTON",    description: "Watchdog timer always on", bit: 6 },
-                FuseBitField { name: "SPIEN",    description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "CKOPT",    description: "Clock oscillator option", bit: 4 },
-                FuseBitField { name: "EESAVE",   description: "Preserve EEPROM on chip erase", bit: 3 },
-                FuseBitField { name: "BOOTSZ1",  description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0",  description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST",  description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "RSTDISBL",
+                    description: "External reset disable",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "CKOPT",
+                    description: "Clock oscillator option",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -495,19 +1137,55 @@ const AVR_15_MEGA8: &FuseConfigDef = &FuseConfigDef {
 // avr_15: ATMEGA8535 — 2 fuse bytes (bit 7 of hfuse is S8535C, not RSTDISBL)
 const AVR_15_MEGA8535: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_BODEN },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_BODEN,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "S8535C",  description: "ATmega8535 compatibility", bit: 7 },
-                FuseBitField { name: "WDTON",   description: "Watchdog timer always on", bit: 6 },
-                FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "CKOPT",   description: "Clock oscillator option", bit: 4 },
-                FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 3 },
-                FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "S8535C",
+                    description: "ATmega8535 compatibility",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "CKOPT",
+                    description: "Clock oscillator option",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -517,29 +1195,81 @@ const AVR_15_MEGA8535: &FuseConfigDef = &FuseConfigDef {
 // avr_17: ATMEGA8U2/16U2/32U2 — 3 fuse bytes
 const AVR_17_U2: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "DWEN",     description: "debugWIRE enable", bit: 7 },
-                FuseBitField { name: "RSTDISBL", description: "External reset disable", bit: 6 },
-                FuseBitField { name: "SPIEN",    description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "WDTON",    description: "Watchdog timer always on", bit: 4 },
-                FuseBitField { name: "EESAVE",   description: "Preserve EEPROM on chip erase", bit: 3 },
-                FuseBitField { name: "BOOTSZ1",  description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0",  description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST",  description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "DWEN",
+                    description: "debugWIRE enable",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "RSTDISBL",
+                    description: "External reset disable",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "HWBE",      description: "Hardware boot enable", bit: 3 },
-                FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 1 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 0 },
+                FuseBitField {
+                    name: "HWBE",
+                    description: "Hardware boot enable",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL2",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -549,29 +1279,81 @@ const AVR_17_U2: &FuseConfigDef = &FuseConfigDef {
 // avr_17: ATMEGA16U4/32U4 — 3 fuse bytes (JTAG instead of DWEN/RSTDISBL)
 const AVR_17_U4: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
         FuseByteDef {
             name: "hfuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "OCDEN",   description: "OCD enable", bit: 7 },
-                FuseBitField { name: "JTAGEN",  description: "JTAG enable", bit: 6 },
-                FuseBitField { name: "SPIEN",   description: "Enable SPI programming", bit: 5 },
-                FuseBitField { name: "WDTON",   description: "Watchdog timer always on", bit: 4 },
-                FuseBitField { name: "EESAVE",  description: "Preserve EEPROM on chip erase", bit: 3 },
-                FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "OCDEN",
+                    description: "OCD enable",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "JTAGEN",
+                    description: "JTAG enable",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "SPIEN",
+                    description: "Enable SPI programming",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "WDTON",
+                    description: "Watchdog timer always on",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "EESAVE",
+                    description: "Preserve EEPROM on chip erase",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "HWBE",      description: "Hardware boot enable", bit: 3 },
-                FuseBitField { name: "BODLEVEL2", description: "Brown-out trigger level", bit: 2 },
-                FuseBitField { name: "BODLEVEL1", description: "Brown-out trigger level", bit: 1 },
-                FuseBitField { name: "BODLEVEL0", description: "Brown-out trigger level", bit: 0 },
+                FuseBitField {
+                    name: "HWBE",
+                    description: "Hardware boot enable",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BODLEVEL2",
+                    description: "Brown-out trigger level",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BODLEVEL1",
+                    description: "Brown-out trigger level",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BODLEVEL0",
+                    description: "Brown-out trigger level",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -581,15 +1363,35 @@ const AVR_17_U4: &FuseConfigDef = &FuseConfigDef {
 // avr_17: ATMEGA328PB — 3 fuse bytes (BODLEVEL in hfuse, BOOTRST/BOOTSZ in efuse)
 const AVR_17_328PB: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "lfuse", width: 8, fields: LFUSE_CKDIV8 },
-        FuseByteDef { name: "hfuse", width: 8, fields: HFUSE_DWEN_BOD },
+        FuseByteDef {
+            name: "lfuse",
+            width: 8,
+            fields: LFUSE_CKDIV8,
+        },
+        FuseByteDef {
+            name: "hfuse",
+            width: 8,
+            fields: HFUSE_DWEN_BOD,
+        },
         FuseByteDef {
             name: "efuse",
             width: 8,
             fields: &[
-                FuseBitField { name: "BOOTSZ1", description: "Boot size", bit: 2 },
-                FuseBitField { name: "BOOTSZ0", description: "Boot size", bit: 1 },
-                FuseBitField { name: "BOOTRST", description: "Boot reset vector", bit: 0 },
+                FuseBitField {
+                    name: "BOOTSZ1",
+                    description: "Boot size",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOOTSZ0",
+                    description: "Boot size",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "BOOTRST",
+                    description: "Boot reset vector",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -611,9 +1413,21 @@ const PIC_1: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE", description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -625,9 +1439,21 @@ const PIC_2: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE", description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -639,11 +1465,31 @@ const PIC_3: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE",  description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "MCPU",   description: "Master Clear pull-up enable (1=disabled, 0=enabled)", bit: 1 },
-            FuseBitField { name: "IOFSCS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 0 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "MCPU",
+                description: "Master Clear pull-up enable (1=disabled, 0=enabled)",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "IOFSCS",
+                description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -655,11 +1501,31 @@ const PIC_4: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE",  description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "MCPU",   description: "Master Clear pull-up enable (1=disabled, 0=enabled)", bit: 1 },
-            FuseBitField { name: "IOFSCS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 0 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "MCPU",
+                description: "Master Clear pull-up enable (1=disabled, 0=enabled)",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "IOFSCS",
+                description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -671,12 +1537,36 @@ const PIC_5: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "IOSCFS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 5 },
-            FuseBitField { name: "MCLRE",  description: "MCLR/VPP/GP3 pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)", bit: 0 },
+            FuseBitField {
+                name: "IOSCFS",
+                description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR/VPP/GP3 pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -688,11 +1578,31 @@ const PIC_6: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE", description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)", bit: 0 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -704,11 +1614,31 @@ const PIC_7: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE", description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 4 },
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)", bit: 0 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTOSC, 11=EXTRC)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -720,13 +1650,41 @@ const PIC_8: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "CPDF",   description: "Code protection - Flash data memory (1=off, 0=on)", bit: 6 },
-            FuseBitField { name: "IOSCFS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 5 },
-            FuseBitField { name: "MCLRE",  description: "RB3/MCLR pin function select (1=MCLR, 0=RB3)", bit: 4 },
-            FuseBitField { name: "CP",     description: "Code protection - User program memory (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTRC, 11=EXTRC)", bit: 0 },
+            FuseBitField {
+                name: "CPDF",
+                description: "Code protection - Flash data memory (1=off, 0=on)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "IOSCFS",
+                description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "RB3/MCLR pin function select (1=MCLR, 0=RB3)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection - User program memory (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=INTRC, 11=EXTRC)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -745,19 +1703,72 @@ const PIC_9: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "WURE",   description: "Wake-up Reset enable (1=standard wake-up, 0=wake-up and reset)", bit: 12 },
-            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 11 },
-            FuseBitField { name: "IESO",   description: "Internal/External Switchover mode (1=enabled, 0=disabled)", bit: 10 },
-            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 9 },
-            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0 (11=on, 10=on in run only, 01=SW control, 00=off)", bit: 8 },
-            FuseBitField { name: "CPD",    description: "Data memory code protection (1=off, 0=on)", bit: 7 },
-            FuseBitField { name: "CP",     description: "Program memory code protection (1=off, 0=on)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
-            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "WURE",
+                description: "Wake-up Reset enable (1=standard wake-up, 0=wake-up and reset)",
+                bit: 12,
+            },
+            FuseBitField {
+                name: "FCMEN",
+                description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)",
+                bit: 11,
+            },
+            FuseBitField {
+                name: "IESO",
+                description: "Internal/External Switchover mode (1=enabled, 0=disabled)",
+                bit: 10,
+            },
+            FuseBitField {
+                name: "BOREN1",
+                description: "Brown-out Reset enable bit 1",
+                bit: 9,
+            },
+            FuseBitField {
+                name: "BOREN0",
+                description:
+                    "Brown-out Reset enable bit 0 (11=on, 10=on in run only, 01=SW control, 00=off)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Program memory code protection (1=off, 0=on)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -769,18 +1780,67 @@ const PIC_10: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 11 },
-            FuseBitField { name: "IESO",   description: "Internal/External Switchover mode (1=enabled, 0=disabled)", bit: 10 },
-            FuseBitField { name: "BODEN1", description: "Brown-out Detect selection bit 1", bit: 9 },
-            FuseBitField { name: "BODEN0", description: "Brown-out Detect selection bit 0 (11=on, 10=on in run, 01=SW control, 00=off)", bit: 8 },
-            FuseBitField { name: "CPD",    description: "Data memory code protection (1=off, 0=on)", bit: 7 },
-            FuseBitField { name: "CP",     description: "Program memory code protection (1=off, 0=on)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)", bit: 5 },
-            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
-            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off via SWDTEN)", bit: 3 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "FCMEN",
+                description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)",
+                bit: 11,
+            },
+            FuseBitField {
+                name: "IESO",
+                description: "Internal/External Switchover mode (1=enabled, 0=disabled)",
+                bit: 10,
+            },
+            FuseBitField {
+                name: "BODEN1",
+                description: "Brown-out Detect selection bit 1",
+                bit: 9,
+            },
+            FuseBitField {
+                name: "BODEN0",
+                description:
+                    "Brown-out Detect selection bit 0 (11=on, 10=on in run, 01=SW control, 00=off)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Program memory code protection (1=off, 0=on)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "GP3/MCLR pin function select (1=MCLR, 0=GP3)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off via SWDTEN)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -792,15 +1852,51 @@ const PIC_11: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
-            FuseBitField { name: "CP",    description: "Program memory code protection (1=off, 0=on)", bit: 7 },
-            FuseBitField { name: "BODEN", description: "Brown-out Detect enable (1=on, 0=off)", bit: 6 },
-            FuseBitField { name: "MCLRE", description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
-            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CPD",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Program memory code protection (1=off, 0=on)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BODEN",
+                description: "Brown-out Detect enable (1=on, 0=off)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -813,16 +1909,56 @@ const PIC_12: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 9 },
-            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0 (11=on, 10=on in run, 0x=off)", bit: 8 },
-            FuseBitField { name: "IOSCFS", description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)", bit: 7 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 4 },
-            FuseBitField { name: "WDTE",   description: "Watchdog Timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "BOREN1",
+                description: "Brown-out Reset enable bit 1",
+                bit: 9,
+            },
+            FuseBitField {
+                name: "BOREN0",
+                description: "Brown-out Reset enable bit 0 (11=on, 10=on in run, 0x=off)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "IOSCFS",
+                description: "Internal oscillator frequency select (1=8MHz, 0=4MHz)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -836,33 +1972,118 @@ const PIC_13: &FuseConfigDef = &FuseConfigDef {
             name: "word1",
             width: 14,
             fields: &[
-                FuseBitField { name: "FCMEN",    description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 13 },
-                FuseBitField { name: "IESO",     description: "Internal/External Switchover (1=enabled, 0=disabled)", bit: 12 },
-                FuseBitField { name: "CLKOUTEN", description: "Clock Out enable (1=disabled, 0=enabled)", bit: 11 },
-                FuseBitField { name: "BOREN1",   description: "Brown-out Reset enable bit 1", bit: 10 },
-                FuseBitField { name: "BOREN0",   description: "Brown-out Reset enable bit 0 (11=on, 10=run only, 01=SW, 00=off)", bit: 9 },
-                FuseBitField { name: "CPD",      description: "Data memory code protection (1=off, 0=on)", bit: 8 },
-                FuseBitField { name: "CP",       description: "Program memory code protection (1=off, 0=on)", bit: 7 },
-                FuseBitField { name: "MCLRE",    description: "MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 6 },
-                FuseBitField { name: "PWRTE",    description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 5 },
-                FuseBitField { name: "WDTE1",    description: "Watchdog Timer enable bit 1", bit: 4 },
-                FuseBitField { name: "WDTE0",    description: "Watchdog Timer enable bit 0 (11=on, 10=run only, 01=SW, 00=off)", bit: 3 },
-                FuseBitField { name: "FOSC2",    description: "Oscillator selection bit 2", bit: 2 },
-                FuseBitField { name: "FOSC1",    description: "Oscillator selection bit 1", bit: 1 },
-                FuseBitField { name: "FOSC0",    description: "Oscillator selection bit 0", bit: 0 },
+                FuseBitField {
+                    name: "FCMEN",
+                    description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)",
+                    bit: 13,
+                },
+                FuseBitField {
+                    name: "IESO",
+                    description: "Internal/External Switchover (1=enabled, 0=disabled)",
+                    bit: 12,
+                },
+                FuseBitField {
+                    name: "CLKOUTEN",
+                    description: "Clock Out enable (1=disabled, 0=enabled)",
+                    bit: 11,
+                },
+                FuseBitField {
+                    name: "BOREN1",
+                    description: "Brown-out Reset enable bit 1",
+                    bit: 10,
+                },
+                FuseBitField {
+                    name: "BOREN0",
+                    description: "Brown-out Reset enable bit 0 (11=on, 10=run only, 01=SW, 00=off)",
+                    bit: 9,
+                },
+                FuseBitField {
+                    name: "CPD",
+                    description: "Data memory code protection (1=off, 0=on)",
+                    bit: 8,
+                },
+                FuseBitField {
+                    name: "CP",
+                    description: "Program memory code protection (1=off, 0=on)",
+                    bit: 7,
+                },
+                FuseBitField {
+                    name: "MCLRE",
+                    description: "MCLR pin function select (1=MCLR, 0=digital I/O)",
+                    bit: 6,
+                },
+                FuseBitField {
+                    name: "PWRTE",
+                    description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "WDTE1",
+                    description: "Watchdog Timer enable bit 1",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "WDTE0",
+                    description: "Watchdog Timer enable bit 0 (11=on, 10=run only, 01=SW, 00=off)",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "FOSC2",
+                    description: "Oscillator selection bit 2",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "FOSC1",
+                    description: "Oscillator selection bit 1",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "FOSC0",
+                    description: "Oscillator selection bit 0",
+                    bit: 0,
+                },
             ],
         },
         FuseByteDef {
             name: "word2",
             width: 14,
             fields: &[
-                FuseBitField { name: "DEBUG",  description: "Debugger enable (1=disabled, 0=enabled)", bit: 12 },
-                FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=enabled, 0=disabled)", bit: 11 },
-                FuseBitField { name: "STVREN", description: "Stack Overflow/Underflow Reset enable (1=on, 0=off)", bit: 10 },
-                FuseBitField { name: "PLLEN",  description: "PLL enable (1=enabled, 0=disabled)", bit: 9 },
-                FuseBitField { name: "BORV",   description: "Brown-out Reset voltage select (1=high, 0=low)", bit: 8 },
-                FuseBitField { name: "WRT1",   description: "Flash self-write protection bit 1", bit: 1 },
-                FuseBitField { name: "WRT0",   description: "Flash self-write protection bit 0 (11=off, 10=half, 01=boot, 00=all)", bit: 0 },
+                FuseBitField {
+                    name: "DEBUG",
+                    description: "Debugger enable (1=disabled, 0=enabled)",
+                    bit: 12,
+                },
+                FuseBitField {
+                    name: "LVP",
+                    description: "Low-voltage Programming enable (1=enabled, 0=disabled)",
+                    bit: 11,
+                },
+                FuseBitField {
+                    name: "STVREN",
+                    description: "Stack Overflow/Underflow Reset enable (1=on, 0=off)",
+                    bit: 10,
+                },
+                FuseBitField {
+                    name: "PLLEN",
+                    description: "PLL enable (1=enabled, 0=disabled)",
+                    bit: 9,
+                },
+                FuseBitField {
+                    name: "BORV",
+                    description: "Brown-out Reset voltage select (1=high, 0=low)",
+                    bit: 8,
+                },
+                FuseBitField {
+                    name: "WRT1",
+                    description: "Flash self-write protection bit 1",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "WRT0",
+                    description:
+                        "Flash self-write protection bit 0 (11=off, 10=half, 01=boot, 00=all)",
+                    bit: 0,
+                },
             ],
         },
     ],
@@ -875,16 +2096,56 @@ const PIC_21: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "CP",    description: "Flash program memory code protection (1=off, 0=on)", bit: 13 },
-            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
-            FuseBitField { name: "LVP",   description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)", bit: 7 },
-            FuseBitField { name: "BOREN", description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
-            FuseBitField { name: "MCLRE", description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 4 },
-            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CP",
+                description: "Flash program memory code protection (1=off, 0=on)",
+                bit: 13,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "LVP",
+                description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BOREN",
+                description: "Brown-out Reset enable (1=on, 0=off)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -896,16 +2157,56 @@ const PIC_23: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "CP",    description: "Flash program memory code protection (1=off, 0=on)", bit: 13 },
-            FuseBitField { name: "CPD",   description: "Data memory code protection (1=off, 0=on)", bit: 8 },
-            FuseBitField { name: "LVP",   description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)", bit: 7 },
-            FuseBitField { name: "BOREN", description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
-            FuseBitField { name: "MCLRE", description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 4 },
-            FuseBitField { name: "PWRTE", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CP",
+                description: "Flash program memory code protection (1=off, 0=on)",
+                bit: 13,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "LVP",
+                description: "Low-voltage Programming enable (1=RB4/PGM, 0=HV on MCLR)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BOREN",
+                description: "Brown-out Reset enable (1=on, 0=off)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -917,17 +2218,61 @@ const PIC_24: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "CCPMX",  description: "CCP1 pin mux (1=RB0, 0=RB3)", bit: 12 },
-            FuseBitField { name: "WRT1",   description: "Flash write protection bit 1", bit: 10 },
-            FuseBitField { name: "WRT0",   description: "Flash write protection bit 0 (11=off, 10=256B, 01=2KB, 00=all)", bit: 9 },
-            FuseBitField { name: "CPD",    description: "Data EEPROM code protection (1=off, 0=on)", bit: 8 },
-            FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)", bit: 7 },
-            FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
-            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CCPMX",
+                description: "CCP1 pin mux (1=RB0, 0=RB3)",
+                bit: 12,
+            },
+            FuseBitField {
+                name: "WRT1",
+                description: "Flash write protection bit 1",
+                bit: 10,
+            },
+            FuseBitField {
+                name: "WRT0",
+                description: "Flash write protection bit 0 (11=off, 10=256B, 01=2KB, 00=all)",
+                bit: 9,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data EEPROM code protection (1=off, 0=on)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "LVP",
+                description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BOREN",
+                description: "Brown-out Reset enable (1=on, 0=off)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTEN",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -939,18 +2284,66 @@ const PIC_25: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 14,
         fields: &[
-            FuseBitField { name: "CCPMX",  description: "CCP1 pin mux (1=RB0, 0=RB3)", bit: 12 },
-            FuseBitField { name: "DEBUG",  description: "In-Circuit Debugger enable (1=disabled, 0=enabled)", bit: 11 },
-            FuseBitField { name: "WRT1",   description: "Flash write protection bit 1", bit: 10 },
-            FuseBitField { name: "CPD",    description: "Data EEPROM code protection (1=off, 0=on)", bit: 8 },
-            FuseBitField { name: "LVP",    description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)", bit: 7 },
-            FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)", bit: 5 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 4 },
-            FuseBitField { name: "PWRTE",  description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 3 },
-            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CCPMX",
+                description: "CCP1 pin mux (1=RB0, 0=RB3)",
+                bit: 12,
+            },
+            FuseBitField {
+                name: "DEBUG",
+                description: "In-Circuit Debugger enable (1=disabled, 0=enabled)",
+                bit: 11,
+            },
+            FuseBitField {
+                name: "WRT1",
+                description: "Flash write protection bit 1",
+                bit: 10,
+            },
+            FuseBitField {
+                name: "CPD",
+                description: "Data EEPROM code protection (1=off, 0=on)",
+                bit: 8,
+            },
+            FuseBitField {
+                name: "LVP",
+                description: "Low-voltage Programming enable (1=RB3/PGM, 0=HV on MCLR)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "BOREN",
+                description: "Brown-out Reset enable (1=on, 0=off)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "RA5/MCLR pin function select (1=MCLR, 0=digital I/O)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "PWRTE",
+                description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTEN",
+                description: "Watchdog Timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -967,13 +2360,41 @@ const PIC_15: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "IOSCFS", description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 4 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "IOSCFS",
+                description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=RB3)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -985,10 +2406,26 @@ const PIC_16: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 3 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=HS, 11=RC)", bit: 0 },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0 (00=LP, 01=XT, 10=HS, 11=RC)",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -1000,12 +2437,36 @@ const PIC_18: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "MCLRE", description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
-            FuseBitField { name: "CP",    description: "Code protection (1=off, 0=on)", bit: 4 },
-            FuseBitField { name: "WDTE",  description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=RB3)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -1017,14 +2478,46 @@ const PIC_27: &FuseConfigDef = &FuseConfigDef {
         name: "word1",
         width: 12,
         fields: &[
-            FuseBitField { name: "CPDF",   description: "Data memory code protection (1=off, 0=on)", bit: 7 },
-            FuseBitField { name: "IOSCFS", description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)", bit: 6 },
-            FuseBitField { name: "MCLRE",  description: "MCLR pin function select (1=MCLR, 0=RB3)", bit: 5 },
-            FuseBitField { name: "CP",     description: "Code protection (1=off, 0=on)", bit: 4 },
-            FuseBitField { name: "WDTE",   description: "Watchdog timer enable (1=on, 0=off)", bit: 3 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 2 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 1 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 0 },
+            FuseBitField {
+                name: "CPDF",
+                description: "Data memory code protection (1=off, 0=on)",
+                bit: 7,
+            },
+            FuseBitField {
+                name: "IOSCFS",
+                description: "Internal Oscillator Frequency Select (1=8MHz, 0=4MHz)",
+                bit: 6,
+            },
+            FuseBitField {
+                name: "MCLRE",
+                description: "MCLR pin function select (1=MCLR, 0=RB3)",
+                bit: 5,
+            },
+            FuseBitField {
+                name: "CP",
+                description: "Code protection (1=off, 0=on)",
+                bit: 4,
+            },
+            FuseBitField {
+                name: "WDTE",
+                description: "Watchdog timer enable (1=on, 0=off)",
+                bit: 3,
+            },
+            FuseBitField {
+                name: "FOSC2",
+                description: "Oscillator selection bit 2",
+                bit: 2,
+            },
+            FuseBitField {
+                name: "FOSC1",
+                description: "Oscillator selection bit 1",
+                bit: 1,
+            },
+            FuseBitField {
+                name: "FOSC0",
+                description: "Oscillator selection bit 0",
+                bit: 0,
+            },
         ],
     }],
     lock_bytes: &[],
@@ -1056,114 +2549,359 @@ const PIC18F_CONFIG1H_STD: &[FuseBitField] = &[
 
 /// CONFIG3H: standard non-USB (MCLRE, LPT1OSC, CCP2MX) — mask 0x87
 const PIC18F_CONFIG3H_STD: &[FuseBitField] = &[
-    FuseBitField { name: "MCLRE",   description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)", bit: 15 },
-    FuseBitField { name: "LPT1OSC", description: "Low-power Timer1 oscillator (1=low power, 0=high power)", bit: 10 },
-    FuseBitField { name: "CCP2MX",  description: "CCP2 mux (1=RC1, 0=RB3)", bit: 8 },
+    FuseBitField {
+        name: "MCLRE",
+        description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "LPT1OSC",
+        description: "Low-power Timer1 oscillator (1=low power, 0=high power)",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "CCP2MX",
+        description: "CCP2 mux (1=RC1, 0=RB3)",
+        bit: 8,
+    },
 ];
 
 /// CONFIG3H: USB (MCLRE, LPT1OSC, PBADEN, CCP2MX) — mask 0x87
 const PIC18F_CONFIG3H_USB: &[FuseBitField] = &[
-    FuseBitField { name: "MCLRE",   description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)", bit: 15 },
-    FuseBitField { name: "LPT1OSC", description: "Low-power Timer1 oscillator (1=low power, 0=high power)", bit: 10 },
-    FuseBitField { name: "PBADEN",  description: "PORTB A/D enable (1=analog on reset, 0=digital on reset)", bit: 9 },
-    FuseBitField { name: "CCP2MX",  description: "CCP2 mux (1=RC1, 0=RB3)", bit: 8 },
+    FuseBitField {
+        name: "MCLRE",
+        description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "LPT1OSC",
+        description: "Low-power Timer1 oscillator (1=low power, 0=high power)",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "PBADEN",
+        description: "PORTB A/D enable (1=analog on reset, 0=digital on reset)",
+        bit: 9,
+    },
+    FuseBitField {
+        name: "CCP2MX",
+        description: "CCP2 mux (1=RC1, 0=RB3)",
+        bit: 8,
+    },
 ];
 
 /// CONFIG4L: without XINST (DEBUG, LVP, STVREN) — mask 0x85
 const PIC18F_CONFIG4L_NO_XINST: &[FuseBitField] = &[
-    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
-    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
-    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+    FuseBitField {
+        name: "DEBUG",
+        description: "Background debugger enable (1=disabled, 0=enabled)",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "LVP",
+        description: "Low-voltage ICSP enable (1=enabled, 0=disabled)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "STVREN",
+        description: "Stack overflow/underflow reset (1=on, 0=off)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG4L: with XINST (DEBUG, XINST, LVP, STVREN) — mask 0xC5
 const PIC18F_CONFIG4L_XINST: &[FuseBitField] = &[
-    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
-    FuseBitField { name: "XINST",  description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
-    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
-    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+    FuseBitField {
+        name: "DEBUG",
+        description: "Background debugger enable (1=disabled, 0=enabled)",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "XINST",
+        description: "Extended instruction set (1=enabled, 0=legacy)",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "LVP",
+        description: "Low-voltage ICSP enable (1=enabled, 0=disabled)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "STVREN",
+        description: "Stack overflow/underflow reset (1=on, 0=off)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG2H+CONFIG2L combined for standard non-USB — mask 0x1F1F
 const PIC18F_WORD2_STD: &[FuseBitField] = &[
-    FuseBitField { name: "WDTPS3", description: "Watchdog Timer postscale bit 3", bit: 12 },
-    FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
-    FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
-    FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0 (00000=1:1 to 11111=1:32768)", bit: 9 },
-    FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN control)", bit: 8 },
-    FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 4 },
-    FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0 (00=max, 11=min)", bit: 3 },
-    FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 2 },
-    FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0 (00=off, 01=SW control, 10=HW only in run, 11=HW only)", bit: 1 },
-    FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+    FuseBitField {
+        name: "WDTPS3",
+        description: "Watchdog Timer postscale bit 3",
+        bit: 12,
+    },
+    FuseBitField {
+        name: "WDTPS2",
+        description: "Watchdog Timer postscale bit 2",
+        bit: 11,
+    },
+    FuseBitField {
+        name: "WDTPS1",
+        description: "Watchdog Timer postscale bit 1",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "WDTPS0",
+        description: "Watchdog Timer postscale bit 0 (00000=1:1 to 11111=1:32768)",
+        bit: 9,
+    },
+    FuseBitField {
+        name: "WDTEN",
+        description: "Watchdog Timer enable (1=on, 0=off/SWDTEN control)",
+        bit: 8,
+    },
+    FuseBitField {
+        name: "BORV1",
+        description: "Brown-out Reset voltage bit 1",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "BORV0",
+        description: "Brown-out Reset voltage bit 0 (00=max, 11=min)",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BOREN1",
+        description: "Brown-out Reset enable bit 1",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BOREN0",
+        description:
+            "Brown-out Reset enable bit 0 (00=off, 01=SW control, 10=HW only in run, 11=HW only)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "PWRTEN",
+        description: "Power-up Timer enable (1=disabled, 0=enabled)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG5H+CONFIG5L: 2 code protection blocks — mask 0xC003
 /// CPD at CONFIG5H bit 7 (packed 15), CPB at CONFIG5H bit 6 (packed 14)
 const PIC18F_WORD5_2BLK: &[FuseBitField] = &[
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "CPD",
+        description: "Data EEPROM code protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG5H+CONFIG5L: 4 code protection blocks — mask 0xC00F
 const PIC18F_WORD5_4BLK: &[FuseBitField] = &[
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "CP3", description: "Code protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "CPD",
+        description: "Data EEPROM code protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CP2",
+        description: "Code protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "CP3",
+        description: "Code protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 /// CONFIG6H+CONFIG6L: 2 write protection blocks — mask 0xE003
 /// WRTD at CONFIG6H bit 7 (packed 15), WRTB at bit 6 (packed 14), WRTC at bit 5 (packed 13)
 const PIC18F_WORD6_2BLK: &[FuseBitField] = &[
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "WRTD",
+        description: "Data EEPROM write protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG6H+CONFIG6L: 4 write protection blocks — mask 0xE00F
 const PIC18F_WORD6_4BLK: &[FuseBitField] = &[
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "WRT3", description: "Write protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "WRTD",
+        description: "Data EEPROM write protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "WRT2",
+        description: "Write protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "WRT3",
+        description: "Write protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 /// CONFIG7H+CONFIG7L: 2 table read protection blocks — mask 0x4003
 const PIC18F_WORD7_2BLK: &[FuseBitField] = &[
-    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "EBTRB",
+        description: "Boot block table read protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "EBTR0",
+        description: "Table read protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "EBTR1",
+        description: "Table read protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG7H+CONFIG7L: 4 table read protection blocks — mask 0x400F
 const PIC18F_WORD7_4BLK: &[FuseBitField] = &[
-    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "EBTR2", description: "Table read protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "EBTR3", description: "Table read protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "EBTRB",
+        description: "Boot block table read protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "EBTR0",
+        description: "Table read protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "EBTR1",
+        description: "Table read protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "EBTR2",
+        description: "Table read protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "EBTR3",
+        description: "Table read protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 // pic_34/pic_38: PIC18F2410/2510 — standard non-USB, no XINST, 2 protection blocks
 const PIC_34: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_STD },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_STD,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1171,13 +2909,41 @@ const PIC_34: &FuseConfigDef = &FuseConfigDef {
 // pic_35/pic_39: PIC18F2420/2520 — standard non-USB, with XINST, 2 protection blocks
 const PIC_35: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_STD },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_STD,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1233,177 +2999,553 @@ const PIC18F_CONFIG1H_OLD: &[FuseBitField] = &[
 
 /// CONFIG1H: PIC18F1220 style (FSCM instead of FCMEN, 4-bit FOSC) — mask 0xCF
 const PIC18F_CONFIG1H_FSCM: &[FuseBitField] = &[
-    FuseBitField { name: "IESO",  description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)", bit: 15 },
-    FuseBitField { name: "FSCM",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 14 },
-    FuseBitField { name: "FOSC3", description: "Oscillator selection bit 3", bit: 11 },
-    FuseBitField { name: "FOSC2", description: "Oscillator selection bit 2", bit: 10 },
-    FuseBitField { name: "FOSC1", description: "Oscillator selection bit 1", bit: 9 },
-    FuseBitField { name: "FOSC0", description: "Oscillator selection bit 0", bit: 8 },
+    FuseBitField {
+        name: "IESO",
+        description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "FSCM",
+        description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "FOSC3",
+        description: "Oscillator selection bit 3",
+        bit: 11,
+    },
+    FuseBitField {
+        name: "FOSC2",
+        description: "Oscillator selection bit 2",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "FOSC1",
+        description: "Oscillator selection bit 1",
+        bit: 9,
+    },
+    FuseBitField {
+        name: "FOSC0",
+        description: "Oscillator selection bit 0",
+        bit: 8,
+    },
 ];
 
 /// CONFIG2H+CONFIG2L: old-style (3-bit WDTPS, single BOREN) — mask 0x0F0F
 const PIC18F_WORD2_OLD: &[FuseBitField] = &[
-    FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
-    FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
-    FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0 (000=1:1 to 111=1:128)", bit: 9 },
-    FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
-    FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 3 },
-    FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 2 },
-    FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 1 },
-    FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+    FuseBitField {
+        name: "WDTPS2",
+        description: "Watchdog Timer postscale bit 2",
+        bit: 11,
+    },
+    FuseBitField {
+        name: "WDTPS1",
+        description: "Watchdog Timer postscale bit 1",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "WDTPS0",
+        description: "Watchdog Timer postscale bit 0 (000=1:1 to 111=1:128)",
+        bit: 9,
+    },
+    FuseBitField {
+        name: "WDTEN",
+        description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)",
+        bit: 8,
+    },
+    FuseBitField {
+        name: "BORV1",
+        description: "Brown-out Reset voltage bit 1",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BORV0",
+        description: "Brown-out Reset voltage bit 0",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BOREN",
+        description: "Brown-out Reset enable (1=on, 0=off)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "PWRTEN",
+        description: "Power-up Timer enable (1=disabled, 0=enabled)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG2H+CONFIG2L: PIC18F1220 style (4-bit WDTPS, single BOREN) — mask 0x1F0F
 const PIC18F_WORD2_FSCM: &[FuseBitField] = &[
-    FuseBitField { name: "WDTPS3", description: "Watchdog Timer postscale bit 3", bit: 12 },
-    FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
-    FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
-    FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0", bit: 9 },
-    FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
-    FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 3 },
-    FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 2 },
-    FuseBitField { name: "BOREN",  description: "Brown-out Reset enable (1=on, 0=off)", bit: 1 },
-    FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
+    FuseBitField {
+        name: "WDTPS3",
+        description: "Watchdog Timer postscale bit 3",
+        bit: 12,
+    },
+    FuseBitField {
+        name: "WDTPS2",
+        description: "Watchdog Timer postscale bit 2",
+        bit: 11,
+    },
+    FuseBitField {
+        name: "WDTPS1",
+        description: "Watchdog Timer postscale bit 1",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "WDTPS0",
+        description: "Watchdog Timer postscale bit 0",
+        bit: 9,
+    },
+    FuseBitField {
+        name: "WDTEN",
+        description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)",
+        bit: 8,
+    },
+    FuseBitField {
+        name: "BORV1",
+        description: "Brown-out Reset voltage bit 1",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "BORV0",
+        description: "Brown-out Reset voltage bit 0",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "BOREN",
+        description: "Brown-out Reset enable (1=on, 0=off)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "PWRTEN",
+        description: "Power-up Timer enable (1=disabled, 0=enabled)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG3H: just CCP2MX — mask 0x01
-const PIC18F_CONFIG3H_CCP2MX: &[FuseBitField] = &[
-    FuseBitField { name: "CCP2MX", description: "CCP2 mux (1=RC1, 0=RB3)", bit: 8 },
-];
+const PIC18F_CONFIG3H_CCP2MX: &[FuseBitField] = &[FuseBitField {
+    name: "CCP2MX",
+    description: "CCP2 mux (1=RC1, 0=RB3)",
+    bit: 8,
+}];
 
 /// CONFIG3H: just MCLRE — mask 0x80
-const PIC18F_CONFIG3H_MCLRE: &[FuseBitField] = &[
-    FuseBitField { name: "MCLRE", description: "MCLR pin enable (1=MCLR enabled, 0=RA5 input)", bit: 15 },
-];
+const PIC18F_CONFIG3H_MCLRE: &[FuseBitField] = &[FuseBitField {
+    name: "MCLRE",
+    description: "MCLR pin enable (1=MCLR enabled, 0=RA5 input)",
+    bit: 15,
+}];
 
 /// CONFIG3H: MCLRE, LPT1OSC, PBADEN (no CCP2MX) — mask 0x86
 const PIC18F_CONFIG3H_PBADEN: &[FuseBitField] = &[
-    FuseBitField { name: "MCLRE",   description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)", bit: 15 },
-    FuseBitField { name: "LPT1OSC", description: "Low-power Timer1 oscillator (1=low power, 0=high power)", bit: 10 },
-    FuseBitField { name: "PBADEN",  description: "PORTB A/D enable (1=analog on reset, 0=digital on reset)", bit: 9 },
+    FuseBitField {
+        name: "MCLRE",
+        description: "MCLR pin enable (1=MCLR enabled, 0=RE3 input)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "LPT1OSC",
+        description: "Low-power Timer1 oscillator (1=low power, 0=high power)",
+        bit: 10,
+    },
+    FuseBitField {
+        name: "PBADEN",
+        description: "PORTB A/D enable (1=analog on reset, 0=digital on reset)",
+        bit: 9,
+    },
 ];
 
 /// CONFIG4L: DEBUG, XINST, BBSIZ (bit 3), LVP, STVREN — mask 0xCD
 const PIC18F_CONFIG4L_BBSIZ3: &[FuseBitField] = &[
-    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
-    FuseBitField { name: "XINST",  description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
-    FuseBitField { name: "BBSIZ",  description: "Boot block size (1=2KW, 0=1KW)", bit: 3 },
-    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
-    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+    FuseBitField {
+        name: "DEBUG",
+        description: "Background debugger enable (1=disabled, 0=enabled)",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "XINST",
+        description: "Extended instruction set (1=enabled, 0=legacy)",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "BBSIZ",
+        description: "Boot block size (1=2KW, 0=1KW)",
+        bit: 3,
+    },
+    FuseBitField {
+        name: "LVP",
+        description: "Low-voltage ICSP enable (1=enabled, 0=disabled)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "STVREN",
+        description: "Stack overflow/underflow reset (1=on, 0=off)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG4L: DEBUG, XINST, BBSIZ (bit 4), LVP, STVREN — mask 0xD5
 const PIC18F_CONFIG4L_BBSIZ4: &[FuseBitField] = &[
-    FuseBitField { name: "DEBUG",  description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
-    FuseBitField { name: "XINST",  description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
-    FuseBitField { name: "BBSIZ",  description: "Boot block size (1=2K words, 0=1K words)", bit: 4 },
-    FuseBitField { name: "LVP",    description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
-    FuseBitField { name: "STVREN", description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+    FuseBitField {
+        name: "DEBUG",
+        description: "Background debugger enable (1=disabled, 0=enabled)",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "XINST",
+        description: "Extended instruction set (1=enabled, 0=legacy)",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "BBSIZ",
+        description: "Boot block size (1=2K words, 0=1K words)",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "LVP",
+        description: "Low-voltage ICSP enable (1=enabled, 0=disabled)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "STVREN",
+        description: "Stack overflow/underflow reset (1=on, 0=off)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG4L: DEBUG, XINST, BBSIZ1:BBSIZ0 (2-bit), LVP, STVREN — mask 0xF5
 const PIC18F_CONFIG4L_BBSIZ2: &[FuseBitField] = &[
-    FuseBitField { name: "DEBUG",   description: "Background debugger enable (1=disabled, 0=enabled)", bit: 7 },
-    FuseBitField { name: "XINST",   description: "Extended instruction set (1=enabled, 0=legacy)", bit: 6 },
-    FuseBitField { name: "BBSIZ1",  description: "Boot block size bit 1", bit: 5 },
-    FuseBitField { name: "BBSIZ0",  description: "Boot block size bit 0 (00=256W, 01=512W, 10=1KW, 11=2KW)", bit: 4 },
-    FuseBitField { name: "LVP",     description: "Low-voltage ICSP enable (1=enabled, 0=disabled)", bit: 2 },
-    FuseBitField { name: "STVREN",  description: "Stack overflow/underflow reset (1=on, 0=off)", bit: 0 },
+    FuseBitField {
+        name: "DEBUG",
+        description: "Background debugger enable (1=disabled, 0=enabled)",
+        bit: 7,
+    },
+    FuseBitField {
+        name: "XINST",
+        description: "Extended instruction set (1=enabled, 0=legacy)",
+        bit: 6,
+    },
+    FuseBitField {
+        name: "BBSIZ1",
+        description: "Boot block size bit 1",
+        bit: 5,
+    },
+    FuseBitField {
+        name: "BBSIZ0",
+        description: "Boot block size bit 0 (00=256W, 01=512W, 10=1KW, 11=2KW)",
+        bit: 4,
+    },
+    FuseBitField {
+        name: "LVP",
+        description: "Low-voltage ICSP enable (1=enabled, 0=disabled)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "STVREN",
+        description: "Stack overflow/underflow reset (1=on, 0=off)",
+        bit: 0,
+    },
 ];
 
 /// CONFIG5H+CONFIG5L: 3 code protection blocks with CPD — mask 0xC007
 const PIC18F_WORD5_3BLK: &[FuseBitField] = &[
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField {
+        name: "CPD",
+        description: "Data EEPROM code protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CP2",
+        description: "Code protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
 ];
 
 /// CONFIG5H+CONFIG5L: 3 code protection blocks without CPD — mask 0x4007
 const PIC18F_WORD5_3BLK_NO_CPD: &[FuseBitField] = &[
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CP2",
+        description: "Code protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
 ];
 
 /// CONFIG5H+CONFIG5L: 2 code protection blocks, CPB only (no CPD) — mask 0x4003
 const PIC18F_WORD5_CPB_ONLY: &[FuseBitField] = &[
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG6H+CONFIG6L: 3 write protection blocks with WRTD — mask 0xE007
 const PIC18F_WORD6_3BLK: &[FuseBitField] = &[
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField {
+        name: "WRTD",
+        description: "Data EEPROM write protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "WRT2",
+        description: "Write protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
 ];
 
 /// CONFIG6H+CONFIG6L: 3 write protection blocks without WRTD — mask 0x6007
 const PIC18F_WORD6_3BLK_NO_WRTD: &[FuseBitField] = &[
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "WRT2",
+        description: "Write protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
 ];
 
 /// CONFIG6H+CONFIG6L: 2 write protection blocks, WRTC+WRTB only (no WRTD) — mask 0x6003
 const PIC18F_WORD6_WRTC_WRTB: &[FuseBitField] = &[
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG7H+CONFIG7L: 3 table read protection blocks — mask 0x4007
 const PIC18F_WORD7_3BLK: &[FuseBitField] = &[
-    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "EBTR2", description: "Table read protection block 2 (1=off, 0=on)", bit: 2 },
+    FuseBitField {
+        name: "EBTRB",
+        description: "Boot block table read protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "EBTR0",
+        description: "Table read protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "EBTR1",
+        description: "Table read protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "EBTR2",
+        description: "Table read protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
 ];
 
 /// CONFIG7L only: 2 table read protection blocks (no EBTRB) — mask 0x0003
 const PIC18F_WORD7_2BLK_NO_EBTRB: &[FuseBitField] = &[
-    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
+    FuseBitField {
+        name: "EBTR0",
+        description: "Table read protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "EBTR1",
+        description: "Table read protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
 ];
 
 /// CONFIG4L: 4 code protection blocks (old-style PIC18F242/252) — mask 0x000F
 const PIC18F_WORD5_4BLK_OLD: &[FuseBitField] = &[
-    FuseBitField { name: "CPD", description: "Data EEPROM code protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "CPB", description: "Boot block code protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "CP0", description: "Code protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "CP1", description: "Code protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "CP2", description: "Code protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "CP3", description: "Code protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "CPD",
+        description: "Data EEPROM code protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "CPB",
+        description: "Boot block code protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "CP0",
+        description: "Code protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "CP1",
+        description: "Code protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "CP2",
+        description: "Code protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "CP3",
+        description: "Code protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 /// CONFIG6L: 4 write protection blocks (old-style PIC18F242/252) — mask 0x000F
 const PIC18F_WORD6_4BLK_OLD: &[FuseBitField] = &[
-    FuseBitField { name: "WRTD", description: "Data EEPROM write protection (1=off, 0=on)", bit: 15 },
-    FuseBitField { name: "WRTB", description: "Boot block write protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "WRTC", description: "Config register write protection (1=off, 0=on)", bit: 13 },
-    FuseBitField { name: "WRT0", description: "Write protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "WRT1", description: "Write protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "WRT2", description: "Write protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "WRT3", description: "Write protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "WRTD",
+        description: "Data EEPROM write protection (1=off, 0=on)",
+        bit: 15,
+    },
+    FuseBitField {
+        name: "WRTB",
+        description: "Boot block write protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "WRTC",
+        description: "Config register write protection (1=off, 0=on)",
+        bit: 13,
+    },
+    FuseBitField {
+        name: "WRT0",
+        description: "Write protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "WRT1",
+        description: "Write protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "WRT2",
+        description: "Write protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "WRT3",
+        description: "Write protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 /// CONFIG7L: 4 table read protection blocks (old-style PIC18F242/252) — mask 0x000F
 const PIC18F_WORD7_4BLK_OLD: &[FuseBitField] = &[
-    FuseBitField { name: "EBTRB", description: "Boot block table read protection (1=off, 0=on)", bit: 14 },
-    FuseBitField { name: "EBTR0", description: "Table read protection block 0 (1=off, 0=on)", bit: 0 },
-    FuseBitField { name: "EBTR1", description: "Table read protection block 1 (1=off, 0=on)", bit: 1 },
-    FuseBitField { name: "EBTR2", description: "Table read protection block 2 (1=off, 0=on)", bit: 2 },
-    FuseBitField { name: "EBTR3", description: "Table read protection block 3 (1=off, 0=on)", bit: 3 },
+    FuseBitField {
+        name: "EBTRB",
+        description: "Boot block table read protection (1=off, 0=on)",
+        bit: 14,
+    },
+    FuseBitField {
+        name: "EBTR0",
+        description: "Table read protection block 0 (1=off, 0=on)",
+        bit: 0,
+    },
+    FuseBitField {
+        name: "EBTR1",
+        description: "Table read protection block 1 (1=off, 0=on)",
+        bit: 1,
+    },
+    FuseBitField {
+        name: "EBTR2",
+        description: "Table read protection block 2 (1=off, 0=on)",
+        bit: 2,
+    },
+    FuseBitField {
+        name: "EBTR3",
+        description: "Table read protection block 3 (1=off, 0=on)",
+        bit: 3,
+    },
 ];
 
 // ── Old-style PIC18F configs (PIC18F242/252/248/258 family) ──
@@ -1414,13 +3556,41 @@ const PIC18F_WORD7_4BLK_OLD: &[FuseBitField] = &[
 // pic_28: PIC18F242 — old-style, 3-bit FOSC, CCP2MX, 2 protection blocks
 const PIC_28: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_CCP2MX },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_OLD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_OLD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_CCP2MX,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1428,13 +3598,41 @@ const PIC_28: &FuseConfigDef = &FuseConfigDef {
 // pic_29: PIC18F252 — old-style, 3-bit FOSC, CCP2MX, 4 protection blocks
 const PIC_29: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_CCP2MX },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_4BLK_OLD },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_4BLK_OLD },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_4BLK_OLD },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_OLD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_OLD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_CCP2MX,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_4BLK_OLD,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_4BLK_OLD,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_4BLK_OLD,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1443,26 +3641,82 @@ const PIC_29: &FuseConfigDef = &FuseConfigDef {
 // PIC18F258 has 4 blocks, PIC18F248 has 2 blocks — use chip-specific overrides.
 const PIC_30: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
-        FuseByteDef { name: "word3", width: 16, fields: &[] },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_4BLK_OLD },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_4BLK_OLD },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_4BLK_OLD },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_OLD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_OLD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: &[],
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_4BLK_OLD,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_4BLK_OLD,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_4BLK_OLD,
+        },
     ],
     lock_bytes: &[],
 };
 
 const PIC_31: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_OLD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_OLD },
-        FuseByteDef { name: "word3", width: 16, fields: &[] },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_OLD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_OLD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: &[],
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1472,13 +3726,41 @@ const PIC_31: &FuseConfigDef = &FuseConfigDef {
 // pic_32: PIC18F1220 — FSCM, 4-bit FOSC, MCLRE only, 2 protection blocks
 const PIC_32: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_FSCM },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_FSCM },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_MCLRE },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_NO_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_FSCM,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_FSCM,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_MCLRE,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_NO_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1486,38 +3768,158 @@ const PIC_32: &FuseConfigDef = &FuseConfigDef {
 // pic_33: PIC18F2450 — USB, FCMEN/IESO, VREGEN, BBSIZ at bit 3, 2 blocks, no CPD/WRTD/EBTRB
 const PIC_33: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: &[
-            FuseBitField { name: "IESO",   description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)", bit: 15 },
-            FuseBitField { name: "FCMEN",  description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)", bit: 14 },
-            FuseBitField { name: "FOSC3",  description: "Oscillator selection bit 3", bit: 11 },
-            FuseBitField { name: "FOSC2",  description: "Oscillator selection bit 2", bit: 10 },
-            FuseBitField { name: "FOSC1",  description: "Oscillator selection bit 1", bit: 9 },
-            FuseBitField { name: "FOSC0",  description: "Oscillator selection bit 0", bit: 8 },
-            FuseBitField { name: "USBDIV", description: "USB clock selection (1=PLL/2, 0=primary)", bit: 5 },
-            FuseBitField { name: "CPUDIV1", description: "System clock postscaler bit 1", bit: 4 },
-            FuseBitField { name: "CPUDIV0", description: "System clock postscaler bit 0", bit: 3 },
-            FuseBitField { name: "PLLDIV2", description: "PLL prescaler bit 2", bit: 2 },
-            FuseBitField { name: "PLLDIV1", description: "PLL prescaler bit 1", bit: 1 },
-            FuseBitField { name: "PLLDIV0", description: "PLL prescaler bit 0", bit: 0 },
-        ]},
-        FuseByteDef { name: "word2", width: 16, fields: &[
-            FuseBitField { name: "WDTPS3", description: "Watchdog Timer postscale bit 3", bit: 12 },
-            FuseBitField { name: "WDTPS2", description: "Watchdog Timer postscale bit 2", bit: 11 },
-            FuseBitField { name: "WDTPS1", description: "Watchdog Timer postscale bit 1", bit: 10 },
-            FuseBitField { name: "WDTPS0", description: "Watchdog Timer postscale bit 0", bit: 9 },
-            FuseBitField { name: "WDTEN",  description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)", bit: 8 },
-            FuseBitField { name: "VREGEN", description: "USB voltage regulator enable (1=enabled, 0=disabled)", bit: 5 },
-            FuseBitField { name: "BORV1",  description: "Brown-out Reset voltage bit 1", bit: 4 },
-            FuseBitField { name: "BORV0",  description: "Brown-out Reset voltage bit 0", bit: 3 },
-            FuseBitField { name: "BOREN1", description: "Brown-out Reset enable bit 1", bit: 2 },
-            FuseBitField { name: "BOREN0", description: "Brown-out Reset enable bit 0", bit: 1 },
-            FuseBitField { name: "PWRTEN", description: "Power-up Timer enable (1=disabled, 0=enabled)", bit: 0 },
-        ]},
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_PBADEN },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ3 },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_CPB_ONLY },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_WRTC_WRTB },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK_NO_EBTRB },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: &[
+                FuseBitField {
+                    name: "IESO",
+                    description: "Internal/External Oscillator Switchover (1=enabled, 0=disabled)",
+                    bit: 15,
+                },
+                FuseBitField {
+                    name: "FCMEN",
+                    description: "Fail-Safe Clock Monitor enable (1=enabled, 0=disabled)",
+                    bit: 14,
+                },
+                FuseBitField {
+                    name: "FOSC3",
+                    description: "Oscillator selection bit 3",
+                    bit: 11,
+                },
+                FuseBitField {
+                    name: "FOSC2",
+                    description: "Oscillator selection bit 2",
+                    bit: 10,
+                },
+                FuseBitField {
+                    name: "FOSC1",
+                    description: "Oscillator selection bit 1",
+                    bit: 9,
+                },
+                FuseBitField {
+                    name: "FOSC0",
+                    description: "Oscillator selection bit 0",
+                    bit: 8,
+                },
+                FuseBitField {
+                    name: "USBDIV",
+                    description: "USB clock selection (1=PLL/2, 0=primary)",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "CPUDIV1",
+                    description: "System clock postscaler bit 1",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "CPUDIV0",
+                    description: "System clock postscaler bit 0",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "PLLDIV2",
+                    description: "PLL prescaler bit 2",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "PLLDIV1",
+                    description: "PLL prescaler bit 1",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "PLLDIV0",
+                    description: "PLL prescaler bit 0",
+                    bit: 0,
+                },
+            ],
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: &[
+                FuseBitField {
+                    name: "WDTPS3",
+                    description: "Watchdog Timer postscale bit 3",
+                    bit: 12,
+                },
+                FuseBitField {
+                    name: "WDTPS2",
+                    description: "Watchdog Timer postscale bit 2",
+                    bit: 11,
+                },
+                FuseBitField {
+                    name: "WDTPS1",
+                    description: "Watchdog Timer postscale bit 1",
+                    bit: 10,
+                },
+                FuseBitField {
+                    name: "WDTPS0",
+                    description: "Watchdog Timer postscale bit 0",
+                    bit: 9,
+                },
+                FuseBitField {
+                    name: "WDTEN",
+                    description: "Watchdog Timer enable (1=on, 0=off/SWDTEN)",
+                    bit: 8,
+                },
+                FuseBitField {
+                    name: "VREGEN",
+                    description: "USB voltage regulator enable (1=enabled, 0=disabled)",
+                    bit: 5,
+                },
+                FuseBitField {
+                    name: "BORV1",
+                    description: "Brown-out Reset voltage bit 1",
+                    bit: 4,
+                },
+                FuseBitField {
+                    name: "BORV0",
+                    description: "Brown-out Reset voltage bit 0",
+                    bit: 3,
+                },
+                FuseBitField {
+                    name: "BOREN1",
+                    description: "Brown-out Reset enable bit 1",
+                    bit: 2,
+                },
+                FuseBitField {
+                    name: "BOREN0",
+                    description: "Brown-out Reset enable bit 0",
+                    bit: 1,
+                },
+                FuseBitField {
+                    name: "PWRTEN",
+                    description: "Power-up Timer enable (1=disabled, 0=enabled)",
+                    bit: 0,
+                },
+            ],
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_PBADEN,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_BBSIZ3,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_CPB_ONLY,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_WRTC_WRTB,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK_NO_EBTRB,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1525,13 +3927,41 @@ const PIC_33: &FuseConfigDef = &FuseConfigDef {
 // pic_37/pic_41: PIC18F2480/2580 — FCMEN/IESO, 4-bit FOSC, PBADEN+LPT1OSC+MCLRE, BBSIZ at bit 4, 2 blocks
 const PIC_37: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_PBADEN },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ4 },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_PBADEN,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_BBSIZ4,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1539,13 +3969,41 @@ const PIC_37: &FuseConfigDef = &FuseConfigDef {
 // pic_42: PIC18F2515 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, XINST, 3 blocks, no CPD/WRTD
 const PIC_42: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_3BLK_NO_CPD },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_3BLK_NO_WRTD },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_3BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_USB,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_3BLK_NO_CPD,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_3BLK_NO_WRTD,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_3BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1553,13 +4011,41 @@ const PIC_42: &FuseConfigDef = &FuseConfigDef {
 // pic_43: PIC18F2525 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, XINST, 3 blocks, with CPD/WRTD
 const PIC_43: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_XINST },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_3BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_3BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_3BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_USB,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_XINST,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_3BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_3BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_3BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1567,13 +4053,41 @@ const PIC_43: &FuseConfigDef = &FuseConfigDef {
 // pic_49: PIC18F2221 — FCMEN/IESO, CCP2MX+PBADEN+LPT1OSC+MCLRE, 2-bit BBSIZ+XINST, 2 blocks
 const PIC_49: &FuseConfigDef = &FuseConfigDef {
     fuse_bytes: &[
-        FuseByteDef { name: "word1", width: 16, fields: PIC18F_CONFIG1H_STD },
-        FuseByteDef { name: "word2", width: 16, fields: PIC18F_WORD2_STD },
-        FuseByteDef { name: "word3", width: 16, fields: PIC18F_CONFIG3H_USB },
-        FuseByteDef { name: "word4", width: 16, fields: PIC18F_CONFIG4L_BBSIZ2 },
-        FuseByteDef { name: "word5", width: 16, fields: PIC18F_WORD5_2BLK },
-        FuseByteDef { name: "word6", width: 16, fields: PIC18F_WORD6_2BLK },
-        FuseByteDef { name: "word7", width: 16, fields: PIC18F_WORD7_2BLK },
+        FuseByteDef {
+            name: "word1",
+            width: 16,
+            fields: PIC18F_CONFIG1H_STD,
+        },
+        FuseByteDef {
+            name: "word2",
+            width: 16,
+            fields: PIC18F_WORD2_STD,
+        },
+        FuseByteDef {
+            name: "word3",
+            width: 16,
+            fields: PIC18F_CONFIG3H_USB,
+        },
+        FuseByteDef {
+            name: "word4",
+            width: 16,
+            fields: PIC18F_CONFIG4L_BBSIZ2,
+        },
+        FuseByteDef {
+            name: "word5",
+            width: 16,
+            fields: PIC18F_WORD5_2BLK,
+        },
+        FuseByteDef {
+            name: "word6",
+            width: 16,
+            fields: PIC18F_WORD6_2BLK,
+        },
+        FuseByteDef {
+            name: "word7",
+            width: 16,
+            fields: PIC18F_WORD7_2BLK,
+        },
     ],
     lock_bytes: &[],
 };
@@ -1582,13 +4096,13 @@ const PIC_49: &FuseConfigDef = &FuseConfigDef {
 
 /// Config-name-only entries (13 AVR + 8 PIC configs with consistent bit layouts).
 static CONFIG_TABLE: &[(&str, &FuseConfigDef)] = &[
-    ("avr_1",  AVR_1),
-    ("avr_2",  AVR_2),
-    ("avr_3",  AVR_3),
-    ("avr_5",  AVR_5),
-    ("avr_7",  AVR_7),
-    ("avr_8",  AVR_8),
-    ("avr_9",  AVR_9),
+    ("avr_1", AVR_1),
+    ("avr_2", AVR_2),
+    ("avr_3", AVR_3),
+    ("avr_5", AVR_5),
+    ("avr_7", AVR_7),
+    ("avr_8", AVR_8),
+    ("avr_9", AVR_9),
     ("avr_10", AVR_10),
     ("avr_11", AVR_11),
     ("avr_12", AVR_12),
@@ -1596,16 +4110,16 @@ static CONFIG_TABLE: &[(&str, &FuseConfigDef)] = &[
     ("avr_16", AVR_16),
     ("avr_18", AVR_18),
     // PIC baseline 12-bit configs (PIC10F/PIC12F5 family)
-    ("pic_1",  PIC_1),
-    ("pic_2",  PIC_2),
-    ("pic_3",  PIC_3),
-    ("pic_4",  PIC_4),
-    ("pic_5",  PIC_5),
-    ("pic_6",  PIC_6),
-    ("pic_7",  PIC_7),
-    ("pic_8",  PIC_8),
+    ("pic_1", PIC_1),
+    ("pic_2", PIC_2),
+    ("pic_3", PIC_3),
+    ("pic_4", PIC_4),
+    ("pic_5", PIC_5),
+    ("pic_6", PIC_6),
+    ("pic_7", PIC_7),
+    ("pic_8", PIC_8),
     // PIC 14-bit mid-range configs (PIC12F6xx, PIC16F6xx, PIC16F8x)
-    ("pic_9",  PIC_9),
+    ("pic_9", PIC_9),
     ("pic_10", PIC_10),
     ("pic_11", PIC_11),
     ("pic_12", PIC_12),
@@ -1649,35 +4163,127 @@ struct ChipSpecific {
 
 static CHIP_SPECIFIC: &[ChipSpecific] = &[
     // avr_4: ATmega48 vs ATtiny24/44
-    ChipSpecific { config: "avr_4",  chip_prefix: "ATMEGA48",    def: AVR_4_MEGA48 },
-    ChipSpecific { config: "avr_4",  chip_prefix: "ATTINY24",    def: AVR_4_TINY24 },
-    ChipSpecific { config: "avr_4",  chip_prefix: "ATTINY44",    def: AVR_4_TINY24 },
+    ChipSpecific {
+        config: "avr_4",
+        chip_prefix: "ATMEGA48",
+        def: AVR_4_MEGA48,
+    },
+    ChipSpecific {
+        config: "avr_4",
+        chip_prefix: "ATTINY24",
+        def: AVR_4_TINY24,
+    },
+    ChipSpecific {
+        config: "avr_4",
+        chip_prefix: "ATTINY44",
+        def: AVR_4_TINY24,
+    },
     // avr_6: ATtiny25/45/85 vs ATtiny2313/4313
-    ChipSpecific { config: "avr_6",  chip_prefix: "ATTINY25",    def: AVR_6_TINY85 },
-    ChipSpecific { config: "avr_6",  chip_prefix: "ATTINY45",    def: AVR_6_TINY85 },
-    ChipSpecific { config: "avr_6",  chip_prefix: "ATTINY85",    def: AVR_6_TINY85 },
-    ChipSpecific { config: "avr_6",  chip_prefix: "ATTINY2313",  def: AVR_6_TINY2313 },
-    ChipSpecific { config: "avr_6",  chip_prefix: "ATTINY4313",  def: AVR_6_TINY2313 },
+    ChipSpecific {
+        config: "avr_6",
+        chip_prefix: "ATTINY25",
+        def: AVR_6_TINY85,
+    },
+    ChipSpecific {
+        config: "avr_6",
+        chip_prefix: "ATTINY45",
+        def: AVR_6_TINY85,
+    },
+    ChipSpecific {
+        config: "avr_6",
+        chip_prefix: "ATTINY85",
+        def: AVR_6_TINY85,
+    },
+    ChipSpecific {
+        config: "avr_6",
+        chip_prefix: "ATTINY2313",
+        def: AVR_6_TINY2313,
+    },
+    ChipSpecific {
+        config: "avr_6",
+        chip_prefix: "ATTINY4313",
+        def: AVR_6_TINY2313,
+    },
     // avr_13: ATmega128A vs ATmega164/324/644/1284/329/649 family
     // NOTE: ATMEGA1284 must come before ATMEGA128 (prefix match order matters).
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA1284",  def: AVR_13_MEGA164 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA128",   def: AVR_13_MEGA128 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA164",   def: AVR_13_MEGA164 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA324",   def: AVR_13_MEGA164 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA329",   def: AVR_13_MEGA164 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA644",   def: AVR_13_MEGA164 },
-    ChipSpecific { config: "avr_13", chip_prefix: "ATMEGA649",   def: AVR_13_MEGA164 },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA1284",
+        def: AVR_13_MEGA164,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA128",
+        def: AVR_13_MEGA128,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA164",
+        def: AVR_13_MEGA164,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA324",
+        def: AVR_13_MEGA164,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA329",
+        def: AVR_13_MEGA164,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA644",
+        def: AVR_13_MEGA164,
+    },
+    ChipSpecific {
+        config: "avr_13",
+        chip_prefix: "ATMEGA649",
+        def: AVR_13_MEGA164,
+    },
     // avr_15: ATmega8 vs ATmega8535
     // NOTE: ATMEGA8535 must come before ATMEGA8 (prefix match order matters).
-    ChipSpecific { config: "avr_15", chip_prefix: "ATMEGA8535",  def: AVR_15_MEGA8535 },
-    ChipSpecific { config: "avr_15", chip_prefix: "ATMEGA8",     def: AVR_15_MEGA8 },
+    ChipSpecific {
+        config: "avr_15",
+        chip_prefix: "ATMEGA8535",
+        def: AVR_15_MEGA8535,
+    },
+    ChipSpecific {
+        config: "avr_15",
+        chip_prefix: "ATMEGA8",
+        def: AVR_15_MEGA8,
+    },
     // avr_17: U2 vs U4 vs 328PB
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA8U",    def: AVR_17_U2 },
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA16U2",  def: AVR_17_U2 },
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA32U2",  def: AVR_17_U2 },
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA16U4",  def: AVR_17_U4 },
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA32U4",  def: AVR_17_U4 },
-    ChipSpecific { config: "avr_17", chip_prefix: "ATMEGA328PB", def: AVR_17_328PB },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA8U",
+        def: AVR_17_U2,
+    },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA16U2",
+        def: AVR_17_U2,
+    },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA32U2",
+        def: AVR_17_U2,
+    },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA16U4",
+        def: AVR_17_U4,
+    },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA32U4",
+        def: AVR_17_U4,
+    },
+    ChipSpecific {
+        config: "avr_17",
+        chip_prefix: "ATMEGA328PB",
+        def: AVR_17_328PB,
+    },
 ];
 
 #[cfg(test)]
@@ -1706,11 +4312,19 @@ mod tests {
     fn test_lookup_avr_4_chip_specific() {
         let mega48 = lookup("avr_4", "ATMEGA48").unwrap();
         // ATmega48 hfuse has DWEN at bit 6
-        let dwen = mega48.fuse_bytes[1].fields.iter().find(|f| f.name == "DWEN").unwrap();
+        let dwen = mega48.fuse_bytes[1]
+            .fields
+            .iter()
+            .find(|f| f.name == "DWEN")
+            .unwrap();
         assert_eq!(dwen.bit, 6);
 
         let tiny24 = lookup("avr_4", "ATTINY24").unwrap();
-        let dwen = tiny24.fuse_bytes[1].fields.iter().find(|f| f.name == "DWEN").unwrap();
+        let dwen = tiny24.fuse_bytes[1]
+            .fields
+            .iter()
+            .find(|f| f.name == "DWEN")
+            .unwrap();
         assert_eq!(dwen.bit, 6);
     }
 
@@ -1718,12 +4332,20 @@ mod tests {
     fn test_lookup_avr_6_tiny85_vs_tiny2313() {
         // ATtiny85: RSTDISBL at bit 7
         let tiny85 = lookup("avr_6", "ATTINY85").unwrap();
-        let rstdisbl = tiny85.fuse_bytes[1].fields.iter().find(|f| f.name == "RSTDISBL").unwrap();
+        let rstdisbl = tiny85.fuse_bytes[1]
+            .fields
+            .iter()
+            .find(|f| f.name == "RSTDISBL")
+            .unwrap();
         assert_eq!(rstdisbl.bit, 7);
 
         // ATtiny2313: RSTDISBL at bit 0
         let tiny2313 = lookup("avr_6", "ATTINY2313").unwrap();
-        let rstdisbl = tiny2313.fuse_bytes[1].fields.iter().find(|f| f.name == "RSTDISBL").unwrap();
+        let rstdisbl = tiny2313.fuse_bytes[1]
+            .fields
+            .iter()
+            .find(|f| f.name == "RSTDISBL")
+            .unwrap();
         assert_eq!(rstdisbl.bit, 0);
     }
 
@@ -1731,13 +4353,24 @@ mod tests {
     fn test_lookup_avr_13_mega128_vs_mega164() {
         // ATmega128: lfuse has BODEN at bit 6
         let mega128 = lookup("avr_13", "ATMEGA128A").unwrap();
-        let boden = mega128.fuse_bytes[0].fields.iter().find(|f| f.name == "BODEN").unwrap();
+        let boden = mega128.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "BODEN")
+            .unwrap();
         assert_eq!(boden.bit, 6);
 
         // ATmega164: lfuse has CKOUT at bit 6 (no BODEN)
         let mega164 = lookup("avr_13", "ATMEGA164A").unwrap();
-        assert!(mega164.fuse_bytes[0].fields.iter().all(|f| f.name != "BODEN"));
-        let ckout = mega164.fuse_bytes[0].fields.iter().find(|f| f.name == "CKOUT").unwrap();
+        assert!(mega164.fuse_bytes[0]
+            .fields
+            .iter()
+            .all(|f| f.name != "BODEN"));
+        let ckout = mega164.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CKOUT")
+            .unwrap();
         assert_eq!(ckout.bit, 6);
     }
 
@@ -1775,7 +4408,11 @@ mod tests {
     fn test_all_avr_configs_have_lock_bytes() {
         for (name, def) in CONFIG_TABLE {
             if name.starts_with("avr_") {
-                assert!(!def.lock_bytes.is_empty(), "missing lock bytes for {}", name);
+                assert!(
+                    !def.lock_bytes.is_empty(),
+                    "missing lock bytes for {}",
+                    name
+                );
             }
         }
     }
@@ -1783,7 +4420,11 @@ mod tests {
     #[test]
     fn test_all_chip_specific_have_lock_bytes() {
         for entry in CHIP_SPECIFIC {
-            assert!(!entry.def.lock_bytes.is_empty(), "missing lock bytes for {}", entry.chip_prefix);
+            assert!(
+                !entry.def.lock_bytes.is_empty(),
+                "missing lock bytes for {}",
+                entry.chip_prefix
+            );
         }
     }
 
@@ -1791,16 +4432,28 @@ mod tests {
     fn test_avr_5_tiny13_lfuse_layout() {
         let tiny13 = lookup("avr_5", "ATTINY13").unwrap();
         // ATtiny13 lfuse: SPIEN at bit 7, CKSEL0 at bit 0
-        let spien = tiny13.fuse_bytes[0].fields.iter().find(|f| f.name == "SPIEN").unwrap();
+        let spien = tiny13.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "SPIEN")
+            .unwrap();
         assert_eq!(spien.bit, 7);
-        let cksel0 = tiny13.fuse_bytes[0].fields.iter().find(|f| f.name == "CKSEL0").unwrap();
+        let cksel0 = tiny13.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CKSEL0")
+            .unwrap();
         assert_eq!(cksel0.bit, 0);
     }
 
     #[test]
     fn test_avr_7_tiny26_lfuse_has_pllck() {
         let tiny26 = lookup("avr_7", "ATTINY26").unwrap();
-        let pllck = tiny26.fuse_bytes[0].fields.iter().find(|f| f.name == "PLLCK").unwrap();
+        let pllck = tiny26.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "PLLCK")
+            .unwrap();
         assert_eq!(pllck.bit, 7);
     }
 
@@ -1810,8 +4463,14 @@ mod tests {
         // This tests prefix ordering: ATMEGA1284 must be checked before ATMEGA128.
         let mega1284 = lookup("avr_13", "ATMEGA1284P").unwrap();
         // mega164 lfuse has CKOUT at bit 6 (modern), mega128 has BODEN at bit 6 (legacy)
-        assert!(mega1284.fuse_bytes[0].fields.iter().any(|f| f.name == "CKOUT"));
-        assert!(mega1284.fuse_bytes[0].fields.iter().all(|f| f.name != "BODEN"));
+        assert!(mega1284.fuse_bytes[0]
+            .fields
+            .iter()
+            .any(|f| f.name == "CKOUT"));
+        assert!(mega1284.fuse_bytes[0]
+            .fields
+            .iter()
+            .all(|f| f.name != "BODEN"));
     }
 
     // ── PIC tests ───────────────────────────────────────────────────────────
@@ -1822,13 +4481,28 @@ mod tests {
         assert_eq!(def.fuse_bytes.len(), 1);
         assert_eq!(def.fuse_bytes[0].name, "word1");
         assert_eq!(def.fuse_bytes[0].width, 12);
-        assert!(def.lock_bytes.is_empty(), "PIC configs should not have lock bytes");
+        assert!(
+            def.lock_bytes.is_empty(),
+            "PIC configs should not have lock bytes"
+        );
         // MCLRE at bit 4, CP at bit 3, WDTE at bit 2
-        let mclre = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCLRE").unwrap();
+        let mclre = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "MCLRE")
+            .unwrap();
         assert_eq!(mclre.bit, 4);
-        let cp = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CP").unwrap();
+        let cp = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CP")
+            .unwrap();
         assert_eq!(cp.bit, 3);
-        let wdte = def.fuse_bytes[0].fields.iter().find(|f| f.name == "WDTE").unwrap();
+        let wdte = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "WDTE")
+            .unwrap();
         assert_eq!(wdte.bit, 2);
     }
 
@@ -1837,9 +4511,17 @@ mod tests {
         let def = lookup("pic_3", "PIC10F220").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 12);
         // pic_3 has MCPU at bit 1 and IOFSCS at bit 0 (not in pic_1/pic_2)
-        let mcpu = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCPU").unwrap();
+        let mcpu = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "MCPU")
+            .unwrap();
         assert_eq!(mcpu.bit, 1);
-        let iofscs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOFSCS").unwrap();
+        let iofscs = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "IOFSCS")
+            .unwrap();
         assert_eq!(iofscs.bit, 0);
     }
 
@@ -1848,11 +4530,23 @@ mod tests {
         let def = lookup("pic_5", "PIC12F510").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 12);
         // IOSCFS at bit 5, FOSC1 at bit 1, FOSC0 at bit 0
-        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        let ioscfs = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "IOSCFS")
+            .unwrap();
         assert_eq!(ioscfs.bit, 5);
-        let fosc1 = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FOSC1").unwrap();
+        let fosc1 = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "FOSC1")
+            .unwrap();
         assert_eq!(fosc1.bit, 1);
-        let fosc0 = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FOSC0").unwrap();
+        let fosc0 = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "FOSC0")
+            .unwrap();
         assert_eq!(fosc0.bit, 0);
     }
 
@@ -1861,7 +4555,11 @@ mod tests {
         let def = lookup("pic_8", "PIC12F519").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 12);
         // CPDF at bit 6 (unique to pic_8, not in pic_5/pic_6/pic_7)
-        let cpdf = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CPDF").unwrap();
+        let cpdf = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CPDF")
+            .unwrap();
         assert_eq!(cpdf.bit, 6);
     }
 
@@ -1869,25 +4567,48 @@ mod tests {
     fn test_pic_configs_have_no_lock_bytes() {
         for (name, def) in CONFIG_TABLE {
             if name.starts_with("pic_") {
-                assert!(def.lock_bytes.is_empty(), "PIC config {} should not have lock bytes", name);
+                assert!(
+                    def.lock_bytes.is_empty(),
+                    "PIC config {} should not have lock bytes",
+                    name
+                );
             }
         }
     }
 
     #[test]
     fn test_pic_configs_have_correct_width() {
-        let baseline: &[&str] = &["pic_1", "pic_2", "pic_3", "pic_4", "pic_5", "pic_6", "pic_7", "pic_8"];
+        let baseline: &[&str] = &[
+            "pic_1", "pic_2", "pic_3", "pic_4", "pic_5", "pic_6", "pic_7", "pic_8",
+        ];
         let baseline16f: &[&str] = &["pic_15", "pic_16", "pic_17", "pic_18", "pic_27"];
-        let midrange: &[&str] = &["pic_9", "pic_10", "pic_11", "pic_12", "pic_13", "pic_21", "pic_23", "pic_24", "pic_25"];
-        let pic18f: &[&str] = &["pic_28", "pic_29", "pic_30", "pic_31", "pic_32", "pic_33", "pic_34", "pic_35", "pic_36", "pic_37", "pic_38", "pic_39", "pic_40", "pic_41", "pic_42", "pic_43", "pic_49"];
+        let midrange: &[&str] = &[
+            "pic_9", "pic_10", "pic_11", "pic_12", "pic_13", "pic_21", "pic_23", "pic_24", "pic_25",
+        ];
+        let pic18f: &[&str] = &[
+            "pic_28", "pic_29", "pic_30", "pic_31", "pic_32", "pic_33", "pic_34", "pic_35",
+            "pic_36", "pic_37", "pic_38", "pic_39", "pic_40", "pic_41", "pic_42", "pic_43",
+            "pic_49",
+        ];
         for (name, def) in CONFIG_TABLE {
-            if !name.starts_with("pic_") { continue; }
-            let expected = if baseline.contains(name) || baseline16f.contains(name) { 12 }
-                else if midrange.contains(name) { 14 }
-                else if pic18f.contains(name) { 16 }
-                else { continue; };
+            if !name.starts_with("pic_") {
+                continue;
+            }
+            let expected = if baseline.contains(name) || baseline16f.contains(name) {
+                12
+            } else if midrange.contains(name) {
+                14
+            } else if pic18f.contains(name) {
+                16
+            } else {
+                continue;
+            };
             for fb in def.fuse_bytes {
-                assert_eq!(fb.width, expected, "PIC config {} word {} should be {}-bit", name, fb.name, expected);
+                assert_eq!(
+                    fb.width, expected,
+                    "PIC config {} word {} should be {}-bit",
+                    name, fb.name, expected
+                );
             }
         }
     }
@@ -1896,9 +4617,17 @@ mod tests {
     fn test_pic_9_pic12f635_has_wure_and_fcmen() {
         let def = lookup("pic_9", "PIC12F635").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
-        let wure = def.fuse_bytes[0].fields.iter().find(|f| f.name == "WURE").unwrap();
+        let wure = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "WURE")
+            .unwrap();
         assert_eq!(wure.bit, 12);
-        let fcmen = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FCMEN").unwrap();
+        let fcmen = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "FCMEN")
+            .unwrap();
         assert_eq!(fcmen.bit, 11);
     }
 
@@ -1907,7 +4636,11 @@ mod tests {
         let def = lookup("pic_11", "PIC12F629").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
         // pic_11 uses BODEN (single bit) not BOREN1/BOREN0 (two bits)
-        let boden = def.fuse_bytes[0].fields.iter().find(|f| f.name == "BODEN").unwrap();
+        let boden = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "BODEN")
+            .unwrap();
         assert_eq!(boden.bit, 6);
         assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "BOREN1"));
     }
@@ -1916,7 +4649,11 @@ mod tests {
     fn test_pic_12_pic16f610_has_ioscfs() {
         let def = lookup("pic_12", "PIC16F610").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
-        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        let ioscfs = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "IOSCFS")
+            .unwrap();
         assert_eq!(ioscfs.bit, 7);
     }
 
@@ -1927,10 +4664,18 @@ mod tests {
         assert_eq!(def.fuse_bytes[0].name, "word1");
         assert_eq!(def.fuse_bytes[1].name, "word2");
         // word1 should have FCMEN at bit 13
-        let fcmen = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FCMEN").unwrap();
+        let fcmen = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "FCMEN")
+            .unwrap();
         assert_eq!(fcmen.bit, 13);
         // word2 should have LVP at bit 11
-        let lvp = def.fuse_bytes[1].fields.iter().find(|f| f.name == "LVP").unwrap();
+        let lvp = def.fuse_bytes[1]
+            .fields
+            .iter()
+            .find(|f| f.name == "LVP")
+            .unwrap();
         assert_eq!(lvp.bit, 11);
     }
 
@@ -1938,7 +4683,11 @@ mod tests {
     fn test_pic_21_pic16f627a_has_lvp() {
         let def = lookup("pic_21", "PIC16F627A").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
-        let lvp = def.fuse_bytes[0].fields.iter().find(|f| f.name == "LVP").unwrap();
+        let lvp = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "LVP")
+            .unwrap();
         assert_eq!(lvp.bit, 7);
     }
 
@@ -1946,7 +4695,11 @@ mod tests {
     fn test_pic_24_pic16f88_has_ccpmx() {
         let def = lookup("pic_24", "PIC16F88").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
-        let ccpmx = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CCPMX").unwrap();
+        let ccpmx = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CCPMX")
+            .unwrap();
         assert_eq!(ccpmx.bit, 12);
     }
 
@@ -1955,7 +4708,11 @@ mod tests {
         let def = lookup("pic_25", "PIC16F88A").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 14);
         // pic_25 has DEBUG at bit 11 (not in pic_24)
-        let debug = def.fuse_bytes[0].fields.iter().find(|f| f.name == "DEBUG").unwrap();
+        let debug = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "DEBUG")
+            .unwrap();
         assert_eq!(debug.bit, 11);
     }
 
@@ -2072,9 +4829,17 @@ mod tests {
         let def = lookup("pic_15", "PIC16F506").unwrap();
         assert_eq!(def.fuse_bytes.len(), 1);
         assert_eq!(def.fuse_bytes[0].width, 12);
-        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        let ioscfs = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "IOSCFS")
+            .unwrap();
         assert_eq!(ioscfs.bit, 6);
-        let mclre = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCLRE").unwrap();
+        let mclre = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "MCLRE")
+            .unwrap();
         assert_eq!(mclre.bit, 5);
         // 7 fields total
         assert_eq!(def.fuse_bytes[0].fields.len(), 7);
@@ -2094,7 +4859,10 @@ mod tests {
     fn test_pic_17_shares_pic_16_definition() {
         let def16 = lookup("pic_16", "PIC16F54").unwrap();
         let def17 = lookup("pic_17", "PIC16F57").unwrap();
-        assert_eq!(def16.fuse_bytes[0].fields.len(), def17.fuse_bytes[0].fields.len());
+        assert_eq!(
+            def16.fuse_bytes[0].fields.len(),
+            def17.fuse_bytes[0].fields.len()
+        );
         assert_eq!(def16.fuse_bytes[0].width, def17.fuse_bytes[0].width);
     }
 
@@ -2103,7 +4871,11 @@ mod tests {
         let def = lookup("pic_18", "PIC16F505").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 12);
         assert_eq!(def.fuse_bytes[0].fields.len(), 6);
-        let mclre = def.fuse_bytes[0].fields.iter().find(|f| f.name == "MCLRE").unwrap();
+        let mclre = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "MCLRE")
+            .unwrap();
         assert_eq!(mclre.bit, 5);
         // No IOSCFS (unlike pic_15)
         assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "IOSCFS"));
@@ -2114,9 +4886,17 @@ mod tests {
         let def = lookup("pic_27", "PIC16F526").unwrap();
         assert_eq!(def.fuse_bytes[0].width, 12);
         assert_eq!(def.fuse_bytes[0].fields.len(), 8);
-        let cpdf = def.fuse_bytes[0].fields.iter().find(|f| f.name == "CPDF").unwrap();
+        let cpdf = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "CPDF")
+            .unwrap();
         assert_eq!(cpdf.bit, 7);
-        let ioscfs = def.fuse_bytes[0].fields.iter().find(|f| f.name == "IOSCFS").unwrap();
+        let ioscfs = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "IOSCFS")
+            .unwrap();
         assert_eq!(ioscfs.bit, 6);
     }
 
@@ -2126,7 +4906,9 @@ mod tests {
     fn test_pic_28_pic18f242_has_old_fosc_and_ccp2mx() {
         let def = lookup("pic_28", "PIC18F242").unwrap();
         assert_eq!(def.fuse_bytes.len(), 7);
-        for fb in def.fuse_bytes { assert_eq!(fb.width, 16); }
+        for fb in def.fuse_bytes {
+            assert_eq!(fb.width, 16);
+        }
         // Old-style 3-bit FOSC: FOSC2/FOSC1/FOSC0
         let w1 = &def.fuse_bytes[0];
         let fosc2 = w1.fields.iter().find(|f| f.name == "FOSC2").unwrap();
@@ -2134,7 +4916,11 @@ mod tests {
         let oscs = w1.fields.iter().find(|f| f.name == "OSCS").unwrap();
         assert_eq!(oscs.bit, 13);
         // CCP2MX in word3
-        let ccp2mx = def.fuse_bytes[2].fields.iter().find(|f| f.name == "CCP2MX").unwrap();
+        let ccp2mx = def.fuse_bytes[2]
+            .fields
+            .iter()
+            .find(|f| f.name == "CCP2MX")
+            .unwrap();
         assert_eq!(ccp2mx.bit, 8);
         // No XINST (old-style)
         assert!(def.fuse_bytes[3].fields.iter().all(|f| f.name != "XINST"));
@@ -2187,7 +4973,11 @@ mod tests {
         let def = lookup("pic_32", "PIC18F1220").unwrap();
         assert_eq!(def.fuse_bytes.len(), 7);
         // FSCM (not FCMEN) at bit 14
-        let fscm = def.fuse_bytes[0].fields.iter().find(|f| f.name == "FSCM").unwrap();
+        let fscm = def.fuse_bytes[0]
+            .fields
+            .iter()
+            .find(|f| f.name == "FSCM")
+            .unwrap();
         assert_eq!(fscm.bit, 14);
         assert!(def.fuse_bytes[0].fields.iter().all(|f| f.name != "FCMEN"));
         // 4-bit FOSC: FOSC3 present
@@ -2231,7 +5021,11 @@ mod tests {
         assert!(w3.fields.iter().any(|f| f.name == "MCLRE"));
         assert!(w3.fields.iter().all(|f| f.name != "CCP2MX"));
         // BBSIZ at bit 4
-        let bbsiz = def.fuse_bytes[3].fields.iter().find(|f| f.name == "BBSIZ").unwrap();
+        let bbsiz = def.fuse_bytes[3]
+            .fields
+            .iter()
+            .find(|f| f.name == "BBSIZ")
+            .unwrap();
         assert_eq!(bbsiz.bit, 4);
         // XINST present
         assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "XINST"));
@@ -2245,8 +5039,15 @@ mod tests {
         let def41 = lookup("pic_41", "PIC18F2580").unwrap();
         assert_eq!(def37.fuse_bytes.len(), def41.fuse_bytes.len());
         // Both should have PBADEN and BBSIZ at bit 4
-        assert!(def41.fuse_bytes[2].fields.iter().any(|f| f.name == "PBADEN"));
-        let bbsiz = def41.fuse_bytes[3].fields.iter().find(|f| f.name == "BBSIZ").unwrap();
+        assert!(def41.fuse_bytes[2]
+            .fields
+            .iter()
+            .any(|f| f.name == "PBADEN"));
+        let bbsiz = def41.fuse_bytes[3]
+            .fields
+            .iter()
+            .find(|f| f.name == "BBSIZ")
+            .unwrap();
         assert_eq!(bbsiz.bit, 4);
     }
 
@@ -2283,7 +5084,7 @@ mod tests {
         // 2-bit BBSIZ (BBSIZ1:BBSIZ0)
         assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "BBSIZ1"));
         assert!(def.fuse_bytes[3].fields.iter().any(|f| f.name == "BBSIZ0"));
-        assert!(def.fuse_bytes[3].fields.iter().all(|f| f.name != "BBSIZ" ));
+        assert!(def.fuse_bytes[3].fields.iter().all(|f| f.name != "BBSIZ"));
         // CCP2MX, PBADEN, LPT1OSC, MCLRE in word3
         let w3 = &def.fuse_bytes[2];
         assert!(w3.fields.iter().any(|f| f.name == "CCP2MX"));
@@ -2297,13 +5098,23 @@ mod tests {
     fn test_pic18f_cpd_above_cpb_in_word5() {
         // CPD at bit 15, CPB at bit 14 (CPD is CONFIG5H bit 7, CPB is bit 6)
         for (name, def) in CONFIG_TABLE {
-            if !name.starts_with("pic_") { continue; }
+            if !name.starts_with("pic_") {
+                continue;
+            }
             for fb in def.fuse_bytes {
                 let cpd = fb.fields.iter().find(|f| f.name == "CPD");
                 let cpb = fb.fields.iter().find(|f| f.name == "CPB");
                 if let (Some(cpd), Some(cpb)) = (cpd, cpb) {
-                    assert_eq!(cpd.bit, 15, "CPD should be at bit 15 in {} {}", name, fb.name);
-                    assert_eq!(cpb.bit, 14, "CPB should be at bit 14 in {} {}", name, fb.name);
+                    assert_eq!(
+                        cpd.bit, 15,
+                        "CPD should be at bit 15 in {} {}",
+                        name, fb.name
+                    );
+                    assert_eq!(
+                        cpb.bit, 14,
+                        "CPB should be at bit 14 in {} {}",
+                        name, fb.name
+                    );
                 }
             }
         }
@@ -2313,18 +5124,36 @@ mod tests {
     fn test_pic18f_wrtd_above_wrtb_above_wrtc_in_word6() {
         // WRTD at bit 15, WRTB at bit 14, WRTC at bit 13
         for (name, def) in CONFIG_TABLE {
-            if !name.starts_with("pic_") { continue; }
+            if !name.starts_with("pic_") {
+                continue;
+            }
             for fb in def.fuse_bytes {
                 let wrtd = fb.fields.iter().find(|f| f.name == "WRTD");
                 let wrtb = fb.fields.iter().find(|f| f.name == "WRTB");
                 let wrtc = fb.fields.iter().find(|f| f.name == "WRTC");
                 if let (Some(wrtd), Some(wrtb)) = (wrtd, wrtb) {
-                    assert_eq!(wrtd.bit, 15, "WRTD should be at bit 15 in {} {}", name, fb.name);
-                    assert_eq!(wrtb.bit, 14, "WRTB should be at bit 14 in {} {}", name, fb.name);
+                    assert_eq!(
+                        wrtd.bit, 15,
+                        "WRTD should be at bit 15 in {} {}",
+                        name, fb.name
+                    );
+                    assert_eq!(
+                        wrtb.bit, 14,
+                        "WRTB should be at bit 14 in {} {}",
+                        name, fb.name
+                    );
                 }
                 if let (Some(wrtc), Some(wrtb)) = (wrtc, wrtb) {
-                    assert_eq!(wrtc.bit, 13, "WRTC should be at bit 13 in {} {}", name, fb.name);
-                    assert_eq!(wrtb.bit, 14, "WRTB should be at bit 14 in {} {}", name, fb.name);
+                    assert_eq!(
+                        wrtc.bit, 13,
+                        "WRTC should be at bit 13 in {} {}",
+                        name, fb.name
+                    );
+                    assert_eq!(
+                        wrtb.bit, 14,
+                        "WRTB should be at bit 14 in {} {}",
+                        name, fb.name
+                    );
                 }
             }
         }

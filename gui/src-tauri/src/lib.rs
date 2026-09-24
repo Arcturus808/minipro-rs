@@ -36,11 +36,11 @@ pub fn run() {
                 let mut guard = state.db_paths.lock().unwrap();
 
                 // Check for a saved custom database directory in settings
-                let custom_db_dir: Option<String> = app
-                    .app_handle()
-                    .store("settings.json")
-                    .ok()
-                    .and_then(|s| s.get("customDbDir").and_then(|v| v.as_str().map(|s| s.to_string())));
+                let custom_db_dir: Option<String> =
+                    app.app_handle().store("settings.json").ok().and_then(|s| {
+                        s.get("customDbDir")
+                            .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    });
 
                 let mut db_paths = None;
 
@@ -52,7 +52,11 @@ pub fn run() {
                     if infoic.exists() && logicic.exists() {
                         // algorithm.xml is optional — pass it as an override only if present
                         let algorithms = dir_path.join("algorithm.xml");
-                        let algo_override = if algorithms.exists() { Some(algorithms.as_path()) } else { None };
+                        let algo_override = if algorithms.exists() {
+                            Some(algorithms.as_path())
+                        } else {
+                            None
+                        };
                         db_paths = minipro_core::database::DatabasePaths::resolve(
                             Some(&infoic),
                             Some(&logicic),
@@ -61,7 +65,9 @@ pub fn run() {
                         .ok();
                     } else {
                         // Custom dir is invalid — mark it so the GUI can warn
-                        state.db_dir_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
+                        state
+                            .db_dir_invalid
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
                         eprintln!(
                             "Warning: saved custom database directory '{}' is missing \
                              infoic.xml or logicic.xml — falling back to default search paths",
@@ -72,14 +78,17 @@ pub fn run() {
 
                 // Fall back to standard search paths (CWD, exe dir, MINIPRO_HOME, %PROGRAMDATA%)
                 if db_paths.is_none() {
-                    db_paths = minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
+                    db_paths =
+                        minipro_core::database::DatabasePaths::resolve(None, None, None).ok();
                 }
 
                 // If still not found, try Tauri bundled resources (for installed builds)
                 if db_paths.is_none() {
                     if let (Ok(infoic_res), Ok(logicic_res)) = (
-                        app.path().resolve("infoic.xml", tauri::path::BaseDirectory::Resource),
-                        app.path().resolve("logicic.xml", tauri::path::BaseDirectory::Resource)
+                        app.path()
+                            .resolve("infoic.xml", tauri::path::BaseDirectory::Resource),
+                        app.path()
+                            .resolve("logicic.xml", tauri::path::BaseDirectory::Resource),
                     ) {
                         if infoic_res.exists() && logicic_res.exists() {
                             db_paths = Some(minipro_core::database::DatabasePaths {
@@ -137,6 +146,7 @@ pub fn run() {
             commands::search_devices,
             commands::get_device_info,
             commands::get_device_pin_map,
+            commands::get_icsp_wiring,
             commands::select_device,
             commands::deselect_device,
             commands::do_read,

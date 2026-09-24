@@ -37,34 +37,46 @@ history live in `docs/` — see "Feature internals" at the bottom.
 
 ## Build Commands
 
-```bash
-# Rust-only changes (no .svelte/.ts/.css/.html touched):
-cd gui && npm run build && cargo build --release
-
-# ANY frontend change — embeds fresh assets into the binary:
-cd gui && cargo tauri build
-# .exe at gui/src-tauri/target/release/minipro-gui.exe
-```
+| Goal | Command | Notes |
+|------|---------|-------|
+| Compile check only | `cd gui/src-tauri && cargo build --release` | Produces a **dev-mode exe** that loads `devUrl` (localhost:5173), not embedded assets — plain `cargo build` lacks the `tauri/custom-protocol` feature that `cargo tauri build` injects. Do NOT run this binary; it shows ERR_CONNECTION_REFUSED. |
+| Runnable release exe | `cd gui && cargo tauri build --no-bundle` | Embeds `dist/`; skips MSI/NSIS packaging. Use for pre-commit verification. |
+| Full build + installers | `cd gui && cargo tauri build` | MSI + NSIS bundles under `gui/src-tauri/target/release/bundle/`. Required for installer/resource testing and release prep (see `docs/RELEASE.md`). `.exe` at `gui/src-tauri/target/release/minipro-gui.exe`. |
 
 **Critical rule:** If you change any `.svelte`, `.ts`, `.css`, or `.html`
-file, you **must** run `cargo tauri build`. This also applies after version
+file, you **must** run `cargo tauri build` (`--no-bundle` is fine) —
+embedded assets go stale otherwise. This also applies after version
 bumps — the GUI version badge reads `gui/package.json` at Vite build time.
 
 ### GUI development workflows
 
-**Fast iteration (active UI development):** `cd gui && npm run dev` — Vite
-dev server with HMR; Svelte/CSS/TS changes appear instantly in the browser
-preview. Tauri commands won't work (no Rust backend).
+**Fast iteration (UI work with a real backend):** `cd gui && cargo tauri dev`
+— vite dev server + debug Rust backend. Svelte/CSS/TS changes hot-reload
+instantly AND Tauri commands work; Rust edits rebuild and relaunch.
+(`npm run dev` alone serves only the frontend — `invoke()` calls fail.)
 
-**Full verification (final testing with the real backend):**
+**Testing without hardware:** set `MINIPRO_FAKE_PROGRAMMER` to a model name
+(`TL866A`, `TL866CS`, `TL866II+`, `T48`, `T56`, `T76`) before launching —
+`get_programmer_info`/`force_reconnect` skip USB and fake the model.
+Device search, device info, and the ICSP/ZIF diagrams work; chip
+operations fail. Works under `tauri dev` and release exes alike.
+
+**Pre-commit verification (release exe, no installers):**
 
 ```powershell
 # The running .exe locks the output binary on Windows — kill it first.
 Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
-cd gui && cargo tauri build
+cd gui && cargo tauri build --no-bundle
 Start-Process "gui\src-tauri\target\release\minipro-gui.exe"
 ```
+
+**When release-mode testing matters:** dev-vs-prod differences (devUrl vs
+embedded assets, CSP), integer-overflow behavior (debug panics, release
+wraps — relevant to protocol/checksum code), startup/parse performance
+(debug Rust is noticeably slower on the 19 MB database), and
+installer/resource bundling — the last only via full `cargo tauri build`,
+which is required during release prep.
 
 ## Store Patterns (CRITICAL)
 

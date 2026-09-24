@@ -11,7 +11,12 @@ use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
     database::{find_device, find_device_any, get_pin_map, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
-    operations::{blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch},
+    operations::{
+        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find,
+        logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file,
+        spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes,
+        write_file, OpStats, SizeMismatch,
+    },
     MiniproHandle,
 };
 use serde::{Deserialize, Serialize};
@@ -32,33 +37,42 @@ fn handle_usb_error(state: &AppState, err: &str) {
         "endpoint",
         "USB error",
         "No programmer connected",
-        "unknown error",   // nusb generic error when device is gone
-        "timed out",       // our USB transfer timeout
-        "cannot open it",  // open_programmer error when device can't be opened
-        "cannot claim",    // interface claim failure
+        "unknown error",  // nusb generic error when device is gone
+        "timed out",      // our USB transfer timeout
+        "cannot open it", // open_programmer error when device can't be opened
+        "cannot claim",   // interface claim failure
     ];
     if usb_errors.iter().any(|&keyword| err.contains(keyword)) {
         state.clear_programmer();
-        log::warn!("USB error detected, clearing cached programmer state: {}", err);
+        log::warn!(
+            "USB error detected, clearing cached programmer state: {}",
+            err
+        );
     }
 }
 
 /// Emit a log message to the frontend terminal.
 fn emit_log(window: &Window, level: &str, message: &str) {
-    let _ = window.emit("app-log", serde_json::json!({
-        "level": level,
-        "message": message,
-    }));
+    let _ = window.emit(
+        "app-log",
+        serde_json::json!({
+            "level": level,
+            "message": message,
+        }),
+    );
 }
 
 /// Emit pin-test results to the frontend for ZIF diagram highlighting.
 fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
-    let _ = window.emit("pin-test-result", serde_json::json!({
-        "supported": dto.supported,
-        "pass": dto.pass,
-        "bad_pins": dto.bad_pins,
-        "message": dto.message,
-    }));
+    let _ = window.emit(
+        "pin-test-result",
+        serde_json::json!({
+            "supported": dto.supported,
+            "pass": dto.pass,
+            "bad_pins": dto.bad_pins,
+            "message": dto.message,
+        }),
+    );
 }
 
 /// Run a pin contact check before an operation if enabled.
@@ -122,7 +136,10 @@ fn run_pin_check_if_enabled(
         emit_log(
             window,
             "warn",
-            &format!("Pin contact check failed: bad contact on pin(s) {}. Operation aborted.", pin_list),
+            &format!(
+                "Pin contact check failed: bad contact on pin(s) {}. Operation aborted.",
+                pin_list
+            ),
         );
         emit_pin_test_result(window, &dto);
         return Err(format!(
@@ -212,7 +229,10 @@ pub struct FuseFieldDto {
 #[derive(Serialize)]
 #[serde(tag = "type")]
 pub enum ChipConfigDto {
-    Mcu { fuses: Vec<FuseFieldDto>, locks: Vec<FuseFieldDto> },
+    Mcu {
+        fuses: Vec<FuseFieldDto>,
+        locks: Vec<FuseFieldDto>,
+    },
     Pld {},
 }
 
@@ -241,6 +261,57 @@ pub struct DeviceInfoDto {
     off_protect_before: bool,
     /// True if chip has protect_after flag (can be write-protected after write).
     protect_after: bool,
+    /// ICSP wiring-class index from `package_details` bits 8–15.
+    /// 0 = no ICSP. Nonzero selects a wiring diagram (see `icsp::icsp_wiring`).
+    icsp: u8,
+}
+
+#[derive(Serialize)]
+pub struct IcspWireDto {
+    header_pin: u8,
+    signal: &'static str,
+    chip_pin: u8,
+}
+
+#[derive(Serialize)]
+pub struct IcspWiringDto {
+    title: &'static str,
+    /// False = generic MCU target; labels are signal names, not pin numbers.
+    numbered: bool,
+    chip_labels: Vec<&'static str>,
+    wires: Vec<IcspWireDto>,
+    notes: Vec<&'static str>,
+}
+
+impl From<&'static minipro_core::icsp::IcspWiring> for IcspWiringDto {
+    fn from(w: &'static minipro_core::icsp::IcspWiring) -> Self {
+        Self {
+            title: w.title,
+            numbered: w.numbered,
+            chip_labels: w.chip_labels.to_vec(),
+            wires: w
+                .wires
+                .iter()
+                .map(|x| IcspWireDto {
+                    header_pin: x.header_pin,
+                    signal: x.signal,
+                    chip_pin: x.chip_pin,
+                })
+                .collect(),
+            notes: w.notes.to_vec(),
+        }
+    }
+}
+
+/// Look up the verified ICSP wiring for a (programmer model, class) pair.
+/// Returns null when no verified table exists.
+#[tauri::command]
+pub async fn get_icsp_wiring(
+    model: String,
+    icspClass: u8,
+) -> Result<Option<IcspWiringDto>, String> {
+    let model: ProgrammerModel = model.parse().map_err(|e: String| e)?;
+    Ok(minipro_core::icsp::icsp_wiring(model, icspClass).map(IcspWiringDto::from))
 }
 
 #[derive(Serialize)]
@@ -256,7 +327,12 @@ impl VoltagesDto {
     /// falls back to the TL866II+ tables — the most common model.
     ///
     /// For logic ICs, VPP and VDD are not applicable (returned as "—").
-    fn from_voltages(v: &Voltages, model: Option<ProgrammerModel>, chip_type: u32, custom_protocol: bool) -> Self {
+    fn from_voltages(
+        v: &Voltages,
+        model: Option<ProgrammerModel>,
+        chip_type: u32,
+        custom_protocol: bool,
+    ) -> Self {
         let is_logic = chip_type == ChipType::Logic as u32;
         let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
         let vcc_table = minipro_core::device::vcc_voltage_table(model, chip_type, custom_protocol);
@@ -272,8 +348,16 @@ impl VoltagesDto {
         };
 
         Self {
-            vpp: if is_logic { "—".to_string() } else { lookup(v.vpp, vpp_table) },
-            vdd: if is_logic { "—".to_string() } else { lookup(v.vdd, vcc_table) },
+            vpp: if is_logic {
+                "—".to_string()
+            } else {
+                lookup(v.vpp, vpp_table)
+            },
+            vdd: if is_logic {
+                "—".to_string()
+            } else {
+                lookup(v.vdd, vcc_table)
+            },
             vcc: lookup(v.vcc, vcc_table),
         }
     }
@@ -336,12 +420,18 @@ pub struct OperationOptions {
     pub pin_check: bool,
 }
 
-fn default_icsp_mode() -> String { "zif".into() }
+fn default_icsp_mode() -> String {
+    "zif".into()
+}
 
 /// Set ICSP mode from the GUI's mode string.
 /// "icsp" → ICSP with VCC (0x81), "icsp_no_vcc" → ICSP without VCC (0x80),
 /// "zif" → ZIF socket mode (0x00).  Also auto-activates ICSP for ICSP-only chips.
-fn set_icsp_from_mode(handle: &mut minipro_core::handle::MiniproHandle, mode: &str, device: &minipro_core::device::Device) {
+fn set_icsp_from_mode(
+    handle: &mut minipro_core::handle::MiniproHandle,
+    mode: &str,
+    device: &minipro_core::device::Device,
+) {
     use minipro_core::device::{MP_ICSP_ONLY, MP_ZIF_ONLY};
     if device.flags.prog_support == MP_ICSP_ONLY {
         handle.set_icsp(true);
@@ -355,10 +445,18 @@ fn set_icsp_from_mode(handle: &mut minipro_core::handle::MiniproHandle, mode: &s
         }
     }
 }
-fn default_page() -> String { "code".into() }
-fn default_format() -> String { "auto".into() }
-fn default_size_mismatch() -> String { "error".into() }
-fn default_true() -> bool { true }
+fn default_page() -> String {
+    "code".into()
+}
+fn default_format() -> String {
+    "auto".into()
+}
+fn default_size_mismatch() -> String {
+    "error".into()
+}
+fn default_true() -> bool {
+    true
+}
 
 /// Apply voltage overrides from GUI options to a device.
 ///
@@ -371,8 +469,16 @@ fn apply_voltage_overrides(
     model: Option<ProgrammerModel>,
 ) -> Result<(), String> {
     let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
-    let vcc_table = minipro_core::device::vcc_voltage_table(model, device.chip_type, device.flags.custom_protocol);
-    let vpp_table = minipro_core::device::vpp_voltage_table(model, device.chip_type, device.flags.custom_protocol);
+    let vcc_table = minipro_core::device::vcc_voltage_table(
+        model,
+        device.chip_type,
+        device.flags.custom_protocol,
+    );
+    let vpp_table = minipro_core::device::vpp_voltage_table(
+        model,
+        device.chip_type,
+        device.flags.custom_protocol,
+    );
 
     let valid_list = |table: Option<&[(&str, u8)]>| -> String {
         match table {
@@ -382,21 +488,48 @@ fn apply_voltage_overrides(
     };
 
     if let Some(ref v) = options.vpp {
-        let table = vpp_table.ok_or_else(|| format!("VPP override not supported for this device; valid values: {}", valid_list(vpp_table)))?;
-        let code = minipro_core::device::lookup_voltage(table, v)
-            .ok_or_else(|| format!("invalid vpp voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        let table = vpp_table.ok_or_else(|| {
+            format!(
+                "VPP override not supported for this device; valid values: {}",
+                valid_list(vpp_table)
+            )
+        })?;
+        let code = minipro_core::device::lookup_voltage(table, v).ok_or_else(|| {
+            format!(
+                "invalid vpp voltage '{v}'; valid values: {}",
+                valid_list(Some(table))
+            )
+        })?;
         device.voltages.vpp = code;
     }
     if let Some(ref v) = options.vdd {
-        let table = vcc_table.ok_or_else(|| format!("VDD override not supported for this device; valid values: {}", valid_list(vcc_table)))?;
-        let code = minipro_core::device::lookup_voltage(table, v)
-            .ok_or_else(|| format!("invalid vdd voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        let table = vcc_table.ok_or_else(|| {
+            format!(
+                "VDD override not supported for this device; valid values: {}",
+                valid_list(vcc_table)
+            )
+        })?;
+        let code = minipro_core::device::lookup_voltage(table, v).ok_or_else(|| {
+            format!(
+                "invalid vdd voltage '{v}'; valid values: {}",
+                valid_list(Some(table))
+            )
+        })?;
         device.voltages.vdd = code;
     }
     if let Some(ref v) = options.vcc {
-        let table = vcc_table.ok_or_else(|| format!("VCC override not supported for this device; valid values: {}", valid_list(vcc_table)))?;
-        let code = minipro_core::device::lookup_voltage(table, v)
-            .ok_or_else(|| format!("invalid vcc voltage '{v}'; valid values: {}", valid_list(Some(table))))?;
+        let table = vcc_table.ok_or_else(|| {
+            format!(
+                "VCC override not supported for this device; valid values: {}",
+                valid_list(vcc_table)
+            )
+        })?;
+        let code = minipro_core::device::lookup_voltage(table, v).ok_or_else(|| {
+            format!(
+                "invalid vcc voltage '{v}'; valid values: {}",
+                valid_list(Some(table))
+            )
+        })?;
         device.voltages.vcc = code;
     }
     Ok(())
@@ -421,7 +554,9 @@ pub struct VoltageOptionsDto {
 /// fields are `None`.  When no programmer is connected, falls back to
 /// TL866II+ tables (matching `VoltagesDto::from_voltages` behavior).
 #[tauri::command]
-pub async fn get_voltage_options(state: State<'_, Arc<AppState>>) -> Result<VoltageOptionsDto, String> {
+pub async fn get_voltage_options(
+    state: State<'_, Arc<AppState>>,
+) -> Result<VoltageOptionsDto, String> {
     let device = state.get_device();
     let model = {
         let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
@@ -430,7 +565,13 @@ pub async fn get_voltage_options(state: State<'_, Arc<AppState>>) -> Result<Volt
 
     let device = match device {
         Ok(dev) => dev,
-        Err(_) => return Ok(VoltageOptionsDto { vcc: None, vpp: None, is_logic: false }),
+        Err(_) => {
+            return Ok(VoltageOptionsDto {
+                vcc: None,
+                vpp: None,
+                is_logic: false,
+            })
+        }
     };
 
     let model = model.unwrap_or(ProgrammerModel::Tl866iiPlus);
@@ -442,8 +583,16 @@ pub async fn get_voltage_options(state: State<'_, Arc<AppState>>) -> Result<Volt
         table.map(|t| t.iter().map(|(n, _)| n.to_string()).collect())
     };
 
-    let vcc = names(minipro_core::device::vcc_voltage_table(model, chip_type, custom_protocol));
-    let vpp = names(minipro_core::device::vpp_voltage_table(model, chip_type, custom_protocol));
+    let vcc = names(minipro_core::device::vcc_voltage_table(
+        model,
+        chip_type,
+        custom_protocol,
+    ));
+    let vpp = names(minipro_core::device::vpp_voltage_table(
+        model,
+        chip_type,
+        custom_protocol,
+    ));
 
     Ok(VoltageOptionsDto { vcc, vpp, is_logic })
 }
@@ -499,12 +648,48 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 
 // ── Tauri commands ─────────────────────────────────────────────────────────
 
+/// If MINIPRO_FAKE_PROGRAMMER is set (e.g. "T48"), install a synthetic
+/// programmer of that model so the GUI can be exercised without hardware.
+/// No USB handle is opened — operations that need the device will fail.
+fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
+    let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
+        return Ok(None);
+    };
+    let model = name.parse::<ProgrammerModel>()?;
+    let info = minipro_core::device::ProgrammerInfo {
+        model,
+        status: minipro_core::device::ProgrammerStatus::Normal,
+        firmware: 0,
+        firmware_str: "fake".to_string(),
+        device_code: "00".to_string(),
+        serial_number: "FAKE".to_string(),
+        hardware_version: 0,
+    };
+    {
+        let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        *guard = Some(info);
+    }
+    let _ = state.reload_device_names_for_model(model);
+    log::warn!("MINIPRO_FAKE_PROGRAMMER={name}: no hardware connected, model faked");
+    Ok(Some(ProgrammerInfoDto {
+        model: model.to_string(),
+        firmware: "fake".to_string(),
+        serial_number: "FAKE".to_string(),
+        hardware_version: "00".to_string(),
+    }))
+}
+
 /// Open the programmer and return its info.
 ///
 /// Retries a few times at startup because Windows USB enumeration can lag
 /// behind the physical plug event by several seconds.
 #[tauri::command]
-pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
+pub async fn get_programmer_info(
+    state: State<'_, Arc<AppState>>,
+) -> Result<ProgrammerInfoDto, String> {
+    if let Some(dto) = fake_programmer_from_env(&state)? {
+        return Ok(dto);
+    }
     {
         let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         if let Some(ref info) = *guard {
@@ -549,13 +734,18 @@ pub async fn get_programmer_info(state: State<'_, Arc<AppState>>) -> Result<Prog
                 let info = handle.info.clone();
                 Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
             }),
-        ).await;
+        )
+        .await;
 
         let (info, handle) = match result {
             Ok(Ok(Ok(v))) => v,
             Ok(Ok(Err(e))) => {
                 last_err = e;
-                eprintln!("get_programmer_info attempt {} failed: {}", attempt + 1, last_err);
+                eprintln!(
+                    "get_programmer_info attempt {} failed: {}",
+                    attempt + 1,
+                    last_err
+                );
                 continue;
             }
             Ok(Err(e)) => {
@@ -613,6 +803,10 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
         *info_guard = None;
     }
 
+    if let Some(dto) = fake_programmer_from_env(&state)? {
+        return Ok(dto);
+    }
+
     // Retry with increasing delays — Windows USB enumeration can lag behind
     // the Device Manager display by several seconds after hot-plug, and a
     // sleep/wake Code 10 recovery may require 20-30 seconds before the
@@ -660,7 +854,8 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
                 let info = handle.info.clone();
                 Ok::<(minipro_core::device::ProgrammerInfo, MiniproHandle), String>((info, handle))
             }),
-        ).await;
+        )
+        .await;
 
         match result {
             Ok(Ok(Ok((info, handle)))) => {
@@ -683,7 +878,11 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
             }
             Ok(Ok(Err(e))) => {
                 last_err = e;
-                eprintln!("force_reconnect attempt {} failed: {}", attempt + 1, last_err);
+                eprintln!(
+                    "force_reconnect attempt {} failed: {}",
+                    attempt + 1,
+                    last_err
+                );
             }
             Ok(Err(e)) => {
                 last_err = format!("Task panicked: {}", e);
@@ -717,22 +916,31 @@ pub struct DeviceSearchResultDto {
 
 /// Search devices by optional query string.
 #[tauri::command]
-pub async fn search_devices(query: String, state: State<'_, Arc<AppState>>) -> Result<Vec<DeviceSearchResultDto>, String> {
+pub async fn search_devices(
+    query: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<DeviceSearchResultDto>, String> {
     let filter = query.trim().to_ascii_lowercase();
     if filter.is_empty() {
         return Ok(vec![]);
     }
     // Use pre-loaded device names (loaded once at startup) for instant search
     let items = state.search_device_names(&filter)?;
-    Ok(items.into_iter().map(|item| DeviceSearchResultDto {
-        name: item.name,
-        manufacturer: item.manufacturer,
-    }).collect())
+    Ok(items
+        .into_iter()
+        .map(|item| DeviceSearchResultDto {
+            name: item.name,
+            manufacturer: item.manufacturer,
+        })
+        .collect())
 }
 
 /// Get detailed info for a single device (no programmer required).
 #[tauri::command]
-pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> Result<DeviceInfoDto, String> {
+pub async fn get_device_info(
+    name: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
     let name_clone = name.clone();
     let model = {
@@ -755,7 +963,10 @@ pub async fn get_device_info(name: String, state: State<'_, Arc<AppState>>) -> R
 /// Get the pin-contact map for a device (ZIF pin numbers that must make contact).
 /// Returns None when pin_map index is 0 (no contact-test data).
 #[tauri::command]
-pub async fn get_device_pin_map(pinMap: u32, state: State<'_, Arc<AppState>>) -> Result<Option<PinMapDto>, String> {
+pub async fn get_device_pin_map(
+    pinMap: u32,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Option<PinMapDto>, String> {
     let index = pinMap & 0xFF;
     if index == 0 {
         return Ok(None);
@@ -783,7 +994,10 @@ pub struct PinMapDto {
 
 /// Select a device, resolving it for the connected programmer model if available.
 #[tauri::command]
-pub async fn select_device(name: String, state: State<'_, Arc<AppState>>) -> Result<DeviceInfoDto, String> {
+pub async fn select_device(
+    name: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
 
     let model = {
@@ -1043,14 +1257,10 @@ pub async fn read_chip_to_bytes(
 #[tauri::command]
 pub async fn save_bytes_to_file(path: String, base64Data: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &base64Data,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &base64Data)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
-        std::fs::write(&path, &bytes)
-            .map_err(|e| format!("Failed to write file: {}", e))
+        std::fs::write(&path, &bytes).map_err(|e| format!("Failed to write file: {}", e))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
@@ -1068,11 +1278,8 @@ pub async fn save_buffer_to_file(
     deviceName: Option<String>,
 ) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &base64Data,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &base64Data)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
         let path_ref = std::path::Path::new(&path);
         let effective_fmt = if format == "auto" || format == "bin" {
@@ -1143,7 +1350,10 @@ pub async fn do_write(
     let path_clone = path.clone();
     let options_clone = options.clone();
     let model = {
-        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        let guard = state_clone
+            .programmer_info
+            .lock()
+            .map_err(|e| e.to_string())?;
         guard.as_ref().map(|info| info.model)
     };
 
@@ -1159,7 +1369,9 @@ pub async fn do_write(
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
-            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1177,7 +1389,11 @@ pub async fn do_write(
                         emit_log(&window_clone, "info", "Chip ID check passed");
                     }
                     Err(e) => {
-                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_log(
+                            &window_clone,
+                            "error",
+                            &format!("Chip ID check failed: {}", e),
+                        );
                         return Err(e.to_string());
                     }
                 }
@@ -1190,18 +1406,25 @@ pub async fn do_write(
             let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
             if off_protect && (is_t76 || options_clone.unprotect_before) {
                 emit_log(&window_clone, "info", "Protect off...");
-                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
+                handle
+                    .protocol
+                    .protect_off(&handle.usb)
+                    .map_err(|e| e.to_string())?;
                 emit_log(&window_clone, "info", "Protect off...OK");
                 if is_t76 {
                     handle.end_transaction().map_err(|e| e.to_string())?;
-                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                    handle
+                        .begin_transaction(device.clone())
+                        .map_err(|e| e.to_string())?;
                 }
             }
 
             if !options_clone.skip_erase {
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device.clone())
+                    .map_err(|e| e.to_string())?;
             }
 
             let stats = write_chip(
@@ -1250,7 +1473,10 @@ pub async fn do_write(
             // ── Protect on (after write + verify) ─────────────────────────────
             if options_clone.protect_after_op && device.flags.protect_after {
                 emit_log(&window_clone, "info", "Protect on...");
-                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                handle
+                    .protocol
+                    .protect_on(&handle.usb)
+                    .map_err(|e| e.to_string())?;
                 emit_log(&window_clone, "info", "Protect on...OK");
             }
 
@@ -1300,7 +1526,10 @@ pub async fn do_batch_write_chip(
     let options_clone = options.clone();
     let serial_dto = serialConfig.clone();
     let model = {
-        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        let guard = state_clone
+            .programmer_info
+            .lock()
+            .map_err(|e| e.to_string())?;
         guard.as_ref().map(|info| info.model)
     };
 
@@ -1325,7 +1554,9 @@ pub async fn do_batch_write_chip(
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
-            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1343,7 +1574,11 @@ pub async fn do_batch_write_chip(
                         emit_log(&window_clone, "info", "Chip ID check passed");
                     }
                     Err(e) => {
-                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_log(
+                            &window_clone,
+                            "error",
+                            &format!("Chip ID check failed: {}", e),
+                        );
                         return Err(e.to_string());
                     }
                 }
@@ -1353,20 +1588,39 @@ pub async fn do_batch_write_chip(
             let off_protect = device.flags.off_protect_before;
             let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
             if off_protect && (is_t76 || options_clone.unprotect_before) {
-                emit_log(&window_clone, "info", &format!("Chip {}: protect off...", chipNumber));
-                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
-                emit_log(&window_clone, "info", &format!("Chip {}: protect off...OK", chipNumber));
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: protect off...", chipNumber),
+                );
+                handle
+                    .protocol
+                    .protect_off(&handle.usb)
+                    .map_err(|e| e.to_string())?;
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: protect off...OK", chipNumber),
+                );
                 if is_t76 {
                     handle.end_transaction().map_err(|e| e.to_string())?;
-                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                    handle
+                        .begin_transaction(device.clone())
+                        .map_err(|e| e.to_string())?;
                 }
             }
 
             if !options_clone.skip_erase {
-                emit_log(&window_clone, "info", &format!("Chip {}: erasing...", chipNumber));
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: erasing...", chipNumber),
+                );
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device.clone())
+                    .map_err(|e| e.to_string())?;
             }
 
             // ── If serial injection: read file, patch, write bytes, verify bytes ──
@@ -1391,7 +1645,12 @@ pub async fn do_batch_write_chip(
                 emit_log(
                     &window_clone,
                     "info",
-                    &format!("Chip {}: serial = 0x{:0>width$X}", chipNumber, serial_value, width = sc.width * 2),
+                    &format!(
+                        "Chip {}: serial = 0x{:0>width$X}",
+                        chipNumber,
+                        serial_value,
+                        width = sc.width * 2
+                    ),
                 );
 
                 let write_window = window_clone.clone();
@@ -1438,9 +1697,20 @@ pub async fn do_batch_write_chip(
 
                 // ── Protect on (after write + verify) ─────────────────────────
                 if options_clone.protect_after_op && device.flags.protect_after {
-                    emit_log(&window_clone, "info", &format!("Chip {}: protect on...", chipNumber));
-                    handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
-                    emit_log(&window_clone, "info", &format!("Chip {}: protect on...OK", chipNumber));
+                    emit_log(
+                        &window_clone,
+                        "info",
+                        &format!("Chip {}: protect on...", chipNumber),
+                    );
+                    handle
+                        .protocol
+                        .protect_on(&handle.usb)
+                        .map_err(|e| e.to_string())?;
+                    emit_log(
+                        &window_clone,
+                        "info",
+                        &format!("Chip {}: protect on...OK", chipNumber),
+                    );
                 }
 
                 emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
@@ -1493,9 +1763,20 @@ pub async fn do_batch_write_chip(
 
             // ── Protect on (after write + verify) ─────────────────────────────
             if options_clone.protect_after_op && device.flags.protect_after {
-                emit_log(&window_clone, "info", &format!("Chip {}: protect on...", chipNumber));
-                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
-                emit_log(&window_clone, "info", &format!("Chip {}: protect on...OK", chipNumber));
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: protect on...", chipNumber),
+                );
+                handle
+                    .protocol
+                    .protect_on(&handle.usb)
+                    .map_err(|e| e.to_string())?;
+                emit_log(
+                    &window_clone,
+                    "info",
+                    &format!("Chip {}: protect on...OK", chipNumber),
+                );
             }
 
             emit_log(&window_clone, "info", &format!("Chip {}: PASS", chipNumber));
@@ -1537,16 +1818,16 @@ pub async fn do_write_bytes(
     let window_clone = window.clone();
     let options_clone = options.clone();
     let model = {
-        let guard = state_clone.programmer_info.lock().map_err(|e| e.to_string())?;
+        let guard = state_clone
+            .programmer_info
+            .lock()
+            .map_err(|e| e.to_string())?;
         guard.as_ref().map(|info| info.model)
     };
 
     let result = tokio::task::spawn_blocking(move || {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &base64Data,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &base64Data)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
         let mut handle = state_task.take_handle()?;
         let device_arc = state_task.get_device()?;
@@ -1559,7 +1840,9 @@ pub async fn do_write_bytes(
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
-            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1577,7 +1860,11 @@ pub async fn do_write_bytes(
                         emit_log(&window_clone, "info", "Chip ID check passed");
                     }
                     Err(e) => {
-                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_log(
+                            &window_clone,
+                            "error",
+                            &format!("Chip ID check failed: {}", e),
+                        );
                         return Err(e.to_string());
                     }
                 }
@@ -1588,18 +1875,25 @@ pub async fn do_write_bytes(
             let is_t76 = handle.info.model == minipro_core::device::ProgrammerModel::T76;
             if off_protect && (is_t76 || options_clone.unprotect_before) {
                 emit_log(&window_clone, "info", "Protect off...");
-                handle.protocol.protect_off(&handle.usb).map_err(|e| e.to_string())?;
+                handle
+                    .protocol
+                    .protect_off(&handle.usb)
+                    .map_err(|e| e.to_string())?;
                 emit_log(&window_clone, "info", "Protect off...OK");
                 if is_t76 {
                     handle.end_transaction().map_err(|e| e.to_string())?;
-                    handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                    handle
+                        .begin_transaction(device.clone())
+                        .map_err(|e| e.to_string())?;
                 }
             }
 
             if !options_clone.skip_erase {
                 erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device.clone())
+                    .map_err(|e| e.to_string())?;
             }
 
             let verify_bytes = bytes.clone();
@@ -1647,7 +1941,10 @@ pub async fn do_write_bytes(
             // ── Protect on (after write + verify) ─────────────────────────────
             if options_clone.protect_after_op && device.flags.protect_after {
                 emit_log(&window_clone, "info", "Protect on...");
-                handle.protocol.protect_on(&handle.usb).map_err(|e| e.to_string())?;
+                handle
+                    .protocol
+                    .protect_on(&handle.usb)
+                    .map_err(|e| e.to_string())?;
                 emit_log(&window_clone, "info", "Protect on...OK");
             }
 
@@ -1697,7 +1994,9 @@ pub async fn do_verify(
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &options_clone.icsp_mode, &device);
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1715,7 +2014,11 @@ pub async fn do_verify(
                         emit_log(&window_clone, "info", "Chip ID check passed");
                     }
                     Err(e) => {
-                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_log(
+                            &window_clone,
+                            "error",
+                            &format!("Chip ID check failed: {}", e),
+                        );
                         return Err(e.to_string());
                     }
                 }
@@ -1763,7 +2066,13 @@ pub async fn do_verify(
 
 /// Erase the chip.
 #[tauri::command]
-pub async fn do_erase(icspMode: String, checkDeviceId: bool, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn do_erase(
+    icspMode: String,
+    checkDeviceId: bool,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1777,7 +2086,9 @@ pub async fn do_erase(icspMode: String, checkDeviceId: bool, pinCheck: bool, win
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1795,7 +2106,11 @@ pub async fn do_erase(icspMode: String, checkDeviceId: bool, pinCheck: bool, win
                         emit_log(&window_clone, "info", "Chip ID check passed");
                     }
                     Err(e) => {
-                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_log(
+                            &window_clone,
+                            "error",
+                            &format!("Chip ID check failed: {}", e),
+                        );
                         return Err(e.to_string());
                     }
                 }
@@ -1832,7 +2147,12 @@ pub struct BlankCheckResultDto {
 /// Blank-check the chip.
 /// Returns Ok(is_blank=true) if blank, Ok(is_blank=false, address) if not blank.
 #[tauri::command]
-pub async fn do_blank_check(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<BlankCheckResultDto, String> {
+pub async fn do_blank_check(
+    icspMode: String,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<BlankCheckResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1846,7 +2166,9 @@ pub async fn do_blank_check(icspMode: String, pinCheck: bool, window: Window, st
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1859,7 +2181,10 @@ pub async fn do_blank_check(icspMode: String, pinCheck: bool, window: Window, st
             )?;
 
             blank_check(&mut handle).map_err(|e| e.to_string())?;
-            Ok::<BlankCheckResultDto, String>(BlankCheckResultDto { is_blank: true, address: 0 })
+            Ok::<BlankCheckResultDto, String>(BlankCheckResultDto {
+                is_blank: true,
+                address: 0,
+            })
         })();
 
         let _ = handle.end_transaction();
@@ -1876,7 +2201,10 @@ pub async fn do_blank_check(icspMode: String, pinCheck: bool, window: Window, st
             // Parse the NotBlank error to extract the address
             if let Some(addr_str) = e.strip_prefix("Chip is not blank at 0x") {
                 if let Ok(addr) = u32::from_str_radix(addr_str.trim(), 16) {
-                    return Ok(BlankCheckResultDto { is_blank: false, address: addr });
+                    return Ok(BlankCheckResultDto {
+                        is_blank: false,
+                        address: addr,
+                    });
                 }
             }
             Err(e)
@@ -1896,7 +2224,12 @@ pub struct ChipIdResultDto {
 
 /// Read the chip ID.
 #[tauri::command]
-pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<ChipIdResultDto, String> {
+pub async fn do_chip_id(
+    icspMode: String,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<ChipIdResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -1910,7 +2243,9 @@ pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state:
 
         let result = (|| {
             set_icsp_from_mode(&mut handle, &icspMode, &device);
-            handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
 
             // Pin contact check (pre-operation gate)
             let db_paths = get_db_paths(&state_task)?;
@@ -1922,7 +2257,10 @@ pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state:
                 &db_paths.infoic,
             )?;
 
-            let (_id_type, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device).map_err(|e| e.to_string())?;
+            let (_id_type, chip_id) = handle
+                .protocol
+                .get_chip_id(&handle.usb, &device)
+                .map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
             // chip that don't match what the firmware returns for that variant's protocol.
             // Treat them as "no expected value" to avoid false mismatch warnings.
@@ -1933,7 +2271,11 @@ pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state:
                 device.name.clone()
             };
             let expected = device.chip_id;
-            let bytes = if is_variant { 4 } else { device.chip_id_bytes_count.clamp(1, 4) };
+            let bytes = if is_variant {
+                4
+            } else {
+                device.chip_id_bytes_count.clamp(1, 4)
+            };
             let mask = match bytes {
                 1 => 0xFFu32,
                 2 => 0xFFFF,
@@ -1943,14 +2285,24 @@ pub async fn do_chip_id(icspMode: String, pinCheck: bool, window: Window, state:
             let masked_id = chip_id & mask;
             let masked_expected = expected & mask;
             let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
-            let expected_str = format!("0x{:0width$x}", masked_expected, width = (bytes * 2) as usize);
+            let expected_str = format!(
+                "0x{:0width$x}",
+                masked_expected,
+                width = (bytes * 2) as usize
+            );
             // Use normalized comparison to handle byte-position differences across protocols
             let norm_id = normalize_chip_id(chip_id);
             let norm_expected = normalize_chip_id(expected);
             // For variants, treat as a match so we don't show a generic mismatch error,
             // but the frontend will show a contextual message instead.
             let is_match = expected == 0 || norm_id == norm_expected || is_variant;
-            Ok::<ChipIdResultDto, String>(ChipIdResultDto { id: id_str, expected: expected_str, is_match, is_variant, base_name })
+            Ok::<ChipIdResultDto, String>(ChipIdResultDto {
+                id: id_str,
+                expected: expected_str,
+                is_match,
+                is_variant,
+                base_name,
+            })
         })();
 
         let _ = handle.end_transaction();
@@ -1987,7 +2339,11 @@ pub struct LogicTestResultDto {
 /// Returns a structured result for the GUI grid rendering.
 /// `vcc` is an optional VCC override (e.g. "3.3") for logic ICs.
 #[tauri::command]
-pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'_, Arc<AppState>>) -> Result<LogicTestResultDto, String> {
+pub async fn do_logic_test(
+    icspMode: String,
+    vcc: Option<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<LogicTestResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2033,7 +2389,9 @@ pub async fn do_logic_test(icspMode: String, vcc: Option<String>, state: State<'
                 device
             };
 
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
             let test_result = logic_ic_test(&mut handle).map_err(|e| e.to_string())?;
             Ok::<LogicTestResultDto, String>(LogicTestResultDto {
                 pinCount: test_result.pin_count,
@@ -2172,7 +2530,11 @@ pub struct SpiAutodetectResultDto {
 /// autodetect. If bad pins are found, autodetect is aborted with a clear
 /// diagnostic message — matching upstream minipro's `-z` + `-a` behavior.
 #[tauri::command]
-pub async fn do_spi_autodetect(idType: u8, window: Window, state: State<'_, Arc<AppState>>) -> Result<SpiAutodetectResultDto, String> {
+pub async fn do_spi_autodetect(
+    idType: u8,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SpiAutodetectResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2290,7 +2652,9 @@ pub async fn get_db_status(state: State<'_, Arc<AppState>>) -> Result<DbDirStatu
     // The custom dir is not stored in AppState — the GUI reads it from
     // the settings store. We only return the invalid flag here so the
     // GUI can show a warning if the saved dir fell back to default.
-    let invalid = state.db_dir_invalid.load(std::sync::atomic::Ordering::SeqCst);
+    let invalid = state
+        .db_dir_invalid
+        .load(std::sync::atomic::Ordering::SeqCst);
     Ok(DbDirStatusDto {
         customDir: None, // GUI fills this from its own settings store
         active: !invalid,
@@ -2317,23 +2681,21 @@ pub async fn set_custom_db_dir(
                 state
                     .db_dir_invalid
                     .store(true, std::sync::atomic::Ordering::SeqCst);
-                return Err(format!(
-                    "infoic.xml not found in '{}'",
-                    dir_path.display()
-                ));
+                return Err(format!("infoic.xml not found in '{}'", dir_path.display()));
             }
             if !logicic.exists() {
                 state
                     .db_dir_invalid
                     .store(true, std::sync::atomic::Ordering::SeqCst);
-                return Err(format!(
-                    "logicic.xml not found in '{}'",
-                    dir_path.display()
-                ));
+                return Err(format!("logicic.xml not found in '{}'", dir_path.display()));
             }
             // algorithm.xml is optional — pass it as an override only if present
             let algorithms = dir_path.join("algorithm.xml");
-            let algo_override = if algorithms.exists() { Some(algorithms.as_path()) } else { None };
+            let algo_override = if algorithms.exists() {
+                Some(algorithms.as_path())
+            } else {
+                None
+            };
             DatabasePaths::resolve(Some(&infoic), Some(&logicic), algo_override)
                 .map_err(|e| format!("Failed to resolve database: {}", e))?
         }
@@ -2367,7 +2729,9 @@ pub async fn set_custom_db_dir(
 
 /// Return expanded programmer details (no USB reconnection required).
 #[tauri::command]
-pub async fn get_programmer_details(state: State<'_, Arc<AppState>>) -> Result<ProgrammerDetailsDto, String> {
+pub async fn get_programmer_details(
+    state: State<'_, Arc<AppState>>,
+) -> Result<ProgrammerDetailsDto, String> {
     let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
     let info = guard.as_ref().ok_or("No programmer connected")?;
 
@@ -2397,7 +2761,10 @@ pub async fn check_overcurrent(state: State<'_, Arc<AppState>>) -> Result<Overcu
         tokio::task::spawn_blocking(move || {
             let handle = state_task.take_handle()?;
             let device = state_task.get_device()?;
-            let result = handle.protocol.get_ovc_status(&handle.usb, &device).map_err(|e| e.to_string());
+            let result = handle
+                .protocol
+                .get_ovc_status(&handle.usb, &device)
+                .map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);
@@ -2434,7 +2801,10 @@ pub async fn read_calibration(state: State<'_, Arc<AppState>>) -> Result<Calibra
         std::time::Duration::from_secs(5),
         tokio::task::spawn_blocking(move || {
             let handle = state_task.take_handle()?;
-            let result = handle.protocol.read_calibration(&handle.usb, 4).map_err(|e| e.to_string());
+            let result = handle
+                .protocol
+                .read_calibration(&handle.usb, 4)
+                .map_err(|e| e.to_string());
             let _ = state_task.store_handle(handle);
             if let Err(ref e) = result {
                 handle_usb_error(&state_task, e);
@@ -2471,7 +2841,12 @@ pub struct ConfigDataDto {
 
 /// Read all fuse / lock / user / calibration data from the chip.
 #[tauri::command]
-pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<ConfigDataDto, String> {
+pub async fn read_fuses(
+    icspMode: String,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<ConfigDataDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2487,7 +2862,9 @@ pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state:
             let device = state_task.get_device()?;
             let result = (|| {
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device)
+                    .map_err(|e| e.to_string())?;
 
                 // Pin contact check (pre-operation gate)
                 let db_paths = get_db_paths(&state_task)?;
@@ -2500,27 +2877,42 @@ pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state:
                 )?;
 
                 // Read named CFG fuses + LOCK bits
-                let named = minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
+                let named =
+                    minipro_core::operations::read_fuses(&mut handle).map_err(|e| e.to_string())?;
 
                 let dev = handle.device().map_err(|e| e.to_string())?;
-                let (fuse_len, element_size) = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
-                    (cfg.fuses.len(), minipro_core::operations::fuse_element_size(&cfg.name))
-                } else {
-                    (0, 1)
-                };
+                let (fuse_len, element_size) =
+                    if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+                        (
+                            cfg.fuses.len(),
+                            minipro_core::operations::fuse_element_size(&cfg.name),
+                        )
+                    } else {
+                        (0, 1)
+                    };
 
                 // Read chip calibration bytes (OSCCAL word for PIC devices)
                 let calibration = minipro_core::operations::read_chip_calibration(&mut handle)
                     .map_err(|e| e.to_string())?;
 
                 Ok::<ConfigDataDto, String>(ConfigDataDto {
-                    cfg_fuses: named.iter().take(fuse_len)
-                        .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
+                    cfg_fuses: named
+                        .iter()
+                        .take(fuse_len)
+                        .map(|v| FuseValueDto {
+                            name: v.name.clone(),
+                            value: v.value,
+                        })
                         .collect(),
-                    lock_bits: named.iter().skip(fuse_len)
-                        .map(|v| FuseValueDto { name: v.name.clone(), value: v.value })
+                    lock_bits: named
+                        .iter()
+                        .skip(fuse_len)
+                        .map(|v| FuseValueDto {
+                            name: v.name.clone(),
+                            value: v.value,
+                        })
                         .collect(),
-                    user_fuses: vec![],  // TODO: TL866A user fuse read hangs firmware
+                    user_fuses: vec![], // TODO: TL866A user fuse read hangs firmware
                     calibration,
                     element_size,
                 })
@@ -2548,7 +2940,14 @@ pub async fn read_fuses(icspMode: String, pinCheck: bool, window: Window, state:
 
 /// Write fuse / lock bytes to the chip.
 #[tauri::command]
-pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String, pinCheck: bool, window: Window, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn write_fuses(
+    cfgFuses: Vec<FuseValueDto>,
+    lockBits: Vec<FuseValueDto>,
+    icspMode: String,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2564,7 +2963,9 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
             let device = state_task.get_device()?;
             let result = (|| {
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
-                handle.begin_transaction(device.clone()).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device.clone())
+                    .map_err(|e| e.to_string())?;
 
                 // Pin contact check (pre-operation gate)
                 let db_paths = get_db_paths(&state_task)?;
@@ -2577,13 +2978,24 @@ pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto
                 )?;
 
                 // Write CFG + LOCK via high-level function
-                let mut all: Vec<minipro_core::operations::FuseValue> = cfgFuses.iter()
-                    .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value })
+                let mut all: Vec<minipro_core::operations::FuseValue> = cfgFuses
+                    .iter()
+                    .map(|d| minipro_core::operations::FuseValue {
+                        name: d.name.clone(),
+                        value: d.value,
+                    })
                     .collect();
-                all.extend(lockBits.iter()
-                    .map(|d| minipro_core::operations::FuseValue { name: d.name.clone(), value: d.value }));
+                all.extend(
+                    lockBits
+                        .iter()
+                        .map(|d| minipro_core::operations::FuseValue {
+                            name: d.name.clone(),
+                            value: d.value,
+                        }),
+                );
 
-                minipro_core::operations::write_fuses(&mut handle, &all).map_err(|e| e.to_string())?;
+                minipro_core::operations::write_fuses(&mut handle, &all)
+                    .map_err(|e| e.to_string())?;
 
                 Ok::<(), String>(())
             })();
@@ -2616,7 +3028,10 @@ pub struct LockStatusDto {
 
 /// Quick check whether the chip's lock bits indicate read/write protection.
 #[tauri::command]
-pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppState>>) -> Result<LockStatusDto, String> {
+pub async fn check_lock_protection(
+    icspMode: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<LockStatusDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2631,21 +3046,34 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
             let device = state_task.get_device()?;
             let result = (|| {
                 set_icsp_from_mode(&mut handle, &icspMode, &device);
-                handle.begin_transaction(device).map_err(|e| e.to_string())?;
+                handle
+                    .begin_transaction(device)
+                    .map_err(|e| e.to_string())?;
 
-                let (lock_count, element_size) = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = handle.device().map_err(|e| e.to_string())?.config {
-                    (cfg.locks.len() as u8, minipro_core::operations::fuse_element_size(&cfg.name))
-                } else { (0, 1) };
+                let (lock_count, element_size) =
+                    if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) =
+                        handle.device().map_err(|e| e.to_string())?.config
+                    {
+                        (
+                            cfg.locks.len() as u8,
+                            minipro_core::operations::fuse_element_size(&cfg.name),
+                        )
+                    } else {
+                        (0, 1)
+                    };
 
                 let lock_byte = if lock_count > 0 {
-                    handle.protocol.read_fuses(
-                        &handle.usb,
-                        handle.device().map_err(|e| e.to_string())?,
-                        minipro_core::operations::MP_FUSE_LOCK,
-                        lock_count as usize * element_size,
-                        element_size as u8,
-                    ).map(|b| minipro_core::operations::parse_fuse_element(&b, 0, element_size))
-                     .unwrap_or(0xffff)
+                    handle
+                        .protocol
+                        .read_fuses(
+                            &handle.usb,
+                            handle.device().map_err(|e| e.to_string())?,
+                            minipro_core::operations::MP_FUSE_LOCK,
+                            lock_count as usize * element_size,
+                            element_size as u8,
+                        )
+                        .map(|b| minipro_core::operations::parse_fuse_element(&b, 0, element_size))
+                        .unwrap_or(0xffff)
                 } else {
                     0xffff
                 };
@@ -2663,11 +3091,12 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                 // detect AVR by checking the config name (e.g., "avr_11") and
                 // hardcode the LB mask as 0x03.
                 let dev = handle.device().map_err(|e| e.to_string())?;
-                let is_avr = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
-                    cfg.name.starts_with("avr_")
-                } else {
-                    false
-                };
+                let is_avr =
+                    if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+                        cfg.name.starts_with("avr_")
+                    } else {
+                        false
+                    };
 
                 let is_protected = if is_avr {
                     // AVR: only LB bits (1:0) control external read/write.
@@ -2683,7 +3112,10 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
                     lock_byte != 0xff
                 };
 
-                Ok::<LockStatusDto, String>(LockStatusDto { is_protected, lock_byte })
+                Ok::<LockStatusDto, String>(LockStatusDto {
+                    is_protected,
+                    lock_byte,
+                })
             })();
 
             let _ = handle.end_transaction();
@@ -2705,7 +3137,9 @@ pub async fn check_lock_protection(icspMode: String, state: State<'_, Arc<AppSta
 
 /// Run the programmer's built-in hardware self-test.
 #[tauri::command]
-pub async fn run_hardware_check(state: State<'_, Arc<AppState>>) -> Result<HardwareCheckResultDto, String> {
+pub async fn run_hardware_check(
+    state: State<'_, Arc<AppState>>,
+) -> Result<HardwareCheckResultDto, String> {
     let state_clone = (*state).clone();
     if !state_clone.try_acquire() {
         return Err("Another operation is already running".into());
@@ -2815,7 +3249,9 @@ pub async fn do_pin_test(
             let db_paths = get_db_paths(&state_task)?;
             let infoic_path = db_paths.infoic.clone();
 
-            handle.begin_transaction(device).map_err(|e| e.to_string())?;
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
             let test_result = pin_contact_check(&mut handle, &infoic_path);
             let _ = handle.end_transaction();
 
@@ -2875,16 +3311,21 @@ pub async fn do_firmware_update(
         let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
         let handle = guard.as_mut().ok_or("No programmer connected")?;
         let mut output = Vec::new();
-        let result = firmware_update(handle, &fw_data, &mut output, Some(&mut |done, total| {
-            let _ = window_clone.emit(
-                "progress",
-                ProgressPayload {
-                    done,
-                    total,
-                    operation: "firmware_update".to_string(),
-                },
-            );
-        }));
+        let result = firmware_update(
+            handle,
+            &fw_data,
+            &mut output,
+            Some(&mut |done, total| {
+                let _ = window_clone.emit(
+                    "progress",
+                    ProgressPayload {
+                        done,
+                        total,
+                        operation: "firmware_update".to_string(),
+                    },
+                );
+            }),
+        );
         let text = String::from_utf8_lossy(&output).into_owned();
         if !text.is_empty() {
             // Emit each line as a separate log entry
@@ -2926,7 +3367,11 @@ fn trim_trailing_blanks(mut bytes: Vec<u8>, blank: u8) -> Vec<u8> {
 /// Automatically detects and parses Intel HEX / SREC / JEDEC files.
 /// Parsed text-format files are trimmed of trailing blank bytes for cleaner display.
 #[tauri::command]
-pub async fn read_file_bytes(path: String, target_size: Option<u32>, blank_value: Option<u8>) -> Result<String, String> {
+pub async fn read_file_bytes(
+    path: String,
+    target_size: Option<u32>,
+    blank_value: Option<u8>,
+) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         let p = Path::new(&path);
         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -2935,13 +3380,17 @@ pub async fn read_file_bytes(path: String, target_size: Option<u32>, blank_value
         let bytes = if is_text_format {
             let size = target_size.unwrap_or(65536) as usize;
             let blank = blank_value.unwrap_or(0xFF);
-            let buf = read_file(p, "auto", size, blank).map_err(|e| format!("Cannot parse file: {}", e))?;
+            let buf = read_file(p, "auto", size, blank)
+                .map_err(|e| format!("Cannot parse file: {}", e))?;
             trim_trailing_blanks(buf, blank)
         } else {
             std::fs::read(p).map_err(|e| format!("Cannot read file: {}", e))?
         };
 
-        Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
+        Ok(base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &bytes,
+        ))
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
@@ -2960,11 +3409,8 @@ pub async fn do_smart_diff(
     eraseValue: Option<u8>,
 ) -> Result<minipro_core::DiffResult, String> {
     tokio::task::spawn_blocking(move || {
-        let buf_a = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &base64Data,
-        )
-        .map_err(|e| format!("Invalid base64 data: {}", e))?;
+        let buf_a = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &base64Data)
+            .map_err(|e| format!("Invalid base64 data: {}", e))?;
 
         let p = Path::new(&referencePath);
         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -2990,7 +3436,9 @@ pub async fn do_smart_diff(
 /// Return the dynamic window size that would be computed for the primary monitor.
 #[tauri::command]
 pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32), String> {
-    let monitor = app.primary_monitor().map_err(|e| e.to_string())?
+    let monitor = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
         .ok_or("No primary monitor found")?;
     let scale = monitor.scale_factor();
     let screen_w = (monitor.size().width as f64 / scale) as u32;
@@ -3008,7 +3456,10 @@ pub async fn get_dynamic_window_size(app: tauri::AppHandle) -> Result<(u32, u32)
 /// Returns `None` (serialized as JSON `null`) when no bit-level definitions
 /// are available — the frontend falls back to hex-only input in that case.
 #[tauri::command]
-pub fn get_fuse_bit_defs(configName: String, chipName: String) -> Option<&'static crate::fuse_defs::FuseConfigDef> {
+pub fn get_fuse_bit_defs(
+    configName: String,
+    chipName: String,
+) -> Option<&'static crate::fuse_defs::FuseConfigDef> {
     crate::fuse_defs::lookup(&configName, &chipName)
 }
 
@@ -3030,18 +3481,26 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
 
     let config = dev.config.as_ref().map(|cfg| match cfg {
         minipro_core::device::ChipConfig::Mcu(fuse_cfg) => ChipConfigDto::Mcu {
-            fuses: fuse_cfg.fuses.iter().map(|f| FuseFieldDto {
-                name: f.name.clone(),
-                display_name: fuse_display_name(&f.name),
-                mask: f.mask,
-                default_value: f.default,
-            }).collect(),
-            locks: fuse_cfg.locks.iter().map(|f| FuseFieldDto {
-                name: f.name.clone(),
-                display_name: fuse_display_name(&f.name),
-                mask: f.mask,
-                default_value: f.default,
-            }).collect(),
+            fuses: fuse_cfg
+                .fuses
+                .iter()
+                .map(|f| FuseFieldDto {
+                    name: f.name.clone(),
+                    display_name: fuse_display_name(&f.name),
+                    mask: f.mask,
+                    default_value: f.default,
+                })
+                .collect(),
+            locks: fuse_cfg
+                .locks
+                .iter()
+                .map(|f| FuseFieldDto {
+                    name: f.name.clone(),
+                    display_name: fuse_display_name(&f.name),
+                    mask: f.mask,
+                    default_value: f.default,
+                })
+                .collect(),
         },
         minipro_core::device::ChipConfig::Pld(_) => ChipConfigDto::Pld {},
     });
@@ -3050,7 +3509,8 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
     // AVR convention: bit=0 means programmed (active).  PIC and others: bit=1.
     // This is more reliable than name pattern matching — the database itself
     // declares the convention via the config name.
-    let invert_fuse_bits = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config {
+    let invert_fuse_bits = if let Some(minipro_core::device::ChipConfig::Mcu(ref cfg)) = dev.config
+    {
         cfg.name.starts_with("avr_")
     } else {
         false
@@ -3068,7 +3528,12 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         chip_type: chip_type_str,
         pin_count: dev.package_details.pin_count,
         package_type: package_type_name(&dev.package_details),
-        voltages: VoltagesDto::from_voltages(&dev.voltages, model, dev.chip_type, dev.flags.custom_protocol),
+        voltages: VoltagesDto::from_voltages(
+            &dev.voltages,
+            model,
+            dev.chip_type,
+            dev.flags.custom_protocol,
+        ),
         code_memory_size: dev.code_memory_size,
         data_memory_size: dev.data_memory_size,
         can_erase: dev.flags.can_erase,
@@ -3079,6 +3544,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         pin_map: dev.pin_map,
         off_protect_before: dev.flags.off_protect_before,
         protect_after: dev.flags.protect_after,
+        icsp: dev.package_details.icsp,
     }
 }
 

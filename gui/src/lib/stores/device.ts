@@ -49,6 +49,28 @@ export interface DeviceInfo {
   off_protect_before: boolean;
   /** True if chip has protect_after flag (can be write-protected after write). */
   protect_after: boolean;
+  /** ICSP wiring-class index (package_details bits 8–15). 0 = no ICSP. */
+  icsp: number;
+}
+
+export interface IcspWire {
+  header_pin: number;
+  signal: string;
+  chip_pin: number;
+}
+
+export interface IcspWiring {
+  title: string;
+  /** False = generic MCU target; labels are signal names, not pin numbers. */
+  numbered: boolean;
+  /** Label per chip pin; index 0 is pin 1 (or signal row when !numbered). */
+  chip_labels: string[];
+  wires: IcspWire[];
+  notes: string[];
+}
+
+export async function getIcspWiring(model: string, icspClass: number): Promise<IcspWiring | null> {
+  return await invoke<IcspWiring | null>("get_icsp_wiring", { model, icspClass });
 }
 
 export interface PinMap {

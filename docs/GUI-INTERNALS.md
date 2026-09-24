@@ -25,7 +25,7 @@ gui/
         DeviceSelector.svelte    — search + paginated IC list (syncs from external selection via $effect)
         DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
-        IcspConnectorDiagram.svelte — ICSP connector pin-numbering diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc")
+        IcspConnectorDiagram.svelte — ICSP connector diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc"); renders pin numbering plus per-class signal wiring when a verified table exists
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
         LogicTestGrid.svelte    — zoomable color-coded logic test result grid (Ctrl+Scroll zoom, copy-to-clipboard TSV)
         IdentifyResults.svelte  — logic IC identify results table (passing matches only, Select/favorite/deselect buttons)
@@ -223,6 +223,69 @@ chip color (never change for bad/good — only the socket slots change).
 "✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
 pin list and a "Clear" button to dismiss results.
 
+## ICSP wiring diagrams (IcspConnectorDiagram.svelte)
+
+The `package_details` field in `infoic.xml` encodes a *wiring-class*
+index in bits 8–15 (`PackageDetails.icsp` in `device.rs`). It is a
+per-device/per-family diagram selector — upstream C minipro prints it
+as `ICP%03d.JPG`, the filename of a canned Xgpro image. We instead map
+each verified `(ProgrammerModel, class)` pair to an explicit connection
+list in `crates/minipro-core/src/icsp.rs` and render our own SVG.
+
+**Important:** the class byte is *family-relative* — the same value can
+mean different chip pinouts in different `<database>` sections (e.g.
+class 0x05 is AT45DB DataFlash in the legacy INFOIC section but SPI
+NAND in INFOIC2PLUS/INFOICT76). The legacy INFOIC section (TL866A/CS)
+also has no class 0x09 at all — SPI NOR ICSP was never offered on that
+hardware, so `icsp == 0` on a TL866A is correct vendor behavior, not a
+missing table.
+
+**Architecture:**
+
+- `icsp::icsp_wiring(model, class)` → `Option<&'static IcspWiring>`;
+  `None` means unverified — callers must not guess.
+- `IcspWiring` = `{ title, numbered, chip_labels, wires, notes }`.
+  `chip_labels` is indexed by chip pin − 1 so unconnected pins still
+  render (dimmed). When `numbered` is false the target is a generic MCU
+  whose pin positions vary by package — labels are signal names and the
+  row index is not a pin number (GUI hides it; CLI omits "chip pin N").
+- `DeviceInfoDto.icsp` carries the raw class byte; the stateless
+  `get_icsp_wiring(model, icspClass)` command resolves the table. The
+  component fetches in an `$effect` keyed on `$programmer.model` +
+  `$selectedDevice.icsp` — no AppState timing issues.
+- CLI `minipro -d NAME` prints `ICSP: ICP%03d.JPG` (upstream parity)
+  plus an ASCII wiring table when `--programmer MODEL` is given.
+
+**Rendering:** header pin-number groups on the left (right-aligned at a
+fixed x), chip pin rows on the right in pin order, horizontal wires —
+no crossings. Unconnected chip pins render dimmed. `notes` render as
+bullet warnings under the SVG.
+
+**Adding a new class:** verify against official docs or hardware, then
+add a `static` table in `icsp.rs` and a match arm. Never ship a
+pinout from a class-number guess — a wrong VCC/VPP line can damage
+hardware.
+
+**Verified tables so far**, per programmer header:
+
+- TL866A + TL866II+ (1×6, identical pinout): 0x01 Atmel SPI, 0x02 PIC
+  (ICD2), 0x06/0x07/0x08 AVR variants, 0x09 SPI NOR; plus TL866A-only
+  0x05 AT45DB, and II+-only 0x05 SPI NAND, 0x0a Microwire, 0x0b I²C,
+  0x0c KB90xx.
+- T48 (2×8 zigzag): 0x01/0x02/0x06–0x09, 0x0a, 0x0b, 0x0c (VCC = pin 13,
+  GND = pin 16; 0x40 eMMC uses an external driver board — stays on
+  fallback).
+- T56 (1×8): all of the above plus 0x0e AT17LV and 0x40 eMMC (direct
+  8-pin wiring).
+- T76 (2×14 zigzag): all of the above plus 0x0e and full 8-bit 0x40
+  eMMC (VCC = pins 20/22/24, GND = 11/21/26/28, SGND = 1/15/27).
+
+Sources: legacy MiniPro `ICP001`–`ICP008` (TL866A) and the Xgpro V13.17
+`img/` set (`ICPnnn` = TL866II+, `T48ICPnnn`/`T56ICPnnn`/`T76ICPnnn` per
+model). The MCU classes are `numbered: false` generic-signal targets.
+Still unverified (fallback): 0x03/0x04 SyncMos (no DB devices reference
+them) and T48 0x0e/0x40 (adapter-board based, not a direct pinout).
+
 ### Logic IC tab gating (GUI)
 
 When a logic IC is selected (`chip_type === "Logic"`), the Read, Write,
@@ -274,10 +337,15 @@ VCC selector, help button, and an "Identify unknown logic IC" link that
 calls `deselectDevice()` to return to identify mode.
 
 **DeviceSelector sync**: An `$effect` in `DeviceSelector.svelte` watches
-`$selectedDevice`. When the name doesn't match local `selectedName`
-(external selection), it syncs local state and sets `searchQuery` to the
-device name, triggering the debounced search so the device appears in the
-list with highlight and favorite controls.
+`$selectedDevice`. A `lastSyncedDevice` guard distinguishes external
+selections (e.g. IdentifyResults → `selectDevice()`): for those, the
+effect syncs local state and sets `searchQuery` to the device name,
+triggering the debounced search so the device appears in the list with
+highlight and favorite controls. Selections made inside the component via
+`onSelect` set `lastSyncedDevice` before publishing to the store, so the
+effect skips the `searchQuery` rewrite — otherwise the full device name
+would re-run the search and collapse the results list to just the
+selection.
 
 ### Logic test grid (GUI)
 
