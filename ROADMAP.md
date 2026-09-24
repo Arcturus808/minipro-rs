@@ -713,7 +713,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - Phase 1: DIP packages only (most common), derive placement from pin_map mask (fallback to pin_count), render SVG ZIF socket with chip overlay and lever indicator — **DONE**
     - Phase 2: ICSP connector pin-numbering diagram (see details below) — **DONE**
     - Phase 3: Adapter-based packages (TSOP, SOP, PLCC) — more complex, lower priority
-    - Phase 4: Per-class ICSP signal-labeled wiring diagrams, scratch-built SVG (see details below) — **PLANNED**
+    - Phase 4: Per-class ICSP signal-labeled wiring diagrams, scratch-built SVG (see details below) — **DONE**
   - **ICSP wiring diagrams — revived (previously dropped):**
     The earlier conclusion ("not derivable from the XML database") was wrong in one important way. `package_details.icsp` is a **wiring-class index**, not a flag: upstream `main.c` prints it verbatim as `ICSP: ICP%03d.JPG` — it selects which canned `ICP%03d.JPG` image Xgpro's "[View ICSP Connection]" displays. The same byte reaches the firmware inside `package_details` (begin_transaction bytes 40–43), where it acts as the ICSP routing-class selector; on T56/T76 the user's ICSP flag additionally switches the FPGA bitstream name (e.g. ATmega → `11S`, AT89C → `2S`, per `get_algorithm()` in upstream `database.c`).
     Because it is a class index, ~30k devices collapse into ~13 wiring classes — no per-chip empirical mapping and no Xgpro binary reverse-engineering needed. Observed distribution in `data/infoic.xml`:
