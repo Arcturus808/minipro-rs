@@ -180,7 +180,11 @@ impl MockUsb {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 pub fn hex_encode(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write;
+    data.iter().fold(String::new(), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 pub fn hex_decode(s: &str) -> Vec<u8> {
