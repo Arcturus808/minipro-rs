@@ -60,6 +60,7 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **ICSP wiring diagrams** — scratch-built SVG wiring diagrams: per-model connector layouts (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag) plus per-class signal-labeled tables for all verified ICSP classes; CLI `-d` prints an ASCII table with `-q <model>`. Collapsible scrollable GUI panel. Unverified classes show a safe fallback — see Phase 4 spec in Backlog.
 - [x] **Model-filtered favorites** — favorites whose exact name doesn't exist in the connected programmer's database section are hidden (names differ per family, e.g. `PIC16F628A` vs `PIC16F628A@DIP18`). Stored favorites are untouched and reappear on a compatible model. Backend: `check_favorite_devices` → `list_devices_by_model()`.
 - [x] **Hardware-free GUI testing** — `MINIPRO_FAKE_PROGRAMMER=<MODEL>` env var fakes programmer presence so device search/selection and the ICSP/ZIF diagrams can be exercised with no USB device attached.
+- [x] **ZIF socket placement diagram** — per-model SVG placement panel driven by `minipro_core::zif` rules (socket size, lever position, top- vs bottom-justified insertion — T48 is 40-pin/bottom-lever; T56/T76 bottom-justify at ZIF 24). Pin-test bad pins highlight at mapped ZIF positions; CLI `-d` prints insertion hints and `-z` annotates bad pins with ZIF positions. Adapter-based packages pending (Phase 3).
 
 ## Near-term
 
@@ -673,7 +674,7 @@ This is a living list of features and improvements planned for minipro-rs.
     - No explicit "insert at position X" field — derive from `pin_map` mask data, or fallback to pin_count-based placement per the model's insertion rule (top- or bottom-justified)
     - Per-class ICSP pin mappings are not in the database — `icsp` gives only the class index. Each class's header-pin↔chip-pin table must be authored and verified manually (see Phase 4 below). ~13 classes cover all ICSP-capable devices.
   - **Design decisions (RESOLVED):**
-    - **Chip placement:** per-model `MODEL_SOCKET` spec in `ZifSocketDiagram.svelte` — `{pins, leverTop, insertion}`; top-justified on most models, bottom-justified on T56/T76 (see table above). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
+    - **Chip placement:** per-model `zif_spec()`/`ZifSpec` in `minipro_core::zif` — `{pins, lever_top, insertion}`; top-justified on most models, bottom-justified on T56/T76 (see table above). Shared by the GUI (`get_zif_layout`) and CLI (`-d` hints, `-z` annotation). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
     - **Diagram rendering:** render the socket with pin 1 at top. Draw the lever at top (all models) or bottom (T48) per the spec. Two SVG templates: 40-pin and 48-pin
     - **UI placement:** ZIF diagram immediately below DeviceSelector (semantic continuity: "which chip" → "how to place it"). DiagnosticsPanel drops to bottom with collapsible buttons. Right sidebar stays focused on log
     - **Socket size:** 40-pin (TL866A/CS/II+/T48) or 48-pin (T56/T76), determined by `programmer.model`
