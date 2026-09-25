@@ -648,19 +648,20 @@ This is a living list of features and improvements planned for minipro-rs.
 
 - [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
   - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the ZIF socket
-  - **Programmer model differences (VERIFIED):**
-    - All models use the same chip insertion convention: **chip pin 1 → ZIF pin 1, at the top of the socket**
-    - The ZIF socket is physically **upside down** on T48/T56/T76 compared to TL866A/CS/II+ — the lever moved from the top (pin 1 end) to the bottom (opposite end)
+  - **Programmer model differences (VERIFIED against XGPro diagrams):**
+    - **Top-justified insertion** (chip pin 1 → ZIF pin 1) on TL866A/CS, TL866II+, and T48
+    - **Bottom-justified insertion** on T56/T76 — the chip's lower-left pin (N/2) sits at ZIF pin 24 of the 48-pin socket, so a DIP-8 occupies ZIF 21–24 + 25–28
+    - Lever is at the **top** on every model except T48, where it is at the **bottom**
     - Pin numbering is the same standard U-shaped arrangement on all models
     - The `pin_map` mask data works uniformly — ZIF pin 1 is always ZIF pin 1 regardless of model
 
-    | Model | ZIF Socket | Pin 1 Position | Lever Position |
+    | Model | ZIF Socket | Chip Insertion | Lever Position |
     |-------|-----------|----------------|----------------|
-    | TL866A/CS | 40-pin | Top | Top (same end as pin 1) |
-    | TL866II+ | 40-pin | Top | Top (same end as pin 1) |
-    | T48 | 48-pin | Top | Bottom (opposite end from pin 1) |
-    | T56 | 48-pin | Top | Bottom (opposite end from pin 1) |
-    | T76 | 48-pin | Top | Bottom (opposite end from pin 1) |
+    | TL866A/CS | 40-pin | Top (pin 1 → ZIF 1) | Top |
+    | TL866II+ | 40-pin | Top (pin 1 → ZIF 1) | Top |
+    | T48 | 40-pin | Top (pin 1 → ZIF 1) | Bottom |
+    | T56 | 48-pin | Bottom (pin N/2 → ZIF 24) | Top |
+    | T76 | 48-pin | Bottom (pin N/2 → ZIF 24) | Top |
 
   - **Data available from database:**
     - `pin_count` — number of pins on the device
@@ -669,13 +670,13 @@ This is a living list of features and improvements planned for minipro-rs.
     - `pin_map` — index into infoic.xml `<maps>` section; the `mask` array tells which ZIF pins are occupied, implicitly encoding placement position
     - `icsp` — ICSP **wiring-class index** from `package_details` bits 8–15 (selects the per-class ICSP wiring diagram; also sent to firmware inside `package_details` at begin_transaction bytes 40–43)
   - **Data NOT available (must be derived or static):**
-    - No explicit "insert at position X" field — derive from `pin_map` mask data, or fallback to pin_count-based placement (pin 1 at ZIF pin 1, chip at top of socket)
+    - No explicit "insert at position X" field — derive from `pin_map` mask data, or fallback to pin_count-based placement per the model's insertion rule (top- or bottom-justified)
     - Per-class ICSP pin mappings are not in the database — `icsp` gives only the class index. Each class's header-pin↔chip-pin table must be authored and verified manually (see Phase 4 below). ~13 classes cover all ICSP-capable devices.
   - **Design decisions (RESOLVED):**
-    - **Chip placement:** identical for all models — pin 1 at top (ZIF pin 1). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
-    - **Diagram rendering:** always render pin 1 at top. Draw lever at top (TL866A/CS/II+) or bottom (T48/T56/T76) based on `programmer.model`. Two SVG templates: 40-pin and 48-pin
+    - **Chip placement:** per-model `MODEL_SOCKET` spec in `ZifSocketDiagram.svelte` — `{pins, leverTop, insertion}`; top-justified on most models, bottom-justified on T56/T76 (see table above). Use `pin_map` mask when available (pin_map != 0), fallback to pin_count-based placement otherwise
+    - **Diagram rendering:** render the socket with pin 1 at top. Draw the lever at top (all models) or bottom (T48) per the spec. Two SVG templates: 40-pin and 48-pin
     - **UI placement:** ZIF diagram immediately below DeviceSelector (semantic continuity: "which chip" → "how to place it"). DiagnosticsPanel drops to bottom with collapsible buttons. Right sidebar stays focused on log
-    - **Socket size:** 40-pin (TL866A/CS/II+) or 48-pin (T48/T56/T76), determined by `programmer.model`
+    - **Socket size:** 40-pin (TL866A/CS/II+/T48) or 48-pin (T56/T76), determined by `programmer.model`
   - **Implementation plan:**
     - **Layout (left sidebar):**
       ```
@@ -697,7 +698,7 @@ This is a living list of features and improvements planned for minipro-rs.
       - `$derived`: socketSize (40/48), leverAtTop (bool), occupiedPins (from pin_map mask or pin_count fallback), chipName
       - SVG: socket body (rounded rect, theme-aware fill), pin slots (currentColor + opacity), pin number labels (U-shape), chip overlay (semi-transparent primary accent), pin 1 notch/dot, lever icon
       - Uses `currentColor` and Skeleton theme classes for automatic dark mode support
-    - **Fallback placement (pin_map == 0):** use `pin_count` — left side pins 1 to N/2, right side pins N/2+1 to N, all at top of socket
+    - **Fallback placement (pin_map == 0):** use `pin_count` — left side pins 1 to N/2, right side pins N/2+1 to N, justified per the model's insertion rule (top for most, bottom of socket for T56/T76)
     - **Backend:** add `get_pin_map` Tauri command wrapping existing `database::get_pin_map()`, returns mask array for selected device
     - **DiagnosticsPanel:** wrap 4 diagnostic buttons in `<details>` collapsed by default, keep programmer info always visible
     - **Files to create/modify:**
