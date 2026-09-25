@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
-    database::{find_device, find_device_any, get_pin_map, DatabasePaths},
+    database::{find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
         blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find,
@@ -655,6 +655,10 @@ fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto
     let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
         return Ok(None);
     };
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
     let model = name.parse::<ProgrammerModel>()?;
     let info = minipro_core::device::ProgrammerInfo {
         model,
@@ -933,6 +937,75 @@ pub async fn search_devices(
             manufacturer: item.manufacturer,
         })
         .collect())
+}
+
+/// Availability of a favorited device name for the connected programmer.
+#[derive(Serialize)]
+pub struct FavoriteStatusDto {
+    /// The stored favorite name.
+    name: String,
+    /// True when the name resolves for the connected programmer (or for any
+    /// programmer when none is connected).
+    available: bool,
+}
+
+/// Check favorite names against every programmer model's device list.
+///
+/// Device names are not portable across database sections (e.g. the TL866A
+/// section has bare "PIC16F628A" while T76 only has "PIC16F628A@DIP18"), so
+/// a favorite saved under one model may not resolve under another.  The GUI
+/// hides such favorites while that model is connected.
+#[tauri::command]
+pub async fn check_favorite_devices(
+    names: Vec<String>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<FavoriteStatusDto>, String> {
+    if names.is_empty() {
+        return Ok(vec![]);
+    }
+    let db = get_db_paths(&state)?;
+    let model = {
+        let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
+
+    tokio::task::spawn_blocking(move || {
+        const ALL_MODELS: [ProgrammerModel; 6] = [
+            ProgrammerModel::Tl866a,
+            ProgrammerModel::Tl866cs,
+            ProgrammerModel::Tl866iiPlus,
+            ProgrammerModel::T48,
+            ProgrammerModel::T56,
+            ProgrammerModel::T76,
+        ];
+        let by_model = list_devices_by_model(&db).map_err(|e| e.to_string())?;
+        let sets: std::collections::HashMap<ProgrammerModel, std::collections::HashSet<String>> =
+            by_model
+                .iter()
+                .map(|(m, items)| (*m, items.iter().map(|i| i.name.to_lowercase()).collect()))
+                .collect();
+
+        let out = names
+            .iter()
+            .map(|name| {
+                let lc = name.to_lowercase();
+                let available = match model {
+                    Some(m) => sets[&m].contains(&lc),
+                    // With no programmer connected, selection resolves via
+                    // find_device_any — the name is usable if it exists in
+                    // any model's section.
+                    None => ALL_MODELS.iter().any(|m| sets[m].contains(&lc)),
+                };
+                FavoriteStatusDto {
+                    name: name.clone(),
+                    available,
+                }
+            })
+            .collect();
+        Ok::<Vec<FavoriteStatusDto>, String>(out)
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
 }
 
 /// Get detailed info for a single device (no programmer required).

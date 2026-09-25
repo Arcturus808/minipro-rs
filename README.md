@@ -77,7 +77,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **USB reconnect hints** — connection button tooltip and error messages advise replugging on USB-related failures (Windows Selective Suspend, Linux autosuspend, macOS sleep power management)
 
 **UI & usability:**
-- Device search & selection with **live search as you type** (200ms debounce), **device favorites** with star toggle (persisted to localStorage), pinned collapsible favorites section, and **manufacturer name** shown alongside each result
+- Device search & selection with **live search as you type** (200ms debounce), **device favorites** with star toggle (persisted to localStorage), pinned collapsible favorites section, and **manufacturer name** shown alongside each result. Favorites are filtered to the connected programmer: the chip database uses different naming per programmer family (e.g. bare `PIC16F628A` for TL866A vs `PIC16F628A@DIP18` for T76), so a name saved under one model may not exist under another. Those entries are hidden rather than failing to select — they reappear when a compatible programmer is connected, and you can simply search the base name to favorite the model-specific variant
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
 - Live progress bar with CRC32 verification

@@ -63,6 +63,14 @@ instantly AND Tauri commands work; `src-tauri` edits rebuild and relaunch.
 Device search, device info, and the ICSP/ZIF diagrams work; chip
 operations fail. Works under `tauri dev` and release exes alike.
 
+```powershell
+cd gui
+$env:MINIPRO_FAKE_PROGRAMMER = "T76"
+cargo tauri dev
+# Back to real hardware in the same shell:
+Remove-Item Env:MINIPRO_FAKE_PROGRAMMER
+```
+
 **Pre-commit verification (release exe, no installers):**
 
 ```powershell

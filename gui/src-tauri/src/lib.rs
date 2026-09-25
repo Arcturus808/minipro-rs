@@ -144,6 +144,7 @@ pub fn run() {
             commands::force_reconnect,
             commands::get_programmer_details,
             commands::search_devices,
+            commands::check_favorite_devices,
             commands::get_device_info,
             commands::get_device_pin_map,
             commands::get_icsp_wiring,

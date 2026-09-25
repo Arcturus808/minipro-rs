@@ -14,6 +14,13 @@
     matches: SearchResult[];
   }
 
+  // Per-favorite availability for the connected programmer's device list.
+  interface FavoriteStatus {
+    name: string;
+    available: boolean;
+  }
+  let favStatus = $state<Record<string, FavoriteStatus>>({});
+
   let searchQuery = $state("");
   let results = $state<SearchResult[]>([]);
   let page = $state(0);
@@ -54,12 +61,45 @@
   });
 
   // Favorite devices (sorted by name) for the pinned favorites section.
+  // Favorites whose exact name doesn't exist in the connected programmer's
+  // device list are hidden — database sections use different naming (e.g.
+  // bare "PIC16F628A" under TL866A vs "PIC16F628A@DIP18" under T76), so a
+  // favorite saved under one model may not resolve under another.
   let favoriteItems = $derived(
-    [...$favorites].sort((a, b) => a.name.localeCompare(b.name))
+    [...$favorites]
+      .filter((f) => favStatus[f.name]?.available !== false)
+      .sort((a, b) => a.name.localeCompare(b.name))
   );
 
   // Reactive set of favorite names for O(1) lookup in templates.
   let favNames = $derived(new Set($favorites.map((f) => f.name)));
+
+  // Re-check favorites against all models' device lists whenever favorites
+  // or the connected programmer change.
+  $effect(() => {
+    const favs = $favorites;
+    void $programmer; // dependency: re-check on model change
+    if (favs.length === 0) {
+      favStatus = {};
+      return;
+    }
+    let cancelled = false;
+    invoke<FavoriteStatus[]>("check_favorite_devices", {
+      names: favs.map((f) => f.name),
+    })
+      .then((list) => {
+        if (cancelled) return;
+        const map: Record<string, FavoriteStatus> = {};
+        for (const s of list) map[s.name] = s;
+        favStatus = map;
+      })
+      .catch(() => {
+        if (!cancelled) favStatus = {};
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   async function doSearch(query: string) {
     const trimmed = query.trim();

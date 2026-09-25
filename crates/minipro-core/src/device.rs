@@ -5,7 +5,7 @@
 //! `device_t`, `package_t` and related structs in the upstream minipro source.
 
 /// Programmer model identifiers (matches the C MP_* defines).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ProgrammerModel {
     Tl866a = 1,
