@@ -410,16 +410,12 @@ model can therefore fail `select_device` under another.
 
 `DeviceSelector` calls `check_favorite_devices` whenever `$favorites` or
 `$programmer` changes. The command does a single-pass
-`list_devices_by_model()` scan of the database and returns, per name: which
-models' lists contain it, whether it resolves for the connected model, and
-same-base-name entries in that model's list. Unavailable favorites render
-dimmed with a warning badge (tooltip lists the models that do have it).
-Clicking one never hits `select_device` directly:
-
-- 1 same-base match → auto-selects it with a notice ("selected X instead").
-- N matches → populates the search box with the base name so results show
-  the equivalents.
-- 0 matches → notice explaining which models' lists contain the name.
+`list_devices_by_model()` scan of the database and reports whether each
+favorite's exact name resolves for the connected model (or any model when
+none is connected). `favoriteItems` then filters out unavailable names —
+hidden favorites still exist in the store and reappear when a compatible
+programmer is connected. While the check is in flight, unknown entries are
+shown (`available !== false`).
 
 ### Config panel state (`$effect.pre`)
 
