@@ -50,6 +50,9 @@ resolved from the per-model socket rules in `minipro_core::zif` — e.g.
 `ZIF placement (T76): bottom of socket — occupies ZIF 21-24 + 25-28
 (chip pin 1 at ZIF pin 21)`. Socket size, lever position, and top- vs
 bottom-justified insertion are per-model facts (the same table the GUI's
-`ZifSocketDiagram` consumes via `get_zif_layout`). The line is skipped
-for adapter-based packages and ICSP-only devices; without `-q` a
-`--programmer` hint is printed instead, since placement is model-specific.
+`ZifSocketDiagram` consumes via `get_zif_layout`). ICSP-only devices skip
+the line entirely; adapter packages print a "requires an adapter" note
+instead — the DIP/non-DIP decision uses the same name-suffix rule as the
+GUI (`@DIP*` or bare-name non-PLCC), since `package_details.adapter` is
+0 for some adapter packages. Without `-q` a `--programmer` hint is
+printed instead, since placement is model-specific.

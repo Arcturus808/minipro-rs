@@ -1203,14 +1203,28 @@ fn print_device_info(dev: &minipro_core::Device, model: Option<ProgrammerModel>)
 }
 
 /// Print a one-line ZIF insertion hint for direct-DIP devices.  Skipped
-/// for adapter-based packages (Phase 3 territory) and ICSP-only devices,
-/// which never sit in the socket.
+/// for ICSP-only devices, which never sit in the socket; adapter-based
+/// packages get a note instead of a position.
 fn print_zif_placement(dev: &minipro_core::Device, model: Option<ProgrammerModel>) {
     use minipro_core::device::MP_ICSP_ONLY;
     use minipro_core::zif;
 
     let pin_count = dev.package_details.pin_count as usize;
-    if dev.flags.prog_support == MP_ICSP_ONLY || dev.package_details.adapter != 0 {
+    if dev.flags.prog_support == MP_ICSP_ONLY {
+        return;
+    }
+    // Same rule as the GUI diagram: the @ suffix is authoritative —
+    // package_details can't distinguish SOP/TSSOP/etc. (adapter index is
+    // 0 for some adapter packages) — bare names fall back to the PLCC
+    // flag, matching package_type_name() in the GUI.
+    let suffix = dev.name.split('@').nth(1).map(str::to_ascii_uppercase);
+    let is_dip = match &suffix {
+        Some(s) => s.starts_with("DIP"),
+        None => !dev.package_details.plcc,
+    };
+    if !is_dip {
+        let pkg = suffix.unwrap_or_else(|| format!("PLCC{pin_count}"));
+        println!("ZIF placement: {pkg} requires an adapter — no direct-socket position");
         return;
     }
     let Some(model) = model else {
