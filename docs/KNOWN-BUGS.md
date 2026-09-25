@@ -247,3 +247,21 @@ prints "This chip does not support electrical erase (use UV light for UV
 EPROMs)." instead of silently succeeding. For auto-erase before write on a
 non-erasable chip, the erase step is silently skipped (matching upstream —
 the write proceeds without a pre-erase).
+
+## Favorited device name failed to resolve under a different programmer (fixed)
+
+A favorite saved while a TL866A was connected (e.g. bare `PIC16F628A`)
+silently failed `select_device` under a T76 — the T76 database section only
+has package-qualified names (`PIC16F628A@DIP18` etc.), so the invoke
+rejected and `selectedDevice` stayed null with no visible error. Device
+names are not portable across `infoic.xml` sections: the display name is
+the record key and naming conventions differ per programmer family.
+
+**Fix:** `check_favorite_devices` (commands.rs) reports per favorite whether
+its exact name resolves for the connected model, using a single-pass
+`list_devices_by_model()` in `database.rs` (per-section grouping + `pin_map`
+model flags). `DeviceSelector` hides favorites that don't resolve; they
+stay in `localStorage` and reappear on a compatible programmer. An earlier
+approach that auto-selected a same-base-name variant on click was reverted —
+substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
+potentially different package variant and was too surprising.

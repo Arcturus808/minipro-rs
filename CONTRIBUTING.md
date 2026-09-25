@@ -57,8 +57,13 @@ For full dev iteration with the Rust backend (slower, but Tauri commands work):
 ```sh
 cd gui
 npm install
-npm run tauri dev
+cargo tauri dev
 ```
+
+To exercise the GUI without a programmer attached, set
+`MINIPRO_FAKE_PROGRAMMER` to a model name (`TL866A`, `TL866CS`, `TL866II+`,
+`T48`, `T56`, `T76`) before launching — device search, selection, and the
+ICSP/ZIF diagrams work; chip operations fail as expected.
 
 ### Running Tests
 
@@ -88,9 +93,12 @@ If you changed any `.svelte`, `.ts`, `.css`, or `.html` file, also run:
 cd gui && cargo tauri build   # embeds fresh frontend into the Rust binary
 ```
 
-`cargo build --release` alone is only safe for Rust-only GUI changes (it reuses
-stale embedded frontend assets). On Windows, stop any running `minipro-gui.exe`
-before rebuilding — it locks the output binary.
+`cargo build --release` alone is a **compile check only** — without the
+`tauri/custom-protocol` feature the binary loads `devUrl` (localhost) and
+shows ERR_CONNECTION_REFUSED instead of embedded assets. For a runnable
+exe use `cargo tauri build --no-bundle` (skips installers). On Windows,
+stop any running `minipro-gui.exe` before rebuilding — it locks the output
+binary.
 
 ## Code Style
 

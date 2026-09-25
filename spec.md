@@ -69,7 +69,9 @@ All commands are invoked via `invoke("command_name", args)` from `@tauri-apps/ap
 | `get_programmer_info` | `{ }` | `get_programmer_info(state)` | Detect connected programmer |
 | `force_reconnect` | `{ }` | `force_reconnect(state)` | Reclaim stale USB handle |
 | `search_devices` | `{ query }` | `search_devices(query, state)` | Search IC database |
+| `check_favorite_devices` | `{ names }` | `check_favorite_devices(names, state)` | Report which favorite names resolve for the connected model |
 | `get_device_info` | `{ name }` | `get_device_info(name, state)` | Get device details (no programmer) |
+| `get_icsp_wiring` | `{ model, icspClass }` | `get_icsp_wiring(model, icspClass)` | Per-model ICSP wiring table + connector pinout |
 | `select_device` | `{ name }` | `select_device(name, state)` | Select and resolve device |
 | `deselect_device` | `{ }` | `deselect_device(state)` | Clear selected device |
 | `do_read` | `{ path, options }` | `do_read(path, options, ...)` | Read chip to file |
@@ -361,14 +363,21 @@ minipro-rs/
     │   └── lib/
     │       ├── stores/
     │       │   ├── operations.ts    ← invoke wrappers, OperationOptions
-    │       │   ├── device.ts          ← programmer, selectedDevice, search
+    │       │   ├── device.ts          ← programmer, selectedDevice, favorites
     │       │   ├── hex.ts             ← hex data, loading state
     │       │   ├── logs.ts            ← terminal log entries
+    │       │   ├── batch.ts           ← batch programming state
+    │       │   ├── theme.ts           ← system/dark/light theme
     │       │   └── settings.ts        ← persisted preferences
     │       ├── components/
     │       │   ├── HexViewer.svelte   ← hex dump rendering
     │       │   ├── TerminalLog.svelte ← scrollable log panel
-    │       │   ├── DeviceSelector.svelte
+    │       │   ├── DeviceSelector.svelte ← search + model-filtered favorites
+    │       │   ├── FuseBitDecoder.svelte
+    │       │   ├── IcspConnectorDiagram.svelte ← ICSP wiring diagram
+    │       │   ├── ZifSocketDiagram.svelte    ← ZIF placement diagram
+    │       │   ├── IdentifyResults.svelte     ← logic-IC identify results
+    │       │   ├── LogicTestGrid.svelte       ← logic test vector grid
     │       │   ├── DiagnosticsPanel.svelte
     │       │   ├── SettingsPanel.svelte
     │       │   └── ProgressPanel.svelte
