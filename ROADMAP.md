@@ -647,7 +647,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - **AVR fuse convention:** bit = 0 means programmed (active). The decoder shows "Programmed"/"Unprogrammed" labels for AVR devices and raw "1"/"0" for non-AVR.
   - Priority: medium — hex input works but is error-prone for users unfamiliar with bit manipulation
 
-- [ ] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket
+- [~] **ZIF socket placement diagram** — visual panel showing the selected device correctly oriented and positioned in the programmer's ZIF socket — **Phases 1, 2, 4 shipped in v0.9.0; Phase 3 (adapter-based packages) open**
   - **Goal:** prevent the most common user error — inserting a chip in the wrong position or wrong orientation in the ZIF socket
   - **Programmer model differences (VERIFIED against XGPro diagrams):**
     - **Top-justified insertion** (chip pin 1 → ZIF pin 1) on TL866A/CS, TL866II+, and T48
