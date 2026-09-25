@@ -29,3 +29,13 @@ T56/T76 must not run the 0x3E command standalone — see the xgecu-pro
 findings documented there). The `-z` handler prints from the returned
 `PinTestResult` struct, preserving the upstream "Bad contact on pin: N"
 output format.
+
+## ICSP wiring diagram (`-d` / `--get-info` + `-q` / `--programmer`)
+
+`-d <DEVICE>` prints the database record including the upstream
+`ICP<NNN>.JPG` wiring-class reference. Adding `-q <MODEL>` also prints a
+human-readable wiring table resolved from the verified static tables in
+`minipro_core::icsp` — header pin → signal → chip pin (or signal name for
+non-numbered targets like eMMC/PIC/AVR). Without `-q` only the class
+reference is shown, with a hint to pass `--programmer`. Unknown classes or
+models without a verified table print a fallback note rather than guessing.
