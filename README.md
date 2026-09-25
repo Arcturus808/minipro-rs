@@ -218,6 +218,14 @@ cargo build --release
 # Binary is at target/release/minipro
 ```
 
+**Man page & shell completions** — the `.deb`/`.rpm` packages and the GitHub release tarballs install them for you. From a source build (or the bare macOS/Linux binary), generate them yourself:
+
+```sh
+minipro --generate-man | gzip -9 | sudo tee /usr/share/man/man1/minipro.1.gz
+minipro --generate-completions bash | sudo tee /usr/share/bash-completion/completions/minipro
+# also: zsh → /usr/share/zsh/site-functions/_minipro, fish → ~/.config/fish/completions/minipro.fish
+```
+
 ### GUI
 
 **Rust 1.88+ is required** for the GUI due to its Tauri v2 dependency tree. On Debian Stable, install a newer rustc via [rustup](https://rustup.rs/) or distro backports (e.g. `rustc` from Debian Trixie backports).

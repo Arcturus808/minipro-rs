@@ -111,7 +111,7 @@ jobs:
       - name: Build CLI
         run: cargo build --release --locked --bin minipro ${{ matrix.args }}
 
-      - name: Strip and stage CLI binary (Unix)
+      - name: Strip and stage CLI tarball (Unix)
         if: matrix.platform != 'windows-latest'
         run: |
           if [ -n "${{ matrix.args }}" ]; then
@@ -120,7 +120,14 @@ jobs:
             BIN="target/release/minipro"
           fi
           strip "$BIN"
-          cp "$BIN" "${{ matrix.cli_name }}"
+          PKGDIR="${{ matrix.cli_name }}"
+          mkdir -p "$PKGDIR/man/man1" "$PKGDIR/completions"
+          cp "$BIN" "$PKGDIR/minipro"
+          "$BIN" --generate-man | gzip -9 > "$PKGDIR/man/man1/minipro.1.gz"
+          "$BIN" --generate-completions bash > "$PKGDIR/completions/minipro.bash"
+          "$BIN" --generate-completions zsh  > "$PKGDIR/completions/_minipro"
+          "$BIN" --generate-completions fish > "$PKGDIR/completions/minipro.fish"
+          tar -czf "${{ matrix.cli_name }}.tar.gz" "$PKGDIR"
 
       - name: Strip and stage CLI binary (Windows)
         if: matrix.platform == 'windows-latest'
@@ -149,8 +156,10 @@ jobs:
             > **macOS users:** If you see "'MINIPRO-RS-GUI' is damaged and can't be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.
 
             ## CLI Binaries
-            Standalone `minipro` CLI binaries for each platform are attached below.
-            No installation required — download, make executable (`chmod +x`), and run.
+            `minipro` CLI binaries for each platform are attached below.
+            Unix releases are `.tar.gz` archives bundling the binary with the man page
+            (`man/man1/minipro.1.gz`) and bash/zsh/fish completions (`completions/`);
+            Windows is a standalone `.exe`.
 
             See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
@@ -160,8 +169,14 @@ jobs:
       - name: Upload CLI binary to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
-          gh release upload ${{ github.ref_name }} ${{ matrix.cli_name }} --clobber
+          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            ARTIFACT="${{ matrix.cli_name }}"
+          else
+            ARTIFACT="${{ matrix.cli_name }}.tar.gz"
+          fi
+          gh release upload ${{ github.ref_name }} "$ARTIFACT" --clobber
 
       - name: Update release body from CHANGELOG (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'

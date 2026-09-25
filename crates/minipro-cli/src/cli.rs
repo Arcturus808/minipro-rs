@@ -9,7 +9,7 @@
     name    = "minipro",
     version,
     about   = "Open-source programmer for XGecu TL866xx/T48/T56/T76 chip programmers",
-    long_about = "Open-source programmer for XGecu TL866xx/T48/T56/T76 chip programmers.\n\nFull documentation: https://arcturus8081.gitlab.io/minipro-rs/\nManual page:        https://arcturus8081.gitlab.io/minipro-rs/minipro.1.html",
+    long_about = "Open-source programmer for XGecu TL866xx/T48/T56/T76 chip programmers.\n\nSource + docs: https://gitlab.com/arcturus8081/minipro-rs\nReleases:      https://github.com/Arcturus808/minipro-rs/releases\nMan page:      minipro --generate-man (packaged in .deb/.rpm and release tarballs)",
 )]
 struct Cli {
     /// Target device name (e.g. AT28C256, PIC16F628A, W25Q128)
