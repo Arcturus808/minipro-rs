@@ -33,6 +33,11 @@ output format — annotated with the corresponding ZIF socket pin
 `minipro_core::zif::device_to_zif` so the position honors the connected
 model's insertion rule.
 
+**Pending verification:** the ZIF-pin annotation is implemented but not
+yet exercised on real hardware — spot-check once a TL866II+/T48 is
+available (insert a chip with a lifted pin; the reported ZIF position
+and the GUI's red highlight should land on the same physical slot).
+
 ## ICSP wiring diagram (`-d` / `--get-info` + `-q` / `--programmer`)
 
 `-d <DEVICE>` prints the database record including the upstream
