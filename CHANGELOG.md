@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.9.0] - 2026-09-25
+
 ### Added
 
 - **ICSP wiring diagrams (GUI + CLI)** — scratch-built SVG wiring diagrams shown for devices with a verified ICSP wiring class: per-model connector layouts (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag), a signal-labeled pin table, and safety notes in a collapsible, scrollable panel. The CLI prints an ASCII wiring table via `-d <DEVICE> -q <MODEL>`. All verified classes are covered on TL866A, TL866II+, T48, T56, and T76; unverified classes show a safe fallback note. No proprietary Xgpro assets are used.
