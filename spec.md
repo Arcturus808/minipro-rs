@@ -72,6 +72,7 @@ All commands are invoked via `invoke("command_name", args)` from `@tauri-apps/ap
 | `check_favorite_devices` | `{ names }` | `check_favorite_devices(names, state)` | Report which favorite names resolve for the connected model |
 | `get_device_info` | `{ name }` | `get_device_info(name, state)` | Get device details (no programmer) |
 | `get_icsp_wiring` | `{ model, icspClass }` | `get_icsp_wiring(model, icspClass)` | Per-model ICSP wiring table + connector pinout |
+| `get_zif_layout` | `{ pinCount }` | `get_zif_layout(pinCount, state)` | ZIF socket spec + device→ZIF pin map for the connected model |
 | `select_device` | `{ name }` | `select_device(name, state)` | Select and resolve device |
 | `deselect_device` | `{ }` | `deselect_device(state)` | Clear selected device |
 | `do_read` | `{ path, options }` | `do_read(path, options, ...)` | Read chip to file |

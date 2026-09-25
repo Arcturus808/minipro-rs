@@ -589,8 +589,22 @@ fn do_operations(
             if !cli.verbose {
                 eprintln!();
             }
+            // Bad pins are device pin numbers; annotate each with the ZIF
+            // socket position the user needs to inspect (right-column pins
+            // differ on 40-pin sockets, and all of them differ under
+            // T56/T76 bottom-justified insertion).
+            let spec = minipro_core::zif::zif_spec(handle.info.model);
+            let pin_count = handle
+                .device()
+                .map(|d| d.package_details.pin_count as usize)
+                .unwrap_or(0);
             for pin in &result.bad_pins {
-                eprintln!("Bad contact on pin: {}", pin);
+                match minipro_core::zif::device_to_zif(&spec, *pin as usize, pin_count) {
+                    Some(zif_pin) => {
+                        eprintln!("Bad contact on pin: {} (ZIF pin {})", pin, zif_pin)
+                    }
+                    None => eprintln!("Bad contact on pin: {}", pin),
+                }
             }
             return Err(anyhow::anyhow!(
                 "Pin contact test failed: {} bad pin(s)",
@@ -1184,6 +1198,58 @@ fn print_device_info(dev: &minipro_core::Device, model: Option<ProgrammerModel>)
             None => println!("              (pass --programmer MODEL for a wiring diagram)"),
         }
     }
+
+    print_zif_placement(dev, model);
+}
+
+/// Print a one-line ZIF insertion hint for direct-DIP devices.  Skipped
+/// for adapter-based packages (Phase 3 territory) and ICSP-only devices,
+/// which never sit in the socket.
+fn print_zif_placement(dev: &minipro_core::Device, model: Option<ProgrammerModel>) {
+    use minipro_core::device::MP_ICSP_ONLY;
+    use minipro_core::zif;
+
+    let pin_count = dev.package_details.pin_count as usize;
+    if dev.flags.prog_support == MP_ICSP_ONLY || dev.package_details.adapter != 0 {
+        return;
+    }
+    let Some(model) = model else {
+        println!("ZIF placement: (pass --programmer MODEL for insertion position)");
+        return;
+    };
+    let spec = zif::zif_spec(model);
+    let occupied = zif::occupied_zif_pins(&spec, pin_count);
+    if occupied.is_empty() {
+        return;
+    }
+    let pin1 = zif::device_to_zif(&spec, 1, pin_count).unwrap_or(0);
+    if occupied.len() == spec.pins {
+        println!(
+            "ZIF placement ({model}): DIP-{pin_count} fills the socket \
+             (chip pin 1 at ZIF pin {pin1})"
+        );
+        return;
+    }
+    // `occupied` is device-order: left column pins first, then right —
+    // each a contiguous range.
+    let (left, right) = occupied.split_at(pin_count / 2);
+    let range = |r: &[usize]| {
+        if r.len() == 1 {
+            format!("{}", r[0])
+        } else {
+            format!("{}-{}", r[0], r[r.len() - 1])
+        }
+    };
+    let end = match spec.insertion {
+        zif::ZifInsertion::Top => "top",
+        zif::ZifInsertion::Bottom => "bottom",
+    };
+    println!(
+        "ZIF placement ({model}): {end} of socket — occupies ZIF {} + {} \
+         (chip pin 1 at ZIF pin {pin1})",
+        range(left),
+        range(right)
+    );
 }
 
 /// Render an ASCII wiring table: header pin → signal → chip pin (or signal
