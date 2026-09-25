@@ -11,9 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(nothing yet)*
+- **ICSP wiring diagrams (GUI + CLI)** — scratch-built SVG wiring diagrams shown for devices with a verified ICSP wiring class: per-model connector layouts (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag), a signal-labeled pin table, and safety notes in a collapsible, scrollable panel. The CLI prints an ASCII wiring table via `-d <DEVICE> -q <MODEL>`. All verified classes are covered on TL866A, TL866II+, T48, T56, and T76; unverified classes show a safe fallback note. No proprietary Xgpro assets are used.
+
+- **ZIF socket placement hints (CLI)** — `-d` prints a one-line insertion hint for direct-DIP devices, resolved from per-model socket rules in `minipro_core::zif` (e.g. `ZIF placement (T76): bottom of socket — occupies ZIF 21-24 + 25-28 (chip pin 1 at ZIF pin 21)`). Adapter packages print a "requires an adapter" note instead; without `-q`, a `--programmer` hint is shown.
+
+- **ZIF-pin annotation in `-z` output** — pin-contact failures now print `Bad contact on pin: N (ZIF pin M)`, resolved through the connected model's insertion rule.
+
+- **Model-filtered favorites** — favorites whose exact name doesn't exist in the connected programmer's database section are hidden while that model is connected (device naming differs per programmer family, e.g. `PIC16F628A` vs `PIC16F628A@DIP18`). Stored favorites are untouched and reappear when a compatible model connects.
+
+- **`MINIPRO_FAKE_PROGRAMMER` dev hook** — set to a model name (`TL866A`, `TL866CS`, `TL866II+`, `T48`, `T56`, `T76`) to fake a connected programmer for hardware-free GUI testing of device search/selection and the ICSP/ZIF diagrams.
 
 ### Fixed
+
+- **ZIF diagram wrong socket geometry on several models** — corrected against XGPro's own placement diagrams: the T48 uses a 40-pin socket (was drawn as 48-pin) with the lever at bottom-right; T56/T76 levers are top-left (were drawn bottom); T56/T76 chips are bottom-justified — the chip's lower-left pin sits at ZIF pin 24, so a DIP-8 occupies ZIF 21–24 + 25–28 — rather than top-justified. Chip overlay, pin stubs, occupied slots, bad-pin highlighting, and "PIN N" labels all follow the corrected per-model rules.
+
+- **ZIF diagram flicker on device change** — the chip overlay briefly disappeared and the socket could snap to a 48-pin fallback while the layout refetched. The last valid layout is now kept until the new one arrives, and resolved layouts are cached per (model, pin count).
 
 - **Device search results collapsed to just the selection** — selecting a device from the search results list overwrote the search field with the full device name and re-ran the search, hiding all other matches. Selections made inside DeviceSelector are now marked as already synced so the `$selectedDevice` → `searchQuery` sync effect only applies to external selections (e.g. IdentifyResults).
 
