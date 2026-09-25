@@ -36,24 +36,32 @@
     insertion: "top" | "bottom";
     zif_pins: number[];
   }
-  let layoutFor = $state<{ pc: number; data: ZifLayout } | null>(null);
+  // Cache resolved layouts so revisiting a device renders synchronously.
+  const layoutCache = new Map<string, ZifLayout>();
+  let layout = $state<ZifLayout | null>(null);
 
   // Use preview pin count when no device is selected (identify mode).
   let pinCount = $derived($selectedDevice?.pin_count ?? previewPinCount ?? 0);
 
   $effect(() => {
     const pc = pinCount;
-    $programmer?.model; // refetch when the connected model changes
-    if (!pc) {
-      layoutFor = null;
+    const model = $programmer?.model ?? "";
+    if (!pc) return; // keep last layout — the socket is hidden anyway
+    const key = `${model}:${pc}`;
+    const hit = layoutCache.get(key);
+    if (hit) {
+      layout = hit;
       return;
     }
     invoke<ZifLayout>("get_zif_layout", { pinCount: pc })
-      .then((data) => (layoutFor = { pc, data }))
-      .catch(() => (layoutFor = null));
+      .then((data) => {
+        layoutCache.set(key, data);
+        // Don't overwrite a newer fetch that resolved first.
+        if (pc === pinCount && model === ($programmer?.model ?? ""))
+          layout = data;
+      })
+      .catch(() => {});
   });
-  // Ignore stale results from a previous pin count.
-  let layout = $derived(layoutFor?.pc === pinCount ? layoutFor.data : null);
 
   // ── Derived state ────────────────────────────────────────────────────────
   let socketSize = $derived(layout?.pins ?? 48);
