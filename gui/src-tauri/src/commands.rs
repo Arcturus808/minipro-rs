@@ -314,6 +314,53 @@ pub async fn get_icsp_wiring(
     Ok(minipro_core::icsp::icsp_wiring(model, icspClass).map(IcspWiringDto::from))
 }
 
+/// ZIF socket layout for the connected programmer, resolved for a DIP
+/// chip of `pinCount` pins.
+///
+/// `zifPins[i]` is the ZIF socket pin occupied by device pin `i+1`
+/// (0 = unmapped).  All device↔ZIF mapping rules live in
+/// `minipro_core::zif`; the frontend consumes this verbatim.
+#[derive(Serialize)]
+pub struct ZifLayoutDto {
+    pins: usize,
+    lever_top: bool,
+    insertion: &'static str,
+    zif_pins: Vec<usize>,
+}
+
+#[tauri::command]
+pub async fn get_zif_layout(
+    pinCount: usize,
+    state: State<'_, Arc<AppState>>,
+) -> Result<ZifLayoutDto, String> {
+    let model = {
+        let guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().map(|info| info.model)
+    };
+    // No programmer connected: widest sensible default, same as the
+    // component's pre-core fallback (48-pin, top lever, top insertion).
+    let spec = match model {
+        Some(m) => minipro_core::zif::zif_spec(m),
+        None => minipro_core::zif::ZifSpec {
+            pins: 48,
+            lever_top: true,
+            insertion: minipro_core::zif::ZifInsertion::Top,
+        },
+    };
+    let zif_pins = (1..=pinCount)
+        .map(|d| minipro_core::zif::device_to_zif(&spec, d, pinCount).unwrap_or(0))
+        .collect();
+    Ok(ZifLayoutDto {
+        pins: spec.pins,
+        lever_top: spec.lever_top,
+        insertion: match spec.insertion {
+            minipro_core::zif::ZifInsertion::Top => "top",
+            minipro_core::zif::ZifInsertion::Bottom => "bottom",
+        },
+        zif_pins,
+    })
+}
+
 #[derive(Serialize)]
 pub struct VoltagesDto {
     vpp: String,

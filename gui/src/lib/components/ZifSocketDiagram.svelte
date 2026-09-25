@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { selectedDevice, programmer } from "../stores/device";
 
   // ── Props ────────────────────────────────────────────────────────────────
@@ -25,57 +26,43 @@
   const KNOB_W = 129.8 * KNOB_SCALE;
   const KNOB_H = 220.3 * KNOB_SCALE;
 
-  // Per-model socket description (from XGPro's own diagrams):
-  // - lever position: top-left on every model except T48 (bottom-right)
-  // - socket size: 40-pin on TL866*/T48, 48-pin on T56/T76
-  // - insertion: most models justify the chip at the TOP of the socket
-  //   (chip pin 1 → ZIF pin 1); T56/T76 bottom-justify — the chip's
-  //   lower-left pin (N/2) sits at ZIF pin 24, so an 8-pin DIP occupies
-  //   ZIF 21-24 + 25-28.
-  interface SocketSpec {
+  // Per-model socket rules (socket size, lever position, top- vs
+  // bottom-justified insertion) live in `minipro_core::zif` — the same
+  // source the CLI uses for its placement hints. `zif_pins[i]` is the ZIF
+  // socket pin occupied by device pin `i+1` (0 = unmapped).
+  interface ZifLayout {
     pins: number;
-    leverTop: boolean;
+    lever_top: boolean;
     insertion: "top" | "bottom";
+    zif_pins: number[];
   }
-  const MODEL_SOCKET: Record<string, SocketSpec> = {
-    "TL866A":   { pins: 40, leverTop: true,  insertion: "top" },
-    "TL866CS":  { pins: 40, leverTop: true,  insertion: "top" },
-    "TL866II+": { pins: 40, leverTop: true,  insertion: "top" },
-    "T48":      { pins: 40, leverTop: false, insertion: "top" },
-    "T56":      { pins: 48, leverTop: true,  insertion: "bottom" },
-    "T76":      { pins: 48, leverTop: true,  insertion: "bottom" },
-  };
-  const DEFAULT_SOCKET: SocketSpec = { pins: 48, leverTop: true, insertion: "top" };
+  let layoutFor = $state<{ pc: number; data: ZifLayout } | null>(null);
+
+  // Use preview pin count when no device is selected (identify mode).
+  let pinCount = $derived($selectedDevice?.pin_count ?? previewPinCount ?? 0);
+
+  $effect(() => {
+    const pc = pinCount;
+    $programmer?.model; // refetch when the connected model changes
+    if (!pc) {
+      layoutFor = null;
+      return;
+    }
+    invoke<ZifLayout>("get_zif_layout", { pinCount: pc })
+      .then((data) => (layoutFor = { pc, data }))
+      .catch(() => (layoutFor = null));
+  });
+  // Ignore stale results from a previous pin count.
+  let layout = $derived(layoutFor?.pc === pinCount ? layoutFor.data : null);
 
   // ── Derived state ────────────────────────────────────────────────────────
-  let socket = $derived(
-    ($programmer && MODEL_SOCKET[$programmer.model]) ?? DEFAULT_SOCKET
-  );
-  let socketSize = $derived(socket.pins);
-  let leverAtTop = $derived(socket.leverTop);
+  let socketSize = $derived(layout?.pins ?? 48);
+  let leverAtTop = $derived(layout?.lever_top ?? true);
 
-  // Compute occupied ZIF pin numbers from pin_count.
-  let occupiedPins = $derived.by(() => {
-    const dev = $selectedDevice;
-    // Use preview pin count when no device is selected (identify mode)
-    const pc = dev?.pin_count ?? previewPinCount;
-    if (!pc) return [];
-    const half = Math.floor(pc / 2);
-    const halfSock = socketSize / 2;
-    const pins: number[] = [];
-    if (socket.insertion === "top") {
-      // Top-justified: chip pin 1 → ZIF 1; left 1..half,
-      // right (socketSize-half+1)..socketSize.
-      for (let i = 1; i <= half; i++) pins.push(i);
-      for (let i = 0; i < half; i++) pins.push(socketSize - half + 1 + i);
-    } else {
-      // Bottom-justified (T56/T76): chip pin N/2 → ZIF halfSock; left
-      // (halfSock-half+1)..halfSock, right (halfSock+1)..(halfSock+half).
-      for (let i = halfSock - half + 1; i <= halfSock; i++) pins.push(i);
-      for (let i = 0; i < half; i++) pins.push(halfSock + 1 + i);
-    }
-    return pins.sort((a, b) => a - b);
-  });
+  // Occupied ZIF pin numbers, resolved by the backend.
+  let occupiedPins = $derived(
+    layout ? layout.zif_pins.filter((p) => p > 0).sort((a, b) => a - b) : []
+  );
 
   // ── Geometry helpers ─────────────────────────────────────────────────────
   let svgHeight = $derived(MARGIN_TOP + MARGIN_BOTTOM + socketSize / 2 * PIN_PITCH);
@@ -128,25 +115,13 @@
   let isDip = $derived(packageName.toUpperCase().startsWith("DIP"));
 
   // ── Pin test state ──────────────────────────────────────────────────────
-  // Map device pin numbers to ZIF socket pin numbers for highlighting,
-  // honoring the model's insertion rule.
-  //   top insertion:    left dPin → dPin; right dPin → socketSize-half+dPin-half
-  //   bottom insertion: left dPin → halfSock-half+dPin; right → halfSock+dPin-half
-  //     (bottom insertion collapses to dPin - half + halfSock for both sides)
+  // badPins are device pin numbers; translate to ZIF socket pins via the
+  // backend layout so highlighting honors the model's insertion rule.
   let badZifPins = $derived.by(() => {
-    if (!badPins || badPins.length === 0 || !$selectedDevice) return new Set<number>();
-    const pc = $selectedDevice.pin_count;
-    const half = Math.floor(pc / 2);
-    const halfSock = socketSize / 2;
-    const set = new Set<number>();
-    for (const dPin of badPins) {
-      if (socket.insertion === "top") {
-        set.add(dPin <= half ? dPin : socketSize - half + (dPin - half));
-      } else {
-        set.add(dPin - half + halfSock);
-      }
-    }
-    return set;
+    if (!badPins || badPins.length === 0 || !layout) return new Set<number>();
+    return new Set(
+      badPins.map((d) => layout!.zif_pins[d - 1]).filter((p) => p > 0)
+    );
   });
 
   // Whether pin test results are active (passed in as a prop from App.svelte)
@@ -234,10 +209,7 @@
           {@const isLeft = pin <= socketSize / 2}
           {@const labelX = isLeft ? coord.x - 4 : coord.x + SLOT_W + 4}
           {@const labelAnchor = isLeft ? "end" : "start"}
-          {@const half = Math.floor(($selectedDevice?.pin_count ?? 0) / 2)}
-          {@const dPin = socket.insertion === "top"
-            ? (pin <= half ? pin : pin - (socketSize - half) + half)
-            : pin - socketSize / 2 + half}
+          {@const dPin = (layout?.zif_pins.indexOf(pin) ?? -1) + 1}
           <text
             x={labelX}
             y={coord.y + SLOT_H + 1}

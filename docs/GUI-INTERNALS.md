@@ -219,14 +219,17 @@ styling (no green). The "ZIF PIN 1" label is hidden when pin 1 is bad to
 avoid overlap with the red "PIN 1" label. Chip pin stubs always use the
 chip color (never change for bad/good — only the socket slots change).
 
-**Per-model socket rules:** `MODEL_SOCKET` in `ZifSocketDiagram.svelte`
-encodes three model-specific facts observed from XGPro's own diagrams:
-socket size (40-pin on TL866A/CS/II+/T48, 48-pin on T56/T76), lever
-position (top-left on every model except T48, which is bottom-right),
-and insertion rule (most models top-justify — chip pin 1 at ZIF pin 1;
+**Per-model socket rules:** `minipro_core::zif` encodes three
+model-specific facts observed from XGPro's own diagrams: socket size
+(40-pin on TL866A/CS/II+/T48, 48-pin on T56/T76), lever position
+(top-left on every model except T48, which is bottom-right), and
+insertion rule (most models top-justify — chip pin 1 at ZIF pin 1;
 T56/T76 bottom-justify — the chip's lower-left pin N/2 sits at ZIF pin
-24, so a DIP-8 occupies ZIF 21–24 + 25–28). `occupiedPins`, `badZifPins`,
-and the "PIN N" label mapping all consume the same spec.
+24, so a DIP-8 occupies ZIF 21–24 + 25–28). The GUI fetches the resolved
+layout via `get_zif_layout(pinCount)` — a `zif_pins[]` map of device
+pin → ZIF pin that `occupiedPins`, `badZifPins`, and the "PIN N" labels
+all consume — so the drawing and highlighting can never diverge from
+the CLI's placement hints (`-d` output, `-z` bad-pin annotation).
 
 **Result panel:** Below the ZIF diagram, a compact panel shows
 "✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
