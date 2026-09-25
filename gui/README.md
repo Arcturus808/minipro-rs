@@ -6,7 +6,9 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Device Search** | Done | Search the 13,000+ device database with instant results |
+| **Device Search** | Done | Search the 13,000+ device database with instant results; star-toggle favorites pinned in a collapsible section — filtered to the connected programmer model since device names differ per database section (e.g. `PIC16F628A` on TL866A vs `PIC16F628A@DIP18` on T76) |
+| **ICSP Wiring Diagram** | Done | Scratch-built SVG of the programmer's ICSP header wired to the selected device — header shape per model (1×6 linear, 2×8/2×14 zigzag), per-model/per-class verified pin tables, collapsible scrollable panel; CLI: `minipro -p <dev> -d` |
+| **ZIF Socket Diagram** | Done | ZIF socket placement diagram for the selected device; shows insertion position and adapter guidance |
 | **Device Selection** | Done | Select a device to configure operations; shows chip type, pin count, voltages |
 | **Read** | Done | Read chip contents directly into hex viewer memory (optional save afterward) |
 | **Write** | Done | Write a file to the chip with optional erase/verify skipping |
@@ -22,7 +24,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Terminal Log** | Done | Timestamped info/warn/error log panel with Copy to clipboard button and drag-select |
 | **Settings** | Done | Persisted preferences (defaults, theme, device view mode, panel widths) via `tauri-plugin-store` |
 | **Diagnostics** | Done | Programmer details, overcurrent check, hardware check |
-| **Search History** | Done | Persistent search history with star/favorite, delete, and autocomplete |
+| **Device Favorites** | Done | Star-toggle favorites persisted to localStorage; filtered per connected programmer model |
 | **Context Options** | Done | Operation buttons are selectors; Start button triggers execution with per-op defaults |
 | **Draggable Panels** | Done | Resize Device Selector, Hex Viewer, and Terminal with mouse drag; widths persist |
 | **Layout Reset** | Done | One-click restore of panel widths, font size, and window position in Settings |
@@ -61,15 +63,20 @@ gui/
 │   ├── lib/
 │   │   ├── file-dialog.ts            # Native open/save wrappers with defaultPath
 │   │   ├── components/
-│   │   │   ├── ComboSearch.svelte      # Search input with persistent history, favorites, delete
-│   │   │   ├── DeviceSelector.svelte   # Search + paginated/scrollable device list
+│   │   │   ├── DeviceSelector.svelte   # Search + favorites + paginated/scrollable device list
+│   │   │   ├── FuseBitDecoder.svelte   # Bit-level fuse/config decoder with named fields
 │   │   │   ├── HexViewer.svelte        # Virtualized hex grid with font size dropdown + Ctrl+scroll
+│   │   │   ├── IcspConnectorDiagram.svelte  # ICSP header + per-device wiring diagram
+│   │   │   ├── IdentifyResults.svelte  # Logic-IC identify candidate table
+│   │   │   ├── LogicTestGrid.svelte    # Color-coded logic test vector grid
 │   │   │   ├── ProgressPanel.svelte    # Progress bar + stats
 │   │   │   ├── TerminalLog.svelte      # Scrollable log output
 │   │   │   ├── SettingsPanel.svelte    # Modal preferences panel
+│   │   │   ├── ZifSocketDiagram.svelte # ZIF socket placement diagram
 │   │   │   └── DiagnosticsPanel.svelte # Programmer info + diagnostic buttons
 │   │   └── stores/
-│   │       ├── device.ts             # programmer, selectedDevice, deviceList stores
+│   │       ├── batch.ts              # Batch programming state
+│   │       ├── device.ts             # programmer, selectedDevice, deviceList, favorites stores
 │   │       ├── hex.ts                # hexBuffer store + loadFile helper
 │   │       ├── logs.ts               # Terminal log store with timestamped levels
 │   │       ├── operations.ts         # doRead/doWrite/... + progress event listener
@@ -128,6 +135,14 @@ npm install              # once
 cargo tauri dev          # hot-reload frontend + Rust backend
 ```
 
+To exercise the UI with no programmer attached, fake a model via env var:
+
+```powershell
+$env:MINIPRO_FAKE_PROGRAMMER = "T76"   # TL866A, TL866CS, TL866II+, T48, T56, T76
+cargo tauri dev
+Remove-Item Env:MINIPRO_FAKE_PROGRAMMER  # restore real-hardware detection
+```
+
 ### Production Build
 
 ```bash
@@ -136,8 +151,8 @@ cargo tauri build
 ```
 
 Output:
-- `src-tauri/target/release/bundle/msi/MINIPRO-RS_0.2.0_x64_en-US.msi`
-- `src-tauri/target/release/bundle/nsis/MINIPRO-RS_0.2.0_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/MINIPRO-RS_<version>_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/MINIPRO-RS_<version>-setup.exe`
 
 ### Chip Database
 
@@ -170,7 +185,9 @@ All USB/programmer operations are exposed as async Tauri commands in `src-tauri/
 |---------|-------------|
 | `get_programmer_info` | Detect connected programmer, return model/firmware/serial |
 | `search_devices` | Query `infoic.xml` by name substring |
-| `select_device` | Load full `Device` struct and begin USB transaction |
+| `check_favorite_devices` | Report which favorites' names resolve for the connected model |
+| `select_device` | Resolve and select a `Device` for the connected model |
+| `get_icsp_wiring` | Per-model, per-class ICSP wiring table + connector pinout for the diagram |
 | `do_read` / `do_write` / `do_verify` | High-level chip operations with progress events |
 | `do_erase` / `do_blank_check` / `do_chip_id` | Chip control operations |
 | `read_chip_to_bytes` | Read chip to memory and return as base64 (for hex viewer) |
@@ -205,18 +222,19 @@ On Windows, Tauri uses the system's WebView2 (Edge) renderer. Complex reactive u
 - Avoid `flex`/`card` wrapper classes in small panels (e.g., DiagnosticsPanel) — use minimal Tailwind utilities
 - Keep reactive computations simple; offload heavy work to the backend
 
-### ComboSearch Component
+### Device Favorites & Programmer Models
 
-`ComboSearch.svelte` replaces plain text inputs in the Device Selector with a searchable dropdown that persists history to `localStorage`:
-
-| Feature | Behavior |
-|---------|----------|
-| **Focus** | Opens dropdown showing all stored entries |
-| **Star** | Click ★ to pin an entry to the top (favorites sorted first) |
-| **Trash** | Hover over a row to reveal 🗑, click to delete (stays open via `stopPropagation`) |
-| **Filter** | Typing filters the dropdown; favorites still appear above non-favorites |
-| **Enter** | New text → saved as entry + submitted; Existing text → selected |
-| **Persist** | All entries and favorites survive app restarts via `localStorage` |
+Favorites live in a shared `favorites` store (`stores/device.ts`) persisted
+to `localStorage`. The chip database is split into per-programmer-family
+sections with different naming — the TL866A section has bare names like
+`PIC16F628A` while T76 only has package-qualified names like
+`PIC16F628A@DIP18`. A favorite saved under one model may therefore not
+resolve under another, so the favorites section hides entries that don't
+exist in the connected model's device list (`check_favorite_devices`
+command → `list_devices_by_model()` in `minipro-core`). Hidden favorites
+stay in the store and reappear when a compatible programmer is connected;
+searching the base name finds the model-specific variant to favorite
+instead.
 
 ### Two-Step Operation Flow
 
@@ -272,7 +290,8 @@ A **Reset layout & font size** button in Settings restores all of the above to f
 - [x] Phase 3 — Diagnostics (overcurrent, hardware check, programmer details)
 - [x] Phase 3.5 — Two-step operations, context-aware options, ComboSearch with favorites
 - [x] Phase 4 — Firmware update (TL866A/CS `update.dat` decryption)
-- [ ] Phase 5 — Pin test integration
+- [x] Phase 5 — Pin test integration
+- [x] Phase 6 — ICSP wiring diagrams (per-model connector + per-class wiring)
 
 *(Phases 3, 3.5, and 5 were completed out of order.)*
 
