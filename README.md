@@ -80,6 +80,9 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - Device search & selection with **live search as you type** (200ms debounce), **device favorites** with star toggle (persisted to localStorage), pinned collapsible favorites section, and **manufacturer name** shown alongside each result. Favorites are filtered to the connected programmer: the chip database uses different naming per programmer family (e.g. bare `PIC16F628A` for TL866A vs `PIC16F628A@DIP18` for T76), so a name saved under one model may not exist under another. Those entries are hidden rather than failing to select — they reappear when a compatible programmer is connected, and you can simply search the base name to favorite the model-specific variant
 - **ZIF socket placement diagram** — shows the selected chip correctly positioned in the programmer's socket, per model: socket size (40-pin on TL866A/CS/II+/T48, 48-pin on T56/T76), lever position (bottom-right on T48, top-left otherwise), and insertion rule (top-justified on most models; T56/T76 bottom-justify — the chip's lower-left pin sits at ZIF pin 24, so a DIP-8 occupies ZIF 21–24 + 25–28). CLI: `-d <DEVICE> -q <MODEL>` prints the same insertion hint
 - **ICSP wiring diagrams** — scratch-built SVG wiring diagrams for devices with a verified ICSP wiring class: per-model connector pinout (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag), signal-labeled pin table, and notes. CLI: `-d <DEVICE> -q <MODEL>` prints an ASCII wiring table. No proprietary Xgpro assets
+
+![MINIPRO-RS GUI — ICSP Wiring Diagram](docs/screenshots/icsp_diagram.png)
+
 - **Two-step operation flow**: select operation → configure options → click Start
 - **Context-aware options panel**: only relevant controls shown per operation
 - Live progress bar with CRC32 verification
