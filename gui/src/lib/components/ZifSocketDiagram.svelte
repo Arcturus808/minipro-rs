@@ -11,7 +11,6 @@
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
   // Pin 1 is always at the TOP of the diagram (ZIF pin 1 = top).
-  // Lever is drawn at top (TL866A/CS/II+) or bottom (T48/T56/T76).
 
   const PIN_PITCH = 12;        // vertical distance between pin slots
   const SOCKET_W = 130;        // socket body width
@@ -26,32 +25,55 @@
   const KNOB_W = 129.8 * KNOB_SCALE;
   const KNOB_H = 220.3 * KNOB_SCALE;
 
-  // Models with lever at top (pin 1 end). All others have lever at bottom.
-  const LEVER_TOP_MODELS = new Set(["TL866A", "TL866CS", "TL866II+"]);
+  // Per-model socket description (from XGPro's own diagrams):
+  // - lever position: top-left on every model except T48 (bottom-right)
+  // - socket size: 40-pin on TL866*/T48, 48-pin on T56/T76
+  // - insertion: most models justify the chip at the TOP of the socket
+  //   (chip pin 1 → ZIF pin 1); T56/T76 bottom-justify — the chip's
+  //   lower-left pin (N/2) sits at ZIF pin 24, so an 8-pin DIP occupies
+  //   ZIF 21-24 + 25-28.
+  interface SocketSpec {
+    pins: number;
+    leverTop: boolean;
+    insertion: "top" | "bottom";
+  }
+  const MODEL_SOCKET: Record<string, SocketSpec> = {
+    "TL866A":   { pins: 40, leverTop: true,  insertion: "top" },
+    "TL866CS":  { pins: 40, leverTop: true,  insertion: "top" },
+    "TL866II+": { pins: 40, leverTop: true,  insertion: "top" },
+    "T48":      { pins: 40, leverTop: false, insertion: "top" },
+    "T56":      { pins: 48, leverTop: true,  insertion: "bottom" },
+    "T76":      { pins: 48, leverTop: true,  insertion: "bottom" },
+  };
+  const DEFAULT_SOCKET: SocketSpec = { pins: 48, leverTop: true, insertion: "top" };
 
   // ── Derived state ────────────────────────────────────────────────────────
-  let socketSize = $derived(
-    $programmer && LEVER_TOP_MODELS.has($programmer.model) ? 40 : 48
+  let socket = $derived(
+    ($programmer && MODEL_SOCKET[$programmer.model]) ?? DEFAULT_SOCKET
   );
-  let leverAtTop = $derived(
-    $programmer ? LEVER_TOP_MODELS.has($programmer.model) : true
-  );
+  let socketSize = $derived(socket.pins);
+  let leverAtTop = $derived(socket.leverTop);
 
   // Compute occupied ZIF pin numbers from pin_count.
-  // DIP chips are placed at the top of the ZIF socket with pin 1 at the
-  // top-left. Left side: ZIF pins 1 to N/2. Right side: ZIF pins
-  // (socketSize - N/2 + 1) to socketSize.
-  // On a 48-pin socket, pins 1-24 are left, 25-48 are right.
-  // A DIP-8 chip uses ZIF pins 1-4 (left) and 45-48 (right).
   let occupiedPins = $derived.by(() => {
     const dev = $selectedDevice;
     // Use preview pin count when no device is selected (identify mode)
     const pc = dev?.pin_count ?? previewPinCount;
     if (!pc) return [];
     const half = Math.floor(pc / 2);
+    const halfSock = socketSize / 2;
     const pins: number[] = [];
-    for (let i = 1; i <= half; i++) pins.push(i);
-    for (let i = 0; i < half; i++) pins.push(socketSize - half + 1 + i);
+    if (socket.insertion === "top") {
+      // Top-justified: chip pin 1 → ZIF 1; left 1..half,
+      // right (socketSize-half+1)..socketSize.
+      for (let i = 1; i <= half; i++) pins.push(i);
+      for (let i = 0; i < half; i++) pins.push(socketSize - half + 1 + i);
+    } else {
+      // Bottom-justified (T56/T76): chip pin N/2 → ZIF halfSock; left
+      // (halfSock-half+1)..halfSock, right (halfSock+1)..(halfSock+half).
+      for (let i = halfSock - half + 1; i <= halfSock; i++) pins.push(i);
+      for (let i = 0; i < half; i++) pins.push(halfSock + 1 + i);
+    }
     return pins.sort((a, b) => a - b);
   });
 
@@ -106,19 +128,22 @@
   let isDip = $derived(packageName.toUpperCase().startsWith("DIP"));
 
   // ── Pin test state ──────────────────────────────────────────────────────
-  // Map device pin numbers to ZIF socket pin numbers for highlighting.
-  // Device pins 1..HALF map to ZIF pins 1..HALF (left side).
-  // Device pins HALF+1..N map to ZIF pins (socketSize - HALF + 1)..socketSize (right side).
+  // Map device pin numbers to ZIF socket pin numbers for highlighting,
+  // honoring the model's insertion rule.
+  //   top insertion:    left dPin → dPin; right dPin → socketSize-half+dPin-half
+  //   bottom insertion: left dPin → halfSock-half+dPin; right → halfSock+dPin-half
+  //     (bottom insertion collapses to dPin - half + halfSock for both sides)
   let badZifPins = $derived.by(() => {
     if (!badPins || badPins.length === 0 || !$selectedDevice) return new Set<number>();
     const pc = $selectedDevice.pin_count;
     const half = Math.floor(pc / 2);
+    const halfSock = socketSize / 2;
     const set = new Set<number>();
     for (const dPin of badPins) {
-      if (dPin <= half) {
-        set.add(dPin);
+      if (socket.insertion === "top") {
+        set.add(dPin <= half ? dPin : socketSize - half + (dPin - half));
       } else {
-        set.add(socketSize - half + (dPin - half));
+        set.add(dPin - half + halfSock);
       }
     }
     return set;
@@ -210,7 +235,9 @@
           {@const labelX = isLeft ? coord.x - 4 : coord.x + SLOT_W + 4}
           {@const labelAnchor = isLeft ? "end" : "start"}
           {@const half = Math.floor(($selectedDevice?.pin_count ?? 0) / 2)}
-          {@const dPin = pin <= half ? pin : pin - (socketSize - half) + half}
+          {@const dPin = socket.insertion === "top"
+            ? (pin <= half ? pin : pin - (socketSize - half) + half)
+            : pin - socketSize / 2 + half}
           <text
             x={labelX}
             y={coord.y + SLOT_H + 1}
