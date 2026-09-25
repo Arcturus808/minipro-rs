@@ -46,6 +46,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `-x` / `--skip-id` CLI flag to skip in read mode (rejected for write/erase, matching upstream); `-y` / `--continue-id` to warn but continue on mismatch; GUI checkbox to bypass
 - **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
+- **ICSP programming**: in-circuit programming via the programmer's ICSP header instead of the ZIF socket — CLI `-i` (ICSP with VCC) or `-I` (without VCC); GUI: mode dropdown in the operations panel (ZIF socket / ICSP / ICSP no VCC). Devices marked ICSP-only in the database auto-enable it
 
 **Hex viewer & analysis:**
 - **Hex viewer** with Save, Open Folder, and Clear buttons — **virtualized rendering** for instant load/clear of large files; now with **in-place editing**: click any hex byte or ASCII character to edit, with type-through overflow and keyboard navigation (arrows, Enter, Escape, Backspace)
@@ -290,6 +291,18 @@ minipro --diff fileA.bin fileB.bin
 
 # Show device info from database (no programmer needed)
 minipro -d AT28C256
+
+# ...plus per-model ICSP wiring table and ZIF placement hint
+minipro -d AT28C256 -q T76
+
+# Program over ICSP instead of the ZIF socket (-I for no VCC)
+minipro -p ATMEGA328P -w firmware.hex -i
+
+# Pin-contact check before an operation (TL866II+/T48)
+minipro -p AT28C256 -w firmware.bin -z
+
+# List devices supported by a specific programmer model
+minipro -l -q TL866A
 
 # Test a logic IC against its test vectors
 minipro -p 74HC00 -T
