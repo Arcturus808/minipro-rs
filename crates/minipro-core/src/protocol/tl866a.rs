@@ -627,10 +627,14 @@ pub fn firmware_update_tl866a(
         file_version_minor
     )
     .ok();
-    if (handle.info.firmware & 0xFF) > file_version_minor as u32 {
-        writeln!(out, "  (older than current firmware)").ok();
-    } else if (handle.info.firmware & 0xFF) < file_version_minor as u32 {
-        writeln!(out, "  (newer than current firmware)").ok();
+    match (handle.info.firmware & 0xFF).cmp(&(file_version_minor as u32)) {
+        std::cmp::Ordering::Greater => {
+            writeln!(out, "  (older than current firmware)").ok();
+        }
+        std::cmp::Ordering::Less => {
+            writeln!(out, "  (newer than current firmware)").ok();
+        }
+        std::cmp::Ordering::Equal => {}
     }
 
     // ── Switch to bootloader ─────────────────────────────────────────────────
