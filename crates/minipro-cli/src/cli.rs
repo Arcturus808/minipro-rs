@@ -47,12 +47,14 @@ struct Cli {
     #[arg(short = 'l', short_alias = 'L', long = "list", value_name = "FILTER")]
     list: Option<Option<String>>,
 
-    /// Restrict -l/--list to devices supported by this programmer model
-    /// (TL866A, TL866CS, TL866II, T48, T56, T76)
+    /// Select programmer model for model-scoped output: restricts -l/--list
+    /// and adds the ICSP wiring table + ZIF placement hint to -d
+    /// (TL866A, TL866CS, TL866II+, T48, T56, T76)
     #[arg(short = 'q', long = "programmer", value_name = "MODEL")]
     programmer: Option<String>,
 
-    /// Show device information from the database (no programmer needed)
+    /// Show device information from the database (no programmer needed).
+    /// Add -q <MODEL> for the per-model ICSP wiring table and ZIF placement hint
     #[arg(short = 'd', long = "get-info", value_name = "DEVICE")]
     get_info: Option<String>,
 
@@ -185,7 +187,9 @@ struct Cli {
     #[arg(short = 't', long = "hardware-check", action = ArgAction::SetTrue)]
     hardware_check: bool,
 
-    /// Test pin contact of the chip in the ZIF socket
+    /// Test pin contact of the chip in the ZIF socket (TL866II+/T48 only).
+    /// With an operation, runs first and aborts it on bad pins; failures
+    /// are annotated with the ZIF socket position
     #[arg(short = 'z', long = "pin-check", action = ArgAction::SetTrue)]
     pin_check: bool,
 
