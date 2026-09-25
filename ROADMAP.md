@@ -57,6 +57,9 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Config panel stale fuses fix** — switching devices no longer shows the previous device's fuse names. Changed `$effect` to `$effect.pre` so configData refreshes before DOM re-render.
 - [x] **Favorites show manufacturer** — device favorites in the search panel now display the manufacturer alongside the device name. Old favorites auto-migrate to the new format.
 - [x] **Hex edit blur fix** — clicking outside the hex viewer (e.g., the device search field) now properly commits the active edit and releases keyboard focus.
+- [x] **ICSP wiring diagrams** — scratch-built SVG wiring diagrams: per-model connector layouts (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag) plus per-class signal-labeled tables for all verified ICSP classes; CLI `-d` prints an ASCII table with `-q <model>`. Collapsible scrollable GUI panel. Unverified classes show a safe fallback — see Phase 4 spec in Backlog.
+- [x] **Model-filtered favorites** — favorites whose exact name doesn't exist in the connected programmer's database section are hidden (names differ per family, e.g. `PIC16F628A` vs `PIC16F628A@DIP18`). Stored favorites are untouched and reappear on a compatible model. Backend: `check_favorite_devices` → `list_devices_by_model()`.
+- [x] **Hardware-free GUI testing** — `MINIPRO_FAKE_PROGRAMMER=<MODEL>` env var fakes programmer presence so device search/selection and the ICSP/ZIF diagrams can be exercised with no USB device attached.
 
 ## Near-term
 
