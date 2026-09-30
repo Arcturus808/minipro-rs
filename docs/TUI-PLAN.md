@@ -101,7 +101,7 @@ Mirror the GUI's proven three-column design. Rounded borders
 portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config fallback.
 
 ```
-╭ minipro-rs 0.9.0 ──── ● TL866II+ · FW 04.2.86 ──────────────── [?] help ╮
+╭ minipro-rs 0.9.0 ──── ● TL866II+ · FW 04.2.86 ─────────────── [?] help ╮
 │ DEVICES            │ WRITE                          │ LOG              │
 │ /search___________ │ Interface  [ZIF socket     ▾]  │ 09:12 connected  │
 │ ★ Favorites        │ Page       [Code           ▾]  │ 09:13 AT28C256   │
@@ -122,6 +122,10 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 │ ⇥ panes · 1-8 op · Space toggle · ←/→ change · Enter run · / · q quit  │
 ╰────────────────────────────────────────────────────────────────────────╯
 ```
+
+(Alignment note: this sketch is exact by character count, but markdown
+previewers may render fallback glyphs like `▓ ░ ⋮ ► ∪ ▸ ▾ ✗` at non-uniform
+widths — view the raw file in a monospace font for the intended geometry.)
 
 Panes: **Devices** (search field, favorites, filtered results, selected
 summary; collapsible Diagnostics below), **Center** (op tabs → options form
