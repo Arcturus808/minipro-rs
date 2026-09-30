@@ -941,9 +941,8 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** implemented
 
 
-- [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI
+- [ ] **Ratatui TUI frontend** — interactive terminal UI as a third frontend alongside CLI and GUI. **Full design: `docs/TUI-PLAN.md`.**
   - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.
-  - **Architecture note:** logic and data tables (including the Phase 4 ICSP wiring tables) live in `minipro-core`, so a TUI is an incremental frontend, not a rewrite — the wiring diagram would render as ASCII/box-drawing from the same `icsp.rs` table the CLI text output uses.
-  - **Scope if pursued:** device selector with fuzzy search, operation panels (read/write/verify/erase), progress display, hex viewer pane, ICSP wiring pane. Not justified by the ICSP diagram feature alone — plain stdout output covers that.
-  - **Priority: low** — speculative; expected demand is occasional rather than frequent. Revisit only if the community asks for it.
-  - **Status:** not started; parked pending user demand
+  - **Decisions:** separate `minipro-tui` binary in `crates/minipro-tui` (workspace member, `rust-version = "1.88"`); ratatui + crossterm; orchestration glue (pin-check gate, voltage overrides, ICSP auto-activation, `MINIPRO_FAKE_PROGRAMMER`, `fuse_defs`) extracted into `minipro-core` first so both frontends share upstream-parity behavior.
+  - **Phasing:** P0 foundation → P1 core ops (read/write/verify/erase/blank/chip-id — MVP ship point) → P2 hex buffer pane + ZIF/ICSP diagrams → P3 fuses/logic-test/identify/diagnostics → P4 batch/serial/polish.
+  - **Status:** planned — design documented in `docs/TUI-PLAN.md`; implementation not started.
