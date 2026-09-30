@@ -108,15 +108,15 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 │   AT28C256         │ Format     [Auto           ▾]  │ 09:14 Read 32KB  │
 │   W25Q64JV         │ Size diff  [Error          ▾]  │ 09:14 CRC A1B2.. │
 │ ──────────────     │ [x] Chip ID check              │ ──────────────── │
-│ 27 results         │ [x] Pin contact check          │ ZIF-40  lever ◄  │
-│   AT28C256         │ [ ] Skip erase                 │    ┌──∪──┐       │
-│   AT28C64B         │ [x] Unprotect before write     │  1 │▓│ │▓│ 40    │
-│   AT28BV64B        │ [ ] Re-protect after write     │  2 │▓│ │▓│ 39    │
-│                    │ Advanced ▸                     │    │ ⋮ ⋮ │       │
-│ Selected:          │ ────────────────────────────── │    └─────┘       │
-│ AT28C256 · Atmel   │ Buffer  32KB · CRC A1B2C3D4    │                  │
-│ 32KB code · DIP28  │ Write source: (f)ile (b)uffer  │ Pin test: ✓ ok   │
-│ ──────────────     │ ▶▶▶ Writing ████████░░  72%    │                  │
+│ 27 results         │ [x] Pin contact check          │ ZIF-40 · DIP8    │
+│   AT28C256         │ [ ] Skip erase                 │   ═════════ lever│
+│   AT28C64B         │ [x] Unprotect before write     │    ┌────∪────┐   │
+│   AT28BV64B        │ [ ] Re-protect after write     │  1 │▓│ ███ │▓│ 40│
+│                    │ Advanced ▸                     │  3►│▓│ ███ │▓│ 38│
+│ Selected:          │ ────────────────────────────── │  ⋮ │⋮│     │⋮│ ⋮ │
+│ AT28C256 · Atmel   │ Buffer  32KB · CRC A1B2C3D4    │ 20 │·│     │·│ 21│
+│ 32KB code · DIP28  │ Write source: (f)ile (b)uffer  │    └─────────┘   │
+│ ──────────────     │ ▶▶▶ Writing ████████░░  72%    │ Pin test ✗ pin 3 │
 │ Diagnostics ▸      │                                │                  │
 ├────────────────────┴────────────────────────────────┴──────────────────┤
 │ ⇥ panes · 1-8 op · Space toggle · ←/→ change · Enter run · / · q quit  │
@@ -164,7 +164,7 @@ etc.).
 | Entropy bar | Colored `▌` gutter char per row | Same 4-tier mapping |
 | Compare/diff | Toggle diff coloring on buffer + `n`/`N` | Same `smart_diff` core call |
 | TerminalLog | Scrolling pane — render ANSI natively | The HTML/whitespace rules from GUI-INTERNALS don't apply |
-| ZIF diagram | Box-drawing widget over `core::zif` pin map | `▓` occupied (green), `▓`+PIN label (red) bad pins |
+| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip = `█` block in the socket channel over occupied rows only; `∪` notch centered on the channel; lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad |
 | ICSP wiring | `Table`: header pin → signal → chip pin + notes | Verified tables already in `core::icsp` |
 | Logic test grid | `Table` of colored cells; `+`/`-` cell width | `c` copies TSV via `arboard` |
 | Identify results | `Table`, `Enter` select, `f` favorite | Same sort order (pass, fewest errors, alpha) |
