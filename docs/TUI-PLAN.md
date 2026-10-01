@@ -109,9 +109,9 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 │   W25Q64JV         │ Size diff  [Error          ▾]  │ ──────────────── │
 │ ──────────────     │ [x] Chip ID check              │ ZIF-40 · DIP8    │
 │ 27 results         │ [x] Pin contact check          │    ═══════ lever │
-│   AT28C256         │ [ ] Skip erase                 │    ┌────∪────┐   │
-│   AT28C64B         │ [x] Unprotect before write     │  1●│▓│ ╭∪╮ │▓│ 40│
-│   AT28BV64B        │ [ ] Re-protect after write     │  2 │▓│ │█│ │▓│ 39│
+│   AT28C256         │ [ ] Skip erase                 │    ┌─────────┐   │
+│   AT28C64B         │ [x] Unprotect before write     │  1 │▓│ ╭∪╮ │▓│ 40│
+│   AT28BV64B        │ [ ] Re-protect after write     │  2 │▓│ │●│ │▓│ 39│
 │                    │ Advanced ▸                     │  3►│▓│ │█│ │▓│ 38│
 │ Selected:          │ ────────────────────────────── │  4 │▓│ ╰─╯ │▓│ 37│
 │ AT28C256 · Atmel   │ Buffer  32KB · CRC A1B2C3D4    │  ⋮ │⋮│     │⋮│ ⋮ │
@@ -168,7 +168,7 @@ etc.).
 | Entropy bar | Colored `▌` gutter char per row | Same 4-tier mapping |
 | Compare/diff | Toggle diff coloring on buffer + `n`/`N` | Same `smart_diff` core call |
 | TerminalLog | Scrolling pane — render ANSI natively | The HTML/whitespace rules from GUI-INTERNALS don't apply |
-| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip drawn as its own glyph nested in the socket channel over occupied rows (`╭─∪─╮` / `│███│` / `╰───╯`, notch at the pin-1 end); `●` marks pin 1's label; socket `∪` notch centered on the channel; lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad. Classic standalone `─┤` chip pinout is the better fit for logic-IC result diagrams, not ZIF placement |
+| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip drawn as its own glyph nested in the socket channel over occupied rows (`╭─∪─╮` / `│███│` / `╰───╯`, notch at the pin-1 end, `●` dimple inside the body at the pin-1 corner); the socket frame stays plain — printed pin numbers already identify ZIF pin 1. Lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad. Classic standalone `─┤` chip pinout is the better fit for logic-IC result diagrams, not ZIF placement |
 | ICSP wiring | `Table`: header pin → signal → chip pin + notes | Verified tables already in `core::icsp` |
 | Logic test grid | `Table` of colored cells; `+`/`-` cell width | `c` copies TSV via `arboard` |
 | Identify results | `Table`, `Enter` select, `f` favorite | Same sort order (pass, fewest errors, alpha) |
