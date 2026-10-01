@@ -207,10 +207,8 @@ for lp, rp in zip(range(1, 6), range(40, 34, -1)):
 R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 9 + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
 lp, rp = 20, 21
 R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + " " * 9 + Ft("·") + Brd("│") + " " + Dm(str(rp)))
-# Socket end-plate: textured ░ fill past the last contact row — reads as
-# socket body material, not dead space. A bottom-justified chip's ╰───╯
-# lands on this row (drawn over the texture).
-R.append("    " + Brd("│") + " " + Ft("░" * 9) + " " + Brd("│"))
+# Bottom edge hugs the last pin row — no filler rows. For a
+# bottom-justified chip the ╰───╯ edge lands on an extra row here.
 R.append("    " + Brd("└" + "─" * 11 + "┘"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + Rd("✗") + " " + T("Pin test:") + " " + Rd("bad contact pin 3"))
