@@ -171,14 +171,14 @@ R.append(" " + Ft("09:13:14") + " " + Dm("…"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + AcB("ZIF-40") + Ft(" · DIP8 · top-justified"))
 # 40-pin ZIF, DIP8 top-justified → chip occupies ZIF pins 1-4 + 37-40.
-# The chip spans the whole socket channel so each occupied slot cell (▓)
-# reads as the chip's pin seated in that ZIF slot — pin-to-ZIF alignment
-# is structural, not implied. Chip glyph: ∪ notch at its pin-1 end and a
-# ● dimple painted inside the body at the pin-1 corner (cell bg = chip
-# colour, else the mark punches a hole in the fill). Socket frame plain —
-# printed pin numbers already identify ZIF pin 1.
-# Bad contact: red cell + red arrow hugging that pin's own label column
-# (left pins "N►", right pins "◄N") — never a label at the row's far end.
+# Each occupied row draws the IC's pin as a ─ stroke bridging the slot
+# cell to the chip wall (┤/├ tee joins) — pin↔ZIF alignment is drawn, not
+# implied. Chip glyph: ∪ notch at its pin-1 end and a ● dimple painted
+# inside the body at the pin-1 corner (cell bg = chip colour, else the
+# mark punches a hole in the fill). Socket frame plain — printed pin
+# numbers already identify ZIF pin 1.
+# Bad contact: red cell+stub + red arrow hugging that pin's own label
+# column (left pins "N►", right pins "◄N") — never a far-end callout.
 # Lever = ═ bar flush against the socket's lever end — top on every model
 # except T48, where it moves below └───────────┘.
 occupied = {1, 2, 3, 4, 37, 38, 39, 40}
@@ -194,11 +194,13 @@ for lp, rp in zip(range(1, 5), range(40, 36, -1)):
     rlab = Rd(str(rp)) if rbad else Dm(str(rp))
     lc = Rd("▓") if lbad else (Gr("▓") if lp in occupied else Ft("·"))
     rc = Rd("▓") if rbad else (Gr("▓") if rp in occupied else Ft("·"))
-    if lp == chip_top:          mid = P2("╭───∪───╮")
-    elif lp == chip_top + 1:    mid = P2("│") + Dpl("●") + P2("██████│")
-    elif lp == chip_bot:        mid = P2("╰───────╯")
-    else:                       mid = P2("│███████│")
-    R.append(" " + llab + lsep + Brd("│") + lc + mid + rc + Brd("│") + rsep + rlab)
+    lstub = Rd("─") if lbad else (Gr("─") if lp in occupied else " ")
+    rstub = Rd("─") if rbad else (Gr("─") if rp in occupied else " ")
+    if lp == chip_top:       mid = P2("╭──∪──╮")
+    elif lp == chip_top + 1: mid = P2("┤") + Dpl("●") + P2("████├")
+    elif lp == chip_bot:     mid = P2("╰─────╯")
+    else:                    mid = P2("┤█████├")
+    R.append(" " + llab + lsep + Brd("│") + lc + lstub + mid + rstub + rc + Brd("│") + rsep + rlab)
 R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 9 + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
 lp, rp = 20, 21
 R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + " " * 9 + Ft("·") + Brd("│") + " " + Dm(str(rp)))
