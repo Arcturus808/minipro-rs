@@ -74,6 +74,7 @@ def Cy(s):     return C["cyan"] + s + RST
 def Bo(s):     return BOLD + s + RST
 def Sel(s):    return C["selbg"] + C["txt"] + s + RST
 def Brd(s):    return C["border"] + s + RST
+def Dpl(s):    return bg(187,154,247) + fg(40,44,64) + s + RST   # ● dimple on chip
 
 
 # ── Frame geometry ────────────────────────────────────────────────────────────
@@ -170,10 +171,12 @@ R.append(" " + Ft("09:13:14") + " " + Dm("…"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + AcB("ZIF-40") + Ft(" · DIP8 · top-justified"))
 # 40-pin ZIF, DIP8 top-justified → chip occupies ZIF pins 1-4 + 37-40.
-# The chip is a real chip glyph nested in the socket channel: own outline,
-# ∪ notch at its pin-1 end, and a ● dimple inside the body at the pin-1
-# corner (the classic package mark). The socket edge itself is plain —
-# the printed pin numbers already identify ZIF pin 1.
+# The chip spans the whole socket channel so each occupied slot cell (▓)
+# reads as the chip's pin seated in that ZIF slot — pin-to-ZIF alignment
+# is structural, not implied. Chip glyph: ∪ notch at its pin-1 end and a
+# ● dimple painted inside the body at the pin-1 corner (cell bg = chip
+# colour, else the mark punches a hole in the fill). Socket frame plain —
+# printed pin numbers already identify ZIF pin 1.
 # Bad contact: red cell + red arrow hugging that pin's own label column
 # (left pins "N►", right pins "◄N") — never a label at the row's far end.
 # Lever = ═ bar flush against the socket's lever end — top on every model
@@ -191,14 +194,14 @@ for lp, rp in zip(range(1, 5), range(40, 36, -1)):
     rlab = Rd(str(rp)) if rbad else Dm(str(rp))
     lc = Rd("▓") if lbad else (Gr("▓") if lp in occupied else Ft("·"))
     rc = Rd("▓") if rbad else (Gr("▓") if rp in occupied else Ft("·"))
-    if lp == chip_top:              chan = P2("╭─∪─╮")
-    elif lp == chip_top + 1:        chan = P2("│") + T("●") + P2("██│")
-    elif lp == chip_bot:            chan = P2("╰───╯")
-    else:                           chan = P2("│███│")
-    R.append(" " + llab + lsep + Brd("│") + lc + Brd("│") + " " + chan + " " + Brd("│") + rc + Brd("│") + rsep + rlab)
-R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + Brd("│") + " " * 7 + Brd("│") + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
+    if lp == chip_top:          mid = P2("╭───∪───╮")
+    elif lp == chip_top + 1:    mid = P2("│") + Dpl("●") + P2("██████│")
+    elif lp == chip_bot:        mid = P2("╰───────╯")
+    else:                       mid = P2("│███████│")
+    R.append(" " + llab + lsep + Brd("│") + lc + mid + rc + Brd("│") + rsep + rlab)
+R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 9 + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
 lp, rp = 20, 21
-R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + Brd("│") + " " * 7 + Brd("│") + Ft("·") + Brd("│") + " " + Dm(str(rp)))
+R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + " " * 9 + Ft("·") + Brd("│") + " " + Dm(str(rp)))
 R.append("    " + Brd("└" + "─" * 11 + "┘"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + Rd("✗") + " " + T("Pin test:") + " " + Rd("bad contact pin 3"))
