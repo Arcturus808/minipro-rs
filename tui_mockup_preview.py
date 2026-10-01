@@ -183,10 +183,14 @@ R.append(" " + AcB("ZIF-40") + Ft(" · DIP8 · top-justified"))
 # except T48, where it moves below └───────────┘.
 occupied = {1, 2, 3, 4, 37, 38, 39, 40}
 bad_pin = 3
-chip_top, chip_bot = 1, 4
+chip_top, chip_bot = 1, 4   # ZIF rows carrying chip pins; edges extend
+                            # one row past the outermost pins, like a
+                            # real package — top edge uses the socket's
+                            # top margin row, bottom edge shares pin 5/36
 R.append("    " + Ft("═" * 13) + " " + Dm("lever"))
 R.append("    " + Brd("┌" + "─" * 11 + "┐"))
-for lp, rp in zip(range(1, 5), range(40, 36, -1)):
+R.append("    " + Brd("│") + "  " + P2("╭──∪──╮") + "  " + Brd("│"))
+for lp, rp in zip(range(1, 6), range(40, 34, -1)):
     lbad, rbad = lp == bad_pin, rp == bad_pin
     llab = Rd(f"{lp:>2}") if lbad else Dm(f"{lp:>2}")
     lsep = Rd("►") if lbad else " "
@@ -194,16 +198,16 @@ for lp, rp in zip(range(1, 5), range(40, 36, -1)):
     rlab = Rd(str(rp)) if rbad else Dm(str(rp))
     lc = Rd("▓") if lbad else (Gr("▓") if lp in occupied else Ft("·"))
     rc = Rd("▓") if rbad else (Gr("▓") if rp in occupied else Ft("·"))
-    lstub = Rd("─") if lbad else (Gr("─") if lp in occupied else " ")
-    rstub = Rd("─") if rbad else (Gr("─") if rp in occupied else " ")
-    if lp == chip_top:       mid = P2("╭──∪──╮")
-    elif lp == chip_top + 1: mid = P2("┤") + Dpl("●") + P2("████├")
-    elif lp == chip_bot:     mid = P2("╰─────╯")
-    else:                    mid = P2("┤█████├")
+    lstub = (Rd if lbad else Gr)("─") if lp in occupied else " "
+    rstub = (Rd if rbad else Gr)("─") if rp in occupied else " "
+    if lp == chip_bot + 1:      mid = P2("╰─────╯")
+    elif lp == chip_top:        mid = P2("┤") + Dpl("●") + P2("████├")
+    else:                       mid = P2("┤█████├")
     R.append(" " + llab + lsep + Brd("│") + lc + lstub + mid + rstub + rc + Brd("│") + rsep + rlab)
 R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 9 + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
 lp, rp = 20, 21
 R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + " " * 9 + Ft("·") + Brd("│") + " " + Dm(str(rp)))
+R.append("    " + Brd("│") + " " * 11 + Brd("│"))
 R.append("    " + Brd("└" + "─" * 11 + "┘"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + Rd("✗") + " " + T("Pin test:") + " " + Rd("bad contact pin 3"))
