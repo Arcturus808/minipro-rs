@@ -118,7 +118,8 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 │ AT28C256 · Atmel   │ Write source: (f)ile (b)uffer  │  5 │· ╰───╯ ·│ 36│
 │ 32KB code · DIP28  │ ▶▶▶ Writing ████████░░  72%    │  ⋮ │⋮       ⋮│ ⋮ │
 │ VCC 3.3V · ID ✓    │                                │ 20 │·       ·│ 21│
-│ Diagnostics ▸      │                                │    └─────────┘   │
+│ Diagnostics ▸      │                                │    │ ░░░░░░░ │   │
+│                    │                                │    └─────────┘   │
 │                    │                                │ Pin test ✗ pin 3 │
 ├────────────────────┴────────────────────────────────┴──────────────────┤
 │ ⇥ panes · 1-8 op · Space toggle · ←/→ change · Enter run · / · q quit  │
@@ -170,7 +171,7 @@ etc.).
 | Entropy bar | Colored `▌` gutter char per row | Same 4-tier mapping |
 | Compare/diff | Toggle diff coloring on buffer + `n`/`N` | Same `smart_diff` core call |
 | TerminalLog | Scrolling pane — render ANSI natively | The HTML/whitespace rules from GUI-INTERNALS don't apply |
-| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip drawn as its own glyph in the socket channel with edges one row beyond the outermost pins, like a real package (`╭──∪──╮` in the socket's top margin / `┤█████├` per pin row / `╰─────╯` sharing the first empty pin row); each `▓` slot cell joins the chip wall via a `─` pin stroke and `┤`/`├` tee — pin↔ZIF alignment is drawn, not implied, and stubs always meet a wall, never a corner; `●` dimple inside the body at the pin-1 corner paints its cell background in the chip colour (a bare glyph punches a hole in the fill); the socket frame stays plain — printed pin numbers already identify ZIF pin 1. Lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad. Classic standalone `─┤` chip pinout is the better fit for logic-IC result diagrams, not ZIF placement |
+| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip drawn as its own glyph in the socket channel with edges one row beyond the outermost pins, like a real package (`╭──∪──╮` in the socket's top margin / `┤█████├` per pin row / `╰─────╯` sharing the first empty pin row); each `▓` slot cell joins the chip wall via a `─` pin stroke and `┤`/`├` tee — pin↔ZIF alignment is drawn, not implied, and stubs always meet a wall, never a corner; `●` dimple inside the body at the pin-1 corner paints its cell background in the chip colour (a bare glyph punches a hole in the fill); the socket frame stays plain — printed pin numbers already identify ZIF pin 1 — and a `░` end-plate fills the dead space past the last pin row. Lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad. Classic standalone `─┤` chip pinout is the better fit for logic-IC result diagrams, not ZIF placement |
 | ICSP wiring | `Table`: header pin → signal → chip pin + notes | Verified tables already in `core::icsp` |
 | Logic test grid | `Table` of colored cells; `+`/`-` cell width | `c` copies TSV via `arboard` |
 | Identify results | `Table`, `Enter` select, `f` favorite | Same sort order (pass, fewest errors, alpha) |
