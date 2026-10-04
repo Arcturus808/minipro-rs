@@ -169,47 +169,54 @@ R.append(" " + Ft("09:13:02") + " " + T("Writing 8388608 B…"))
 R.append(" " + Ft("09:13:09") + " " + Am("OVC check ok"))
 R.append(" " + Ft("09:13:14") + " " + Dm("…"))
 R.append(" " + Ft("─" * (RW - 2)))
-R.append(" " + AcB("ZIF-40") + Ft(" · DIP8 · top-justified"))
-# 40-pin ZIF, DIP8 top-justified → chip occupies ZIF pins 1-4 + 37-40.
-# Each occupied row draws the IC's pin as a ─ stroke bridging the slot
-# cell to the chip wall (┤/├ tee joins) — pin↔ZIF alignment is drawn, not
-# implied. Chip glyph: ∪ notch at its pin-1 end and a ● dimple painted
-# inside the body at the pin-1 corner (cell bg = chip colour, else the
-# mark punches a hole in the fill). Socket frame plain — printed pin
-# numbers already identify ZIF pin 1.
-# Bad contact: red cell+stub + red arrow hugging that pin's own label
+R.append(" " + AcB("ZIF-40") + Ft(" · DIP16 · top-justified"))
+# 40-pin ZIF. Occupied rows draw a ▭ slot contact + ▪ pin tip against the
+# chip body — pin↔ZIF alignment is drawn, not implied. The chip's pin-1
+# end carries a ● dimple + ╰╯ notch INSIDE the body on its top body row,
+# cells painted chip-bg (a bare mark would punch a hole in the fill).
+# Socket frame stays plain — printed pin numbers identify ZIF pin 1.
+# Bad contact: red slot+pin + red arrow hugging that pin's own label
 # column (left pins "N►", right pins "◄N") — never a far-end callout.
-# Lever = ═ bar flush against the socket's lever end — top on every model
-# except T48, where it moves below └───────────┘.
-occupied = {1, 2, 3, 4, 37, 38, 39, 40}
+# Lever = "lever" label anchored above the socket's top-left corner on
+# every model except T48, where it sits below the bottom-right corner.
+# Justification is pure data: occupied slots + chip_top/chip_bot row span
+# decide every cell; the ⋮ row just covers the collapsed empty span.
+occupied = {1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35, 36, 37, 38, 39, 40}  # DIP16
 bad_pin = 3
-chip_top, chip_bot = 1, 4   # ZIF rows carrying chip pins; edges extend
-                            # one row past the outermost pins, like a
-                            # real package — top edge uses the socket's
-                            # top margin row, bottom edge shares pin 5/36
-R.append("    " + Ft("═" * 13) + " " + Dm("lever"))
-R.append("    " + Brd("┌" + "─" * 11 + "┐"))
-R.append("    " + Brd("│") + "  " + P2("╭──∪──╮") + "  " + Brd("│"))
-for lp, rp in zip(range(1, 6), range(40, 34, -1)):
+chip_top, chip_bot = 1, 8   # ZIF rows carrying chip pins
+
+
+def pinrow(lp, rp):
     lbad, rbad = lp == bad_pin, rp == bad_pin
     llab = Rd(f"{lp:>2}") if lbad else Dm(f"{lp:>2}")
     lsep = Rd("►") if lbad else " "
     rsep = Rd("◄") if rbad else " "
     rlab = Rd(str(rp)) if rbad else Dm(str(rp))
-    lc = Rd("▓") if lbad else (Gr("▓") if lp in occupied else Ft("·"))
-    rc = Rd("▓") if rbad else (Gr("▓") if rp in occupied else Ft("·"))
-    lstub = (Rd if lbad else Gr)("─") if lp in occupied else " "
-    rstub = (Rd if rbad else Gr)("─") if rp in occupied else " "
-    if lp == chip_bot + 1:      mid = P2("╰─────╯")
-    elif lp == chip_top:        mid = P2("┤") + Dpl("●") + P2("████├")
-    else:                       mid = P2("┤█████├")
-    R.append(" " + llab + lsep + Brd("│") + lc + lstub + mid + rstub + rc + Brd("│") + rsep + rlab)
-R.append(" " + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 9 + Ft("⋮") + Brd("│") + " " + Ft("⋮"))
-lp, rp = 20, 21
-R.append(" " + Dm(f"{lp:>2}") + " " + Brd("│") + Ft("·") + " " * 9 + Ft("·") + Brd("│") + " " + Dm(str(rp)))
-# Bottom edge hugs the last pin row — no filler rows. For a
-# bottom-justified chip the ╰───╯ edge lands on an extra row here.
-R.append("    " + Brd("└" + "─" * 11 + "┘"))
+    lc = Rd("▭") if lbad else (Gr("▭") if lp in occupied else Ft("▭"))
+    rc = Rd("▭") if rbad else (Gr("▭") if rp in occupied else Ft("▭"))
+    lj, rj = (Rd if lbad else Gr), (Rd if rbad else Gr)
+    if lp == chip_top:
+        mid = lj("▪") + Dpl("●") + P2("█") + Dpl("╰╯") + P2("██") + rj("▪")
+    elif chip_top <= lp <= chip_bot:
+        mid = lj("▪") + P2("██████") + rj("▪")
+    else:
+        mid = " " * 8
+    return (" " * 8 + llab + lsep + Brd("│") + lc + mid + rc + Brd("│")
+            + rsep + rlab)
+
+
+def dots():
+    return (" " * 8 + Ft(" ⋮") + " " + Brd("│") + Ft("⋮") + " " * 8 + Ft("⋮")
+            + Brd("│") + " " + Ft("⋮"))
+
+
+R.append(" " * 11 + Dm("lever"))
+R.append(" " * 11 + Brd("┌" + "─" * 10 + "┐"))
+for lp, rp in zip(range(1, 9), range(40, 32, -1)):
+    R.append(pinrow(lp, rp))
+R.append(dots())
+R.append(pinrow(20, 21))
+R.append(" " * 11 + Brd("└" + "─" * 10 + "┘"))
 R.append(" " + Ft("─" * (RW - 2)))
 R.append(" " + Rd("✗") + " " + T("Pin test:") + " " + Rd("bad contact pin 3"))
 

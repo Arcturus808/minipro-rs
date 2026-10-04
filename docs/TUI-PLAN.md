@@ -108,17 +108,17 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 │   AT28C256         │ Format     [Auto           ▾]  │ 09:14 Read 32KB  │
 │   W25Q64JV         │ Size diff  [Error          ▾]  │ ──────────────── │
 │ ──────────────     │ [x] Chip ID check              │ ZIF-40 · DIP8    │
-│ 27 results         │ [x] Pin contact check          │    ═══════ lever │
+│ 27 results         │ [x] Pin contact check          │    lever         │
 │   AT28C256         │ [ ] Skip erase                 │    ┌─────────┐   │
-│   AT28C64B         │ [x] Unprotect before write     │    │  ╭─∪─╮  │   │
-│   AT28BV64B        │ [ ] Re-protect after write     │  1 │▓─┤●██├─▓│ 40│
-│   MX25L6433F       │ Advanced ▸                     │  2 │▓─┤███├─▓│ 39│
-│                    │ ────────────────────────────── │  3►│▓─┤███├─▓│ 38│
-│ Selected:          │ Buffer  32KB · CRC A1B2C3D4    │  4 │▓─┤███├─▓│ 37│
-│ AT28C256 · Atmel   │ Write source: (f)ile (b)uffer  │  5 │· ╰───╯ ·│ 36│
-│ 32KB code · DIP28  │ ▶▶▶ Writing ████████░░  72%    │  ⋮ │⋮       ⋮│ ⋮ │
-│ VCC 3.3V · ID ✓    │                                │ 20 │·       ·│ 21│
-│ Diagnostics ▸      │                                │    └─────────┘   │
+│   AT28C64B         │ [x] Unprotect before write     │  1 │▭▪●█╰╯█▪▭│ 40│
+│   AT28BV64B        │ [ ] Re-protect after write     │  2 │▭▪█████▪▭│ 39│
+│   MX25L6433F       │ Advanced ▸                     │  3►│▭▪█████▪▭│ 38│
+│                    │ ────────────────────────────── │  4 │▭▪█████▪▭│ 37│
+│ Selected:          │ Buffer  32KB · CRC A1B2C3D4    │  5 │▭       ▭│ 36│
+│ AT28C256 · Atmel   │ Write source: (f)ile (b)uffer  │  ⋮ │⋮       ⋮│ ⋮ │
+│ 32KB code · DIP28  │ ▶▶▶ Writing ████████░░  72%    │ 20 │▭       ▭│ 21│
+│ VCC 3.3V · ID ✓    │                                │    └─────────┘   │
+│ Diagnostics ▸      │                                │                  │
 │                    │                                │ Pin test ✗ pin 3 │
 ├────────────────────┴────────────────────────────────┴──────────────────┤
 │ ⇥ panes · 1-8 op · Space toggle · ←/→ change · Enter run · / · q quit  │
@@ -126,8 +126,9 @@ portable glyphs only (● ✓ ✗ ★ ▲▼ ◄) with an `ascii = true` config 
 ```
 
 (Alignment note: this sketch is exact by character count, but markdown
-previewers may render fallback glyphs like `▓ ░ ⋮ ► ∪ ▸ ▾ ✗` at non-uniform
-widths — view the raw file in a monospace font for the intended geometry.)
+previewers may render fallback glyphs like `▭ ▪ ⋮ ► ▸ ▾ ✗ ░` at non-uniform
+widths — view the raw file in a monospace font, or run
+`tui_mockup_preview.py`, for the intended geometry.)
 
 Panes: **Devices** (search field, favorites, filtered results, selected
 summary; collapsible Diagnostics below), **Center** (op tabs → options form
@@ -170,7 +171,7 @@ etc.).
 | Entropy bar | Colored `▌` gutter char per row | Same 4-tier mapping |
 | Compare/diff | Toggle diff coloring on buffer + `n`/`N` | Same `smart_diff` core call |
 | TerminalLog | Scrolling pane — render ANSI natively | The HTML/whitespace rules from GUI-INTERNALS don't apply |
-| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py`: pin numbers live in fixed label columns; bad-pin markers hug *that pin's own* column (`N►` left / `◄N` right) — never a callout at the row's far end. Chip drawn as its own glyph in the socket channel with edges one row beyond the outermost pins, like a real package (`╭──∪──╮` in the socket's top margin / `┤█████├` per pin row / `╰─────╯` sharing the first empty pin row); each `▓` slot cell joins the chip wall via a `─` pin stroke and `┤`/`├` tee — pin↔ZIF alignment is drawn, not implied, and stubs always meet a wall, never a corner; `●` dimple inside the body at the pin-1 corner paints its cell background in the chip colour (a bare glyph punches a hole in the fill); the socket frame stays plain — printed pin numbers already identify ZIF pin 1 — and the bottom edge hugs the last pin row (no filler rows; a bottom-justified chip's `╰───╯` gets an extra row there). Lever = `═` bar flush against the socket's lever end (top on all models except T48 = bottom). `▓` occupied green / red bad. Classic standalone `─┤` chip pinout is the better fit for logic-IC result diagrams, not ZIF placement |
+| ZIF diagram | Box-drawing widget over `core::zif` pin map | Rendering rules proven in `tui_mockup_preview.py` (canonical render — run it to see): every row is built from one skeleton `[label][marker][│ slot pin…body…pin slot │][marker][label]` so nothing drifts. Justification is *pure data* — `occupied` slots + `chip_top`/`chip_bot` span decide each cell; top vs bottom-justified differ only in which span is populated and which end `⋮` collapses (never collapse a row carrying chip pins). Glyph vocabulary (font-vetted — prefer Box Drawing; geometric/oblong glyphs like `◡ ▭` risk bad fallback, verify per terminal): `▭` = ZIF contact cell (faint = empty slot, green = pin seated, red = bad contact — every slot exists physically, color carries state); `▪` = IC pin tip at the chip wall; chip body = `█` fill on the pin rows only — no edge rows; pin-1 end marks (`●` dimple + `╰╯` arc-pair notch) live INSIDE the top body row with cells painted chip-bg (a bare glyph punches a hole in the fill); bad-pin marker hugs *that pin's own* label column (`N►` left / `◄N` right) — never a far-end callout; socket frame plain — printed pin numbers already identify ZIF pin 1; `lever` label anchored at the lever-end corner (above `┌` on most models, below `┘` on T48); diagram block centred in its pane, headers/result strip left-aligned. Classic standalone `─┤` chip pinout remains the better fit for logic-IC result diagrams, not ZIF placement |
 | ICSP wiring | `Table`: header pin → signal → chip pin + notes | Verified tables already in `core::icsp` |
 | Logic test grid | `Table` of colored cells; `+`/`-` cell width | `c` copies TSV via `arboard` |
 | Identify results | `Table`, `Enter` select, `f` favorite | Same sort order (pass, fewest errors, alpha) |
