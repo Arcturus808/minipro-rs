@@ -266,33 +266,35 @@ approach that auto-selected a same-base-name variant on click was reverted —
 substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
 potentially different package variant and was too surprising.
 
-## TUI resize repaint strategy — throttle, not debounce
+## TUI resize repaint strategy — atomic frames, no throttling
 
-`run()` in `crates/minipro-tui/src/main.rs` throttles repaints to ~30 fps
-while `Event::Resize` streams. ratatui's `resize()` clears the backend and
-repaints every cell, so drawing per Resize event strobes during a drag —
-but a full debounce (skip drawing until a quiet gap, tried and reverted)
-is worse: the OS reflows the last frame at the new size, so the screen
-shows misaligned stale content for the entire drag and reads as frozen.
-Throttling bounds staleness to ~33 ms while still skipping most
-intermediate paints.
+`run()` in `crates/minipro-tui/src/main.rs` repaints on every resize
+burst — deliberately **not** throttled or debounced. Three attempts
+established that paint timing was never the real problem:
 
-**Do not** switch back to a quiet-gap debounce or lengthen the frame
-window — that reintroduces the frozen-frame regression.
+- **Repainting per step "flickered" — but the flicker was write
+  tearing, not paint frequency.** `io::Stdout` is a `LineWriter` with
+  an ~8KB buffer; a full repaint is tens of KB of escapes, so each draw
+  flushed several times mid-frame and the terminal composited a torn
+  half-painted screen — perceived as contents shearing vertically. The
+  backend now writes through `io::BufWriter::with_capacity(256 * 1024,
+  stdout)` — one write per draw, atomic frames. **Do not** revert to
+  raw `Stdout` or shrink the buffer below a frame's escape volume.
+- **Debouncing (paint only after a quiet gap) is worse**: the OS
+  reflows the last frame at the new size, so the screen shows stale
+  misaligned content for the whole drag and reads as frozen (tried and
+  reverted in e466b6d).
+- **Throttling repaint rate causes a subtler artifact**: during rapid
+  *shrinking* drags, skipped paints leave a stale too-wide frame on
+  screen; Windows Terminal reflow-wraps the overhanging rows (the
+  separator/`┤`/keybar reach the last column) and the bottom line
+  scrolls off — contents jump up ~1 row until the next paint. Prompt
+  repaints keep the stale window smaller than the reflow interval.
 
 Related: both responsive breakpoints (the <80×24 message screen and the
 ~100-col right-pane collapse) use a dead band in `App::note_size` —
 leaving a regime takes a few more cells than entering it. Without
 hysteresis, a drag parked on a boundary alternates between structurally
 different layouts every repaint, which reads as violent jumping rather
-than flicker. The `]` override is cleared only on a real regime crossing,
-so it now survives a mid-drag wobble across 100 cols.
-
-Also related — **repaint atomicity**: the backend writes through
-`io::BufWriter::with_capacity(256 * 1024, stdout)`, not `io::Stdout`
-directly. `Stdout` is a `LineWriter` with an ~8KB buffer; a full repaint
-(tens of KB of escapes) flushes several times mid-frame, so the terminal
-composites a torn half-painted screen — perceived as contents shearing
-vertically ("jumping up and down") on every repaint. The BufWriter makes
-each `term.draw` a single write. Do not shrink the capacity below a
-full-frame's escape volume and do not revert to raw `Stdout`.
+than flicker. The `]` override is cleared only on a real regime
+crossing, so it survives a mid-drag wobble across 100 cols.

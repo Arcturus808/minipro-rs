@@ -9,11 +9,7 @@ mod app;
 mod theme;
 mod zif;
 
-use std::{
-    error::Error,
-    io,
-    time::{Duration, Instant},
-};
+use std::{error::Error, io, time::Duration};
 
 use app::{App, Pane, OPS, OPT_COLS};
 use crossterm::{
@@ -68,54 +64,29 @@ fn install_panic_hook() {
 }
 
 fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) -> io::Result<()> {
-    // ratatui's resize() clears and repaints every cell, so drawing on
-    // each Resize step is the mid-drag flicker. Throttle to ~30fps while
-    // events stream — don't debounce to drag-end. A quiet-gap debounce
-    // was tried and reverted: the OS reflows the last frame at the new
-    // size, so the screen shows misaligned stale content for the whole
-    // drag and reads as frozen. Throttling bounds staleness to one frame
-    // while still skipping most intermediate paints.
-    const FRAME: Duration = Duration::from_millis(33);
-    let mut last = Instant::now();
-    // A repaint was skipped to keep under FRAME — the next draw happens
-    // when the window ends or the event stream pauses.
-    let mut lagging = false;
     loop {
-        if !lagging {
-            term.draw(|f| draw(f, app))?;
-            last = Instant::now();
-        }
-        // Lagging: wait only until the throttle window ends — a resize
-        // stream keeps this loop fed without repainting.
-        let wait = if lagging {
-            (last + FRAME)
-                .saturating_duration_since(Instant::now())
-                .max(Duration::from_millis(1))
-        } else {
-            Duration::from_millis(250)
-        };
-        if !event::poll(wait)? {
-            lagging = false;
+        term.draw(|f| draw(f, app))?;
+        if !event::poll(Duration::from_millis(250))? {
             continue;
         }
         // Drain the whole burst before the next draw — a resize drag
-        // queues a stream of Resize events.
+        // queues a stream of Resize events. Deliberately no further
+        // repaint throttling: delayed paints leave a stale, too-wide
+        // frame on screen during shrinking drags, and the terminal
+        // reflow-wraps the overhang — rows scroll off the bottom and
+        // the contents jump up until the next paint (see KNOWN-BUGS).
         let mut quit = false;
         loop {
-            match event::read()? {
-                Event::Resize(_, _) => lagging = last.elapsed() < FRAME,
-                Event::Key(k) => {
-                    // Debug-only panic trigger: verifies the panic hook
-                    // restores the terminal. Ctrl+P → panic.
-                    #[cfg(debug_assertions)]
-                    if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('p') {
-                        panic!("minipro-tui: debug panic trigger (terminal restore test)");
-                    }
-                    if app.handle_key(k) {
-                        quit = true;
-                    }
+            if let Event::Key(k) = event::read()? {
+                // Debug-only panic trigger: verifies the panic hook
+                // restores the terminal. Ctrl+P → panic.
+                #[cfg(debug_assertions)]
+                if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('p') {
+                    panic!("minipro-tui: debug panic trigger (terminal restore test)");
                 }
-                _ => {}
+                if app.handle_key(k) {
+                    quit = true;
+                }
             }
             if !event::poll(Duration::ZERO)? {
                 break;
