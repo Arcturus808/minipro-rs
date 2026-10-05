@@ -40,23 +40,6 @@ pub enum Pane {
     Right,
 }
 
-impl Pane {
-    fn next(self) -> Self {
-        match self {
-            Pane::Devices => Pane::Options,
-            Pane::Options => Pane::Right,
-            Pane::Right => Pane::Devices,
-        }
-    }
-    fn prev(self) -> Self {
-        match self {
-            Pane::Devices => Pane::Right,
-            Pane::Options => Pane::Devices,
-            Pane::Right => Pane::Options,
-        }
-    }
-}
-
 pub struct App {
     pub pane: Pane,
     /// Selected operation tab index into `OPS`.
@@ -79,6 +62,13 @@ pub struct App {
     pub opt_row: usize,
     /// Help overlay is open — swallows all keys until dismissed.
     pub show_help: bool,
+    /// Right pane visibility override: None = auto (hidden below 100
+    /// cols per the plan's responsive rule); Some = the user's `]`
+    /// toggle, in either direction.
+    pub right_hidden: Option<bool>,
+    /// Terminal width from the last draw — `handle_key` needs it for the
+    /// auto-collapse check and `]` toggles.
+    pub last_width: u16,
     /// Full device record, resolved on Enter; cleared when the cursor
     /// moves to a different device.
     pub selected: Option<Device>,
@@ -125,9 +115,33 @@ impl App {
             opt_col: 0,
             opt_row: 0,
             show_help: false,
+            right_hidden: None,
+            last_width: 0,
             selected: None,
             paths,
             model,
+        }
+    }
+
+    /// Right pane: auto-follows width (shown ≥100 cols), `]` overrides.
+    pub fn right_visible(&self) -> bool {
+        self.right_hidden.unwrap_or(self.last_width >= 100)
+    }
+
+    /// `Tab`/`Shift-Tab` cycling; Right is skipped while collapsed, and
+    /// a focused Right falls back to Options when it collapses.
+    fn cycle_pane(&mut self, dir: i32) {
+        const DEV_OPT: [Pane; 2] = [Pane::Devices, Pane::Options];
+        const ALL: [Pane; 3] = [Pane::Devices, Pane::Options, Pane::Right];
+        let order: &[Pane] = if self.right_visible() { &ALL } else { &DEV_OPT };
+        let i = order.iter().position(|&p| p == self.pane).unwrap_or(0);
+        self.pane = order[(i as i32 + dir).rem_euclid(order.len() as i32) as usize];
+    }
+
+    fn toggle_right(&mut self) {
+        self.right_hidden = Some(!self.right_visible());
+        if !self.right_visible() && self.pane == Pane::Right {
+            self.pane = Pane::Options;
         }
     }
 
@@ -269,8 +283,9 @@ impl App {
         match k.code {
             KeyCode::Char('q') | KeyCode::Esc => return true,
             KeyCode::Char('?') => self.show_help = true,
-            KeyCode::Tab => self.pane = self.pane.next(),
-            KeyCode::BackTab => self.pane = self.pane.prev(),
+            KeyCode::Tab => self.cycle_pane(1),
+            KeyCode::BackTab => self.cycle_pane(-1),
+            KeyCode::Char(']') => self.toggle_right(),
             KeyCode::Char(c @ '1'..='8') => self.op = (c as usize) - ('1' as usize),
             _ => match self.pane {
                 Pane::Devices => match k.code {
@@ -421,6 +436,49 @@ mod tests {
         assert!(!a.show_help);
         // Search is still editing afterwards — F1 didn't leave the box.
         assert!(a.search_editing);
+    }
+
+    #[test]
+    fn right_pane_auto_collapses_under_100() {
+        let mut a = app();
+        a.last_width = 90;
+        assert!(!a.right_visible());
+        a.last_width = 120;
+        assert!(a.right_visible());
+        // `]` overrides in both directions.
+        a.last_width = 90;
+        a.handle_key(key(KeyCode::Char(']')));
+        assert!(a.right_visible());
+        a.last_width = 120;
+        a.handle_key(key(KeyCode::Char(']')));
+        assert!(!a.right_visible());
+    }
+
+    #[test]
+    fn tab_cycle_skips_collapsed_right() {
+        let mut a = app();
+        a.last_width = 90; // right hidden → two-pane cycle
+        a.handle_key(key(KeyCode::Tab));
+        assert_eq!(a.pane, Pane::Options);
+        a.handle_key(key(KeyCode::Tab));
+        assert_eq!(a.pane, Pane::Devices);
+        // At ≥100 all three panes cycle.
+        a.last_width = 120;
+        a.handle_key(key(KeyCode::Tab));
+        assert_eq!(a.pane, Pane::Options);
+        a.handle_key(key(KeyCode::Tab));
+        assert_eq!(a.pane, Pane::Right);
+        a.handle_key(key(KeyCode::Tab));
+        assert_eq!(a.pane, Pane::Devices);
+    }
+
+    #[test]
+    fn toggle_off_falls_back_to_options() {
+        let mut a = app();
+        a.last_width = 120;
+        a.pane = Pane::Right;
+        a.handle_key(key(KeyCode::Char(']')));
+        assert_eq!(a.pane, Pane::Options);
     }
 
     #[test]

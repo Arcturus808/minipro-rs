@@ -79,6 +79,16 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::
 
 fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
+    app.last_width = area.width;
+    if !app.right_visible() && app.pane == Pane::Right {
+        app.pane = Pane::Options;
+    }
+    // <80×24 per the plan's responsive rule — a message screen, not a
+    // squashed layout. handle_key still runs, so q/Ctrl+C quit.
+    if area.width < 80 || area.height < 24 {
+        resize_screen(f, area);
+        return;
+    }
     let outer = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme::border())
@@ -101,14 +111,26 @@ fn draw(f: &mut Frame, app: &mut App) {
     ])
     .split(inner);
 
-    let h = Layout::horizontal([
-        Constraint::Length(26), // DEVICES
-        Constraint::Length(1),  // sep
-        Constraint::Min(0),     // options/buffer/progress
-        Constraint::Length(1),  // sep
-        Constraint::Length(34), // LOG + ZIF
-    ])
+    // 80–100 cols: the right pane collapses behind `]` (app decides via
+    // right_visible). Options expands to fill when it's hidden.
+    let right_visible = app.right_visible();
+    let h = Layout::horizontal(if right_visible {
+        vec![
+            Constraint::Length(26), // DEVICES
+            Constraint::Length(1),  // sep
+            Constraint::Min(0),     // options/buffer/progress
+            Constraint::Length(1),  // sep
+            Constraint::Length(34), // LOG + ZIF
+        ]
+    } else {
+        vec![
+            Constraint::Length(26),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ]
+    })
     .split(v[1]);
+    let right_area = if right_visible { Some(h[4]) } else { None };
 
     let buf = f.buffer_mut();
     let y = v[0].y;
@@ -117,7 +139,11 @@ fn draw(f: &mut Frame, app: &mut App) {
     }
     buf.set_string(area.x, y, "├", theme::border());
     buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
-    for col in [h[1], h[3]] {
+    let mut seps = vec![h[1]];
+    if right_visible {
+        seps.push(h[3]);
+    }
+    for col in seps {
         buf.set_string(col.x, y, "┬", theme::border());
         for yy in col.y..col.y + col.height {
             buf.set_string(col.x, yy, "│", theme::border());
@@ -127,10 +153,11 @@ fn draw(f: &mut Frame, app: &mut App) {
     // Focus cue: accent the focused pane's left + right + top edges.
     // Edge panes borrow the outer frame column as one side. Recolour
     // existing cells only — junctions (├ ┬ ┤ ╭ ╰) keep their glyphs.
+    let frame_r = area.x + area.width - 1;
     let (lx, rx) = match app.pane {
         Pane::Devices => (area.x, h[1].x),
-        Pane::Options => (h[1].x, h[3].x),
-        Pane::Right => (h[3].x, area.x + area.width - 1),
+        Pane::Options => (h[1].x, if right_visible { h[3].x } else { frame_r }),
+        Pane::Right => (h[3].x, frame_r),
     };
     for x in lx..=rx {
         buf[(x, y)].set_style(theme::accent());
@@ -140,14 +167,40 @@ fn draw(f: &mut Frame, app: &mut App) {
         buf[(rx, yy)].set_style(theme::accent());
     }
 
+    // Collapsed affordance: ◄ on the frame edge — "] pulls it open".
+    if !right_visible {
+        buf.set_string(frame_r, v[1].y + v[1].height / 2, "◄", theme::accent());
+    }
+
     devices_pane(f, h[0], app);
     center_pane(f, h[2], app);
-    right_pane(f, h[4], app);
+    if let Some(ra) = right_area {
+        right_pane(f, ra, app);
+    }
     keybar(f, v[2]);
 
     if app.show_help {
         help_overlay(f, area);
     }
+}
+
+/// <80×24 fallback — the plan's "resize terminal" screen.
+fn resize_screen(f: &mut Frame, area: Rect) {
+    let lines = vec![
+        Line::from(sp("minipro-tui needs at least 80 × 24", theme::text())),
+        Line::from(sp(
+            format!("current: {} × {}", area.width, area.height),
+            theme::dim(),
+        )),
+        Line::from(sp("resize the terminal · q to quit", theme::faint())),
+    ];
+    let r = Rect::new(
+        area.x,
+        area.y + area.height.saturating_sub(3) / 2,
+        area.width,
+        3,
+    );
+    f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), r);
 }
 
 fn sp(s: impl Into<String>, style: Style) -> Span<'static> {
@@ -568,22 +621,27 @@ fn help_overlay(f: &mut Frame, area: Rect) {
 fn keybar(f: &mut Frame, area: Rect) {
     let key = |s: &'static str| Span::styled(s.to_string(), theme::accent_bold().bg(theme::KEY_BG));
     let sep = |s: &'static str| Span::styled(s.to_string(), theme::dim().bg(theme::KEY_BG));
-    let line = Line::from(vec![
-        key(" ⇥"),
-        sep(" panes  ·  "),
-        key("1-8"),
-        sep(" op  ·  "),
-        key("Space"),
-        sep(" toggle  ·  "),
-        key("←→"),
-        sep(" change  ·  "),
-        key("Enter"),
-        sep(" sel  ·  "),
+    let mut spans = vec![key(" ⇥"), sep(" panes  ·  "), key("1-8"), sep(" op  ·  ")];
+    // Compact variant below 100 cols — the full set would clip mid-hint.
+    if area.width >= 100 {
+        spans.extend([
+            key("Space"),
+            sep(" toggle  ·  "),
+            key("←→"),
+            sep(" change  ·  "),
+            key("Enter"),
+            sep(" sel  ·  "),
+        ]);
+    }
+    spans.extend([
         key("/"),
         sep(" search  ·  "),
+        key("]"),
+        sep(" right  ·  "),
         key("q"),
         sep(" quit "),
     ]);
+    let line = Line::from(spans);
     f.render_widget(
         Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
         area,
