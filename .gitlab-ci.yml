@@ -74,7 +74,9 @@ msrv:
       - .cargo/git/
       - target/
   script:
-    - cargo check --all --locked
+    # minipro-tui has its own rust-version (1.88, same as the GUI) —
+    # ratatui 0.30 cannot compile on the core/CLI 1.85 floor.
+    - cargo check --workspace --exclude minipro-tui --locked
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
