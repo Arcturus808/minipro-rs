@@ -117,23 +117,27 @@ fn draw(f: &mut Frame, app: &mut App) {
     }
     buf.set_string(area.x, y, "├", theme::border());
     buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
-    // Separators flanking the focused pane get the accent colour — the
-    // focus cue without adding real borders to the borderless design.
-    for (i, col) in [h[1], h[3]].iter().enumerate() {
-        let hot = match app.pane {
-            Pane::Devices => i == 0,
-            Pane::Options => true,
-            Pane::Right => i == 1,
-        };
-        let st = if hot {
-            theme::accent()
-        } else {
-            theme::border()
-        };
-        buf.set_string(col.x, y, "┬", st);
+    for col in [h[1], h[3]] {
+        buf.set_string(col.x, y, "┬", theme::border());
         for yy in col.y..col.y + col.height {
-            buf.set_string(col.x, yy, "│", st);
+            buf.set_string(col.x, yy, "│", theme::border());
         }
+    }
+
+    // Focus cue: accent the focused pane's left + right + top edges.
+    // Edge panes borrow the outer frame column as one side. Recolour
+    // existing cells only — junctions (├ ┬ ┤ ╭ ╰) keep their glyphs.
+    let (lx, rx) = match app.pane {
+        Pane::Devices => (area.x, h[1].x),
+        Pane::Options => (h[1].x, h[3].x),
+        Pane::Right => (h[3].x, area.x + area.width - 1),
+    };
+    for x in lx..=rx {
+        buf[(x, y)].set_style(theme::accent());
+    }
+    for yy in v[1].y..v[1].y + v[1].height {
+        buf[(lx, yy)].set_style(theme::accent());
+        buf[(rx, yy)].set_style(theme::accent());
     }
 
     devices_pane(f, h[0], app);
