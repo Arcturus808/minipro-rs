@@ -13,7 +13,7 @@ use std::{error::Error, io, time::Duration};
 
 use app::{App, Pane, OPS, OPT_COLS};
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -62,6 +62,12 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::
         term.draw(|f| draw(f, app))?;
         if event::poll(Duration::from_millis(250))? {
             if let Event::Key(k) = event::read()? {
+                // Debug-only panic trigger: verifies the panic hook
+                // restores the terminal. Ctrl+P → panic.
+                #[cfg(debug_assertions)]
+                if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('p') {
+                    panic!("minipro-tui: debug panic trigger (terminal restore test)");
+                }
                 if app.handle_key(k) {
                     break;
                 }
@@ -111,10 +117,22 @@ fn draw(f: &mut Frame, app: &mut App) {
     }
     buf.set_string(area.x, y, "├", theme::border());
     buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
-    for col in [h[1], h[3]] {
-        buf.set_string(col.x, y, "┬", theme::border());
+    // Separators flanking the focused pane get the accent colour — the
+    // focus cue without adding real borders to the borderless design.
+    for (i, col) in [h[1], h[3]].iter().enumerate() {
+        let hot = match app.pane {
+            Pane::Devices => i == 0,
+            Pane::Options => true,
+            Pane::Right => i == 1,
+        };
+        let st = if hot {
+            theme::accent()
+        } else {
+            theme::border()
+        };
+        buf.set_string(col.x, y, "┬", st);
         for yy in col.y..col.y + col.height {
-            buf.set_string(col.x, yy, "│", theme::border());
+            buf.set_string(col.x, yy, "│", st);
         }
     }
 
