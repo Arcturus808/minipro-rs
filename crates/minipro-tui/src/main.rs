@@ -60,7 +60,14 @@ fn install_panic_hook() {
 fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {
     loop {
         term.draw(|f| draw(f, app))?;
-        if event::poll(Duration::from_millis(250))? {
+        if !event::poll(Duration::from_millis(250))? {
+            continue;
+        }
+        // Drain the whole burst before the next draw — a resize drag
+        // queues a stream of Resize events, and repainting once per
+        // burst instead of once per event reduces mid-drag flicker.
+        let mut quit = false;
+        loop {
             if let Event::Key(k) = event::read()? {
                 // Debug-only panic trigger: verifies the panic hook
                 // restores the terminal. Ctrl+P → panic.
@@ -69,9 +76,15 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::
                     panic!("minipro-tui: debug panic trigger (terminal restore test)");
                 }
                 if app.handle_key(k) {
-                    break;
+                    quit = true;
                 }
             }
+            if !event::poll(Duration::ZERO)? {
+                break;
+            }
+        }
+        if quit {
+            break;
         }
     }
     Ok(())
