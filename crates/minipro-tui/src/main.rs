@@ -79,7 +79,7 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::
 
 fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    app.last_width = area.width;
+    app.note_width(area.width);
     if !app.right_visible() && app.pane == Pane::Right {
         app.pane = Pane::Options;
     }

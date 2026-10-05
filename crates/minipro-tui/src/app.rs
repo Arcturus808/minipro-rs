@@ -128,6 +128,17 @@ impl App {
         self.right_hidden.unwrap_or(self.last_width >= 100)
     }
 
+    /// Track the terminal width each frame. Crossing the 100-col
+    /// threshold clears a manual `]` override — the toggle tweaks the
+    /// pane within a regime; the responsive rule owns boundary
+    /// crossings, so narrowing after a manual toggle still collapses.
+    pub fn note_width(&mut self, w: u16) {
+        if self.last_width != 0 && (w >= 100) != (self.last_width >= 100) {
+            self.right_hidden = None;
+        }
+        self.last_width = w;
+    }
+
     /// `Tab`/`Shift-Tab` cycling; Right is skipped while collapsed, and
     /// a focused Right falls back to Options when it collapses.
     fn cycle_pane(&mut self, dir: i32) {
@@ -441,29 +452,50 @@ mod tests {
     #[test]
     fn right_pane_auto_collapses_under_100() {
         let mut a = app();
-        a.last_width = 90;
+        a.note_width(90);
         assert!(!a.right_visible());
-        a.last_width = 120;
+        a.note_width(120);
         assert!(a.right_visible());
         // `]` overrides in both directions.
-        a.last_width = 90;
+        a.note_width(90);
         a.handle_key(key(KeyCode::Char(']')));
         assert!(a.right_visible());
-        a.last_width = 120;
+        a.note_width(120);
         a.handle_key(key(KeyCode::Char(']')));
+        assert!(!a.right_visible());
+    }
+
+    #[test]
+    fn manual_override_resets_on_threshold_crossing() {
+        // Reported bug: ] at wide pinned the pane forever — narrowing
+        // must return to auto-collapse.
+        let mut a = app();
+        a.note_width(120);
+        a.handle_key(key(KeyCode::Char(']'))); // hide manually
+        assert!(!a.right_visible());
+        a.handle_key(key(KeyCode::Char(']'))); // show manually
+        assert!(a.right_visible());
+        a.note_width(90); // narrow → back to auto: hidden
+        assert!(!a.right_visible());
+        // Same for a narrow-time override.
+        a.handle_key(key(KeyCode::Char(']'))); // show manually at 90
+        assert!(a.right_visible());
+        a.note_width(120); // widen → auto: shown
+        assert!(a.right_visible());
+        a.note_width(90); // narrow again → hidden
         assert!(!a.right_visible());
     }
 
     #[test]
     fn tab_cycle_skips_collapsed_right() {
         let mut a = app();
-        a.last_width = 90; // right hidden → two-pane cycle
+        a.note_width(90); // right hidden → two-pane cycle
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Options);
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Devices);
         // At ≥100 all three panes cycle.
-        a.last_width = 120;
+        a.note_width(120);
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Options);
         a.handle_key(key(KeyCode::Tab));
@@ -475,7 +507,7 @@ mod tests {
     #[test]
     fn toggle_off_falls_back_to_options() {
         let mut a = app();
-        a.last_width = 120;
+        a.note_width(120);
         a.pane = Pane::Right;
         a.handle_key(key(KeyCode::Char(']')));
         assert_eq!(a.pane, Pane::Options);
