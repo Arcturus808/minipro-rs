@@ -311,7 +311,7 @@ fn right_pane(f: &mut Frame, area: Rect, zif: &ZifDiagram) {
             sp(" ", theme::text()),
             sp("✗", theme::red()),
             sp(" Pin test: ", theme::text()),
-            sp("bad contact pin 3", theme::red()),
+            sp("bad contact on pin 3", theme::red()),
         ])),
         v[4],
     );
