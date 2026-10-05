@@ -1069,6 +1069,7 @@ name = "minipro-tui"
 version = "0.9.0"
 dependencies = [
  "crossterm",
+ "minipro-core",
  "ratatui",
 ]
 

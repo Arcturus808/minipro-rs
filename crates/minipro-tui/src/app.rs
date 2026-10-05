@@ -1,0 +1,364 @@
+//! Application state and key handling.
+//!
+//! Focus model (per docs/TUI-PLAN.md): `Tab`/`Shift-Tab` cycles panes;
+//! in DEVICES, `/` enters the search box, `↑↓`/`PgUp`/`PgDn`/`Home`/`End`
+//! move the result cursor, `Enter` resolves the highlighted device to a
+//! full `Device` record and advances to the options pane. `q`/`Esc`
+//! quits whenever the search box isn't editing — while editing, keys go
+//! to the text field and `Esc`/`Enter` return to the list.
+//!
+//! The device list is loaded once via `list_devices_for_model` and
+//! filtered in-memory — reparsing the XML database per keystroke is far
+//! too slow. `find_device` runs only on `Enter` (a full-file scan is fine
+//! once per selection, not per cursor move).
+
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use minipro_core::database::{find_device, list_devices_for_model, DatabasePaths, DeviceListItem};
+use minipro_core::device::{Device, ProgrammerModel};
+use minipro_core::error::MiniproError;
+use ratatui::widgets::ListState;
+
+pub const OPS: [&str; 8] = [
+    "Read", "Write", "Verify", "Erase", "Blank", "ID", "Logic", "Config",
+];
+
+/// Option checkboxes per column (rendered two-up in the options pane).
+pub const OPT_COLS: [&[&str]; 2] = [
+    &[
+        "Chip ID check",
+        "Skip erase",
+        "Skip verify",
+        "Skip blank pages",
+    ],
+    &["Pin contact check", "Unprotect before", "Re-protect after"],
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Pane {
+    Devices,
+    Options,
+    Right,
+}
+
+impl Pane {
+    fn next(self) -> Self {
+        match self {
+            Pane::Devices => Pane::Options,
+            Pane::Options => Pane::Right,
+            Pane::Right => Pane::Devices,
+        }
+    }
+    fn prev(self) -> Self {
+        match self {
+            Pane::Devices => Pane::Right,
+            Pane::Options => Pane::Devices,
+            Pane::Right => Pane::Options,
+        }
+    }
+}
+
+pub struct App {
+    pub pane: Pane,
+    /// Selected operation tab index into `OPS`.
+    pub op: usize,
+    /// Search box is being edited (keys route to it).
+    pub search_editing: bool,
+    pub search: String,
+    /// Byte offset of the text cursor inside `search`.
+    pub search_cursor: usize,
+    /// Full model-filtered device list (loaded once).
+    pub devices: Vec<DeviceListItem>,
+    /// Indices into `devices` matching `search`.
+    pub matches: Vec<usize>,
+    /// Result-list cursor + scroll (drives `render_stateful_widget`).
+    pub list: ListState,
+    /// Checkbox states, col-major per `OPT_COLS`.
+    pub options: [bool; 7],
+    /// Option cursor: column and row within it.
+    pub opt_col: usize,
+    pub opt_row: usize,
+    /// Full device record, resolved on Enter; cleared when the cursor
+    /// moves to a different device.
+    pub selected: Option<Device>,
+    paths: DatabasePaths,
+    model: ProgrammerModel,
+}
+
+fn filtered(devices: &[DeviceListItem], query: &str) -> Vec<usize> {
+    let q = query.to_lowercase();
+    devices
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| q.is_empty() || d.name.to_lowercase().contains(&q))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+impl App {
+    pub fn new() -> Result<Self, MiniproError> {
+        let paths = DatabasePaths::resolve(None, None, None)?;
+        let model = ProgrammerModel::Tl866iiPlus;
+        let devices = list_devices_for_model(&paths, None, model)?;
+        Ok(Self::from_devices(devices, paths, model))
+    }
+
+    fn from_devices(
+        devices: Vec<DeviceListItem>,
+        paths: DatabasePaths,
+        model: ProgrammerModel,
+    ) -> Self {
+        let matches = filtered(&devices, "");
+        let mut list = ListState::default();
+        list.select(if matches.is_empty() { None } else { Some(0) });
+        Self {
+            pane: Pane::Devices,
+            op: 1, // Write — matches the mockup
+            search_editing: false,
+            search: String::new(),
+            search_cursor: 0,
+            devices,
+            matches,
+            list,
+            options: [true, false, false, false, true, true, false],
+            opt_col: 0,
+            opt_row: 0,
+            selected: None,
+            paths,
+            model,
+        }
+    }
+
+    fn refilter(&mut self) {
+        self.matches = filtered(&self.devices, &self.search);
+        let n = self.matches.len();
+        let cur = self.list.selected().unwrap_or(0).min(n.saturating_sub(1));
+        self.list.select(if n == 0 { None } else { Some(cur) });
+        self.clear_selection_if_moved();
+    }
+
+    fn cursor(&self) -> usize {
+        self.list.selected().unwrap_or(0)
+    }
+
+    /// Full record of the highlighted device, fetched on Enter only.
+    fn activate(&mut self) {
+        if let Some(&idx) = self.matches.get(self.cursor()) {
+            let name = self.devices[idx].name.clone();
+            if let Ok(dev) = find_device(&self.paths, &name, self.model) {
+                self.selected = Some(dev);
+            }
+            self.pane = Pane::Options;
+        }
+    }
+
+    fn clear_selection_if_moved(&mut self) {
+        let cur_name = self
+            .matches
+            .get(self.cursor())
+            .map(|&i| self.devices[i].name.as_str());
+        if let Some(sel) = &self.selected {
+            if Some(sel.name.as_str()) != cur_name {
+                self.selected = None;
+            }
+        }
+    }
+
+    fn move_cursor(&mut self, to: usize) {
+        if self.matches.is_empty() {
+            return;
+        }
+        let to = to.min(self.matches.len() - 1);
+        self.list.select(Some(to));
+        self.clear_selection_if_moved();
+    }
+
+    fn insert(&mut self, c: char) {
+        self.search.insert(self.search_cursor, c);
+        self.search_cursor += c.len_utf8();
+        self.refilter();
+    }
+
+    fn backspace(&mut self) {
+        if self.search_cursor == 0 {
+            return;
+        }
+        let prev = self.search[..self.search_cursor]
+            .char_indices()
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        self.search.remove(prev);
+        self.search_cursor = prev;
+        self.refilter();
+    }
+
+    /// Returns true when the app should quit.
+    pub fn handle_key(&mut self, k: KeyEvent) -> bool {
+        if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
+            return true;
+        }
+        if self.search_editing {
+            match k.code {
+                KeyCode::Char(c) => self.insert(c),
+                KeyCode::Backspace => {
+                    if self.search.is_empty() {
+                        self.search_editing = false;
+                    } else {
+                        self.backspace();
+                    }
+                }
+                KeyCode::Delete => {
+                    if self.search_cursor < self.search.len() {
+                        self.search.remove(self.search_cursor);
+                        self.refilter();
+                    }
+                }
+                KeyCode::Left => {
+                    if self.search_cursor > 0 {
+                        self.search_cursor = self.search[..self.search_cursor]
+                            .char_indices()
+                            .last()
+                            .map(|(i, _)| i)
+                            .unwrap_or(0);
+                    }
+                }
+                KeyCode::Right => {
+                    if self.search_cursor < self.search.len() {
+                        self.search_cursor += self.search[self.search_cursor..]
+                            .chars()
+                            .next()
+                            .unwrap()
+                            .len_utf8();
+                    }
+                }
+                KeyCode::Home => self.search_cursor = 0,
+                KeyCode::End => self.search_cursor = self.search.len(),
+                KeyCode::Esc | KeyCode::Enter => self.search_editing = false,
+                _ => {}
+            }
+            return false;
+        }
+        match k.code {
+            KeyCode::Char('q') | KeyCode::Esc => return true,
+            KeyCode::Tab => self.pane = self.pane.next(),
+            KeyCode::BackTab => self.pane = self.pane.prev(),
+            KeyCode::Char(c @ '1'..='8') => self.op = (c as usize) - ('1' as usize),
+            _ => match self.pane {
+                Pane::Devices => match k.code {
+                    KeyCode::Up => self.move_cursor(self.cursor().saturating_sub(1)),
+                    KeyCode::Down => self.move_cursor(self.cursor() + 1),
+                    KeyCode::PageUp => self.move_cursor(self.cursor().saturating_sub(10)),
+                    KeyCode::PageDown => self.move_cursor(self.cursor() + 10),
+                    KeyCode::Home => self.move_cursor(0),
+                    KeyCode::End => self.move_cursor(usize::MAX),
+                    KeyCode::Enter => self.activate(),
+                    KeyCode::Char('/') => self.search_editing = true,
+                    _ => {}
+                },
+                Pane::Options => match k.code {
+                    KeyCode::Up => self.opt_row = self.opt_row.saturating_sub(1),
+                    KeyCode::Down => {
+                        self.opt_row = (self.opt_row + 1).min(OPT_COLS[self.opt_col].len() - 1)
+                    }
+                    KeyCode::Left => {
+                        self.opt_col = 0;
+                        self.opt_row = self.opt_row.min(OPT_COLS[0].len() - 1);
+                    }
+                    KeyCode::Right => {
+                        self.opt_col = 1;
+                        self.opt_row = self.opt_row.min(OPT_COLS[1].len() - 1);
+                    }
+                    KeyCode::Char(' ') | KeyCode::Enter => {
+                        let base = if self.opt_col == 0 {
+                            0
+                        } else {
+                            OPT_COLS[0].len()
+                        };
+                        let i = base + self.opt_row;
+                        self.options[i] = !self.options[i];
+                    }
+                    _ => {}
+                },
+                Pane::Right => {}
+            },
+        }
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dev(name: &str) -> DeviceListItem {
+        DeviceListItem {
+            name: name.to_string(),
+            manufacturer: "X".to_string(),
+        }
+    }
+
+    fn app() -> App {
+        let devices = vec![
+            dev("W25Q32JV"),
+            dev("W25Q64BV"),
+            dev("W25Q64JV"),
+            dev("AT28C256"),
+        ];
+        let paths = DatabasePaths {
+            infoic: "n".into(),
+            logicic: "n".into(),
+            algorithms: None,
+        };
+        App::from_devices(devices, paths, ProgrammerModel::Tl866iiPlus)
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn search_filters_and_reopens() {
+        let mut a = app();
+        assert_eq!(a.matches.len(), 4);
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Char('2')));
+        a.handle_key(key(KeyCode::Char('5')));
+        a.handle_key(key(KeyCode::Char('q')));
+        a.handle_key(key(KeyCode::Char('6')));
+        a.handle_key(key(KeyCode::Char('4')));
+        assert_eq!(a.search, "25q64");
+        assert_eq!(a.matches.len(), 2);
+        // 'q' typed while editing must not quit.
+        assert!(!a.handle_key(key(KeyCode::Char('x'))));
+    }
+
+    #[test]
+    fn cursor_clamps_when_filter_shrinks() {
+        let mut a = app();
+        a.move_cursor(3);
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Char('A')));
+        a.handle_key(key(KeyCode::Char('T')));
+        assert_eq!(a.cursor(), 0);
+    }
+
+    #[test]
+    fn slash_enters_and_esc_leaves_search() {
+        let mut a = app();
+        a.handle_key(key(KeyCode::Char('/')));
+        assert!(a.search_editing);
+        a.handle_key(key(KeyCode::Esc));
+        assert!(!a.search_editing);
+        assert!(a.handle_key(key(KeyCode::Esc)));
+    }
+
+    #[test]
+    fn option_toggle_uses_col_major_index() {
+        let mut a = app();
+        a.pane = Pane::Options;
+        a.opt_col = 1;
+        a.opt_row = 1; // "Unprotect before" = index 5
+        a.handle_key(key(KeyCode::Char(' ')));
+        assert!(!a.options[5]);
+    }
+}

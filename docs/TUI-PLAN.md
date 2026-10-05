@@ -147,7 +147,7 @@ panes · `F5` reconnect · `,` settings · `Esc` close modal/backs out.
 
 | Context | Keys |
 |---------|------|
-| Devices | type or `/` to search · `↑/↓` navigate · `Enter` select/deselect · `f` favorite · `a`/`A` SPI autodetect 8/16-pin |
+| Devices | `/` enters the search box (all chars insert while focused — bare `q` stays quit, so typing can't *start* a query; `Esc`/`Enter`/`Backspace`-on-empty leave it) · `↑/↓`/`PgUp`/`PgDn` navigate · `Enter` select & advance to options · `f` favorite · `a`/`A` SPI autodetect 8/16-pin |
 | Operations | `1`–`8` pick op (Read Write Verify Erase Blank Chip-ID Logic Config) · `Enter` start · `Space` toggle · `←/→` cycle select · `o` open file · `s` save buffer |
 | Hex (P2) | `hjkl`/arrows · `g`/`G` first/last · `/` find, `n`/`N` next/prev · `v` select · hex digits or chars edit in place · `u`/`Ctrl-r` undo/redo · `+`/`-` bytes-per-row |
 | Log | `PgUp/PgDn`/`j`/`k` scroll · `c` copy · `x` clear |

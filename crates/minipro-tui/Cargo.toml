@@ -10,5 +10,6 @@ name = "minipro-tui"
 path = "src/main.rs"
 
 [dependencies]
-ratatui   = "0.30"
-crossterm = "0.29"
+minipro-core = { path = "../minipro-core" }
+ratatui      = "0.30"
+crossterm    = "0.29"
