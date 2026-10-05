@@ -265,3 +265,17 @@ stay in `localStorage` and reappear on a compatible programmer. An earlier
 approach that auto-selected a same-base-name variant on click was reverted —
 substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
 potentially different package variant and was too surprising.
+
+## TUI resize repaint strategy — throttle, not debounce
+
+`run()` in `crates/minipro-tui/src/main.rs` throttles repaints to ~30 fps
+while `Event::Resize` streams. ratatui's `resize()` clears the backend and
+repaints every cell, so drawing per Resize event strobes during a drag —
+but a full debounce (skip drawing until a quiet gap, tried and reverted)
+is worse: the OS reflows the last frame at the new size, so the screen
+shows misaligned stale content for the entire drag and reads as frozen.
+Throttling bounds staleness to ~33 ms while still skipping most
+intermediate paints.
+
+**Do not** switch back to a quiet-gap debounce or lengthen the frame
+window — that reintroduces the frozen-frame regression.
