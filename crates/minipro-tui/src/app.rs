@@ -62,13 +62,17 @@ pub struct App {
     pub opt_row: usize,
     /// Help overlay is open — swallows all keys until dismissed.
     pub show_help: bool,
-    /// Right pane visibility override: None = auto (hidden below 100
-    /// cols per the plan's responsive rule); Some = the user's `]`
+    /// Right pane visibility override: None = auto (collapsed at narrow
+    /// widths per the plan's responsive rule); Some = the user's `]`
     /// toggle, in either direction.
     pub right_hidden: Option<bool>,
-    /// Terminal width from the last draw — `handle_key` needs it for the
-    /// auto-collapse check and `]` toggles.
-    pub last_width: u16,
+    /// Auto-collapse state for the right pane — the last width regime
+    /// seen outside the 98–102 dead band. `right_hidden` overrides it.
+    right_auto: bool,
+    /// Below-minimum-layout flag with hysteresis: enters at <80×24,
+    /// exits at ≥82×25, so a drag parked on the boundary can't flap
+    /// between message screen and full layout every repaint.
+    pub too_small: bool,
     /// Full device record, resolved on Enter; cleared when the cursor
     /// moves to a different device.
     pub selected: Option<Device>,
@@ -116,27 +120,45 @@ impl App {
             opt_row: 0,
             show_help: false,
             right_hidden: None,
-            last_width: 0,
+            right_auto: true,
+            too_small: false,
             selected: None,
             paths,
             model,
         }
     }
 
-    /// Right pane: auto-follows width (shown ≥100 cols), `]` overrides.
+    /// Right pane: auto-follows the dead-banded width regime; `]` sets
+    /// `right_hidden` to override it in either direction.
     pub fn right_visible(&self) -> bool {
-        self.right_hidden.unwrap_or(self.last_width >= 100)
+        self.right_hidden.unwrap_or(self.right_auto)
     }
 
-    /// Track the terminal width each frame. Crossing the 100-col
-    /// threshold clears a manual `]` override — the toggle tweaks the
-    /// pane within a regime; the responsive rule owns boundary
-    /// crossings, so narrowing after a manual toggle still collapses.
-    pub fn note_width(&mut self, w: u16) {
-        if self.last_width != 0 && (w >= 100) != (self.last_width >= 100) {
-            self.right_hidden = None;
+    /// Track the terminal size each draw. Both responsive breakpoints
+    /// use a dead band — leaving a regime takes a couple more cells than
+    /// entering it — so a resize drag parked on a boundary can't flap
+    /// between structurally different layouts every repaint. A real
+    /// regime crossing still clears a `]` override: the toggle tweaks
+    /// the pane within a regime; the responsive rule owns crossings.
+    pub fn note_size(&mut self, w: u16, h: u16) {
+        self.too_small = if self.too_small {
+            !(w >= 82 && h >= 25)
+        } else {
+            w < 80 || h < 24
+        };
+        let auto = if w >= 103 {
+            Some(true)
+        } else if w <= 97 {
+            Some(false)
+        } else {
+            None
+        };
+        if let Some(a) = auto {
+            if self.right_auto != a {
+                self.right_hidden = None;
+                self.right_auto = a;
+            }
         }
-        self.last_width = w;
     }
 
     /// `Tab`/`Shift-Tab` cycling; Right is skipped while collapsed, and
@@ -452,15 +474,15 @@ mod tests {
     #[test]
     fn right_pane_auto_collapses_under_100() {
         let mut a = app();
-        a.note_width(90);
+        a.note_size(90, 40);
         assert!(!a.right_visible());
-        a.note_width(120);
+        a.note_size(120, 40);
         assert!(a.right_visible());
         // `]` overrides in both directions.
-        a.note_width(90);
+        a.note_size(90, 40);
         a.handle_key(key(KeyCode::Char(']')));
         assert!(a.right_visible());
-        a.note_width(120);
+        a.note_size(120, 40);
         a.handle_key(key(KeyCode::Char(']')));
         assert!(!a.right_visible());
     }
@@ -470,32 +492,32 @@ mod tests {
         // Reported bug: ] at wide pinned the pane forever — narrowing
         // must return to auto-collapse.
         let mut a = app();
-        a.note_width(120);
+        a.note_size(120, 40);
         a.handle_key(key(KeyCode::Char(']'))); // hide manually
         assert!(!a.right_visible());
         a.handle_key(key(KeyCode::Char(']'))); // show manually
         assert!(a.right_visible());
-        a.note_width(90); // narrow → back to auto: hidden
+        a.note_size(90, 40); // narrow → back to auto: hidden
         assert!(!a.right_visible());
         // Same for a narrow-time override.
         a.handle_key(key(KeyCode::Char(']'))); // show manually at 90
         assert!(a.right_visible());
-        a.note_width(120); // widen → auto: shown
+        a.note_size(120, 40); // widen → auto: shown
         assert!(a.right_visible());
-        a.note_width(90); // narrow again → hidden
+        a.note_size(90, 40); // narrow again → hidden
         assert!(!a.right_visible());
     }
 
     #[test]
     fn tab_cycle_skips_collapsed_right() {
         let mut a = app();
-        a.note_width(90); // right hidden → two-pane cycle
+        a.note_size(90, 40); // right hidden → two-pane cycle
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Options);
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Devices);
         // At ≥100 all three panes cycle.
-        a.note_width(120);
+        a.note_size(120, 40);
         a.handle_key(key(KeyCode::Tab));
         assert_eq!(a.pane, Pane::Options);
         a.handle_key(key(KeyCode::Tab));
@@ -507,7 +529,7 @@ mod tests {
     #[test]
     fn toggle_off_falls_back_to_options() {
         let mut a = app();
-        a.note_width(120);
+        a.note_size(120, 40);
         a.pane = Pane::Right;
         a.handle_key(key(KeyCode::Char(']')));
         assert_eq!(a.pane, Pane::Options);

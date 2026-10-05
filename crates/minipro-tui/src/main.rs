@@ -124,13 +124,14 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::
 
 fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    app.note_width(area.width);
+    app.note_size(area.width, area.height);
     if !app.right_visible() && app.pane == Pane::Right {
         app.pane = Pane::Options;
     }
-    // <80×24 per the plan's responsive rule — a message screen, not a
-    // squashed layout. handle_key still runs, so q/Ctrl+C quit.
-    if area.width < 80 || area.height < 24 {
+    // ~80×24 minimum per the plan's responsive rule (dead-banded in
+    // note_size) — a message screen, not a squashed layout. handle_key
+    // still runs, so q/Ctrl+C quit.
+    if app.too_small {
         resize_screen(f, area);
         return;
     }

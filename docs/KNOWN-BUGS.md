@@ -279,3 +279,11 @@ intermediate paints.
 
 **Do not** switch back to a quiet-gap debounce or lengthen the frame
 window — that reintroduces the frozen-frame regression.
+
+Related: both responsive breakpoints (the <80×24 message screen and the
+~100-col right-pane collapse) use a dead band in `App::note_size` —
+leaving a regime takes a few more cells than entering it. Without
+hysteresis, a drag parked on a boundary alternates between structurally
+different layouts every repaint, which reads as violent jumping rather
+than flicker. The `]` override is cleared only on a real regime crossing,
+so it now survives a mid-drag wobble across 100 cols.
