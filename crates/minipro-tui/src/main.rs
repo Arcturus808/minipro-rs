@@ -9,7 +9,11 @@ mod app;
 mod theme;
 mod zif;
 
-use std::{error::Error, io, time::Duration};
+use std::{
+    error::Error,
+    io,
+    time::{Duration, Instant},
+};
 
 use app::{App, Pane, OPS, OPT_COLS};
 use crossterm::{
@@ -64,18 +68,35 @@ fn install_panic_hook() {
 }
 
 fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) -> io::Result<()> {
+    // MINIPRO_TUI_DEBUG_PAINT (any value) overlays draws-per-second and
+    // the painted size — diagnoses whether mid-drag blank frames are
+    // starved repaints (0 d/s) or terminal-side compositing.
+    let debug = std::env::var_os("MINIPRO_TUI_DEBUG_PAINT").is_some();
+    let mut paints = 0u32;
+    let mut meter = Instant::now();
     loop {
-        term.draw(|f| draw(f, app))?;
+        // Transient degenerate sizes (0 rows/cols) surface mid-drag on
+        // conpty — drawing at one clears the screen to blank.
+        let (w, h) = crossterm::terminal::size().unwrap_or((0, 0));
+        if w > 0 && h > 0 {
+            term.draw(|f| draw(f, app))?;
+            paints += 1;
+        }
+        if debug && meter.elapsed() >= Duration::from_secs(1) {
+            app.debug_paint = Some((paints, w, h));
+            paints = 0;
+            meter = Instant::now();
+        }
         if !event::poll(Duration::from_millis(250))? {
             continue;
         }
-        // Drain the whole burst before the next draw — a resize drag
-        // queues a stream of Resize events. Deliberately no further
-        // repaint throttling: delayed paints leave a stale, too-wide
-        // frame on screen during shrinking drags, and the terminal
-        // reflow-wraps the overhang — rows scroll off the bottom and
-        // the contents jump up until the next paint (see KNOWN-BUGS).
+        // Drain the queued events before the next draw — a resize drag
+        // streams them — but bound the drain so a continuous flood
+        // can't starve repaints entirely (the mid-drag "contents
+        // disappear"). No further paint throttling: delayed paints
+        // leave a stale too-wide frame that reflow-wraps into a scroll.
         let mut quit = false;
+        let deadline = Instant::now() + Duration::from_millis(8);
         loop {
             if let Event::Key(k) = event::read()? {
                 // Debug-only panic trigger: verifies the panic hook
@@ -88,7 +109,7 @@ fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) ->
                     quit = true;
                 }
             }
-            if !event::poll(Duration::ZERO)? {
+            if Instant::now() >= deadline || !event::poll(Duration::ZERO)? {
                 break;
             }
         }
@@ -204,6 +225,13 @@ fn draw(f: &mut Frame, app: &mut App) {
 
     if app.show_help {
         help_overlay(f, area);
+    }
+
+    // Debug paint meter (MINIPRO_TUI_DEBUG_PAINT) — right end of keybar.
+    if let Some((paints, w, h)) = app.debug_paint {
+        let s = format!(" {paints}d/s {w}×{h} ");
+        let x = area.x + area.width.saturating_sub(s.len() as u16 + 1);
+        f.buffer_mut().set_string(x, v[2].y, s, theme::accent());
     }
 }
 

@@ -73,6 +73,9 @@ pub struct App {
     /// exits at ≥82×25, so a drag parked on the boundary can't flap
     /// between message screen and full layout every repaint.
     pub too_small: bool,
+    /// Debug paint meter: (draws in the last second, painted w, h) —
+    /// set by `run` while MINIPRO_TUI_DEBUG_PAINT is in the environment.
+    pub debug_paint: Option<(u32, u16, u16)>,
     /// Full device record, resolved on Enter; cleared when the cursor
     /// moves to a different device.
     pub selected: Option<Device>,
@@ -122,6 +125,7 @@ impl App {
             right_hidden: None,
             right_auto: true,
             too_small: false,
+            debug_paint: None,
             selected: None,
             paths,
             model,

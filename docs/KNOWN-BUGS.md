@@ -298,3 +298,18 @@ hysteresis, a drag parked on a boundary alternates between structurally
 different layouts every repaint, which reads as violent jumping rather
 than flicker. The `]` override is cleared only on a real regime
 crossing, so it survives a mid-drag wobble across 100 cols.
+
+Two more mid-drag blanking mechanisms are guarded in `run()`:
+
+- **Drain starvation** — an unbounded event drain lets a continuous
+  event flood postpone `term.draw` indefinitely; contents "disappear"
+  until the stream slows. The drain is capped at ~8 ms so a paint is
+  always imminent. Do not remove the deadline.
+- **Transient degenerate sizes** — conpty can report a 0-row/col size
+  mid-resize; drawing at it resizes buffers and `clear()`s, producing a
+  blank frame until the next good size. `run()` checks
+  `terminal::size()` itself and skips the draw when either dim is 0.
+
+`MINIPRO_TUI_DEBUG_PAINT` (any value) overlays draws-per-second and the
+painted size on the keybar — distinguishes starved repaints (0 d/s
+during a drag) from terminal-side compositing artifacts.
