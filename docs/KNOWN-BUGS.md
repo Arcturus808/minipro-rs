@@ -287,3 +287,12 @@ hysteresis, a drag parked on a boundary alternates between structurally
 different layouts every repaint, which reads as violent jumping rather
 than flicker. The `]` override is cleared only on a real regime crossing,
 so it now survives a mid-drag wobble across 100 cols.
+
+Also related — **repaint atomicity**: the backend writes through
+`io::BufWriter::with_capacity(256 * 1024, stdout)`, not `io::Stdout`
+directly. `Stdout` is a `LineWriter` with an ~8KB buffer; a full repaint
+(tens of KB of escapes) flushes several times mid-frame, so the terminal
+composites a torn half-painted screen — perceived as contents shearing
+vertically ("jumping up and down") on every repaint. The BufWriter makes
+each `term.draw` a single write. Do not shrink the capacity below a
+full-frame's escape volume and do not revert to raw `Stdout`.

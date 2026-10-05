@@ -40,6 +40,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
+    // io::Stdout's LineWriter flushes mid-frame once its ~8KB buffer
+    // fills — a resize repaint rewrites every cell (tens of KB), so the
+    // terminal composites a torn half-painted screen per repaint and the
+    // contents read as jumping vertically. A big BufWriter lands each
+    // draw as a single write — one atomic frame.
+    let stdout = io::BufWriter::with_capacity(256 * 1024, stdout);
     let mut term = Terminal::new(CrosstermBackend::new(stdout))?;
 
     let res = run(&mut term, &mut app);
@@ -61,7 +67,7 @@ fn install_panic_hook() {
     }));
 }
 
-fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {
+fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) -> io::Result<()> {
     // ratatui's resize() clears and repaints every cell, so drawing on
     // each Resize step is the mid-drag flicker. Throttle to ~30fps while
     // events stream — don't debounce to drag-end. A quiet-gap debounce
