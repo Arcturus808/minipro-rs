@@ -12,7 +12,7 @@
 //! too slow. `find_device` runs only on `Enter` (a full-file scan is fine
 //! once per selection, not per cursor move).
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use minipro_core::database::{find_device, list_devices_for_model, DatabasePaths, DeviceListItem};
 use minipro_core::device::{Device, ProgrammerModel};
 use minipro_core::error::MiniproError;
@@ -194,6 +194,11 @@ impl App {
 
     /// Returns true when the app should quit.
     pub fn handle_key(&mut self, k: KeyEvent) -> bool {
+        // Windows emits Press + Release (+ Repeat for held keys); acting
+        // on every event types each character twice. Unix is Press-only.
+        if !matches!(k.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+            return false;
+        }
         if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
             return true;
         }
@@ -350,6 +355,23 @@ mod tests {
         a.handle_key(key(KeyCode::Esc));
         assert!(!a.search_editing);
         assert!(a.handle_key(key(KeyCode::Esc)));
+    }
+
+    #[test]
+    fn release_events_are_ignored() {
+        // Windows reports Press+Release per keystroke; only Press may act.
+        let mut a = app();
+        a.search_editing = true;
+        let press =
+            KeyEvent::new_with_kind(KeyCode::Char('x'), KeyModifiers::NONE, KeyEventKind::Press);
+        let release = KeyEvent::new_with_kind(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        a.handle_key(press);
+        a.handle_key(release);
+        assert_eq!(a.search, "x");
     }
 
     #[test]
