@@ -9,7 +9,11 @@ mod app;
 mod theme;
 mod zif;
 
-use std::{error::Error, io, time::Duration};
+use std::{
+    error::Error,
+    io,
+    time::{Duration, Instant},
+};
 
 use app::{App, Pane, OPS, OPT_COLS};
 use crossterm::{
@@ -58,26 +62,44 @@ fn install_panic_hook() {
 }
 
 fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {
+    // ratatui's resize() clears the backend and repaints every cell —
+    // drawing on each Resize step is the mid-drag flicker. Debounce:
+    // skip drawing while Resize events are still arriving; the reflowed
+    // stale frame shows during the drag and snaps clean on a 60ms pause.
+    let mut resize_deadline: Option<Instant> = None;
     loop {
-        term.draw(|f| draw(f, app))?;
-        if !event::poll(Duration::from_millis(250))? {
+        if resize_deadline.is_none_or(|t| t <= Instant::now()) {
+            term.draw(|f| draw(f, app))?;
+        }
+        // Wait at most until the resize deadline so a quiet period ends
+        // in a repaint after ~60ms, not a full idle tick.
+        let wait = resize_deadline
+            .map(|t| {
+                t.saturating_duration_since(Instant::now())
+                    .max(Duration::from_millis(1))
+            })
+            .unwrap_or(Duration::from_millis(250));
+        if !event::poll(wait)? {
             continue;
         }
-        // Drain the whole burst before the next draw — a resize drag
-        // queues a stream of Resize events, and repainting once per
-        // burst instead of once per event reduces mid-drag flicker.
         let mut quit = false;
         loop {
-            if let Event::Key(k) = event::read()? {
-                // Debug-only panic trigger: verifies the panic hook
-                // restores the terminal. Ctrl+P → panic.
-                #[cfg(debug_assertions)]
-                if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('p') {
-                    panic!("minipro-tui: debug panic trigger (terminal restore test)");
+            match event::read()? {
+                Event::Resize(_, _) => {
+                    resize_deadline = Some(Instant::now() + Duration::from_millis(60));
                 }
-                if app.handle_key(k) {
-                    quit = true;
+                Event::Key(k) => {
+                    // Debug-only panic trigger: verifies the panic hook
+                    // restores the terminal. Ctrl+P → panic.
+                    #[cfg(debug_assertions)]
+                    if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('p') {
+                        panic!("minipro-tui: debug panic trigger (terminal restore test)");
+                    }
+                    if app.handle_key(k) {
+                        quit = true;
+                    }
                 }
+                _ => {}
             }
             if !event::poll(Duration::ZERO)? {
                 break;
