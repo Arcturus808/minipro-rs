@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`minipro-tui` (work in progress)** — a new `minipro-tui` binary rendering the docs/TUI-PLAN.md three-pane layout in ratatui over mock state, including the custom ZIF socket diagram widget (pin-contact states, chip overlay with notch/dimple, per-model lever corner, top/bottom justification, empty-span collapsing). Hardware operations are not wired yet; the binary is a visual/UX proof. Requires Rust 1.88 and is excluded from the 1.85 MSRV check.
+- **`minipro-tui` (work in progress)** — a new `minipro-tui` binary rendering the docs/TUI-PLAN.md three-pane layout in ratatui: focus-aware panes, live device search against the real database, option checkboxes, help overlay, and the custom ZIF socket diagram widget (pin-contact states, chip overlay with notch/dimple, per-model lever corner, top/bottom justification, empty-span collapsing). Hardware operations are not wired yet. Requires Rust 1.88 and is excluded from the 1.85 MSRV check.
 
 ---
 

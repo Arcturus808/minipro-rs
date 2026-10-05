@@ -77,6 +77,8 @@ pub struct App {
     /// Option cursor: column and row within it.
     pub opt_col: usize,
     pub opt_row: usize,
+    /// Help overlay is open — swallows all keys until dismissed.
+    pub show_help: bool,
     /// Full device record, resolved on Enter; cleared when the cursor
     /// moves to a different device.
     pub selected: Option<Device>,
@@ -122,6 +124,7 @@ impl App {
             options: [true, false, false, false, true, true, false],
             opt_col: 0,
             opt_row: 0,
+            show_help: false,
             selected: None,
             paths,
             model,
@@ -202,6 +205,26 @@ impl App {
         if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
             return true;
         }
+        // Modal: help swallows every key except the close set.
+        if self.show_help {
+            if matches!(
+                k.code,
+                KeyCode::Esc
+                    | KeyCode::Enter
+                    | KeyCode::F(1)
+                    | KeyCode::Char('?')
+                    | KeyCode::Char('q')
+            ) {
+                self.show_help = false;
+            }
+            return false;
+        }
+        // F1 opens help even while the search box is editing — it can't
+        // be typed, so there's no ambiguity with query text.
+        if k.code == KeyCode::F(1) {
+            self.show_help = true;
+            return false;
+        }
         if self.search_editing {
             match k.code {
                 KeyCode::Char(c) => self.insert(c),
@@ -245,6 +268,7 @@ impl App {
         }
         match k.code {
             KeyCode::Char('q') | KeyCode::Esc => return true,
+            KeyCode::Char('?') => self.show_help = true,
             KeyCode::Tab => self.pane = self.pane.next(),
             KeyCode::BackTab => self.pane = self.pane.prev(),
             KeyCode::Char(c @ '1'..='8') => self.op = (c as usize) - ('1' as usize),
@@ -372,6 +396,31 @@ mod tests {
         a.handle_key(press);
         a.handle_key(release);
         assert_eq!(a.search, "x");
+    }
+
+    #[test]
+    fn help_opens_swallows_and_closes() {
+        let mut a = app();
+        a.handle_key(key(KeyCode::Char('?')));
+        assert!(a.show_help);
+        // While open, navigation keys are swallowed — cursor must not move.
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.cursor(), 0);
+        // 'q' closes the overlay rather than quitting.
+        assert!(!a.handle_key(key(KeyCode::Char('q'))));
+        assert!(!a.show_help);
+    }
+
+    #[test]
+    fn f1_opens_help_while_search_editing() {
+        let mut a = app();
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::F(1)));
+        assert!(a.show_help);
+        a.handle_key(key(KeyCode::Esc));
+        assert!(!a.show_help);
+        // Search is still editing afterwards — F1 didn't leave the box.
+        assert!(a.search_editing);
     }
 
     #[test]

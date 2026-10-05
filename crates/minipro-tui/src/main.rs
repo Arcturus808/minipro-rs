@@ -22,7 +22,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Gauge, HighlightSpacing, List, ListItem, Paragraph, Tabs},
+    widgets::{Block, BorderType, Clear, Gauge, HighlightSpacing, List, ListItem, Paragraph, Tabs},
     Frame, Terminal,
 };
 use zif::{Justify, Lever, ZifDiagram};
@@ -144,6 +144,10 @@ fn draw(f: &mut Frame, app: &mut App) {
     center_pane(f, h[2], app);
     right_pane(f, h[4], app);
     keybar(f, v[2]);
+
+    if app.show_help {
+        help_overlay(f, area);
+    }
 }
 
 fn sp(s: impl Into<String>, style: Style) -> Span<'static> {
@@ -503,6 +507,62 @@ fn log_line(ts: &'static str, msg: &'static str, style: Style) -> Line<'static> 
         Span::raw(" "),
         Span::styled(msg, style),
     ])
+}
+
+/// Centered help modal — the first overlay; settings/confirm dialogs
+/// will reuse this pattern. Lists only keys that are actually bound.
+fn help_overlay(f: &mut Frame, area: Rect) {
+    let w = 56u16.min(area.width.saturating_sub(4));
+    let h = 21u16.min(area.height.saturating_sub(2));
+    let r = Rect::new(
+        area.x + area.width.saturating_sub(w) / 2,
+        area.y + area.height.saturating_sub(h) / 2,
+        w,
+        h,
+    );
+    f.render_widget(Clear, r);
+    let row = |keys: &'static str, desc: &'static str| {
+        Line::from(vec![
+            Span::raw("   "),
+            sp(format!("{keys:<16}"), theme::accent()),
+            sp(desc, theme::text()),
+        ])
+    };
+    let section = |t: &'static str| Line::from(vec![Span::raw(" "), sp(t, theme::accent_bold())]);
+    let lines = vec![
+        Line::default(),
+        section("Global"),
+        row("q / Ctrl+C", "quit"),
+        row("? / F1", "this help · close"),
+        row("Tab / S-Tab", "cycle panes"),
+        row("Esc", "back / quit"),
+        Line::default(),
+        section("Devices"),
+        row("/", "edit search (chars insert)"),
+        row("Esc · Enter", "leave search · Bksp on empty exits"),
+        row("↑ ↓ PgUp PgDn", "move cursor"),
+        row("Home · End", "first · last match"),
+        row("Enter", "select device → options"),
+        Line::default(),
+        section("Operations"),
+        row("1-8", "pick operation"),
+        row("↑ ↓ ← →", "move option cursor"),
+        row("Space · Enter", "toggle option"),
+        Line::default(),
+        Line::from(Span::styled(
+            "  Esc / q / ? / Enter / F1 — close",
+            theme::faint(),
+        )),
+    ];
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(theme::accent())
+                .title(Span::styled(" Help — keys ", theme::accent_bold())),
+        ),
+        r,
+    );
 }
 
 fn keybar(f: &mut Frame, area: Rect) {
