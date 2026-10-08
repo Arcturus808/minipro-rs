@@ -75,15 +75,78 @@ Note the pull-up/pull-down opcodes are **swapped** between models:
 T48 `0x31`=pull-ups/`0x32`=pull-downs vs TL866II+ `0x31`=pull-downs/
 `0x32`=pull-ups.
 
-**Divergence warning:** upstream dispatches T48-specific functions for
-nearly every operation (`t48_set_zif_direction/state`,
-`t48_get_zif_state`, `t48_set_pin_drivers`, `t48_set_voltages`,
-`t48_begin_transaction` SPI-clock fields at `msg[24]`/`msg[28]`, OVC trip
-level at `msg[0x34]`) and provides **no** `pin_test` for T48. The shared
-implementation remains in use for those paths — if T48 pin-contact tests
-(`-z`), SPI clock behaviour, or voltage overrides misbehave on real
-hardware, port the corresponding `t48.c` functions rather than assuming
-TL866II+ layout.
+**Divergence warning:** upstream still dispatches T48-specific pin-driver
+functions that we have not ported (`t48_set_zif_direction/state`,
+`t48_get_zif_state`, `t48_set_pin_drivers`, `t48_set_voltages`, the OVC
+trip level at `msg[0x34]`). The shared TL866II+ implementation remains in
+use for those paths — if ZIF pin state/direction or voltage overrides
+misbehave on real T48 hardware, port the corresponding `t48.c` functions
+rather than assuming TL866II+ layout. (`t48_begin_transaction` SPI-clock
+fields and the read/write payload path have since been ported — see the
+next entry.)
+
+## T48 reads/writes > 64 bytes stall — payload must use EP2 only (fixed)
+
+Symptom: `Protocol error: hardware fault or protocol violation` (or
+`transfer was cancelled`) on the first "Reading Code" block for any T48
+chip whose `read_buffer_size` exceeds 64 bytes (e.g. ATMEGA328P@DIP28 at
+`0x100`, BY25Q128@SOIC8 at `0x1000`), while a chip with `read_buffer_size`
+`0x40` (ATTINY85) read fine.
+
+**Root cause:** for payloads larger than 64 bytes the TL866II+ firmware
+interleaves the transfer across two bulk endpoints (EP2 + EP3), so the
+shared code submitted concurrent `bulk_in`/`bulk_out` transfers on both.
+The T48 firmware never services the EP3 endpoint during read/write block
+operations — upstream `t48_read_block` calls `read_payload2(..., 0)` and
+`t48_write_block` calls `write_payload2(..., write_buffer_size, 0)`, where
+`limit == 0` means "single endpoint, EP2 only". Pending EP3 transfers on
+T48 stall (`Fault`) or sit unsubmitted and get torn down (`Cancelled`).
+
+**Fix:** when `is_t48` is set, `read_block` reads every page type over
+EP2-IN only via `read_payload_limit(len, 0)` — including MP_USER, which
+the TL866II+ reads over the command endpoint instead — and `write_block`
+always sends an 8-byte header on EP1 followed by a `write_buffer_size`
+EP2-OUT payload (a short final block is padded; upstream transfers
+`write_buffer_size` bytes regardless of `ds->size`). `write_payload_limit`
+now treats `limit == 0` as single-EP2-OUT like upstream (`!limit`);
+`read_payload_limit` already handled it.
+
+Related fixes in the same area (shared TL866II+/T48 code had drifted
+from upstream packet layouts; upstream's `t48.c` and `tl866iiplus.c`
+versions of these are byte-identical):
+
+- `read_fuses`/`write_fuses`: `protocol_id` at `msg[1]`, `items_count` at
+  `msg[2]`, `code_memory_size` (`- 0x38` on write — upstream notes a
+  firmware quirk) at `msg[4..8]`, fuse data at `msg[8]`; the response's
+  first 8 bytes are a header, so fuse data is returned starting at
+  `resp[8]`. `write_fuses` does not read a response.
+- `erase`: `num_fuses` at `msg[2]`, PLD flag at `msg[4]`, 15-byte packet.
+- `protect_off`/`protect_on`: command only — the firmware sends no
+  response, and reading one could block for the full transfer timeout.
+- `get_ovc_status`: `error`=`msg[0]`, `c1`/`c2`=LE16 at `msg[2]`/`msg[4]`,
+  `address`=LE32 at `msg[8]`, OVC flag at `msg[12]` (was parsed at wrong
+  offsets).
+- `read_jedec_row`/`write_jedec_row`: commands are `0x1D`/`0x1E` with
+  `protocol_id` at `msg[1]`, row size in bits at `msg[2]`, row at
+  `msg[4]`, flags at `msg[5]`; row data at `msg[8]` on write and at
+  `resp[0]` on read.
+- `read_calibration`: byte count is LE16 at `msg[2..4]` in a 64-byte
+  command.
+- `unlock_tsop48`: a 48-byte packet — 8 random bytes at `msg[8..16]` with
+  a CRC16 packed into `msg[10]`/`msg[12]` and the original bytes echoed to
+  `msg[16]`/`msg[17]`; reads an 8-byte status.
+- `get_system_info`: the request is a 5-byte command and the response can
+  be 80 bytes; T48/T56/T76 use a shifted field layout (`device_code` at
+  `resp[24]`, `serial_number` at `resp[32]`, `hardware_version` reported
+  as 0) vs TL866II+ (`8`/`16`/`40`).
+- `begin_transaction` (T48): `msg[24] = 1` enables the SPI clock override
+  at `msg[28]` when `can_adjust_clock` is set — without it `--speed` was
+  silently ignored on T48.
+- `read_block`/`write_block` command byte for MP_USER is `0x0B`/`0x0A`
+  (`READ/WRITE_USER_DATA`), not the fuse `READ/WRITE_USER` (`0x06`/`0x07`).
+- `pin_test`, `unlock_tsop48`, and `read_calibration` have no upstream
+  T48 handler and now return `UnsupportedOperation` on T48 instead of
+  running TL866II+ commands against different hardware.
 
 ## `do_write` called `erase_chip` before `begin_transaction`
 

@@ -42,6 +42,8 @@ const CMD_READ_USER: u8 = 0x06;
 const CMD_WRITE_USER: u8 = 0x07;
 const CMD_READ_FUSES: u8 = 0x08;
 const CMD_WRITE_FUSES: u8 = 0x09;
+const CMD_WRITE_USER_DATA: u8 = 0x0A;
+const CMD_READ_USER_DATA: u8 = 0x0B;
 const CMD_WRITE_CODE: u8 = 0x0C;
 const CMD_READ_CODE: u8 = 0x0D;
 const CMD_ERASE: u8 = 0x0E;
@@ -52,6 +54,8 @@ const CMD_READ_LOCK: u8 = 0x15;
 const CMD_READ_CALIB: u8 = 0x16;
 const CMD_PROTECT_OFF: u8 = 0x18;
 const CMD_PROTECT_ON: u8 = 0x19;
+const CMD_READ_JEDEC: u8 = 0x1D;
+const CMD_WRITE_JEDEC: u8 = 0x1E;
 const CMD_SET_VCC_VOLTAGE: u8 = 0x1B;
 const CMD_SET_VPP_VOLTAGE: u8 = 0x1C;
 const CMD_LOGIC_IC_TEST: u8 = 0x28;
@@ -605,25 +609,23 @@ impl Default for Tl866iiPlusProtocol {
 
 // ── System info ──────────────────────────────────────────────────────────────
 
-/// Parse the 64-byte system-info response.
+/// Parse the system-info response (up to 80 bytes).
 ///
-/// Layout (from tl866iiplus.md):
+/// Upstream `minipro_get_system_info` sends a 5-byte command and receives
+/// into an 80-byte buffer.  Field layout depends on the model reported in
+/// byte 6 (from minipro.c):
+///
 /// ```text
-/// u8   echo (0x00)
-/// u8   device_status
-/// u16  report_size
-/// u8   firmware_minor
-/// u8   firmware_major
-/// u16  device_version   (5 = TL866II+, 7 = T48, 6 = T56, 8 = T76)
-/// u8[8]  device_code
-/// u8[24] serial_number
-/// u8   hardware_version
+/// TL866II+:  device_code @ 8 (8 B),  serial @ 16 (20 B), hw_version @ 40
+/// T48/T56/T76: mfg_date @ 8 (16 B), device_code @ 24 (8 B),
+///              serial @ 32 (24 B), voltage @ 56 (4 B), usb_speed @ 60,
+///              hw_version reported as 0
 /// ```
 pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
-    let mut cmd = [0u8; 64];
+    let mut cmd = [0u8; 5];
     cmd[0] = CMD_GET_INFO;
     usb.msg_send(&cmd)?;
-    let resp = usb.msg_recv(64)?;
+    let resp = usb.msg_recv(80)?;
 
     if resp.len() < 41 {
         return Err(MiniproError::ResponseTooShort {
@@ -651,14 +653,27 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
         _ => crate::device::ProgrammerModel::Tl866iiPlus,
     };
 
-    let device_code = String::from_utf8_lossy(&resp[8..16])
+    // T48/T56/T76 shift the identification fields by 16 bytes (the first
+    // 16 bytes after the header carry the manufacture date instead).
+    let (dev_off, serial_off, serial_len, hw_off) = match model {
+        crate::device::ProgrammerModel::Tl866iiPlus => (8, 16, 20, Some(40)),
+        _ => (24, 32, 24, None),
+    };
+    let need = serial_off + serial_len;
+    if resp.len() < need {
+        return Err(MiniproError::ResponseTooShort {
+            expected: need,
+            actual: resp.len(),
+        });
+    }
+
+    let device_code = String::from_utf8_lossy(&resp[dev_off..dev_off + 8])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
-    // C code: memcpy(serial_number, msg + 16, 20) — 20 bytes, not 24
-    let serial_number = String::from_utf8_lossy(&resp[16..36])
+    let serial_number = String::from_utf8_lossy(&resp[serial_off..serial_off + serial_len])
         .trim_end_matches(|c: char| c.is_control())
         .to_string();
-    let hardware_version = resp[40];
+    let hardware_version = hw_off.map(|o| resp[o]).unwrap_or(0);
 
     let firmware_str = format!("{:02}.{}.{:02}", hardware_version, fw_major, fw_minor);
 
@@ -729,6 +744,13 @@ impl Protocol for Tl866iiPlusProtocol {
         if device.voltages.raw & 0x8000_0000 != 0 {
             pkt[22] = ((device.voltages.raw >> 16) & 0x0f) as u8;
         }
+        // T48 only (upstream t48_begin_transaction): msg[24]=1 enables the
+        // SPI-clock override at msg[28].  Without it --speed is silently
+        // ignored (e.g. in-circuit SPI flashes that need a slower clock).
+        if self.is_t48 && device.flags.can_adjust_clock {
+            pkt[24] = 1;
+            pkt[28] = device.spi_clock;
+        }
         le32(&mut pkt[40..44], device.package_details.raw);
         le16(&mut pkt[44..46], device.read_buffer_size);
         le32(&mut pkt[56..60], device.flags.raw);
@@ -754,6 +776,14 @@ impl Protocol for Tl866iiPlusProtocol {
             &cmd
         );
         usb.msg_send(&cmd)?;
+        if self.is_t48 {
+            // T48 (upstream t48_read_block): read_payload2(..., limit 0) —
+            // every page type, MP_USER included, is read over EP2-IN only.
+            // The T48 firmware never services EP3-IN during reads, so the
+            // dual-endpoint path stalls/cancels for blocks > 64 bytes.
+            ds.data = usb.read_payload_limit(ds.data.len(), 0)?;
+            return Ok(());
+        }
         // MP_USER (data_memory2) is always read over the command endpoint (EP1).
         if ds.page_type == MP_USER {
             ds.data = usb.msg_recv(ds.data.len())?;
@@ -768,8 +798,24 @@ impl Protocol for Tl866iiPlusProtocol {
         Ok(())
     }
 
-    fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
+    fn write_block(&self, usb: &UsbDevice, device: &Device, ds: &DataSet) -> Result<()> {
         let cmd = write_cmd(ds);
+        if self.is_t48 {
+            // T48 (upstream t48_write_block): always an 8-byte header on EP1,
+            // then the payload on EP2-OUT only — even for small writes (no
+            // combined header+payload message like the TL866II+ path).
+            // Upstream transfers device->write_buffer_size bytes regardless
+            // of ds->size; pad a short final block so the transfer length
+            // matches what the firmware expects.
+            usb.msg_send(&cmd)?;
+            let wbs = device.write_buffer_size as usize;
+            if wbs > ds.data.len() {
+                let mut payload = ds.data.to_vec();
+                payload.resize(wbs, device.blank_value as u8);
+                return usb.write_payload_limit(&payload, 0);
+            }
+            return usb.write_payload_limit(&ds.data, 0);
+        }
         // Small writes (< 57 bytes payload): combine header + payload in a
         // single EP1 message (8 + payload <= 64).  Matches C tl866iiplus_write_block.
         if ds.data.len() < 57 {
@@ -798,7 +844,8 @@ impl Protocol for Tl866iiPlusProtocol {
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_READ_CHIP_ID;
         usb.msg_send(&pkt)?;
-        let resp = usb.msg_recv(64)?;
+        // Upstream receives 6 bytes on TL866II+, 32 on T48.
+        let resp = usb.msg_recv(if self.is_t48 { 32 } else { 6 })?;
         // ID type is in resp[0], ID bytes start at resp[2].
         // Length is chip_id_bytes_count (1-4), endianness depends on type.
         let id_length = device.chip_id_bytes_count.min(4) as usize;
@@ -829,7 +876,7 @@ impl Protocol for Tl866iiPlusProtocol {
     fn read_fuses(
         &self,
         usb: &UsbDevice,
-        _device: &Device,
+        device: &Device,
         fuse_type: u8,
         length: usize,
         items_count: u8,
@@ -840,18 +887,24 @@ impl Protocol for Tl866iiPlusProtocol {
             0x02 => CMD_READ_LOCK,  // MP_FUSE_LOCK
             _ => CMD_READ_FUSES,
         };
+        // Upstream tl866iiplus_read_fuses / t48_read_fuses (identical):
+        // msg[1]=protocol_id, msg[2]=items_count, msg[4..8]=code_memory_size.
         let mut pkt = [0u8; 8];
         pkt[0] = cmd_byte;
-        pkt[1] = length as u8;
+        pkt[1] = device.protocol_id;
         pkt[2] = items_count;
+        le32(&mut pkt[4..8], device.code_memory_size);
         usb.msg_send(&pkt)?;
-        usb.msg_recv(64)
+        let resp = usb.msg_recv(64)?;
+        // Fuse data starts at resp[8]; the response has an 8-byte header.
+        let start = 8.min(resp.len());
+        Ok(resp[start..].iter().copied().take(length).collect())
     }
 
     fn write_fuses(
         &self,
         usb: &UsbDevice,
-        _device: &Device,
+        device: &Device,
         fuse_type: u8,
         length: usize,
         items_count: u8,
@@ -863,100 +916,150 @@ impl Protocol for Tl866iiPlusProtocol {
             0x02 => CMD_WRITE_LOCK,
             _ => CMD_WRITE_FUSES,
         };
-        let mut pkt = vec![0u8; 64];
+        // Upstream tl866iiplus_write_fuses / t48_write_fuses (identical):
+        // msg[1]=protocol_id, msg[2]=items_count,
+        // msg[4..8]=code_memory_size - 0x38 (upstream comment: "firmware bug?"),
+        // fuse data at msg[8], full 64-byte packet, no response read.
+        let mut pkt = [0u8; 64];
         pkt[0] = cmd_byte;
-        pkt[1] = length as u8;
+        pkt[1] = device.protocol_id;
         pkt[2] = items_count;
-        let copy_len = data.len().min(61);
-        pkt[3..3 + copy_len].copy_from_slice(&data[..copy_len]);
-        usb.msg_send(&pkt)?;
-        usb.msg_recv(64)?;
-        Ok(())
+        le32(&mut pkt[4..8], device.code_memory_size.wrapping_sub(0x38));
+        let n = length.min(data.len()).min(56);
+        pkt[8..8 + n].copy_from_slice(&data[..n]);
+        usb.msg_send(&pkt)
     }
 
     fn read_calibration(&self, usb: &UsbDevice, size: usize) -> Result<Vec<u8>> {
-        let mut pkt = [0u8; 8];
+        // Upstream maps no read_calibration handler for the T48.
+        if self.is_t48 {
+            return Err(MiniproError::UnsupportedOperation);
+        }
+        // Upstream tl866iiplus_read_calibration: length is a LE16 at
+        // msg[2..4], a full 64-byte command is sent, and exactly `size`
+        // bytes are received.
+        let mut pkt = [0u8; 64];
         pkt[0] = CMD_READ_CALIB;
-        pkt[1] = size as u8;
+        le16(&mut pkt[2..4], size as u16);
         usb.msg_send(&pkt)?;
-        usb.msg_recv(64)
+        usb.msg_recv(size)
     }
 
     fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
-        let mut pkt = [0u8; 64];
+        // Upstream tl866iiplus_erase / t48_erase (identical): num_fuses at
+        // msg[2], pld flag at msg[4], 15-byte command packet.
+        let mut pkt = [0u8; 15];
         pkt[0] = CMD_ERASE;
-        pkt[1] = num_fuses;
-        pkt[2] = is_pld as u8;
+        pkt[2] = num_fuses;
+        pkt[4] = is_pld as u8;
         usb.msg_send(&pkt)?;
         usb.msg_recv(64)?;
         Ok(())
     }
 
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
+    fn read_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &mut JedecSet) -> Result<()> {
+        // Upstream tl866iiplus_read_jedec_row / t48_read_jedec_row
+        // (identical): msg[1]=protocol_id, msg[2]=row size in bits,
+        // msg[4]=row, msg[5]=flags; the response carries the packed row
+        // data starting at msg[0].
         let mut pkt = [0u8; 8];
-        pkt[0] = 0x0A; // read data2 payload
-        pkt[1] = js.row;
-        pkt[2] = js.flags;
-        pkt[3] = js.set_type;
+        pkt[0] = CMD_READ_JEDEC;
+        pkt[1] = device.protocol_id;
+        pkt[2] = (js.data.len() * 8).min(255) as u8;
+        pkt[4] = js.row;
+        pkt[5] = js.flags;
         usb.msg_send(&pkt)?;
-        js.data = usb.read_payload_limit(js.data.len(), js.data.len())?;
+        let resp = usb.msg_recv(32)?;
+        let byte_len = js.data.len();
+        js.data = resp[..byte_len.min(resp.len())].to_vec();
         Ok(())
     }
 
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
-        let mut pkt = [0u8; 8];
-        pkt[0] = 0x0B; // write data2 payload
-        pkt[1] = js.row;
-        pkt[2] = js.flags;
-        pkt[3] = js.set_type;
-        usb.msg_send(&pkt)?;
-        usb.write_payload(&js.data)?;
-        usb.msg_recv(64)?;
-        Ok(())
+    fn write_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &JedecSet) -> Result<()> {
+        // Upstream tl866iiplus_write_jedec_row / t48_write_jedec_row
+        // (identical): same header as read, row data at msg[8], 64-byte
+        // packet, no response read.
+        let mut pkt = [0u8; 64];
+        pkt[0] = CMD_WRITE_JEDEC;
+        pkt[1] = device.protocol_id;
+        pkt[2] = (js.data.len() * 8).min(255) as u8;
+        pkt[4] = js.row;
+        pkt[5] = js.flags;
+        let n = js.data.len().min(56);
+        pkt[8..8 + n].copy_from_slice(&js.data[..n]);
+        usb.msg_send(&pkt)
     }
 
     fn protect_off(&self, usb: &UsbDevice) -> Result<()> {
+        // Upstream sends the command only — no response is read.
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_PROTECT_OFF;
-        usb.msg_send(&pkt)?;
-        usb.msg_recv(64)?;
-        Ok(())
+        usb.msg_send(&pkt)
     }
 
     fn protect_on(&self, usb: &UsbDevice) -> Result<()> {
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_PROTECT_ON;
-        usb.msg_send(&pkt)?;
-        usb.msg_recv(64)?;
-        Ok(())
+        usb.msg_send(&pkt)
     }
 
     fn get_ovc_status(&self, usb: &UsbDevice, _device: &Device) -> Result<(OvcStatus, u8)> {
+        // Upstream tl866iiplus_get_ovc_status / t48_get_ovc_status
+        // (identical): 32-byte response; error=msg[0], c1=LE16@2,
+        // c2=LE16@4, address=LE32@8, ovc flag=msg[12].
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_REQUEST_STATUS;
         usb.msg_send(&pkt)?;
-        let resp = usb.msg_recv(64)?;
-        if resp.len() < 8 {
-            return Err(MiniproError::ResponseTooShort {
-                expected: 8,
-                actual: resp.len(),
-            });
-        }
-        let ovc_flag = resp[1];
+        let resp = usb.msg_recv(32)?;
+        // Upstream parses a zeroed 32-byte buffer — bytes beyond a short
+        // response read as 0 rather than raising an error.
+        let byte = |i: usize| resp.get(i).copied().unwrap_or(0);
+        let le16_at = |i: usize| u32::from(u16::from_le_bytes([byte(i), byte(i + 1)]));
+        let le32_at =
+            |i: usize| u32::from_le_bytes([byte(i), byte(i + 1), byte(i + 2), byte(i + 3)]);
         let status = OvcStatus {
-            error: resp[0],
-            address: u32::from_le_bytes([resp[2], resp[3], resp[4], resp[5]]),
-            c1: resp[6] as u32,
-            c2: resp[7] as u32,
+            error: byte(0),
+            c1: le16_at(2),
+            c2: le16_at(4),
+            address: le32_at(8),
         };
-        Ok((status, ovc_flag))
+        Ok((status, byte(12)))
     }
 
     fn unlock_tsop48(&self, usb: &UsbDevice) -> Result<u8> {
-        let mut pkt = [0u8; 8];
+        // Upstream maps no unlock_tsop48 handler for the T48.
+        if self.is_t48 {
+            return Err(MiniproError::UnsupportedOperation);
+        }
+        // Upstream tl866iiplus_unlock_tsop48 sends a 48-byte packet:
+        // 8 pseudo-random bytes at [8..16], a CRC16 of those bytes packed
+        // into msg[10]/msg[12], and the original random bytes at [10]/[12]
+        // echoed to msg[16]/msg[17] so the firmware can verify the CRC.
+        let mut pkt = [0u8; 48];
         pkt[0] = CMD_UNLOCK_TSOP48;
+        let mut seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos() ^ (d.as_secs() as u32))
+            .unwrap_or(0x9e37_79b9);
+        let mut crc: u16 = 0;
+        for b in pkt.iter_mut().take(16).skip(8) {
+            // xorshift32 — same role as upstream's rand() fill.
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            *b = seed as u8;
+            crc = crc.rotate_left(8);
+            crc ^= u16::from(*b);
+            crc ^= (crc & 0xFF) >> 4;
+            crc ^= crc << 12;
+            crc ^= (crc & 0xFF) << 5;
+        }
+        pkt[16] = pkt[10];
+        pkt[17] = pkt[12];
+        pkt[10] = crc as u8;
+        pkt[12] = (crc >> 8) as u8;
         usb.msg_send(&pkt)?;
-        let resp = usb.msg_recv(64)?;
+        let resp = usb.msg_recv(8)?;
         Ok(if resp.len() > 1 { resp[1] } else { 0 })
     }
 
@@ -1169,6 +1272,10 @@ impl Protocol for Tl866iiPlusProtocol {
         device: &Device,
         pin_map: &crate::database::PinMap,
     ) -> Result<crate::protocol::PinTestResult> {
+        // Upstream maps no pin_test handler for the T48.
+        if self.is_t48 {
+            return Err(MiniproError::UnsupportedOperation);
+        }
         pin_test_tl866(usb, device, pin_map)
     }
 
@@ -1185,7 +1292,8 @@ impl Protocol for Tl866iiPlusProtocol {
         msg[0] = CMD_AUTODETECT;
         msg[8] = id_type;
         usb.msg_send(&msg[..10])?;
-        let resp = usb.msg_recv(16)?;
+        // Upstream receives 16 bytes on TL866II+, 32 on T48.
+        let resp = usb.msg_recv(if self.is_t48 { 32 } else { 16 })?;
         if resp.len() < 5 {
             return Err(MiniproError::ResponseTooShort {
                 expected: 5,
@@ -1243,7 +1351,7 @@ fn read_cmd(ds: &DataSet) -> [u8; 8] {
     let cmd = match ds.page_type {
         MP_CODE => CMD_READ_CODE,
         MP_DATA => CMD_READ_DATA,
-        MP_USER => CMD_READ_USER,
+        MP_USER => CMD_READ_USER_DATA,
         _ => CMD_READ_CODE,
     };
     let len = ds.data.len() as u16;
@@ -1260,7 +1368,7 @@ fn write_cmd(ds: &DataSet) -> [u8; 8] {
     let cmd = match ds.page_type {
         MP_CODE => CMD_WRITE_CODE,
         MP_DATA => CMD_WRITE_DATA,
-        MP_USER => CMD_WRITE_USER,
+        MP_USER => CMD_WRITE_USER_DATA,
         _ => CMD_WRITE_CODE,
     };
     let len = ds.data.len() as u16;

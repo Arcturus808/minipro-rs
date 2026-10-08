@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`minipro -t` panic and bogus results on T48** — the hardware self-test used the TL866II+ pin tables and byte-per-pin parsing, but the T48 has its own pin-driver domain (56 drivers, bit-packed pin states, swapped pull-up/pull-down opcodes, different self-test tables). This reported every VPP pin as Bad and panicked with `index out of bounds` on pin 9. Ported the upstream `t48_hardware_check` — VPP/VCC/GND driver tests, logic-level drive tests at both levels, cross-short detection, and the overcurrent-protection tail. Output now matches upstream (`17 VPP / 34 VCC / 35 GND / 2×53 logic pins` and per-pin `state is Good/Bad` lines).
 
+- **T48 reads/writes over 64 bytes failed with USB errors** — reads and writes of chips with `read_buffer_size`/`write_buffer_size` > 64 bytes (e.g. ATMEGA328P@DIP28, BY25Q128@SOIC8) died on the first block with `hardware fault or protocol violation` or `transfer was cancelled`, because the code used the TL866II+ dual-endpoint (EP2+EP3) payload path which the T48 firmware never services. T48 now routes all block payloads through EP2 only, matching upstream `t48_read_block`/`t48_write_block` (`read_payload2`/`write_payload2` with limit 0). Small chips (≤64-byte buffers, e.g. ATTINY85) already worked and are unaffected.
+
+- **T48 `--speed` was silently ignored** — `begin_transaction` never sent the SPI-clock fields; upstream `t48_begin_transaction` sets `msg[24]=1` + `msg[28]=spi_clock` for chips with `can_adjust_clock`. Matters for in-circuit SPI flashes (e.g. BY25Q128 needing `--speed 3`).
+
+- **T48 system info showed wrong device code/serial** — T48 (and T56/T76) use a shifted response layout (`device_code` at offset 24, `serial_number` at 32, hardware version reported as 0); all non-TL866A models were parsed with TL866II+ offsets. The request is now the upstream 5-byte command with an 80-byte response buffer.
+
+- **Several TL866II+/T48 packet layouts diverged from upstream** — fixed to match `tl866iiplus.c`/`t48.c` (identical between the two): fuse reads/writes now put `protocol_id`/`items_count`/`code_memory_size` in the header and use data offset 8 (fuse responses were being parsed 8 bytes early); `erase` uses `msg[2]`/`msg[4]` fields in a 15-byte packet; `protect_off`/`protect_on` no longer wait for a response the firmware never sends; `get_ovc_status` parses `ovc`/`c1`/`c2`/`address` at upstream offsets; JEDEC row commands use `0x1D`/`0x1E` with the upstream header; `read_calibration` sends the length as LE16 at `msg[2]`; `unlock_tsop48` sends the upstream 48-byte packet with CRC16; MP_USER block reads/writes use command `0x0B`/`0x0A` instead of the fuse commands `0x06`/`0x07`. On T48, `pin_test`, `unlock_tsop48`, and `read_calibration` now report "unsupported" — upstream maps no T48 handler for them.
+
 ---
 
 ## [0.9.0] - 2026-09-25

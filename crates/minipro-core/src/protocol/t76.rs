@@ -1135,7 +1135,7 @@ impl Protocol for T76Protocol {
         Ok(())
     }
 
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
+    fn read_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &mut JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
         let mut msg = [0u8; 8];
         msg[0] = CMD_READ_JEDEC;
@@ -1152,7 +1152,7 @@ impl Protocol for T76Protocol {
         Ok(())
     }
 
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
+    fn write_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
         let byte_len = (bits as usize).div_ceil(8);
         let mut msg = [0u8; 64];
