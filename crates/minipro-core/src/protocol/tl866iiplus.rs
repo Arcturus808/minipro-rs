@@ -575,11 +575,25 @@ fn init_zif(usb: &UsbDevice, pullup: u8) -> Result<()> {
     Ok(())
 }
 
-pub struct Tl866iiPlusProtocol;
+pub struct Tl866iiPlusProtocol {
+    /// True when this instance drives a T48 (re-exported as `T48Protocol`).
+    ///
+    /// The T48 shares the TL866II+ command set for chip operations but has
+    /// its own pin-driver domain — 56 drivers, bit-packed pin-state reads,
+    /// and different pin tables (upstream `t48.c`).  Operations that
+    /// diverge branch on this flag; currently only `hardware_check`.
+    is_t48: bool,
+}
 
 impl Tl866iiPlusProtocol {
     pub fn new() -> Self {
-        Self
+        Self { is_t48: false }
+    }
+
+    /// Constructor for the T48 (`protocol/t48.rs` re-exports this type as
+    /// `T48Protocol`; `handle.rs` constructs it via this method).
+    pub fn new_t48() -> Self {
+        Self { is_t48: true }
     }
 }
 
@@ -947,6 +961,11 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn hardware_check(&self, usb: &UsbDevice) -> Result<()> {
+        // The T48 has its own pin-driver layout and self-test protocol
+        // (upstream t48_hardware_check) — a different implementation.
+        if self.is_t48 {
+            return super::t48::hardware_check(self, usb);
+        }
         let mut msg = [0u8; 48];
         let mut errors: u32 = 0;
 

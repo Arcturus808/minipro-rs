@@ -12,7 +12,7 @@ use crate::{
     device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
     error::{MiniproError, Result},
     protocol::{
-        t48::T48Protocol,
+        t48::{T48Protocol, MIN_FIRMWARE_T48},
         t56::{T56Protocol, MIN_FIRMWARE_T56},
         t76::{T76Protocol, MIN_FIRMWARE_T76},
         tl866a::{self, Tl866aProtocol},
@@ -73,7 +73,8 @@ impl MiniproHandle {
         let min_fw = match info.model {
             ProgrammerModel::T56 => MIN_FIRMWARE_T56,
             ProgrammerModel::T76 => MIN_FIRMWARE_T76,
-            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 => MIN_FIRMWARE,
+            ProgrammerModel::Tl866iiPlus => MIN_FIRMWARE,
+            ProgrammerModel::T48 => MIN_FIRMWARE_T48,
             _ => 0,
         };
         if min_fw > 0 && info.firmware < min_fw {
@@ -90,7 +91,7 @@ impl MiniproHandle {
 
         let protocol: Box<dyn Protocol> = match info.model {
             ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Box::new(Tl866aProtocol::new()),
-            ProgrammerModel::T48 => Box::new(T48Protocol::new()),
+            ProgrammerModel::T48 => Box::new(T48Protocol::new_t48()),
             ProgrammerModel::T56 => Box::new(T56Protocol::new()),
             ProgrammerModel::T76 => Box::new(T76Protocol::new()),
             _ => Box::new(Tl866iiPlusProtocol::new()),

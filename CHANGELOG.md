@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **T48 rejected at connect with "firmware too old"** — the firmware minimum check grouped the T48 with the TL866II+ minimum (`0x255`), but the T48 runs its own firmware line (latest `0x127` / 01.1.39), so every released T48 firmware was refused. The T48 now has its own minimum (`0`, no hard floor), matching upstream C minipro which warns on version mismatch but never refuses to connect.
+
+- **`minipro -t` panic and bogus results on T48** — the hardware self-test used the TL866II+ pin tables and byte-per-pin parsing, but the T48 has its own pin-driver domain (56 drivers, bit-packed pin states, swapped pull-up/pull-down opcodes, different self-test tables). This reported every VPP pin as Bad and panicked with `index out of bounds` on pin 9. Ported the upstream `t48_hardware_check` — VPP/VCC/GND driver tests, logic-level drive tests at both levels, cross-short detection, and the overcurrent-protection tail. Output now matches upstream (`17 VPP / 34 VCC / 35 GND / 2×53 logic pins` and per-pin `state is Good/Bad` lines).
+
 ---
 
 ## [0.9.0] - 2026-09-25
