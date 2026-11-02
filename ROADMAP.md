@@ -275,8 +275,11 @@ This is a living list of features and improvements planned for minipro-rs.
 
     **What we have:**
     - CLI flag `-a` / `--spi-autodetect` (with `auto_detect` alias)
-    - Protocol implementations for TL866A/CS and TL866II+ (firmware
-      command 0x37, 3-byte big-endian JEDEC ID parse)
+    - Protocol implementations for TL866A/CS, TL866II+, and T48
+      (firmware command 0x37, 3-byte big-endian JEDEC ID parse). The
+      T48 shares the II+ implementation and reads the correct 32-byte
+      response as of `fix/t48-read-path` (f41ce87) — hardware
+      validation still pending.
     - Operations layer `spi_autodetect()` and
       `spi_autodetect_and_lookup()` in `operations.rs`
     - Database lookup by JEDEC ID: `find_devices_by_chip_id()` in
@@ -313,6 +316,10 @@ This is a living list of features and improvements planned for minipro-rs.
        `t76_spi_autodetect()` uploads SPI25F11/SPI25F21 bitstream via
        `t76_send_bitstream()`, then sends 0x37. No trait override in
        our `t76.rs`.
+       **Request-length caveat:** upstream fixed this in commit
+       3e2f491 — the T76 firmware expects a **12-byte** 0x37 request,
+       not the 10-byte packet the other models use. Port the 12-byte
+       form directly rather than copying the T56/II+ packet layout.
        **Difficulty: Medium.** Same infrastructure as T56
        (`upload_bitstream_t76()`, `get_algorithm()`). Same
        `bitstream_uploaded` flag management concern. ~50 lines.
@@ -349,6 +356,26 @@ This is a living list of features and improvements planned for minipro-rs.
     Matt Brown's parallel NOR write implementation from the upstream C code.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
+
+  - [ ] **`-o ovc_level` — OVC trip-level override** — upstream added
+    this in 2026 (commits `1473189`, `7eeddba`): it raises the Vcc
+    current-limit trip point, which matters for in-circuit work where
+    the target board loads the VCC rail and trips the default limit
+    ("Overcurrent protection!").
+    - **T48/T56/TL866II+:** raw calibrated trip code as LE16 at
+      `msg[0x34]` in the 0x03 BEGIN_TRANS command (identical encoding
+      on all three — upstream verified against the vendor build).
+      Levels 1–9 map to 130/150/180/200/220/250/300/335/400 nominal
+      mA; 0 = firmware default.
+    - **T76:** takes the 1..9 level as an enum; firmware picks the
+      actual mA value itself.
+    - **Scope:** new `ovc_level` key in the `-o` override parser,
+      plumbing into `begin_transaction` for tl866iiplus.rs (T48 and
+      TL866II+) and the t56.rs/t76.rs equivalents, plus a GUI
+      advanced-override row if surfaced there.
+    - **Difficulty: Low-Medium** — mechanical plumbing; upstream's
+      comments document the raw table verbatim. Real-world relevance:
+      ICSP/in-circuit targets are exactly the scenario this exists for.
 
   ### Low — niche or deferred
 
