@@ -22,12 +22,13 @@
     "T76",
   ]);
 
-  // Pin test is supported on TL866II+ only. The C minipro maps no pin-test
-  // handler for the T48 — its ZIF pin-driver layout differs from the II+
-  // (the same reason the hardware self-test needed a separate port), so
-  // the II+ bit-banging commands (0x2D-0x36) don't apply. TL866A/CS and
-  // T56 are unsupported — the C minipro does not implement pin testing for
-  // either. T76 is FPGA-based with no dedicated contact-test bitstream;
+  // Pin test is implemented for TL866II+ only — the sole model upstream
+  // supports. The T48 has its own single-command pin-detect protocol
+  // (0x3E → per-pin contact bitmap, documented at
+  // proghq.org/wiki/XGecu_Protocol and used by XGPro's "Pin Detect") that
+  // upstream never implemented, so the II+ bit-banging commands
+  // (0x2D-0x36) don't apply. TL866A/CS and T56 are likewise unimplemented
+  // upstream. T76 is FPGA-based with no dedicated contact-test bitstream;
   // Matt Brown's t76-improvements branch discovered that its 0x3E command
   // is an adapter-init pin-driver configuration step, not a standalone
   // test — the xgecu-pro project confirmed on real hardware that it

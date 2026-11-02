@@ -155,6 +155,16 @@ versions of these are byte-identical):
   the fix every T48 operation would abort), and the autodetect
   pre-check, which upstream's `auto_detect` also runs on TL866II+ only
   (other models print "not supported" and continue).
+  Note this is "unimplemented upstream", not "impossible on T48":
+  XGPro's Pin Detect does run on T48 (vendor manual + XGecu forum
+  tid=802) via its own single-command protocol — `0x3E` carrying the
+  chip ID, returning a per-pin contact bitmap (ZIF1-40 + ISP1-16).
+  Documented with USB captures at https://proghq.org/wiki/XGecu_Protocol,
+  which is also the best existing reference for the rest of the T48
+  pin-control protocol (0x2D-0x36 command maps, 0x29 AUTO_FIND, 0x33
+  MEASURE_VOLTAGES, 0x24 adapter DRM). Do NOT conflate T48 `0x3E` with
+  T76 `0x3E` — the latter is an unrelated adapter-init command that
+  corrupts reads when run standalone (xgecu-pro finding).
 - `write_block` (TL866II+ path): upstream always transfers
   `write_buffer_size` payload bytes even when the final block is short
   (it reads ahead into padded file data). We now pad short blocks to

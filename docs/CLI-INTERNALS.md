@@ -25,10 +25,9 @@ the test runs standalone and exits.
 
 Model support and hardware caveats are documented in
 `docs/GUI-INTERNALS.md` under "Pin-contact test" (TL866II+ only — the
-T48's different ZIF pin-driver domain means the II+ bit-bang commands
-don't apply, matching upstream, which maps no T48 pin-test handler;
-T56/T76 must not run the 0x3E command standalone — see the xgecu-pro
-findings documented there). The `-z` handler prints from the returned
+T48 has its own 0x3E pin-detect protocol that upstream never
+implemented; T76's 0x3E is an unrelated adapter-init command that must
+not run standalone — see the xgecu-pro findings documented there). The `-z` handler prints from the returned
 `PinTestResult` struct, preserving the upstream "Bad contact on pin: N"
 output format — annotated with the corresponding ZIF socket pin
 (`Bad contact on pin: 4 (ZIF pin 24)`), resolved through

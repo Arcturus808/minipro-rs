@@ -148,26 +148,31 @@ the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
 if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
-**Model support:** TL866II+ only. The C `minipro` maps no pin-test
-handler for the T48 — its ZIF pin-driver domain differs from the II+
-(the same reason the T48 hardware self-test needed a separate port), so
-the II+ bit-banging commands (0x2D-0x36) do not apply; the backend
-returns `UnsupportedOperation` on T48 and the button is disabled.
-TL866A/CS, T56, and T76 are likewise unsupported — button is disabled
-with a tooltip. The C `minipro` source does not define the bit-banging
-commands (0x2D-0x36) for any of these models. The T76's `0x3E` command is an
-adapter-init pin-driver configuration step, not a standalone contact
-test — running it standalone returns meaningless data and can corrupt
-subsequent reads. This was discovered by Matt Brown's t76-improvements
-branch, whose t76_adapter_init() uses 0x3E to configure socket pin
-drivers before bitstream upload. The upstream C minipro's `t76_pin_test`
-receives the response but never parses it — `value` is initialized to 0
-and never updated from the response buffer, so every pin reports as bad.
-The xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
+**Model support:** TL866II+ only — the sole model upstream implements
+pin test for, so the backend returns `UnsupportedOperation` on every
+other model and the button is disabled with a tooltip.
+
+The T48's absence is an upstream gap, not a hardware limit: XGPro's
+"Pin Detect" works on T48 (vendor manual, XGecu forum tid=802) via its
+own single-command protocol — `0x3E` carrying the chip ID, returning a
+per-pin contact bitmap (ZIF1-40 + ISP1-16), documented with USB
+captures at https://proghq.org/wiki/XGecu_Protocol. Implementing it
+means sending one command and diffing the bitmap against the device's
+`pin_map` mask — tracked in ROADMAP.md.
+
+Do NOT run `0x3E` standalone on a T76: there it is an adapter-init
+pin-driver configuration step, not a contact test — running it
+standalone returns meaningless data and can corrupt subsequent reads.
+This was discovered by Matt Brown's t76-improvements branch, whose
+t76_adapter_init() uses 0x3E to configure socket pin drivers before
+bitstream upload. The upstream C minipro's `t76_pin_test` receives the
+response but never parses it — `value` is initialized to 0 and never
+updated from the response buffer, so every pin reports as bad. The
+xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
 on real hardware that it "measured nothing and corrupted every read."
-The T56 defines the same `0x3E` command but has no `t56_pin_test`
-function — it may share the T76's situation, but this has not been
-verified on T56 hardware.
+The T56 also defines `0x3E`, labelled pin detect on proghq like the
+T48's — but whether it is the pin-detect variant or the T76-style
+adapter-init is unverified on hardware.
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
