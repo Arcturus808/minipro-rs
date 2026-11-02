@@ -148,11 +148,14 @@ the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
 if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
-**Model support:** TL866II+ and T48 only. T48 inherits pin test
-from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
-TL866A/CS, T56, and T76 are not supported — button is disabled with a
-tooltip. The C `minipro` source does not define the bit-banging commands
-(0x2D-0x36) for any of these models. The T76's `0x3E` command is an
+**Model support:** TL866II+ only. The C `minipro` maps no pin-test
+handler for the T48 — its ZIF pin-driver domain differs from the II+
+(the same reason the T48 hardware self-test needed a separate port), so
+the II+ bit-banging commands (0x2D-0x36) do not apply; the backend
+returns `UnsupportedOperation` on T48 and the button is disabled.
+TL866A/CS, T56, and T76 are likewise unsupported — button is disabled
+with a tooltip. The C `minipro` source does not define the bit-banging
+commands (0x2D-0x36) for any of these models. The T76's `0x3E` command is an
 adapter-init pin-driver configuration step, not a standalone contact
 test — running it standalone returns meaningless data and can corrupt
 subsequent reads. This was discovered by Matt Brown's t76-improvements

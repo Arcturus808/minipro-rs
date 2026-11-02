@@ -566,10 +566,10 @@ fn do_operations(
             eprintln!("Pin test is not supported in ICSP mode.");
             return Ok(());
         }
-        if !matches!(
-            handle.info.model,
-            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-        ) {
+        // Upstream maps no pin-test handler for the T48 (its ZIF pin-driver
+        // layout differs from the TL866II+); the protocol returns
+        // UnsupportedOperation there.
+        if !matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) {
             eprintln!("Pin test is not supported on this programmer model.");
             return Ok(());
         }

@@ -22,18 +22,18 @@
     "T76",
   ]);
 
-  // Pin test is supported on TL866II+ and T48 only.
-  // T48 inherits from TL866II+ protocol (alias). TL866A/CS and T56 are
-  // not supported — the C minipro does not implement pin testing for
-  // either and neither defines the bit-banging commands (0x2D-0x36).
-  // T76 is FPGA-based with no dedicated contact-test bitstream; Matt
-  // Brown's t76-improvements branch discovered that its 0x3E command is
-  // an adapter-init pin-driver configuration step, not a standalone test.
-  // The xgecu-pro project confirmed on real hardware that it "measured
-  // nothing and corrupted every read."
+  // Pin test is supported on TL866II+ only. The C minipro maps no pin-test
+  // handler for the T48 — its ZIF pin-driver layout differs from the II+
+  // (the same reason the hardware self-test needed a separate port), so
+  // the II+ bit-banging commands (0x2D-0x36) don't apply. TL866A/CS and
+  // T56 are unsupported — the C minipro does not implement pin testing for
+  // either. T76 is FPGA-based with no dedicated contact-test bitstream;
+  // Matt Brown's t76-improvements branch discovered that its 0x3E command
+  // is an adapter-init pin-driver configuration step, not a standalone
+  // test — the xgecu-pro project confirmed on real hardware that it
+  // "measured nothing and corrupted every read."
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
-    "T48",
   ]);
 
   $: hardwareCheckSupported = $programmer

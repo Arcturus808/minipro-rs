@@ -834,7 +834,18 @@ impl Protocol for Tl866iiPlusProtocol {
             // (write_buffer_size=0x80) but not DIP24 (write_buffer_size=0x20,
             // which uses the small < 57 byte single-EP1 path).
             usb.msg_send(&cmd)?;
-            usb.write_payload(&ds.data)?;
+            // Upstream always transfers write_buffer_size payload bytes —
+            // on a short final block it reads that many from ds.data (into
+            // padded file data).  Pad a short block the same way so the
+            // EP2/EP3 transfer length matches what the firmware expects.
+            let wbs = device.write_buffer_size as usize;
+            if wbs > ds.data.len() {
+                let mut payload = ds.data.to_vec();
+                payload.resize(wbs, device.blank_value as u8);
+                usb.write_payload(&payload)?;
+            } else {
+                usb.write_payload(&ds.data)?;
+            }
         }
         // C tl866iiplus_write_block does not read a status response here.
         Ok(())

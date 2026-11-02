@@ -146,7 +146,29 @@ versions of these are byte-identical):
   (`READ/WRITE_USER_DATA`), not the fuse `READ/WRITE_USER` (`0x06`/`0x07`).
 - `pin_test`, `unlock_tsop48`, and `read_calibration` have no upstream
   T48 handler and now return `UnsupportedOperation` on T48 instead of
-  running TL866II+ commands against different hardware.
+  running TL866II+ commands against different hardware — the II+
+  pin-test bit-bang commands (0x2D-0x36) target the II+ pin-driver
+  domain, which the T48 does not share (the same reason `hardware_check`
+  needed its own port). Pin-test surfaces were aligned to TL866II+-only
+  accordingly: the `-z` model gate and help text, the GUI Diagnostics
+  button, the pre-operation "Pin Contact Check" (default-on — without
+  the fix every T48 operation would abort), and the autodetect
+  pre-check, which upstream's `auto_detect` also runs on TL866II+ only
+  (other models print "not supported" and continue).
+- `write_block` (TL866II+ path): upstream always transfers
+  `write_buffer_size` payload bytes even when the final block is short
+  (it reads ahead into padded file data). We now pad short blocks to
+  `write_buffer_size` with `blank_value` before the EP2/EP3 split so the
+  transfer length matches what the firmware drains — same fix as the
+  T48 path. A `ds->size < write_buffer_size` block ≥ 57 bytes would
+  previously have left the firmware waiting for the remainder.
+- `read_jedec_row`/`write_jedec_row` put the row size **in bits** at
+  `msg[2]`; we currently derive it as `data.len() * 8`, which overstates
+  by up to 7 bits when the JEDEC fuse count isn't byte-aligned (upstream
+  passes `js->size` verbatim). Harmless today — no caller constructs
+  `JedecSet` yet — but if JEDEC fuse-map write support is wired up
+  later, thread the exact fuse count through rather than inferring it
+  from the packed byte length.
 
 ## `do_write` called `erase_chip` before `begin_transaction`
 

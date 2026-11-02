@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Several TL866II+/T48 packet layouts diverged from upstream** — fixed to match `tl866iiplus.c`/`t48.c` (identical between the two): fuse reads/writes now put `protocol_id`/`items_count`/`code_memory_size` in the header and use data offset 8 (fuse responses were being parsed 8 bytes early); `erase` uses `msg[2]`/`msg[4]` fields in a 15-byte packet; `protect_off`/`protect_on` no longer wait for a response the firmware never sends; `get_ovc_status` parses `ovc`/`c1`/`c2`/`address` at upstream offsets; JEDEC row commands use `0x1D`/`0x1E` with the upstream header; `read_calibration` sends the length as LE16 at `msg[2]`; `unlock_tsop48` sends the upstream 48-byte packet with CRC16; MP_USER block reads/writes use command `0x0B`/`0x0A` instead of the fuse commands `0x06`/`0x07`. On T48, `pin_test`, `unlock_tsop48`, and `read_calibration` now report "unsupported" — upstream maps no T48 handler for them.
 
+- **TL866II+ writes could under-fill the final block** — upstream `tl866iiplus_write_block` always transfers `write_buffer_size` payload bytes on the EP2/EP3 split path even when the final block is short; the port sent only `ds->size`, which could leave the firmware waiting for the remainder and stall the write. Short final blocks are now padded to `write_buffer_size` with the blank value, matching both upstream and the T48 fix above.
+
+- **Pin-contact test is now TL866II+-only** — upstream maps no pin-test handler for the T48 (its ZIF pin-driver domain differs from the II+, the same reason the hardware self-test needed a separate port), so the previously shared II+ commands could not have produced valid results on a T48 anyway. The `-z` gate and help text, the GUI Diagnostics button, the default-on pre-operation "Pin Contact Check" (which would otherwise have aborted every T48 operation), and the SPI-autodetect pre-check are all TL866II+-only now, matching upstream.
+
 ---
 
 ## [0.9.0] - 2026-09-25
