@@ -540,6 +540,36 @@ This is a living list of features and improvements planned for minipro-rs.
   S29GL512N (parallel NOR), W29N02GZ and GD5F1GM7UEYIG (NAND), KLM8G1GEAC-B001
   (eMMC).
 
+- [ ] **T48 pin contact detection (`0x3E`)** — implement XGPro's "Pin
+  Detect" for the T48. Upstream C minipro only implements pin test for
+  the TL866II+ (per-pin bit-banging via 0x2D–0x36), so our pin test is
+  gated to that model — but the T48 has its own, simpler protocol.
+  - **Protocol** (documented with USB captures at
+    https://proghq.org/wiki/XGecu_Protocol):
+    `send 3E 00 <chip_id_lo> <chip_id_hi> 00 00 00 00` →
+    `recv 3E 00 <id_lo> <id_hi> 00 00 00 00 b0 b1 b2 b3 b4 b5 b6 00`
+    where b0–b4 are the ZIF1–ZIF40 contact bitmap (LSB-first) and
+    b5–b6 the ISP1–ISP16 bitmap. Single command — no bit-banging.
+  - **Evidence it works in XGPro:** the official T48/T76 user manual
+    documents Pin Detect, and XGecu forum tid=802 shows a real T48
+    "PIN 3 and 5 are not connected" error plus an admin noting
+    per-device pin sets ship in software updates — i.e. the
+    expected-pin data lives in the database, so comparing the bitmap
+    against our `pin_map` mask is the right model.
+  - **Implementation sketch:** T48 arm of `pin_test` in
+    `tl866iiplus.rs` — send chip ID, parse the 7-byte bitmap, flag as
+    bad any pin whose bit is clear but is expected by the device's
+    `pin_map` mask (bit semantics per proghq captures; sanity-check on
+    hardware). Reuse the existing `PinTestResult`/bad-pin/ZIF-
+    annotation plumbing, then un-gate the CLI `-z` and GUI surfaces.
+  - **Caution:** do NOT port this to T76 — the same opcode there is an
+    unrelated adapter-init command ("measured nothing and corrupted
+    every read" per xgecu-pro). T56 also lists `0x3E` on proghq but
+    which variant it is remains hardware-unverified.
+  - **Validation:** needs a T48 — seated chip reports all-good;
+    lifting a pin reports that pin.
+  - **Difficulty: Low** — one new protocol method plus gate changes.
+
 - [x] **Smart firmware diff** — compare firmware files or chip dumps with intelligent trailing-padding handling
   - **Problem:** Minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical. Naive "strip trailing 0xFF and compare" is insufficient because it silently ignores cases where the reference has real data beyond the dump length (truncated read, wrong chip selected) or where the dump has non-erased data beyond the reference (leftover from previous programming — forensically interesting).
   - **Algorithm: byte-aligned, three-way tail classification (not LCS)**
