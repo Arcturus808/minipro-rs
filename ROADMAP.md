@@ -1042,6 +1042,22 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** implemented
 
 
+- [ ] **Chip read-stability health check** — repeated reads to detect marginal/degrading chips
+  - **Motivation (real case, 2026-11):** a PM25LV010 read cleanly on a TL866A in June but produced non-deterministic corruption on *both* a TL866A and a T76 months later — scattered `0→1` bit flips, different garbage every run, ~34% of bytes wrong. The chip's output driver had degraded (flash contents likely still intact — the stored bits aren't what's failing, the MISO drive is). Diagnosis took cross-comparing four dumps; a built-in check would have surfaced "chip is marginal" in seconds and prevented "is the programmer broken?" confusion.
+  - **What it detects:** *read-path* instability — weak/floating DO drivers, marginal contacts, intermittent HOLD#/WP# faults. Signature: bytes that differ between repeated reads. What it does NOT detect: stored-cell charge loss (a uniformly-rotten cell reads consistently — needs a known-good reference) or deterministic decode bugs (also consistent).
+  - **Design sketch:**
+    - Core: `health_check(handle, device, passes) -> HealthReport` in `minipro-core::operations` — reads the full chip N times (default 5; user-configurable), keeping all N buffers.
+    - Analysis: per-byte disagree-count across buffers; report total unstable bytes, per-region instability map (e.g. 4 KiB buckets like the diff-map above), and a verdict: `Stable` (all N identical) / `Marginal` (few unstable bytes) / `Unstable` (widespread disagreement).
+    - Also run `get_chip_id` M times (cheap, ~0.1 s each) — a drifting JEDEC ID (e.g. `0x9d7c` → `0xdf7e`/`0x9f7e`) is itself diagnostic.
+    - Output (CLI `--health-check [N]`): `5/5 reads consistent — chip stable` or per-region table of disagree counts + worst offsets. Exit code reflects verdict for scripting.
+    - Output (GUI): "Health Check" button in Diagnostics panel; result panel with verdict badge + mini instability map (reuses diff/density styling).
+    - Bonus diagnostic value: a *consensus* buffer (per-byte majority vote across N reads) could be offered as a "best-effort recovery dump" — three reads + majority vote already reconstructs most marginal chips.
+    - Compare-with-reference mode: optionally diff each pass against a supplied file (extends `smart_diff` machinery) to also catch consistently-corrupt reads.
+  - **Edge cases:** N reads of large chips (16 MB NAND/eMMC) take time — cap default passes or read a sampled subset of regions; chips with volatile regions (status registers mirrored in the address space) need a mask mechanism; `--continue-on-error` behavior when a pass fails mid-read.
+  - **Difficulty: Low-Medium** — reuses existing `read_block`/`read_chip` plumbing; analysis is pure buffer math; no protocol work. GUI surface is the larger half.
+  - **Priority: medium** — genuinely unique diagnostic (neither XGPro nor upstream minipro has it); salvaging old/suspect chips is a common workflow for this tool's audience.
+  - **Status:** not started
+
 - [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI
   - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.
   - **Architecture note:** logic and data tables (including the Phase 4 ICSP wiring tables) live in `minipro-core`, so a TUI is an incremental frontend, not a rewrite — the wiring diagram would render as ASCII/box-drawing from the same `icsp.rs` table the CLI text output uses.
