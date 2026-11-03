@@ -55,6 +55,7 @@ const CMD_PROTECT_ON: u8 = 0x19;
 const CMD_READ_JEDEC: u8 = 0x1D;
 const CMD_WRITE_JEDEC: u8 = 0x1E;
 const CMD_WRITE_BITSTREAM: u8 = 0x26;
+const CMD_AUTODETECT: u8 = 0x37;
 const CMD_UNLOCK_TSOP48: u8 = 0x38;
 const CMD_REQUEST_STATUS: u8 = 0x39;
 const CMD_HARDWARE_CHECK: u8 = 0x3C;
@@ -969,6 +970,37 @@ impl Protocol for T76Protocol {
             u32::from_be_bytes(bytes) >> (8 * (4 - id_length))
         };
         Ok((id_type, chip_id))
+    }
+
+    fn upload_bitstream(&self, usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
+        upload_bitstream_t76(usb, bitstream, false)?;
+        self.bitstream_uploaded.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {
+        let mut msg = [0u8; 64];
+        msg[0] = CMD_AUTODETECT;
+        msg[8] = id_type;
+        // T76 expects a 12-byte request (upstream commit 3e2f491), not the
+        // 10-byte packet the TL866A/II+/T48 use.
+        let result = (|| {
+            usb.msg_send(&msg[..12])?;
+            let resp = usb.msg_recv(16)?;
+            if resp.len() < 5 {
+                return Err(MiniproError::ResponseTooShort {
+                    expected: 5,
+                    actual: resp.len(),
+                });
+            }
+            // Device ID is 3 bytes big-endian at resp[2..5]
+            Ok(((resp[2] as u32) << 16) | ((resp[3] as u32) << 8) | resp[4] as u32)
+        })();
+        // The loaded bitstream is the autodetect SPI one (SPI25F11/SPI25F21);
+        // force the next begin_transaction to re-upload the selected device's
+        // algorithm in case it differs (e.g. a NAND picked after autodetect).
+        self.bitstream_uploaded.store(false, Ordering::Relaxed);
+        result
     }
 
     fn read_fuses(

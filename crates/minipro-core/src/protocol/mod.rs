@@ -107,6 +107,15 @@ pub trait Protocol: Send + Sync {
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 
+    /// Upload an FPGA bitstream outside of `begin_transaction`.
+    ///
+    /// T56/T76 SPI autodetect needs the SPI bitstream (SPI25F11/SPI25F21)
+    /// loaded before the 0x37 command can run — the FPGA ships blank.
+    fn upload_bitstream(&self, usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
+        let _ = (usb, bitstream);
+        Err(crate::error::MiniproError::UnsupportedOperation)
+    }
+
     /// Read fuse / lock bytes.
     fn read_fuses(
         &self,

@@ -1387,7 +1387,40 @@ pub fn firmware_update(
 ///
 /// `id_type` selects the package: 0 = 8-pin SOP/DIP, 1 = 16-pin.
 /// Returns the 3-byte JEDEC manufacturer+device ID packed into a u32.
+///
+/// On T76 the SPI FPGA bitstream must be uploaded first — mirrors upstream
+/// `t76_spi_autodetect`: a synthetic device with `protocol_id=0x03` and
+/// variant `0x1100` (8-pin) or `0x2100` (16-pin) resolves `SPI25F11`/`SPI25F21`
+/// via the normal algorithm lookup, then the protocol impl sends 0x37.
 pub fn spi_autodetect(handle: &mut MiniproHandle, id_type: u8) -> Result<u32> {
+    if handle.info.model == ProgrammerModel::T76 {
+        let algo_path = handle
+            .db_paths
+            .as_ref()
+            .and_then(|p| p.algorithms.as_ref())
+            .ok_or_else(|| {
+                MiniproError::Protocol(
+                    "algorithm.xml not found — required to upload the SPI \
+                     autodetect bitstream on T76"
+                        .into(),
+                )
+            })?;
+        let device = Device {
+            protocol_id: 0x03,
+            variant: if id_type == 0 { 0x1100 } else { 0x2100 },
+            ..Default::default()
+        };
+        let algo = crate::algorithm::get_algorithm(
+            &device,
+            handle.info.model,
+            handle.icsp,
+            crate::algorithm::V_3V3,
+            algo_path,
+        )?;
+        handle
+            .protocol
+            .upload_bitstream(&handle.usb, &algo.bitstream)?;
+    }
     handle.protocol.spi_autodetect(&handle.usb, id_type)
 }
 
