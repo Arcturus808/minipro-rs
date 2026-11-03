@@ -161,6 +161,50 @@ This is a living list of features and improvements planned for minipro-rs.
     - None known.
   - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
 
+- [ ] **Native XGPro downloader — replaces `dump-alg-minipro.bash`** — generate `algorithm.xml` + `firmware-*.dat` in pure Rust, no bash/bsdtar/coreutils/wget
+  - **Problem:** T56/T76 chip operations need `algorithm.xml` (FPGA bitstreams) and `minipro -F` needs `update*.dat` firmware images. Today both come only from upstream's `dump-alg-minipro.bash`, which requires bash, bsdtar, sha256sum, strings, base64, and wget/curl — so it **cannot run on Windows at all**, needs sudo for system dirs, and has a latent bug (`[ -n $USE_ROOT ]` is always true → always `sudo cp`s when an install dir is given). This is the biggest remaining gap for Windows users wanting full T56/T76 support.
+  - **Verified approach (prototyped 2026-11):** the XGPro `.rar` downloads are a two-layer RAR5 matryoshka — outer RAR contains a single `*Setup.exe`, which is a WinRAR SFX (inner RAR5 begins at the `Rar!\x1a\x07\x01\x00` signature, e.g. offset 0x4e600). Only RAR5 decompression is needed, applied twice; no NSIS/zip. `rar-codec` 0.1.2 (pure Rust, zero deps, Apache-2.0, `#![forbid(unsafe_code)]`, oracle-tested vs real UnRAR) extracted **both** real archives end-to-end: V1304 → 33.7 MB exe → 584 entries incl. 354 `algorithm/*.alg` + `updateII.dat`/`UpdateT48.dat`/`updateT56.dat`; T76 V1319 → 69.3 MB exe → 624 entries incl. 370 `algoT76/*.alg` (all extracted, 0 failures) + `UpdateT76.Dat`. Naming confirmed: 356/370 T76 files use the `T7_` prefix (stripped → `SPI25F10`, matching lookup names); `T76_*` vga/uart utils and `Test*` pass through unstripped — strip **only** `T7_`, never `T76_`.
+  - **Implementation plan:**
+    1. **Core: `minipro-core::xgpro_fetch` module** — constants (URLs, SHA-256s, firmware name/type/version table, `.alg` layout offsets) + pipeline:
+       - `download(url) -> Vec<u8>` via `ureq` + rustls, with a `Fn(DownloadProgress)` callback; honor `Proxy::try_from_env()`.
+       - `unwrap_sfx_rar(bytes) -> rar members`: `Archive::open`, find `.exe` member, extract, scan for `Rar!\x1a\x07`, `Archive::open` again — all in memory (~65 MB peak; exe never hits disk, which also avoids antivirus scanning of a foreign PE).
+       - `build_xml(t56, t76) -> String`: for each `.alg`, name = stem (T76 additionally strips `T7_` prefix); desc = T56 bytes-to-first-NUL / T76 GNU-strings emulation (printable runs ≥4 over `data[16..4096]`, newline-joined); bitstream = gzip+base64 of `data[544..]` (T56, level 9) or `data[4..12] ++ data[4096..]` (T76, level 6); `String::from_utf8_lossy` + XML-escape on desc (upstream emits raw bytes → can produce invalid XML; deliberate improvement, bitstreams byte-identical after decode).
+       - `verify_xml()`: re-parse generated XML and run every bitstream through the existing `decode_bitstream` + CRC32 — a self-check the bash script lacks.
+       - `write_outputs(dir)`: `algorithm.xml` + `firmware-<type>-<ver>.dat` renames, atomic temp-file-then-rename, sorted deterministic output.
+    2. **Resolver: per-user data dir in `resolve_one()`** — insert between `MINIPRO_HOME` and the system dirs: `%LOCALAPPDATA%\minipro-rs` (Windows), `${XDG_DATA_HOME:-~/.local/share}/minipro-rs` (Linux/BSD), `~/Library/Application Support/minipro-rs` (macOS). Hand-rolled `#[cfg]` fn matching existing style (no `dirs` dep). User dir outranks system dirs (XDG convention); search order becomes: override → cwd → exe dir → macOS resources → repo `data/` → `MINIPRO_HOME` → **per-user dir** → system dirs → C-minipro fallback. Benefits `infoic.xml`/`logicic.xml` overrides too; zero regression risk (dir never existed before).
+    3. **CLI:** `--download-algorithms` flag + `--output DIR` override + `--from-file PATH` (process a local `.rar` or `.exe` — offline use, CI, mirrors) + optional `--xgpro-url` (hidden, for mirror/version bumps). Progress dots like the script; prints resulting paths. Does NOT connect to a programmer.
+    4. **GUI:** Settings → Database "Download algorithm.xml…" button. Tauri command streams progress over the existing `Channel` pattern (download %, extract, verify stages); `spawn_blocking` for CPU-bound decompression; on success shows path + "reconnect programmer to apply" note (matches documented algorithm-path caching caveat).
+    5. **Tests:** `rar-codec`'s `ArchiveBuilder` writes store-method RARs → build a nested rar→exe→rar fixture in-test for a fully offline integration test of `unwrap_sfx_rar` + `build_xml`; unit tests for strings emulation, offsets, name munging, XML output vs upstream fixture; one `#[ignore]`d live-network test (95 MB download — CI compute conservation).
+    6. **Docs:** README T56/T76 section + custom-database section, `gui/README.md` feature table, `CHANGELOG.md` `[Unreleased]`, man page (`--generate-man` source), AGENTS.md feature-internals pointer if a `docs/ALGO-DOWNLOAD-INTERNALS.md` is warranted.
+  - **Cross-platform implications:**
+    - **Windows:** the headline win — script can't run there; native binary makes T56/T76 first-class. Per-user dir avoids UAC entirely (`%PROGRAMDATA%` needs admin). Never writing the foreign `.exe` to disk sidesteps SmartScreen/AV heuristics.
+    - **Linux:** `XDG_DATA_HOME` respected; no more sudo/`libarchive-tools`/`bsdtar` dependency for package users. **sudo footgun:** users habitually `sudo minipro` when udev rules aren't installed — `sudo --download-algorithms` would write to `/root/.local/share` and be invisible to normal runs. Mitigate: detect `SUDO_UID`/`SUDO_USER` and resolve to the invoking user's data dir, or at minimum warn + print the absolute output path.
+    - **macOS:** `~/Library/Application Support` convention; downloaded data files don't get `com.apple.quarantine` (only apps do); no sandbox (not App Store distributed) — and if ever sandboxed, `$HOME` already resolves to the container so the hand-rolled path still lands correctly.
+    - **HOME/XDG unset** (systemd units, cron, minimal envs): resolve the per-user dir via `getpwuid` fallback or skip gracefully — `std::env::home_dir()` is only un-deprecated in Rust 1.86 (> MSRV 1.85), so it can't be used; hand-roll env reading or take the `dirs` dep (handles passwd fallback for us).
+    - **TLS interception:** corporate MITM proxies need the proxy CA — prefer `rustls-native-certs` (reads OS store) or `rustls-platform-verifier` over bundled `webpki-roots` alone; plain `webpki-roots` breaks on intercepted networks.
+    - **TLS:** `ureq` + `rustls` = no OpenSSL anywhere → uniform behavior and easy musl/static builds; env-proxy support via `Proxy::try_from_env()` for corporate networks.
+    - **Network reachability:** GitHub raw can be slow/blocked in some regions (XGecu is Chinese; large user base there) — `--from-file` + `--xgpro-url` cover mirrors/offline.
+    - **Filenames:** inner-RAR members use `/` separators and mixed case (`UpdateT76.Dat` vs `updateT56.dat`) — match case-insensitively, normalize via `Path`; output names are ASCII-safe.
+    - **Encoding:** `.alg` descriptions may contain non-UTF-8 bytes — `from_utf8_lossy` produces *more* valid XML than upstream (documented divergence).
+    - **Line endings:** write `\n` only on all platforms for byte-stable output.
+    - **MSRV:** root workspace is 1.85 (CI `msrv` job); `rar-codec`/`ureq` must compile there — verify with `rustup run 1.85 cargo check` during implementation; fallback is MSRV bump per `docs/RELEASE.md` (heavier, avoid if possible).
+    - **License audit:** all new deps must pass `cargo deny` (deny.toml allow-list) — `rar-codec` Apache-2.0, `ureq` MIT/Apache-2.0, `sha2` MIT/Apache all clean. `unrar-rs` (non-standard license) rejected for this reason.
+    - **Lockfiles:** run `cargo generate-lockfile` and commit `Cargo.lock` + `gui/src-tauri/Cargo.lock` (CI uses `--locked`).
+  - **Design decisions:**
+    - In-memory pipeline: peak RAM ~65 MB (two RARs processed sequentially) — fine for a desktop tool; streaming extraction possible later if needed.
+    - `--from-file` exists from day one: needed for testing AND users who can't reach GitHub.
+    - Firmware `.dat` extraction kept (script parity) — files already in the archive; skipping means re-downloading 95 MB later for `minipro -F`.
+    - Downloaded RARs cached under `<per-user-dir>/cache/` so re-runs skip the network (mirrors the script's "already in workdir" path).
+    - Sort `.alg` entries by name — deterministic output (shell glob order is locale-dependent anyway).
+    - `rar-codec` caveat: published 2026-11-01 (brand new, pre-1.0). Verified against both real archives today (354 + 370 algs, 100% decode), but: (a) doesn't implement "RAR 7.x" compression v1 — current archives are v0; the SHA-256 gate fails loudly if XGecu repacks; (b) pin the version in Cargo.toml/lockfile against API churn; (c) escape hatch if it rots = `compress-tools` (libarchive binding — a C dep, works everywhere, mirrors bsdtar exactly).
+  - **Edge cases:**
+    - Outer RAR contains a `QO` archive-comment service record — ignore non-`.exe` members.
+    - `tail -c +N` is 1-indexed in the script: offsets are `data[544..]`, `data[16..4096]`, `data[4..12]`, `data[4096..]` — verify against upstream `algorithm.xml` golden.
+    - gzip bytes differ from GNU gzip (impl difference, same level) — irrelevant: consumers gunzip + CRC32.
+    - Partial/failed downloads: temp file + SHA-256 check before use; delete on mismatch.
+    - T76 `strings` step: GNU strings default is ≥4 printable chars; replicate exactly or desc text diverges (bitstreams unaffected either way).
+  - Status: planned. Prototype verified RAR5 extraction on both real archives — V1304 (T48/T56) and V1319 (T76) — 724/724 `.alg` files decoded (2026-11).
+
 ## Backlog
 
 - [ ] **Protocol parity with original minipro + Matt Brown's t76 branch**
