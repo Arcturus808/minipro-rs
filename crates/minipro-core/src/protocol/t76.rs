@@ -1294,8 +1294,7 @@ impl Protocol for T76Protocol {
 /// Total size = N*0x114 + 16
 /// ```
 fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
-    use crc::{Crc, CRC_32_ISO_HDLC};
-    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+    use crate::util::crc_32;
 
     // ── Parse header ─────────────────────────────────────────────────────────
     if dat.len() < 16 {
@@ -1323,9 +1322,7 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
     // ── CRC check ────────────────────────────────────────────────────────────
     // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
     // The result (NOT inverted) must equal file_crc.
-    let mut digest = CRC32.digest_with_initial(0xFFFF_FFFF);
-    digest.update(&dat[16..]);
-    let computed = digest.finalize();
+    let computed = crc_32(&dat[16..], 0xFFFF_FFFF);
     if computed != file_crc {
         return Err(MiniproError::AlgorithmCrc);
     }

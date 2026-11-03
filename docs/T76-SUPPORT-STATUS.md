@@ -11,15 +11,18 @@ SPI-NAND, parallel NAND, eMMC, and parallel NOR. The protocol was
 reverse-engineered from XGPro_T76.exe V13.19 and ported from Matt
 Brown's `t76-improvements` branch of C minipro.
 
-**Nothing has been validated on real T76 hardware.** All code is
-correct as far as we can tell from reading the C source, but hardware
-testing is required to confirm.
+**Hardware validation (2026-11):** SPI NOR chip ID and read verified on
+a real T76 (firmware 00.1.18) — W25X20CL (`0x00ef3012`, 256 KB read) and
+PM25LV010 (`0x00009d7c`, 128 KB read) return correct IDs and valid data
+with `SPI25F11` uploaded from `algorithm.xml`. All other chip classes
+remain unvalidated — the code is correct as far as we can tell from
+reading the C source, but hardware testing is required to confirm.
 
 ## Chip Class Status
 
 | Chip Class | Protocol ID | Read | Erase | Program | Validated? |
 |------------|-------------|------|-------|---------|------------|
-| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | No |
+| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | **Yes — ID + read (fw 00.1.18)** |
 | SPI NOR (16-pin) | 0x0f | ✅ | ✅ | ✅ | No |
 | SPI-NAND | 0x2d | ✅ | ✅ | ✅ | No |
 | Parallel NAND | 0x2d | ✅ | ✅ | ✅ | No |
@@ -111,9 +114,13 @@ placeholder. Real capacity is detected at runtime (see above).
 
 ## Known Issues
 
-1. **No hardware validation** — all chip classes are untested
-2. **`algorithm.xml` not bundled** — users must provide it; without it,
-   T56/T76 can't upload bitstreams and most operations fail
+1. **Limited hardware validation** — only SPI NOR (8-pin) chip ID + read
+   verified on real hardware; all other chip classes untested
+2. **`algorithm.xml` required, not bundled** — the T56/T76 FPGA ships
+   blank, so every chip needs an uploaded bitstream. Without
+   `algorithm.xml`, `begin_transaction` now fails hard (matching
+   upstream); generate it from the XGPro installer with upstream
+   `dump-alg-minipro.bash`
 3. **Database is outdated** — V12.91 vs V13.19 (2,028 missing chips)
 4. **`eprintln!` logging** — protocol layer doesn't integrate with GUI
    log system (cross-cutting issue, not T76-specific)

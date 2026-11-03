@@ -42,6 +42,7 @@ pub mod icsp;
 pub mod operations;
 pub mod protocol;
 pub mod usb;
+pub(crate) mod util;
 pub mod zif;
 
 // Re-export the most commonly used types so callers can write

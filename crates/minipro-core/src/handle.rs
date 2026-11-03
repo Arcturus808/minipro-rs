@@ -119,37 +119,33 @@ impl MiniproHandle {
         info!("Device: {}", device.name);
 
         // T56/T76: look up the FPGA algorithm bitstream if not already
-        // populated and algorithm.xml is available.  The protocol layer
-        // checks `device.algorithm` during begin_transaction to upload the
-        // bitstream.  Without this, FPGA-based operations fail silently.
+        // populated.  The FPGA ships blank — without the uploaded bitstream
+        // every operation returns garbage.  Upstream C minipro fails
+        // begin_transaction here; do the same instead of continuing with an
+        // unconfigured FPGA.
         let device = if device.algorithm.is_none()
             && crate::algorithm::needs_algorithm(&device, self.info.model)
         {
-            if let Some(ref paths) = self.db_paths {
-                if let Some(ref algo_path) = paths.algorithms {
-                    match crate::algorithm::get_algorithm(
-                        &device,
-                        self.info.model,
-                        self.icsp,
-                        crate::algorithm::V_3V3,
-                        algo_path,
-                    ) {
-                        Ok(algo) => {
-                            let mut d = (*device).clone();
-                            d.algorithm = Some(algo);
-                            Arc::new(d)
-                        }
-                        Err(e) => {
-                            log::warn!("Algorithm lookup failed for {}: {}", device.name, e);
-                            device
-                        }
-                    }
-                } else {
-                    device
-                }
-            } else {
-                device
-            }
+            let algo_path = self
+                .db_paths
+                .as_ref()
+                .and_then(|p| p.algorithms.as_ref())
+                .ok_or_else(|| {
+                    MiniproError::Protocol(format!(
+                        "algorithm.xml not found — required to upload the FPGA bitstream for {} on {:?}",
+                        device.name, self.info.model
+                    ))
+                })?;
+            let algo = crate::algorithm::get_algorithm(
+                &device,
+                self.info.model,
+                self.icsp,
+                crate::algorithm::V_3V3,
+                algo_path,
+            )?;
+            let mut d = (*device).clone();
+            d.algorithm = Some(algo);
+            Arc::new(d)
         } else {
             device
         };

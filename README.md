@@ -329,13 +329,13 @@ Run `minipro --help` for the full list of options.
 
 ## T56 / T76 FPGA algorithm support
 
-> **Note:** The T56 and T76 programmers require FPGA bitstream algorithms for certain chip families. These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
+> **Note:** The T56 and T76 programmers have a host-configurable FPGA — they require an uploaded bitstream algorithm for **every** chip (SPI NOR uses `SPI25F11`/`SPI25F21`; even `protocol_id 0` devices use a utility bitstream). These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
 >
-> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, T56/T76 can still program many standard devices (SPI NOR, I2C EEPROM, etc.), but some advanced or newer chips will fail with a protocol error.
+> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, **no chip operation works on T56/T76** — `begin_transaction` fails with an `algorithm.xml not found` error. `algorithm.xml` can be generated from the vendor XGPro installer using the upstream `dump-alg-minipro.bash` script.
 >
-> The algorithm parser is now implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC32 verification, and T76 level-2 zero-run decompression.
+> The algorithm parser is implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC verification, and T76 level-2 zero-run decompression.
 >
-> To enable full T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
+> To enable T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
 > 1. The directory containing the `minipro` executable
 > 2. The current working directory
 > 3. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)

@@ -5,6 +5,47 @@ requirements. Extracted from AGENTS.md — check here before touching related
 code; several fixes document upstream C minipro behavior that must be
 preserved.
 
+## XGecu CRC-32 is not zlib CRC-32 — no final complement (fixed)
+
+Upstream `crc_32()` (in `minipro.c`) is a reflected CRC-32 with a
+caller-supplied initial value and **no final XOR-out** — it returns the raw
+accumulator, whereas the standard `CRC_32_ISO_HDLC` profile complements the
+result with `0xFFFFFFFF`. The port "corrected" it to `CRC_32_ISO_HDLC` in
+three places, which made every embedded CRC check fail:
+
+- `algorithm.rs::decode_bitstream` — every `algorithm.xml` bitstream was
+  rejected with `AlgorithmCrc`, so T56/T76 chip operations silently ran
+  with an unconfigured FPGA and returned zeros.
+- `t76.rs::firmware_update_t76` / `t56.rs::firmware_update` — firmware
+  images always failed the CRC gate (the comments even said "NOT
+  inverted", but `finalize()` on the ISO_HDLC profile applies the
+  complement anyway).
+
+Call sites where upstream explicitly complements (`~crc_32(...)`, e.g.
+`tl866a` firmware check, `tl866iiplus` file CRC) were already correct
+under `CRC_32_ISO_HDLC`.
+
+**Fix:** `util::crc_32(data, init)` ports the upstream function verbatim
+(no xor-out); the three call sites use it. Do not replace it with
+`CRC_32_ISO_HDLC` — the checks will always mismatch.
+
+## T76 level-2 decompression must tolerate short output (fixed)
+
+The T76 `.alg` payload decompresses zero-run-encoded u16 words into a
+buffer whose declared size (`ALGO_SIZE_OFFSET`) can be **odd** — e.g.
+`SPI25F11` declares 701,145 bytes but the stream emits 701,144. Upstream C
+`calloc`s the declared size, writes words without any output-bound check,
+and lets trailing slack stay zero (it even overflows the odd byte by one
+word). The port required `out_pos == algo_size` *and* stopped at
+`out_pos + 2 <= algo_size`, so it both dropped the final word and then
+rejected the stream.
+
+**Fix:** `level2_decompress` rounds the buffer up to even, decodes the
+whole stream, then truncates to `algo_size`. Unwritten tail bytes stay
+zero exactly like the upstream `calloc` slack. Do not re-add an
+exact-length assertion — real `.alg` files legitimately end a few bytes
+short.
+
 ## Custom database directory startup fallback
 
 If the user sets a custom database directory in Settings and later moves or
