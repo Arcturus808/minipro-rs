@@ -11,18 +11,24 @@ SPI-NAND, parallel NAND, eMMC, and parallel NOR. The protocol was
 reverse-engineered from XGPro_T76.exe V13.19 and ported from Matt
 Brown's `t76-improvements` branch of C minipro.
 
-**Hardware validation (2026-11):** SPI NOR chip ID and read verified on
-a real T76 (firmware 00.1.18) — W25X20CL (`0x00ef3012`, 256 KB read) and
-PM25LV010 (`0x00009d7c`, 128 KB read) return correct IDs and valid data
-with `SPI25F11` uploaded from `algorithm.xml`. All other chip classes
-remain unvalidated — the code is correct as far as we can tell from
-reading the C source, but hardware testing is required to confirm.
+**Hardware validation (2026-11):** SPI NOR chip ID, read, erase, program
+and verify tested on a real T76 (firmware 00.1.18). W25X20CL passed the
+full pipeline — ID `0x00ef3012`, byte-identical read vs TL866A, and a
+256 KB write+verify with zero diffs. PM25LV010 ID/read also worked
+(`0x00009d7c`) — though that specific chip later showed marginal/degrading
+output-driver behavior on *both* programmers (non-deterministic reads;
+a silicon issue, not a code issue). LE25FS406M@SOP8 (SOP8→DIP adapter)
+reads deterministically and programs 2047/2048 pages; its last page
+erases but refuses to program — a chip-specific quirk (works fine on
+W25X20CL), not a write-path bug. All other chip classes remain
+unvalidated — the code is correct as far as we can tell from reading the
+C source, but hardware testing is required to confirm.
 
 ## Chip Class Status
 
 | Chip Class | Protocol ID | Read | Erase | Program | Validated? |
 |------------|-------------|------|-------|---------|------------|
-| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | **Yes — ID + read (fw 00.1.18)** |
+| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | **Yes — ID, read, write+verify (fw 00.1.18)** |
 | SPI NOR (16-pin) | 0x0f | ✅ | ✅ | ✅ | No |
 | SPI-NAND | 0x2d | ✅ | ✅ | ✅ | No |
 | Parallel NAND | 0x2d | ✅ | ✅ | ✅ | No |
