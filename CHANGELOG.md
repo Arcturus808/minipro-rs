@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-user database directory** — database resolution now searches a writable per-user dir between `MINIPRO_HOME` and the system data dirs: `%LOCALAPPDATA%\minipro-rs\` (Windows), `${XDG_DATA_HOME:-~/.local/share}/minipro-rs/` (Linux), `~/Library/Application Support/minipro-rs/` (macOS). `infoic.xml`, `logicic.xml`, and `algorithm.xml` dropped there are picked up without admin/root — groundwork for the planned native XGPro algorithm downloader.
+
 - **SPI Auto Detect on T76** — the "8-Pin" / "16-Pin" autodetect buttons now work on the T76, which was previously gated off in the GUI. Mirrors upstream `t76_spi_autodetect`: a synthetic SPI device resolves `SPI25F11` (8-pin) or `SPI25F21` (16-pin) from `algorithm.xml`, the FPGA bitstream is uploaded, then the T76-specific 12-byte `0x37` request returns the JEDEC ID for database matching. The autodetect bitstream is invalidated afterwards so the next selected-device transaction re-uploads its own algorithm. T56 remains gated (protocol implementation pending).
 
 ### Fixed

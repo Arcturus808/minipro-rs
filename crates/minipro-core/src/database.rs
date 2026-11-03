@@ -54,7 +54,11 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///  4. (macOS only) Tauri resource directory: `.app/Contents/Resources/`
 ///  5. Repo `data/` directory (dev builds only).
 ///  6. `MINIPRO_HOME` environment variable.
-///  7. Platform data directory (minipro-rs first, then minipro as fallback):
+///  7. Per-user data directory (writable without elevation):
+///     - Linux: `${XDG_DATA_HOME:-~/.local/share}/minipro-rs/`
+///     - macOS: `~/Library/Application Support/minipro-rs/`
+///     - Windows: `%LOCALAPPDATA%\minipro-rs\`
+///  8. Platform data directory (minipro-rs first, then minipro as fallback):
 ///     - Linux: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
 ///     - macOS: `/Library/Application Support/minipro-rs/` then `/Library/Application Support/minipro/`
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
@@ -139,6 +143,15 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
         }
     }
 
+    // 3a. Per-user data directory — writable without elevation, so it's the
+    //     default target for features that fetch data files at runtime.
+    if let Some(dir) = user_data_dir() {
+        let p = dir.join(filename);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
     // 4. Platform data directory — try minipro-rs first, then fall back to
     //    the C minipro's directory so users with the C version installed
     //    don't need to duplicate the XML files.
@@ -188,6 +201,41 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
 /// cannot be found.  Used for optional databases (e.g. `algorithm.xml`).
 fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<PathBuf> {
     resolve_one(filename, override_path).ok()
+}
+
+/// `std::env::var_os` that treats a set-but-empty variable as unset.
+fn env_non_empty(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Per-user data directory for this platform, or `None` when the relevant
+/// env vars are unset (minimal environments like systemd units or cron).
+///
+/// Hand-rolled to match the platform blocks above — no `dirs` dependency for
+/// a single path.  `std::env::home_dir()` can't be used: it was only
+/// un-deprecated in Rust 1.86, above this crate's MSRV (1.85).
+#[cfg(target_os = "windows")]
+fn user_data_dir() -> Option<PathBuf> {
+    env_non_empty("LOCALAPPDATA").map(|d| d.join("minipro-rs"))
+}
+
+#[cfg(target_os = "macos")]
+fn user_data_dir() -> Option<PathBuf> {
+    env_non_empty("HOME").map(|h| {
+        h.join("Library")
+            .join("Application Support")
+            .join("minipro-rs")
+    })
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn user_data_dir() -> Option<PathBuf> {
+    // $XDG_DATA_HOME wins; otherwise $HOME/.local/share (XDG base-dir spec).
+    env_non_empty("XDG_DATA_HOME")
+        .or_else(|| env_non_empty("HOME").map(|h| h.join(".local").join("share")))
+        .map(|d| d.join("minipro-rs"))
 }
 
 // ── Database query ───────────────────────────────────────────────────────────
