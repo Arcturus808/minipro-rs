@@ -36,10 +36,10 @@
   let autodetectJedecId = $state<string | null>(null);
   let autodetectError = $state<string | null>(null);
 
-  // Autodetect is supported on TL866A, TL866CS, TL866II+, and T48.
-  // T56 and T76 need protocol implementations (gaps 2/3).
+  // Autodetect is supported on TL866A, TL866CS, TL866II+, T48, and T76.
+  // T56 still needs a protocol implementation.
   let autodetectSupported = $derived(
-    $programmer !== null && !["T56", "T76"].includes($programmer.model)
+    $programmer !== null && $programmer.model !== "T56"
   );
 
   // Live search: debounce + race-condition guard.

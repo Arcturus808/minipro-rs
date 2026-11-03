@@ -333,7 +333,22 @@ This is a living list of features and improvements planned for minipro-rs.
       entries. CLI output now matches upstream format:
       `Autodetecting device (ID:0xXXXX)` + device names + count.
 
-    **What we're missing (2 remaining gaps):**
+    **Also implemented:**
+    - **T76 autodetect** — DONE (`feat/t76-spi-autodetect`), matching
+      upstream `t76_spi_autodetect()`. `operations::spi_autodetect()`
+      builds a synthetic device (`protocol_id=0x03`, variant `0x1100`/
+      `0x2100`), resolves `SPI25F11`/`SPI25F21` via `get_algorithm()`,
+      uploads it through a new `Protocol::upload_bitstream()` method,
+      then `T76Protocol::spi_autodetect()` sends the T76-specific
+      **12-byte** `0x37` request (upstream commit 3e2f491 — not the
+      10-byte packet the other models use) and parses the 3-byte
+      big-endian JEDEC ID. `bitstream_uploaded` is reset afterward so
+      the next `begin_transaction` re-uploads the selected device's own
+      algorithm. GUI buttons ungated for T76; 8-pin path hardware-
+      validated (W25X20CL → `0xef3012`). 16-pin path implemented but
+      unvalidated pending a 16-pin SPI chip (e.g. W25Q128 SOIC-16).
+
+    **What we're missing (1 remaining gap):**
 
     1. **T56 autodetect** — T56 has `CMD_AUTODETECT = 0x37` defined but
        no `spi_autodetect` trait method override (falls through to
@@ -343,43 +358,21 @@ This is a living list of features and improvements planned for minipro-rs.
        command.
        **Difficulty: Medium.** The bitstream upload infrastructure
        already exists (`upload_bitstream()` in `t56.rs`, algorithm
-       lookup via `get_algorithm()` in `algorithm.rs`). The
-       `compute_algorithm_name()` function already maps
-       `protocol_id=0x03, variant=0x1100` → `"SPI25F11"` and
-       `variant=0x2100` → `"SPI25F21"` (verified by existing tests in
-       `algorithm.rs`). The implementation needs to: construct a
-       temporary `Device` with `protocol_id=0x03` and the appropriate
-       variant, call `get_algorithm()`, upload the bitstream, then send
-       the 0x37 command and parse the 3-byte response. ~50 lines of
-       protocol code + trait wiring. The tricky part is managing the
-       `bitstream_uploaded` flag — autodetect uses a different
-       bitstream than the subsequently-selected device, so the flag
-       must be reset after autodetect.
-
-    2. **T76 autodetect** — same pattern as T56. Upstream's
-       `t76_spi_autodetect()` uploads SPI25F11/SPI25F21 bitstream via
-       `t76_send_bitstream()`, then sends 0x37. No trait override in
-       our `t76.rs`.
-       **Request-length caveat:** upstream fixed this in commit
-       3e2f491 — the T76 firmware expects a **12-byte** 0x37 request,
-       not the 10-byte packet the other models use. Port the 12-byte
-       form directly rather than copying the T56/II+ packet layout.
-       **Difficulty: Medium.** Same infrastructure as T56
-       (`upload_bitstream_t76()`, `get_algorithm()`). Same
-       `bitstream_uploaded` flag management concern. ~50 lines.
+       lookup via `get_algorithm()` in `algorithm.rs`), and the T76
+       implementation above is the template — same synthetic-device +
+       `upload_bitstream` + flag-reset pattern, except the T56 sends
+       the 10-byte `0x37` packet. ~30 lines now. Same
+       `bitstream_uploaded` flag management applies. Needs T56
+       hardware to validate.
 
     **Also missing (minor):**
     - Pin-contact pre-check before autodetect (upstream optionally runs
       `minipro_pin_test` on TL866II+ before autodetect). We have pin
       test support; wiring it in is trivial but low-value.
 
-    **Overall difficulty: Medium.** The database lookup is now done.
-    T56/T76 protocol implementations are mechanical ports from C (~50
-    lines each) with existing bitstream infrastructure. The main
-    subtlety is bitstream-flag management across the autodetect →
-    device-selection transition. T56/T76 protocol implementations
-    ideally need hardware testing but the code path is identical to
-    upstream C.
+    **Overall difficulty: Medium.** The database lookup is done and
+    T76 is implemented. T56 is a near-mechanical copy of the T76
+    pattern with the 10-byte request packet.
 
   - [x] **T56 firmware update** — DONE (protocol-parity branch). Ported
     from C `t56_firmware_update()`. Implemented as `firmware_update_t56()`

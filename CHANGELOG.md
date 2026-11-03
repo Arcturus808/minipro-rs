@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **SPI Auto Detect on T76** — the "8-Pin" / "16-Pin" autodetect buttons now work on the T76, which was previously gated off in the GUI. Mirrors upstream `t76_spi_autodetect`: a synthetic SPI device resolves `SPI25F11` (8-pin) or `SPI25F21` (16-pin) from `algorithm.xml`, the FPGA bitstream is uploaded, then the T76-specific 12-byte `0x37` request returns the JEDEC ID for database matching. The autodetect bitstream is invalidated afterwards so the next selected-device transaction re-uploads its own algorithm. T56 remains gated (protocol implementation pending).
+
 ### Fixed
 
 - **T56/T76 algorithm.xml bitstreams always rejected — chip ID and reads returned zeros** — upstream's `crc_32` is a reflected CRC-32 with *no* final complement, but the port used `CRC_32_ISO_HDLC` (which XORs the result with `0xFFFFFFFF`), so every embedded bitstream CRC mismatched and `algorithm.xml` could never load. On the T76 every operation needs an uploaded FPGA bitstream; without it reads/clocks returned garbage. Verified on real T76 hardware (firmware 00.1.18): W25X20CL and PM25LV010 chip ID (`0x00ef3012`/`0x00009d7c`) and full reads now work. The same wrong-profile CRC also broke T56/T76 firmware-update image verification. Both now use the ported no-xor-out `crc_32`.
