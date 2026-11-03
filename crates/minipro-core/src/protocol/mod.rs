@@ -138,14 +138,17 @@ pub trait Protocol: Send + Sync {
     fn erase(&self, usb: &UsbDevice, device: &Device, num_fuses: u8, is_pld: bool) -> Result<()>;
 
     /// Read a JEDEC fuse-map row.
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
-        let _ = (usb, js);
+    ///
+    /// `device` supplies the protocol ID required by the command header on
+    /// TL866II+/T48-family programmers.
+    fn read_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &mut JedecSet) -> Result<()> {
+        let _ = (usb, device, js);
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 
     /// Write a JEDEC fuse-map row.
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
-        let _ = (usb, js);
+    fn write_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &JedecSet) -> Result<()> {
+        let _ = (usb, device, js);
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 

@@ -411,7 +411,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
+    fn read_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &mut JedecSet) -> Result<()> {
         let mut msg = [0u8; 18];
         msg[0] = CMD_READ_CODE;
         msg[4] = js.row;
@@ -423,7 +423,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
+    fn write_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &JedecSet) -> Result<()> {
         let mut msg = [0u8; 64];
         msg[0] = CMD_WRITE_CODE;
         msg[4] = js.row;

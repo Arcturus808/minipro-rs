@@ -79,7 +79,9 @@ fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
 ///
 /// Silently returns `Ok(())` when:
 /// - `pin_check` is false (user unchecked the box)
-/// - Programmer model is not TL866II+/T48
+/// - Programmer model is not TL866II+ — the only model with an upstream
+///   pin-test implementation. The T48's own 0x3E pin-detect command is a
+///   documented but never-implemented protocol.
 /// - ICSP mode is active (pin test is ZIF-only)
 /// - Device has `pin_map == 0` (no contact-test data in database)
 ///
@@ -95,10 +97,7 @@ fn run_pin_check_if_enabled(
     if !enabled {
         return Ok(());
     }
-    if !matches!(
-        handle.info.model,
-        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-    ) {
+    if !matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) {
         return Ok(());
     }
     if icsp_mode != "zif" {
@@ -2671,10 +2670,10 @@ pub async fn do_spi_autodetect(
             // Automatic pin contact check before autodetect on supported models.
             // Constructs a temporary device with pin_map based on package type,
             // matching upstream minipro's auto_detect function (main.c line 482-503).
-            if matches!(
-                handle.info.model,
-                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-            ) && handle.icsp == 0
+            // Upstream runs this check on the TL866II+ only. The T48's own
+            // 0x3E pin-detect command is a different protocol that upstream
+            // never implemented.
+            if matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) && handle.icsp == 0
             {
                 let pin_count = if idType == 0 { 8 } else { 16 };
                 let temp_device = Arc::new(Device {
