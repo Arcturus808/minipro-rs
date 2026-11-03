@@ -21,7 +21,8 @@ a silicon issue, not a code issue). LE25FS406M@SOP8 (SOP8→DIP adapter)
 reads deterministically and programs 2047/2048 pages; its last page
 erases but refuses to program — a chip-specific quirk (works fine on
 W25X20CL), not a write-path bug. SPI autodetect (`-a` / GUI "8-pin")
-validated on W25X20CL — JEDEC `0xef3012` with correct database matches;
+validated on W25X20CL (`0xef3012`, 21 matches) and LE25FS406M@SOP8 via
+adapter (`0x621613`, 5 matches);
 the 16-pin path (SPI25F21) is implemented but unvalidated pending a
 16-pin SPI chip. All other chip classes remain
 unvalidated — the code is correct as far as we can tell from reading the
