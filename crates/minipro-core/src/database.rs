@@ -217,12 +217,12 @@ fn env_non_empty(key: &str) -> Option<PathBuf> {
 /// a single path.  `std::env::home_dir()` can't be used: it was only
 /// un-deprecated in Rust 1.86, above this crate's MSRV (1.85).
 #[cfg(target_os = "windows")]
-fn user_data_dir() -> Option<PathBuf> {
+pub fn user_data_dir() -> Option<PathBuf> {
     env_non_empty("LOCALAPPDATA").map(|d| d.join("minipro-rs"))
 }
 
 #[cfg(target_os = "macos")]
-fn user_data_dir() -> Option<PathBuf> {
+pub fn user_data_dir() -> Option<PathBuf> {
     env_non_empty("HOME").map(|h| {
         h.join("Library")
             .join("Application Support")
@@ -231,7 +231,7 @@ fn user_data_dir() -> Option<PathBuf> {
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
-fn user_data_dir() -> Option<PathBuf> {
+pub fn user_data_dir() -> Option<PathBuf> {
     // $XDG_DATA_HOME wins; otherwise $HOME/.local/share (XDG base-dir spec).
     env_non_empty("XDG_DATA_HOME")
         .or_else(|| env_non_empty("HOME").map(|h| h.join(".local").join("share")))

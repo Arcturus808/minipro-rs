@@ -367,7 +367,13 @@ fn find_algorithm_in_xml(
 
 /// Decode the base64 + gzip bitstream, verify CRC, and (for T76) perform
 /// level-2 zero-run decompression.
-fn decode_bitstream(base64_data: &str, model: ProgrammerModel) -> Result<Vec<u8>, MiniproError> {
+///
+/// `pub(crate)` so `xgpro_fetch` can validate freshly generated
+/// `algorithm.xml` entries through the exact consumer decode path.
+pub(crate) fn decode_bitstream(
+    base64_data: &str,
+    model: ProgrammerModel,
+) -> Result<Vec<u8>, MiniproError> {
     // 1. Base64 decode.
     let gzip_data = base64::engine::general_purpose::STANDARD
         .decode(base64_data.trim())

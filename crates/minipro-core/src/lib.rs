@@ -43,6 +43,7 @@ pub mod operations;
 pub mod protocol;
 pub mod usb;
 pub(crate) mod util;
+pub mod xgpro_fetch;
 pub mod zif;
 
 // Re-export the most commonly used types so callers can write
@@ -53,7 +54,7 @@ pub use batch::{
 };
 pub use database::{
     find_device, find_device_any, find_devices_by_chip_id, list_devices, list_devices_for_model,
-    list_logic_ics_by_pin_count, DatabasePaths,
+    list_logic_ics_by_pin_count, user_data_dir, DatabasePaths,
 };
 pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,

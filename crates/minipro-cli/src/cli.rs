@@ -237,6 +237,28 @@ struct Cli {
     #[arg(long = "address", value_name = "HEX")]
     address: Option<String>,
 
+    /// Download T56/T76 FPGA algorithm definitions and firmware images from
+    /// the official XGPro release and generate algorithm.xml.
+    /// No programmer hardware required.
+    #[arg(long = "download-algorithms", action = ArgAction::SetTrue)]
+    download_algorithms: bool,
+
+    /// Output directory for --download-algorithms
+    /// (default: per-user data directory).
+    #[arg(long = "output", value_name = "DIR")]
+    output: Option<PathBuf>,
+
+    /// Use a local XGPro archive instead of downloading — accepts the outer
+    /// .rar, the setup .exe, or the inner RAR; role is auto-detected.
+    /// May be given twice (once per archive).
+    #[arg(long = "from-file", value_name = "FILE", action = ArgAction::Append)]
+    from_file: Vec<PathBuf>,
+
+    /// Override the XGPro download URL base for mirrors.
+    /// The pinned SHA-256 checksums are still enforced.
+    #[arg(long = "xgpro-url", value_name = "URL")]
+    xgpro_url: Option<String>,
+
     /// Compare two firmware files (byte-aligned diff with trailing-padding handling).
     /// Pass two file paths: --diff fileA.bin fileB.bin
     /// No programmer hardware required.

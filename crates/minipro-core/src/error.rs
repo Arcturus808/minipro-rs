@@ -59,6 +59,12 @@ pub enum MiniproError {
 
     #[error("Algorithm CRC mismatch")]
     AlgorithmCrc,
+
+    #[error("Download error: {0}")]
+    Download(String),
+
+    #[error("Operation cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, MiniproError>;

@@ -332,7 +332,7 @@ Run `minipro --help` for the full list of options.
 
 > **Note:** The T56 and T76 programmers have a host-configurable FPGA — they require an uploaded bitstream algorithm for **every** chip (SPI NOR uses `SPI25F11`/`SPI25F21`; even `protocol_id 0` devices use a utility bitstream). These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
 >
-> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, **no chip operation works on T56/T76** — `begin_transaction` fails with an `algorithm.xml not found` error. `algorithm.xml` can be generated from the vendor XGPro installer using the upstream `dump-alg-minipro.bash` script.
+> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, **no chip operation works on T56/T76** — `begin_transaction` fails with an `algorithm.xml not found` error. Generate it with `minipro --download-algorithms` — a pure-Rust replacement for upstream's `dump-alg-minipro.bash` that needs no bash, bsdtar, or other external tools (so it works natively on Windows too).
 >
 > The algorithm parser is implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC verification, and T76 level-2 zero-run decompression.
 >
@@ -345,6 +345,29 @@ Run `minipro --help` for the full list of options.
 > 6. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
 >
 > The CLI also accepts `--algorithms PATH` to specify the file directly.
+
+### Downloading algorithm.xml and firmware images
+
+`minipro --download-algorithms` downloads the official XGPro setup archives, verifies their pinned SHA-256 checksums, extracts the T56/T76 `.alg` files and programmer firmware images, generates a validated `algorithm.xml`, and writes everything atomically to the output directory. No programmer needs to be connected. Every generated bitstream is decoded and CRC-verified before the file is considered complete.
+
+```bash
+# Default: writes to the per-user data dir (search-path step 4 above)
+minipro --download-algorithms
+
+# Custom output directory
+minipro --download-algorithms --output /usr/local/share/minipro-rs
+
+# Fully offline: supply the archives yourself (outer .rar, the setup
+# .exe, or the bare inner RAR — auto-detected; repeat for both archives)
+minipro --download-algorithms \
+    --from-file xgproV1304_T48_T56_T866II_Setup.rar \
+    --from-file xgpro_T76_V1319.rar
+
+# Mirror / custom URL base (pinned checksums still enforced)
+minipro --download-algorithms --xgpro-url https://mirror.example/Xgpro/13
+```
+
+Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866II+, T48, T56, T76) — useful for `minipro -F`. If a programmer is connected when the command finishes, the output notes which bundled image corresponds to it; this is informational only — the tool never flashes firmware on its own, and the bundled image may be older than the one already installed.
 
 ---
 
