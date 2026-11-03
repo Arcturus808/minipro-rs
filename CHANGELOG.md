@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **T56/T76 algorithm.xml bitstreams always rejected — chip ID and reads returned zeros** — upstream's `crc_32` is a reflected CRC-32 with *no* final complement, but the port used `CRC_32_ISO_HDLC` (which XORs the result with `0xFFFFFFFF`), so every embedded bitstream CRC mismatched and `algorithm.xml` could never load. On the T76 every operation needs an uploaded FPGA bitstream; without it reads/clocks returned garbage. Verified on real T76 hardware (firmware 00.1.18): W25X20CL and PM25LV010 chip ID (`0x00ef3012`/`0x00009d7c`) and full reads now work. The same wrong-profile CRC also broke T56/T76 firmware-update image verification. Both now use the ported no-xor-out `crc_32`.
+
+- **T76 level-2 bitstream decompression rejected valid algorithms** — the declared output size can be odd (SPI25F11 declares 701,145 bytes while the stream emits 701,144 u16 words); upstream tolerates the slack via `calloc` but the port errored on the mismatch and dropped a boundary word. The decoder now rounds the buffer to even, decodes fully, and truncates.
+
+- **Missing/failed T56/T76 algorithm lookup now fails `begin_transaction`** — upstream C minipro calls `get_algorithm()` unconditionally and aborts when it fails; the port logged a warning (or nothing, when `algorithm.xml` was absent) and continued with a blank FPGA, producing silent zero reads. Lookup is now attempted for all T56/T76 devices and any failure aborts with a clear error.
+
 - **T48 rejected at connect with "firmware too old"** — the firmware minimum check grouped the T48 with the TL866II+ minimum (`0x255`), but the T48 runs its own firmware line (latest `0x127` / 01.1.39), so every released T48 firmware was refused. The T48 now has its own minimum (`0`, no hard floor), matching upstream C minipro which warns on version mismatch but never refuses to connect.
 
 - **`minipro -t` panic and bogus results on T48** — the hardware self-test used the TL866II+ pin tables and byte-per-pin parsing, but the T48 has its own pin-driver domain (56 drivers, bit-packed pin states, swapped pull-up/pull-down opcodes, different self-test tables). This reported every VPP pin as Bad and panicked with `index out of bounds` on pin 9. Ported the upstream `t48_hardware_check` — VPP/VCC/GND driver tests, logic-level drive tests at both levels, cross-short detection, and the overcurrent-protection tail. Output now matches upstream (`17 VPP / 34 VCC / 35 GND / 2×53 logic pins` and per-pin `state is Good/Bad` lines).

@@ -488,8 +488,7 @@ pub fn firmware_update_t56(
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
     use crate::device::ProgrammerStatus;
-    use crc::{Crc, CRC_32_ISO_HDLC};
-    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+    use crate::util::crc_32;
 
     // ── Parse header ─────────────────────────────────────────────────────────
     if dat.len() < 16 {
@@ -516,9 +515,7 @@ pub fn firmware_update_t56(
 
     // ── CRC check ────────────────────────────────────────────────────────────
     // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
-    let mut digest = CRC32.digest_with_initial(0xFFFF_FFFF);
-    digest.update(&dat[16..]);
-    let computed = digest.finalize();
+    let computed = crc_32(&dat[16..], 0xFFFF_FFFF);
     if computed != file_crc {
         return Err(MiniproError::AlgorithmCrc);
     }
