@@ -345,8 +345,9 @@ This is a living list of features and improvements planned for minipro-rs.
       big-endian JEDEC ID. `bitstream_uploaded` is reset afterward so
       the next `begin_transaction` re-uploads the selected device's own
       algorithm. GUI buttons ungated for T76; 8-pin path hardware-
-      validated (W25X20CL → `0xef3012`). 16-pin path implemented but
-      unvalidated pending a 16-pin SPI chip (e.g. W25Q128 SOIC-16).
+      validated (W25X20CL → `0xef3012`, LE25FS406M@SOP8 → `0x621613`).
+      16-pin path implemented but unvalidated pending a 16-pin SPI
+      chip (e.g. W25Q128 SOIC-16).
 
     **What we're missing (1 remaining gap):**
 
