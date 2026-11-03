@@ -671,7 +671,7 @@
             if (expectedVal === 0) {
               logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
             } else if (chipResult.is_match) {
-              logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
+              logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
             } else {
               logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
             }
