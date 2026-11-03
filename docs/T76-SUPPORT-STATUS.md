@@ -20,7 +20,10 @@ output-driver behavior on *both* programmers (non-deterministic reads;
 a silicon issue, not a code issue). LE25FS406M@SOP8 (SOP8→DIP adapter)
 reads deterministically and programs 2047/2048 pages; its last page
 erases but refuses to program — a chip-specific quirk (works fine on
-W25X20CL), not a write-path bug. All other chip classes remain
+W25X20CL), not a write-path bug. SPI autodetect (`-a` / GUI "8-pin")
+validated on W25X20CL — JEDEC `0xef3012` with correct database matches;
+the 16-pin path (SPI25F21) is implemented but unvalidated pending a
+16-pin SPI chip. All other chip classes remain
 unvalidated — the code is correct as far as we can tell from reading the
 C source, but hardware testing is required to confirm.
 
@@ -50,7 +53,10 @@ redundant uploads.
 **Known limitation**: If a different chip requiring a different
 algorithm is selected in the same session, the flag is not reset.
 This matches C minipro behavior. Not an issue for batch operations
-(same chip, same algorithm).
+(same chip, same algorithm). Exception: SPI autodetect *does* reset
+the flag — it uploads SPI25F11/SPI25F21 outside `begin_transaction`,
+so clearing the flag forces the next selected device's own algorithm
+to upload.
 
 ### OVC safety check
 `MiniproHandle::begin_transaction()` polls `get_ovc_status()` after
