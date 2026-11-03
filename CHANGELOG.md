@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Pin-contact test is now TL866II+-only** — upstream maps no pin-test handler for the T48 (its ZIF pin-driver domain differs from the II+, the same reason the hardware self-test needed a separate port), so the previously shared II+ commands could not have produced valid results on a T48 anyway. The `-z` gate and help text, the GUI Diagnostics button, the default-on pre-operation "Pin Contact Check" (which would otherwise have aborted every T48 operation), and the SPI-autodetect pre-check are all TL866II+-only now, matching upstream.
 
+- **GUI chip-ID log for `@`-package variants always claimed "mismatch" and suggested a nonexistent device** — the Chip ID operation printed `Chip ID mismatch ... select "<base>" instead` unconditionally for `@SOP8`-style entries, even when the read ID actually matched, and the suggested base name (e.g. `LE25FS406M`) often isn't a selectable device since variant names share one database row. The backend now returns the real normalized comparison; the GUI shows the normal "matches expected ID" on match, and on a genuine mismatch an informational note that the package-variant entry may report a different ID from the base chip.
+
 ---
 
 ## [0.9.0] - 2026-09-25

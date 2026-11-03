@@ -268,7 +268,6 @@ export interface ChipIdResult {
   expected: string;
   is_match: boolean;
   is_variant: boolean;
-  base_name: string;
 }
 
 export async function doChipId(icspMode: string = "zif", pinCheck: boolean = true): Promise<ChipIdResult | undefined> {

@@ -664,17 +664,15 @@
       case "chip_id": {
         const chipResult = await doChipId(icspMode, pinCheck);
         if (chipResult) {
-          if (chipResult.is_variant) {
-            logs.info(`Chip ID mismatch for ${$selectedDevice.name}: read ${chipResult.id}, expected ${chipResult.expected}. For chip ID verification, select "${chipResult.base_name}" instead.`);
+          const expectedVal = parseInt(chipResult.expected, 16);
+          if (expectedVal === 0) {
+            logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
+          } else if (chipResult.is_match) {
+            logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
+          } else if (chipResult.is_variant) {
+            logs.info(`Chip ID: ${chipResult.id} (differs from expected ${chipResult.expected} — ${$selectedDevice.name} is a package-variant entry; the base chip may report a different ID)`);
           } else {
-            const expectedVal = parseInt(chipResult.expected, 16);
-            if (expectedVal === 0) {
-              logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
-            } else if (chipResult.is_match) {
-              logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
-            } else {
-              logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
-            }
+            logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
           }
         }
         break;

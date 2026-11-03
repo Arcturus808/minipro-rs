@@ -2338,7 +2338,6 @@ pub struct ChipIdResultDto {
     expected: String,
     is_match: bool,
     is_variant: bool,
-    base_name: String,
 }
 
 /// Read the chip ID.
@@ -2382,13 +2381,8 @@ pub async fn do_chip_id(
                 .map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
             // chip that don't match what the firmware returns for that variant's protocol.
-            // Treat them as "no expected value" to avoid false mismatch warnings.
+            // The frontend softens a real mismatch into an informational note for these.
             let is_variant = device.name.contains('@');
-            let base_name = if let Some(at) = device.name.find('@') {
-                device.name[..at].to_string()
-            } else {
-                device.name.clone()
-            };
             let expected = device.chip_id;
             let bytes = if is_variant {
                 4
@@ -2412,15 +2406,14 @@ pub async fn do_chip_id(
             // Use normalized comparison to handle byte-position differences across protocols
             let norm_id = normalize_chip_id(chip_id);
             let norm_expected = normalize_chip_id(expected);
-            // For variants, treat as a match so we don't show a generic mismatch error,
-            // but the frontend will show a contextual message instead.
-            let is_match = expected == 0 || norm_id == norm_expected || is_variant;
+            // Report the real comparison even for variants — the frontend decides how
+            // to present it (hard warning vs. informational variant note).
+            let is_match = expected == 0 || norm_id == norm_expected;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto {
                 id: id_str,
                 expected: expected_str,
                 is_match,
                 is_variant,
-                base_name,
             })
         })();
 
