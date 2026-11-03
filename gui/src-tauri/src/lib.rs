@@ -183,6 +183,9 @@ pub fn run() {
             commands::write_fuses,
             commands::check_lock_protection,
             commands::get_fuse_bit_defs,
+            commands::download_algorithms,
+            commands::cancel_algo_download,
+            commands::open_download_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

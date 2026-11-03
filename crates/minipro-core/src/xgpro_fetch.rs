@@ -191,6 +191,22 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
             )
         })?,
     };
+
+    let mut warnings = Vec::new();
+
+    // sudo footgun: `sudo minipro --download-algorithms` would write into the
+    // *superuser's* data dir (e.g. /root/.local/share under `sudo -H`),
+    // invisible to normal unprivileged runs. Can't portably resolve the
+    // invoking user's home without libc — warn instead.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if opts.output_dir.is_none() && std::env::var_os("SUDO_UID").is_some() {
+        warnings.push(format!(
+            "running under sudo — output lands in the superuser's data dir \
+             ({}), invisible to unprivileged runs; run without sudo or pass --output",
+            output_dir.display()
+        ));
+    }
+
     fs::create_dir_all(&output_dir)?;
 
     let cache_dir = user_data_dir()
@@ -227,7 +243,6 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
         }
     }
 
-    let mut warnings = Vec::new();
     let mut t56_entries = Vec::new();
     let mut t76_entries = Vec::new();
     // (out_name, model, version, bytes); first archive to provide a name wins.

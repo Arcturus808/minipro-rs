@@ -519,6 +519,43 @@ depends on monospace fonts and preserved whitespace.
    after DOM changes — the content is in the DOM but invisible until an
    unrelated event (hover, scroll, resize) triggers a repaint.
 
+## Algorithm Downloader (Settings → Database)
+
+The "Download algorithm.xml + firmware…" button in SettingsPanel invokes
+`download_algorithms`, which wraps `minipro_core::xgpro_fetch::fetch` in
+`spawn_blocking` behind the shared `try_acquire` gate — it cannot run
+concurrently with chip operations.
+
+- **Output dir:** the command takes an optional `outputDir`. The frontend
+  passes `$settings.customDbDir` so generated files land next to a custom
+  database when one is configured; `None` → the per-user data dir that
+  `resolve_one()` already searches (see CLI-INTERNALS.md).
+- **Progress:** core `Progress` events are mapped onto the standard
+  `"progress"` channel (`{done, total, operation}` — `operation` is
+  `"download"` or `"extract"`) and stage/file lines go through
+  `emit_log` → `"app-log"`, so ProgressPanel and the terminal show them
+  with no new plumbing.
+- **Cancel:** `AppState.download_cancel` is an `AtomicBool` flipped by the
+  `cancel_algo_download` command; the core progress callback returns
+  `false` when set, and `fetch` aborts with `MiniproError::Cancelled`
+  (displayed as `"Operation cancelled"` — the command matches on that
+  string, so keep them in sync). The flag is reset at the start of each
+  download; cancelling is fire-and-forget.
+- **Post-download refresh:** the cached `DatabasePaths.algorithms` is
+  re-resolved only when absent or stale — an existing still-present path
+  wins, so an explicit/custom `algorithm.xml` is never shadowed by the
+  downloaded one. `DatabasePaths::resolve` semantics mean this also picks
+  up the per-user dir automatically.
+- **Connected handle caveat:** an open `MiniproHandle` snapshots its db
+  paths at connect time; the refresh only updates `state.db_paths`. The
+  command logs "reconnect to use the new algorithm.xml" on success.
+- **Open folder:** the adjacent "Open folder" button calls
+  `open_download_dir(dir)` — resolves the same output dir (custom db dir
+  or per-user data dir), `create_dir_all`s it so it works before any
+  download, and opens it in the OS file manager. `open_folder` gained an
+  `is_dir()` branch via the shared `open_dir_in_manager` helper, so it
+  accepts directory paths too (previously it opened the *parent*).
+
 ### Rust format specifiers
 
 - `{:<3}` = left-align in 3-char field (`"1  "`)

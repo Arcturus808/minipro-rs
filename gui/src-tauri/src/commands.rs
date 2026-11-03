@@ -1414,35 +1414,58 @@ pub async fn save_buffer_to_file(
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
-/// Open the folder containing the given file path in the system file manager.
-#[tauri::command]
-pub fn open_folder(path: String) -> Result<(), String> {
-    let parent = std::path::Path::new(&path)
-        .parent()
-        .ok_or("Path has no parent directory")?;
-
+fn open_dir_in_manager(dir: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     Ok(())
+}
+
+/// Open the folder containing the given file path in the system file
+/// manager. Directory paths are opened directly.
+#[tauri::command]
+pub fn open_folder(path: String) -> Result<(), String> {
+    let path = std::path::Path::new(&path);
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().ok_or("Path has no parent directory")?
+    };
+    open_dir_in_manager(dir)
+}
+
+/// Open the directory `download_algorithms` writes to: `dir` when given
+/// (the configured custom database directory), otherwise the per-user
+/// data directory. Creates it when missing so the button works before
+/// any download has run.
+#[tauri::command]
+pub fn open_download_dir(dir: Option<String>) -> Result<(), String> {
+    let dir = match dir {
+        Some(d) => std::path::PathBuf::from(d),
+        None => minipro_core::user_data_dir()
+            .ok_or("Could not determine the per-user data directory")?,
+    };
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
+    open_dir_in_manager(&dir)
 }
 
 /// Check whether a file exists at the given path.
@@ -3666,4 +3689,197 @@ fn package_type_name(pkg: &PackageDetails) -> String {
     } else {
         format!("DIP{}", pkg.pin_count)
     }
+}
+
+// ── XGPro algorithm/firmware downloader ─────────────────────────────────────
+
+/// One downloaded firmware image, for display in the Settings result.
+#[derive(Serialize)]
+pub struct DownloadedFirmwareDto {
+    pub model: String,
+    pub version: String,
+    pub path: String,
+}
+
+/// Result of `download_algorithms`.
+#[derive(Serialize)]
+pub struct AlgoDownloadOutcomeDto {
+    pub output_dir: String,
+    pub xml_path: String,
+    pub t56_algorithms: usize,
+    pub t76_algorithms: usize,
+    pub firmware: Vec<DownloadedFirmwareDto>,
+    pub warnings: Vec<String>,
+}
+
+/// Download the XGPro setup archives, extract the T56/T76 FPGA algorithms
+/// and programmer firmware images, and generate `algorithm.xml`.
+///
+/// `outputDir` — `None` writes to the per-user data directory, which the
+/// database resolver already searches; pass the custom db dir when the user
+/// keeps their database files elsewhere.
+///
+/// Runs on a blocking thread; progress rides the standard `progress`
+/// channel (`{done, total, operation}`) plus `app-log` stage lines.
+/// `cancel_algo_download` flips a flag the core progress callback observes.
+#[tauri::command]
+pub async fn download_algorithms(
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+    outputDir: Option<String>,
+) -> Result<AlgoDownloadOutcomeDto, String> {
+    if !state.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+    state
+        .download_cancel
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let win = window.clone();
+    let cancel = (*state).clone();
+    let output_dir = outputDir.map(std::path::PathBuf::from);
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut progress = |ev: minipro_core::xgpro_fetch::Progress| -> bool {
+            if cancel
+                .download_cancel
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
+                return false;
+            }
+            use minipro_core::xgpro_fetch::Progress as P;
+            match ev {
+                P::DownloadStart { archive, total } => {
+                    emit_log(&win, "info", &format!("Downloading {archive}..."));
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": 0,
+                            "total": total.unwrap_or(0),
+                            "operation": "download",
+                        }),
+                    );
+                }
+                P::DownloadBytes { received, .. } => {
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": received,
+                            "total": 0,
+                            "operation": "download",
+                        }),
+                    );
+                }
+                P::DownloadFinished { archive } => {
+                    emit_log(&win, "info", &format!("{archive}: download complete"));
+                }
+                P::Stage { archive, stage } => {
+                    emit_log(&win, "info", &format!("{archive}: {stage}"));
+                }
+                P::Processed { done, total, .. } => {
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": done,
+                            "total": total,
+                            "operation": "extract",
+                        }),
+                    );
+                }
+                P::Written { path } => {
+                    emit_log(&win, "info", &format!("wrote {}", path.display()));
+                }
+            }
+            true
+        };
+        let mut opts = minipro_core::xgpro_fetch::FetchOptions {
+            output_dir,
+            progress: Some(&mut progress),
+            ..Default::default()
+        };
+        minipro_core::xgpro_fetch::fetch(&mut opts).map_err(|e| e.to_string())
+    })
+    .await;
+
+    state.release();
+
+    let out = match result {
+        Ok(Ok(o)) => o,
+        Ok(Err(e)) if e == "Operation cancelled" => {
+            emit_log(&window, "warn", "Download cancelled");
+            return Err("cancelled".into());
+        }
+        Ok(Err(e)) => {
+            emit_log(&window, "error", &format!("Download failed: {e}"));
+            return Err(e);
+        }
+        Err(e) => {
+            emit_log(&window, "error", &format!("Download task failed: {e}"));
+            return Err(format!("Task panicked: {e}"));
+        }
+    };
+
+    // Refresh the algorithms slot of the resolved db paths so the new file
+    // is picked up. An existing still-present file wins (explicit overrides
+    // are never clobbered by the download).
+    {
+        let mut guard = state.db_paths.lock().map_err(|e| e.to_string())?;
+        if let Some(ref mut paths) = *guard {
+            let stale = match &paths.algorithms {
+                Some(p) => !p.exists(),
+                None => true,
+            };
+            if stale {
+                if let Ok(fresh) = DatabasePaths::resolve(None, None, None) {
+                    paths.algorithms = fresh.algorithms;
+                }
+            }
+        }
+    }
+
+    for w in &out.warnings {
+        emit_log(&window, "warn", w);
+    }
+    emit_log(
+        &window,
+        "info",
+        &format!(
+            "algorithm.xml: {} T56 + {} T76 algorithms → {}",
+            out.t56_algorithms,
+            out.t76_algorithms,
+            out.xml_path.display()
+        ),
+    );
+    emit_log(
+        &window,
+        "info",
+        "If a programmer is connected, reconnect it to use the new algorithm.xml",
+    );
+
+    Ok(AlgoDownloadOutcomeDto {
+        output_dir: out.output_dir.display().to_string(),
+        xml_path: out.xml_path.display().to_string(),
+        t56_algorithms: out.t56_algorithms,
+        t76_algorithms: out.t76_algorithms,
+        firmware: out
+            .firmware
+            .iter()
+            .map(|f| DownloadedFirmwareDto {
+                model: f.model.to_string(),
+                version: f.version.to_string(),
+                path: f.path.display().to_string(),
+            })
+            .collect(),
+        warnings: out.warnings,
+    })
+}
+
+/// Cancel a running `download_algorithms` call. Fire-and-forget: the
+/// download thread notices at the next progress checkpoint.
+#[tauri::command]
+pub async fn cancel_algo_download(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state
+        .download_cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
 }
