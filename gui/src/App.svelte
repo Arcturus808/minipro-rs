@@ -550,10 +550,15 @@
     return data.every((b) => b === 0xff);
   }
 
-  function warnIfVariant() {
-    if ($selectedDevice?.name.includes("@")) {
-      const base = $selectedDevice.name.split("@")[0];
-      logs.warn(`Package variant selected (${$selectedDevice.name}). The data read may be incorrect or garbage. For reliable flash operations, select "${base}" instead.`);
+  async function warnIfVariant() {
+    const name = $selectedDevice?.name;
+    if (!name?.includes("@")) return;
+    const base = name.split("@")[0];
+    try {
+      await invoke("get_device_info", { name: base });
+      logs.warn(`Package variant selected (${name}). The data read may be incorrect or garbage. For reliable flash operations, select "${base}" instead.`);
+    } catch {
+      logs.info(`Package variant (${name}) — verify the package matches the physical chip; a mismatched variant produces garbage data.`);
     }
   }
 
@@ -565,7 +570,7 @@
 
   async function onWriteFromFile() {
     await warnIfLocked();
-    warnIfVariant();
+    await warnIfVariant();
     const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
@@ -606,7 +611,7 @@
 
   async function onWriteFromHex() {
     await warnIfLocked();
-    warnIfVariant();
+    await warnIfVariant();
     if (hasPendingHexEdits) {
       applyHexEdits();
       logs.info("Applied pending hex edits before write");
@@ -622,7 +627,7 @@
     switch (op) {
       case "read":
         await warnIfLocked();
-        warnIfVariant();
+        await warnIfVariant();
         await doReadToBuffer(getOptions());
         logChipIdCheck();
         if (isAllBlank(getHexData())) {
@@ -636,7 +641,7 @@
         break;
       case "verify": {
         await warnIfLocked();
-        warnIfVariant();
+        await warnIfVariant();
         const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));

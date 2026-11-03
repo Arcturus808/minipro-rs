@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **GUI chip-ID log for `@`-package variants always claimed "mismatch" and suggested a nonexistent device** — the Chip ID operation printed `Chip ID mismatch ... select "<base>" instead` unconditionally for `@SOP8`-style entries, even when the read ID actually matched, and the suggested base name (e.g. `LE25FS406M`) often isn't a selectable device since variant names share one database row. The backend now returns the real normalized comparison; the GUI shows the normal "matches expected ID" on match, and on a genuine mismatch an informational note that the package-variant entry may report a different ID from the base chip.
 
+- **GUI package-variant warning suggested a nonexistent base device on every operation** — the pre-operation warning for `@`-suffixed devices always claimed the read "may be incorrect or garbage" and told the user to select the base name, even for chips (like `LE25FS406M@SOP8`) where only variant entries exist. The warning now fires only when the base device actually exists in the connected programmer's database; otherwise an info-level note asks the user to verify the selected package matches the physical chip.
+
 ---
 
 ## [0.9.0] - 2026-09-25
