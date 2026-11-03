@@ -239,7 +239,8 @@
       <div class="space-y-3">
         <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Layout</h3>
         <button
-          class="btn preset-tonal text-sm w-full"
+          class="btn preset-tonal text-sm w-full hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+          title="Reset panel layout, hex font size and window size to defaults"
           onclick={async () => {
             // Reset panel percentages to defaults
             update("leftPanelPercent", 0.20);
@@ -294,7 +295,8 @@
           {/if}
           <div class="flex gap-2">
             <button
-              class="btn preset-tonal text-xs"
+              class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+              title="Choose a directory containing infoic.xml and logicic.xml"
               onclick={browseDbDir}
               disabled={dbBusy}
             >
@@ -302,7 +304,8 @@
             </button>
             {#if $settings.customDbDir}
               <button
-                class="btn preset-tonal text-xs"
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                title="Use the built-in database search paths"
                 onclick={resetDbDir}
                 disabled={dbBusy}
               >
@@ -317,14 +320,15 @@
           <div class={`border-t pt-3 mt-1 space-y-2 ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
             <div class="flex gap-2 items-center">
               <button
-                class="btn preset-tonal text-xs"
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                title="Download the official XGPro archives and generate algorithm.xml + firmware images"
                 onclick={downloadAlgos}
                 disabled={dlBusy}
               >
                 {dlBusy ? "Downloading…" : "Download algorithm.xml + firmware…"}
               </button>
               <button
-                class="btn preset-tonal text-xs"
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
                 onclick={openSaveFolder}
                 disabled={dlBusy}
                 title="Open the folder the files are saved to"
@@ -332,7 +336,11 @@
                 Open folder
               </button>
               {#if dlBusy}
-                <button class="btn preset-tonal text-xs" onclick={cancelDownload}>
+                <button
+                  class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                  title="Cancel the download"
+                  onclick={cancelDownload}
+                >
                   Cancel
                 </button>
               {/if}
