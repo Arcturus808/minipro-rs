@@ -5,11 +5,24 @@
   import { invoke } from "@tauri-apps/api/core";
   import { pickDirectory } from "../file-dialog";
   import { getDbStatus, setCustomDbDir, reloadDatabase, type DbDirStatus } from "../stores/device";
+  import { progress } from "../stores/operations";
+
+  interface AlgoDownloadOutcome {
+    output_dir: string;
+    xml_path: string;
+    t56_algorithms: number;
+    t76_algorithms: number;
+    firmware: { model: string; version: string; path: string }[];
+    warnings: string[];
+  }
 
   let show = $state(false);
   let dbStatus = $state<DbDirStatus | null>(null);
   let dbError = $state<string | null>(null);
   let dbBusy = $state(false);
+  let dlBusy = $state(false);
+  let dlError = $state<string | null>(null);
+  let dlResult = $state<AlgoDownloadOutcome | null>(null);
 
   let isDark = $derived(
     $settings.theme === "dark" ||
@@ -62,6 +75,40 @@
       dbError = String(e);
     } finally {
       dbBusy = false;
+    }
+  }
+
+  async function downloadAlgos() {
+    dlBusy = true;
+    dlError = null;
+    dlResult = null;
+    try {
+      // Writes to the custom db dir when one is configured so the new
+      // algorithm.xml lives alongside the user's other database files;
+      // otherwise the per-user data dir (which the resolver searches).
+      dlResult = await invoke<AlgoDownloadOutcome>("download_algorithms", {
+        outputDir: $settings.customDbDir ?? null,
+      });
+    } catch (e: any) {
+      dlError = String(e);
+    } finally {
+      dlBusy = false;
+    }
+  }
+
+  async function cancelDownload() {
+    try {
+      await invoke("cancel_algo_download");
+    } catch {
+      // fire-and-forget — the flag may arrive after completion anyway
+    }
+  }
+
+  async function openSaveFolder() {
+    try {
+      await invoke("open_download_dir", { dir: $settings.customDbDir ?? null });
+    } catch (e: any) {
+      dlError = String(e);
     }
   }
 
@@ -266,6 +313,51 @@
           <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             Select a directory containing custom <span class="font-mono">infoic.xml</span> and <span class="font-mono">logicic.xml</span> files. The device list reloads immediately.
           </p>
+
+          <div class={`border-t pt-3 mt-1 space-y-2 ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
+            <div class="flex gap-2 items-center">
+              <button
+                class="btn preset-tonal text-xs"
+                onclick={downloadAlgos}
+                disabled={dlBusy}
+              >
+                {dlBusy ? "Downloading…" : "Download algorithm.xml + firmware…"}
+              </button>
+              <button
+                class="btn preset-tonal text-xs"
+                onclick={openSaveFolder}
+                disabled={dlBusy}
+                title="Open the folder the files are saved to"
+              >
+                Open folder
+              </button>
+              {#if dlBusy}
+                <button class="btn preset-tonal text-xs" onclick={cancelDownload}>
+                  Cancel
+                </button>
+              {/if}
+            </div>
+            {#if dlBusy && $progress}
+              <div class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {$progress.operation}: {$progress.done.toLocaleString()}{$progress.total ? ` / ${$progress.total.toLocaleString()}` : ""}
+              </div>
+            {/if}
+            {#if dlError}
+              <div class="text-xs text-red-500">{dlError}</div>
+            {/if}
+            {#if dlResult}
+              <div class={`text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                algorithm.xml: {dlResult.t56_algorithms} T56 + {dlResult.t76_algorithms} T76
+                algorithms, {dlResult.firmware.length} firmware image(s) → {dlResult.output_dir}.
+                Reconnect the programmer to use them.
+              </div>
+            {/if}
+            <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Required for T56/T76 chip operations — not bundled for licensing reasons.
+              Downloads the official XGPro archives, verifies checksums, and generates
+              <span class="font-mono">algorithm.xml</span> plus firmware images.
+            </p>
+          </div>
         </div>
       </div>
     </div>

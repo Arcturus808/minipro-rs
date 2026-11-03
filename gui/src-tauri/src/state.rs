@@ -24,6 +24,9 @@ pub struct AppState {
     /// valid (missing or lacks infoic.xml/logicic.xml). The app fell back
     /// to standard search paths; the GUI shows a warning in Settings.
     pub db_dir_invalid: AtomicBool,
+    /// Cancel flag for a running `download_algorithms` call — the core
+    /// progress callback observes it and aborts the fetch.
+    pub download_cancel: AtomicBool,
 }
 
 impl Default for AppState {
@@ -36,6 +39,7 @@ impl Default for AppState {
             is_running: AtomicBool::new(false),
             all_device_names: Mutex::new(Vec::new()),
             db_dir_invalid: AtomicBool::new(false),
+            download_cancel: AtomicBool::new(false),
         }
     }
 }
