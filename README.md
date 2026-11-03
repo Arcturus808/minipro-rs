@@ -160,12 +160,13 @@ The distributed binary is a **single self-contained `.exe`** — no Cygwin, no M
 1. Download `infoic.xml` and `logicic.xml` from the [release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) (included in the `.deb` / `.rpm` packages, or available in the repo's `data/` directory).
 2. Place both files in **any one** of these locations:
    - `%PROGRAMDATA%\minipro-rs\` — recommended for system-wide use
+   - `%LOCALAPPDATA%\minipro-rs\` — per-user, no admin rights needed
    - Same directory as `minipro.exe` — good for portable setups
    - Current working directory — quick but not persistent
    - A directory pointed to by the `MINIPRO_HOME` environment variable
    - `%PROGRAMDATA%\minipro\` — fallback if you already have the C `minipro` installed; note this uses the C version's database, which may be older or differ from the one shipped with this project
 
-   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `%PROGRAMDATA%\minipro-rs\` → `MINIPRO_HOME` → `%PROGRAMDATA%\minipro\`.
+   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `MINIPRO_HOME` → `%LOCALAPPDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro\`.
 
 > **GUI users don't need this step** — the `.msi` / `.exe` installer bundles the full chip database.
 
@@ -336,10 +337,12 @@ Run `minipro --help` for the full list of options.
 > The algorithm parser is implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC verification, and T76 level-2 zero-run decompression.
 >
 > To enable T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
-> 1. The directory containing the `minipro` executable
-> 2. The current working directory
-> 3. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)
-> 4. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
+> 1. The current working directory
+> 2. The directory containing the `minipro` executable
+> 3. The directory pointed to by the `MINIPRO_HOME` environment variable
+> 4. A per-user data directory — writable without admin/root (`%LOCALAPPDATA%\minipro-rs\` on Windows, `~/.local/share/minipro-rs/` on Linux, `~/Library/Application Support/minipro-rs/` on macOS)
+> 5. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)
+> 6. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
 >
 > The CLI also accepts `--algorithms PATH` to specify the file directly.
 
