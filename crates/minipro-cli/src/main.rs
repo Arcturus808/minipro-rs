@@ -128,6 +128,117 @@ fn format_logic_test_output(result: &minipro_core::LogicTestResult) -> String {
     out
 }
 
+/// `--download-algorithms`: fetch XGPro archives, generate algorithm.xml,
+/// extract firmware images. Runs entirely before any USB access.
+fn run_download_algorithms(cli: &Cli) -> Result<()> {
+    use minipro_core::xgpro_fetch::{fetch, FetchOptions, Progress};
+
+    // Progress: one indicatif bar for the download phase, plain stderr
+    // lines for stages and written files — stdout stays clean.
+    let mut bar: Option<ProgressBar> = None;
+    let mut progress = |ev: Progress| -> bool {
+        match ev {
+            Progress::DownloadStart { archive, total } => {
+                let b = match total {
+                    Some(t) => ProgressBar::new(t),
+                    None => ProgressBar::new_spinner(),
+                };
+                if total.is_some() {
+                    b.set_style(
+                        ProgressStyle::with_template("{msg} {bar:40} {bytes}/{total_bytes}")
+                            .expect("valid template")
+                            .progress_chars("=>-"),
+                    );
+                }
+                b.set_message(archive);
+                bar = Some(b);
+            }
+            Progress::DownloadBytes { received, .. } => {
+                if let Some(b) = &bar {
+                    b.set_position(received);
+                }
+            }
+            Progress::DownloadFinished { archive } => {
+                if let Some(b) = bar.take() {
+                    b.finish_and_clear();
+                }
+                eprintln!("{archive}: downloaded");
+            }
+            Progress::Stage { archive, stage } => {
+                if let Some(b) = bar.take() {
+                    b.finish_and_clear();
+                }
+                eprintln!("{archive}: {stage}");
+            }
+            Progress::Processed { done, total, .. } => {
+                eprint!("\r  algorithms: {done}/{total} ");
+                if done == total {
+                    eprintln!();
+                }
+            }
+            Progress::Written { path } => {
+                if let Some(b) = &bar {
+                    b.println(format!("  wrote {}", path.display()));
+                } else {
+                    eprintln!("  wrote {}", path.display());
+                }
+            }
+        }
+        true
+    };
+
+    let mut opts = FetchOptions {
+        output_dir: cli.output.clone(),
+        input_files: &cli.from_file,
+        url_base: cli.xgpro_url.as_deref(),
+        progress: Some(&mut progress),
+    };
+
+    let out = fetch(&mut opts)?;
+
+    for w in &out.warnings {
+        eprintln!("warning: {w}");
+    }
+    println!(
+        "algorithm.xml: {} T56 + {} T76 algorithms (verified) -> {}",
+        out.t56_algorithms,
+        out.t76_algorithms,
+        out.xml_path.display()
+    );
+    for fw in &out.firmware {
+        println!(
+            "firmware {} {} -> {}",
+            fw.model,
+            fw.version,
+            fw.path.display()
+        );
+    }
+
+    // Informational only: if a programmer is connected, say which bundled
+    // image corresponds to it. Never suggests or performs a firmware
+    // update — cross-revision flashing can brick the device.
+    if let Ok(handle) = MiniproHandle::open() {
+        let model = handle.info.model;
+        let fw_model = match model {
+            ProgrammerModel::Tl866iiPlus => Some("TL866II+"),
+            ProgrammerModel::T48 => Some("T48"),
+            ProgrammerModel::T56 => Some("T56"),
+            ProgrammerModel::T76 => Some("T76"),
+            _ => None,
+        };
+        eprintln!(
+            "connected programmer: {model} firmware {}",
+            handle.info.firmware_str
+        );
+        if let Some(m) = fw_model {
+            if let Some(fw) = out.firmware.iter().find(|f| f.model == m) {
+                eprintln!("  bundled image for this model: {}", fw.path.display());
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -239,6 +350,11 @@ fn run() -> Result<()> {
             // Exit code 1 on mismatch (like diff(1))
             Err(anyhow::anyhow!("files differ"))
         };
+    }
+
+    // ── Download algorithm databases + firmware (no USB needed) ──────────────
+    if cli.download_algorithms {
+        return run_download_algorithms(&cli);
     }
 
     // ── Operations that need USB ──────────────────────────────────────────────

@@ -62,3 +62,37 @@ instead — the DIP/non-DIP decision uses the same name-suffix rule as the
 GUI (`@DIP*` or bare-name non-PLCC), since `package_details.adapter` is
 0 for some adapter packages. Without `-q` a `--programmer` hint is
 printed instead, since placement is model-specific.
+
+## XGPro algorithm/firmware downloader (`--download-algorithms`)
+
+`--download-algorithms` is an early-exit action handled before
+`MiniproHandle::open()` — no programmer required. It replaces upstream's
+`dump-alg-minipro.bash` entirely in Rust (`minipro_core::xgpro_fetch`):
+download (`ureq`, env-proxy honored, platform TLS roots) → pinned
+SHA-256 verify → in-memory nested RAR5 unwrap via `rar-codec` →
+`algorithm.xml` generation → full re-decode + CRC verify of every
+emitted bitstream → atomic writes.
+
+- `--output DIR` — destination for `algorithm.xml` + `firmware-*.dat`;
+  default is the per-user data dir (the one `DatabasePaths::resolve`
+  searches), so a default run needs no elevation. Errors out with a
+  hint when no per-user dir can be determined and no `--output` given.
+- `--from-file FILE` — offline/mirror input; repeatable (one per
+  archive). Auto-detects outer `.rar`, SFX `.exe`, or bare inner RAR,
+  and assigns the T48/T56 vs T76 role by inner-archive layout
+  (`algorithm/` vs `algoT76/`). SHA-256 is computed and a mismatch is a
+  *warning* (local files may be a different XGPro version); for
+  downloads the pinned checksum is a hard error.
+- `--xgpro-url BASE` — mirror URL base (`<base>/<filename>`); pinned
+  checksums still enforced.
+- Downloaded archives are cached under `<per-user-dir>/cache/` keyed by
+  filename; a cached file that fails the checksum is re-downloaded.
+- Progress (indicatif) and all status go to stderr; the result summary
+  goes to stdout. After completion, if a programmer happens to be
+  connected, the bundled `firmware-<MODEL>-<VER>.dat` matching its model
+  is printed **informationally only** — no version comparison, no update
+  suggestion (cross-revision flashing is a brick risk).
+- Expected counts (354 T56 / 370 T76 for the pinned versions) are
+  warn-only, so a future XGPro repack doesn't hard-fail.
+- `.gitignore` covers `algorithm.xml`, `firmware-*.dat`, `*.rar` — the
+  outputs are XGecu-proprietary and must never be committed.

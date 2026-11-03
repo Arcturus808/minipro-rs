@@ -1,2 +1,8 @@
 /target
 gui/src-tauri/test.bin
+
+# XGPro downloader outputs — proprietary XGecu content, never commit
+algorithm.xml
+firmware-*.dat
+*.rar
+*.part
