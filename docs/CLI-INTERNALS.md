@@ -24,20 +24,23 @@ operation only proceeds if all pins are good. If `-z` is the only flag,
 the test runs standalone and exits.
 
 Model support and hardware caveats are documented in
-`docs/GUI-INTERNALS.md` under "Pin-contact test" (TL866II+ only — the
-T48 has its own 0x3E pin-detect protocol that upstream never
-implemented; T76's 0x3E is an unrelated adapter-init command that must
-not run standalone — see the xgecu-pro findings documented there). The `-z` handler prints from the returned
+`docs/GUI-INTERNALS.md` under "Pin-contact test" (TL866II+ and T48 —
+the T48 has its own single-command `0x3E` pin-detect protocol that
+upstream never implemented; T76's `0x3E` is an unrelated adapter-init
+command that must not run standalone — see the xgecu-pro findings
+documented there). The `-z` handler prints from the returned
 `PinTestResult` struct, preserving the upstream "Bad contact on pin: N"
 output format — annotated with the corresponding ZIF socket pin
 (`Bad contact on pin: 4 (ZIF pin 24)`), resolved through
 `minipro_core::zif::device_to_zif` so the position honors the connected
 model's insertion rule.
 
-**Pending verification:** the ZIF-pin annotation is implemented but not
-yet exercised on real hardware — spot-check once a TL866II+ is
-available (insert a chip with a lifted pin; the reported ZIF position
-and the GUI's red highlight should land on the same physical slot).
+**Verification:** T48 path verified on real hardware (seated DIP-8
+passes; lifted pins 2 and 2+5 report "Bad contact on pin: 2 (ZIF pin
+2)" and "5 (ZIF pin 37)" — the annotation lands on the physical lifted
+slots). The TL866II+ annotation path shares `device_to_zif` but its
+bit-banging measurement remains to be spot-checked when an II+ is
+available.
 
 ## ICSP wiring diagram (`-d` / `--get-info` + `-q` / `--programmer`)
 
