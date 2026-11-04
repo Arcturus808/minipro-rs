@@ -178,6 +178,8 @@ The distributed binary is a **single self-contained `.exe`** — no Cygwin, no M
 
 This is a one-time step per machine.  It is the same requirement the original C `minipro` has on Windows — this project does not add any new hurdle; it only removes the `libusb` runtime layer that sat on top.
 
+> **Programmer shows a garbled name in Device Manager?** XGecu programmers ship a buggy USB product string — Windows displays the raw bytes as random CJK characters. It's cosmetic and harmless (not a counterfeit sign, not a driver problem). See [docs/GARBLED-DEVICE-NAME.md](docs/GARBLED-DEVICE-NAME.md) for the explanation and how to give it a proper name.
+
 **GUI installer** — The `.msi` / `.exe` installer includes the full chip database and the Hack font. After installation, run `MINIPRO-RS` from the Start Menu. No manual file copying needed.
 
 ### For developers
