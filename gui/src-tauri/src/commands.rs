@@ -3883,3 +3883,71 @@ pub async fn cancel_algo_download(state: State<'_, Arc<AppState>>) -> Result<(),
         .store(true, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }
+
+/// A downloaded firmware image matching the connected programmer model.
+#[derive(Serialize)]
+pub struct FirmwareFileDto {
+    pub path: String,
+    pub model: String,
+    pub version: String,
+}
+
+fn parse_fw_version(v: &str) -> Option<[u32; 3]> {
+    let mut it = v.split('.');
+    let parsed = [
+        it.next()?.parse().ok()?,
+        it.next()?.parse().ok()?,
+        it.next()?.parse().ok()?,
+    ];
+    if it.next().is_some() {
+        return None;
+    }
+    Some(parsed)
+}
+
+/// Find firmware images previously written by `download_algorithms` that
+/// match `model` (e.g. "T76" → `firmware-T76-*.dat`). Scans `customDir`
+/// first (the configured custom database dir, which the GUI downloader
+/// writes to), then the per-user data dir (CLI default). Returns matches
+/// newest-version-first, deduplicated by version — empty vec when none
+/// exist (e.g. TL866A/CS, whose firmware isn't in the pinned archives).
+#[tauri::command]
+pub fn find_downloaded_firmware(
+    model: String,
+    customDir: Option<String>,
+) -> Result<Vec<FirmwareFileDto>, String> {
+    let mut dirs = Vec::new();
+    if let Some(d) = customDir {
+        dirs.push(std::path::PathBuf::from(d));
+    }
+    if let Some(d) = minipro_core::user_data_dir() {
+        dirs.push(d);
+    }
+
+    let prefix = format!("firmware-{model}-");
+    let mut found = Vec::new();
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(version) = name
+                .strip_prefix(&prefix)
+                .and_then(|s| s.strip_suffix(".dat"))
+                .filter(|v| parse_fw_version(v).is_some())
+            {
+                found.push(FirmwareFileDto {
+                    path: entry.path().display().to_string(),
+                    model: model.clone(),
+                    version: version.to_string(),
+                });
+            }
+        }
+    }
+    // Stable sort keeps the custom-dir entry ahead of the per-user one
+    // when both carry the same version.
+    found.sort_by_key(|f| std::cmp::Reverse(parse_fw_version(&f.version)));
+    found.dedup_by(|a, b| a.version == b.version);
+    Ok(found)
+}
