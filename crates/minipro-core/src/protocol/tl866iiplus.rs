@@ -1285,7 +1285,7 @@ impl Protocol for Tl866iiPlusProtocol {
     ) -> Result<crate::protocol::PinTestResult> {
         // Upstream maps no pin_test handler for the T48.
         if self.is_t48 {
-            return Err(MiniproError::UnsupportedOperation);
+            return pin_test_t48(usb, device, pin_map);
         }
         pin_test_tl866(usb, device, pin_map)
     }
@@ -1695,6 +1695,54 @@ pub(super) fn pin_test_tl866(
         let p = p_pin as usize;
         let d_pin = if p > x_pin { p - pno } else { p };
         if (1..=40).contains(&p) && pins[p - 1] == 0 {
+            bad_pins.push(d_pin as u16);
+        }
+    }
+
+    Ok(crate::protocol::PinTestResult { bad_pins })
+}
+
+/// T48 pin-contact check (`0x3E`) — a single command returning a per-pin
+/// contact bitmap; no bit-banging like the TL866II+ path (upstream never
+/// implemented it; protocol per proghq USB captures).
+///
+/// ```text
+/// send 3E 00 <chip_id_lo> <chip_id_hi> 00 00 00 00
+/// recv 3E 00 <id_lo> <id_hi> 00 00 00 00 b0 b1 b2 b3 b4 b5 b6 00
+/// ```
+///
+/// `b0..b4` is the ZIF1–ZIF40 contact bitmap (LSB-first, bit `p-1` of
+/// `resp[8 + (p-1)/8]`); `b5..b6` is the ISP1–ISP16 bitmap (unused — this
+/// surface is ZIF-mode only). A set bit means contact; every
+/// `pin_map.mask` pin whose bit is clear is reported bad. `chip_id` is
+/// the device `variant` (u16 LE) — the record identifier already sent in
+/// transaction packets — echoed back in the response.
+fn pin_test_t48(
+    usb: &UsbDevice,
+    device: &Device,
+    pin_map: &crate::database::PinMap,
+) -> Result<crate::protocol::PinTestResult> {
+    const T48_PIN_DETECT: u8 = 0x3E;
+
+    let mut msg = [0u8; 8];
+    msg[0] = T48_PIN_DETECT;
+    msg[2..4].copy_from_slice(&(device.variant as u16).to_le_bytes());
+    usb.msg_send(&msg)?;
+
+    let resp = usb.msg_recv(16)?;
+    if resp.first().copied() != Some(T48_PIN_DETECT) || resp.len() < 15 {
+        return Err(MiniproError::Protocol("T48 pin detect failed".into()));
+    }
+
+    let d_pins = device.package_details.pin_count as usize;
+    let x_pin = d_pins / 2;
+    let pno = ZIF_PINS - d_pins;
+
+    let mut bad_pins = Vec::new();
+    for &p_pin in &pin_map.mask {
+        let p = p_pin as usize;
+        let d_pin = if p > x_pin { p - pno } else { p };
+        if (1..=40).contains(&p) && resp[8 + (p - 1) / 8] & (1 << ((p - 1) & 7)) == 0 {
             bad_pins.push(d_pin as u16);
         }
     }
