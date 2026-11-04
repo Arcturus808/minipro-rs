@@ -7,7 +7,7 @@
   // pinTestActive: true only when a pin test has been run and returned
   //   results. When false, slots render in their default color regardless
   //   of badPins content.
-  let { badPins = [], pinTestActive = false, previewPinCount = null, identifyMode = false }: { badPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null; identifyMode?: boolean } = $props();
+  let { badPins = [], expectedPins = [], pinTestActive = false, previewPinCount = null, identifyMode = false }: { badPins?: number[]; expectedPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null; identifyMode?: boolean } = $props();
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -132,7 +132,19 @@
     );
   });
 
-  // Whether pin test results are active (passed in as a prop from App.svelte)
+  // Device pins the mask actually tested (e.g. excludes the GND pin on
+  // SPI flashes) — rendered green on pass/remainder-neutral so untested
+  // pins are never implied "good".
+  let goodZifPins = $derived.by(() => {
+    if (!pinTestActive || !expectedPins || expectedPins.length === 0 || !layout)
+      return new Set<number>();
+    const bad = badZifPins;
+    return new Set(
+      expectedPins
+        .map((d) => layout!.zif_pins[d - 1])
+        .filter((p) => p > 0 && !bad.has(p))
+    );
+  });
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
@@ -201,17 +213,18 @@
       {#each allPins as pin}
         {@const coord = pinToCoord(pin, socketSize)}
         {@const isBad = badZifPins.has(pin)}
+        {@const isGood = !isBad && goodZifPins.has(pin)}
         <rect
           x={coord.x}
           y={coord.y}
           width={SLOT_W}
           height={SLOT_H}
           rx="1"
-          fill={isBad ? "#f38ba8" : "black"}
-          fill-opacity={isBad ? "0.9" : "0.15"}
-          stroke={isBad ? "#f38ba8" : "currentColor"}
+          fill={isBad ? "#f38ba8" : isGood ? "#4ade80" : "black"}
+          fill-opacity={isBad ? "0.9" : isGood ? "0.7" : "0.15"}
+          stroke={isBad ? "#f38ba8" : isGood ? "#4ade80" : "currentColor"}
           stroke-width="1.5"
-          opacity={isBad ? "1" : "0.5"}
+          opacity={isBad || isGood ? "1" : "0.5"}
         />
         {#if isBad}
           {@const isLeft = pin <= socketSize / 2}

@@ -1766,7 +1766,7 @@
         {#if icspMode !== "zif"}
           <IcspConnectorDiagram />
         {:else}
-          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
+          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} expectedPins={$pinTestResult?.expected_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
           {#if $pinTestResult}
             <div class="border border-surface-200-800 p-2 mt-1 flex items-start justify-between gap-2">
               <div>
@@ -1784,7 +1784,11 @@
                   <div class="text-xs font-mono text-error-500-400 mt-1">
                     Bad pins: {$pinTestResult.bad_pins.join(", ")}
                   </div>
-                  <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
+                  {#if $pinTestResult.expected_pins.length > 0 && $pinTestResult.bad_pins.length === $pinTestResult.expected_pins.length}
+                    <p class="text-xs opacity-60 mt-1">Every expected pin is open — is a chip seated in the socket?</p>
+                  {:else}
+                    <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
+                  {/if}
                 {:else}
                   <div class="text-sm text-warning-500-400">{$pinTestResult.message}</div>
                 {/if}

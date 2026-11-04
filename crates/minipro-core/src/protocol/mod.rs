@@ -13,10 +13,23 @@ use crate::{
 /// Result of a pin-contact test.
 ///
 /// `bad_pins` contains device pin numbers (1-based) that failed contact.
-/// Empty means all pins contacted successfully.
+/// Empty means all tested pins contacted successfully.
+/// `expected_pins` contains every device pin the `pin_map` mask actually
+/// tested (in-range mask entries only) — pins outside it (e.g. the GND
+/// pin on SPI flashes) are never measured, so a UI can distinguish
+/// tested-good from untested instead of implying both are "good".
 #[derive(Debug, Clone, Default)]
 pub struct PinTestResult {
     pub bad_pins: Vec<u16>,
+    pub expected_pins: Vec<u16>,
+}
+
+impl PinTestResult {
+    /// True when every pin the mask expected is open — almost always an
+    /// empty socket rather than that many simultaneous bad contacts.
+    pub fn all_expected_open(&self) -> bool {
+        !self.expected_pins.is_empty() && self.bad_pins.len() == self.expected_pins.len()
+    }
 }
 
 /// Structured result of a logic IC test.

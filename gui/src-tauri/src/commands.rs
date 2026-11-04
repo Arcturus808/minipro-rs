@@ -70,6 +70,7 @@ fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
             "supported": dto.supported,
             "pass": dto.pass,
             "bad_pins": dto.bad_pins,
+            "expected_pins": dto.expected_pins,
             "message": dto.message,
         }),
     );
@@ -115,10 +116,12 @@ fn run_pin_check_if_enabled(
     let result = pin_contact_check(handle, infoic_path).map_err(|e| e.to_string())?;
     let pass = result.bad_pins.is_empty();
     let count = result.bad_pins.len();
+    let all_open = result.all_expected_open();
     let dto = PinTestResultDto {
         supported: true,
         pass,
         bad_pins: result.bad_pins.clone(),
+        expected_pins: result.expected_pins.clone(),
         message: if pass {
             "All pins OK".into()
         } else {
@@ -135,13 +138,16 @@ fn run_pin_check_if_enabled(
             .map(|p| p.to_string())
             .collect::<Vec<_>>()
             .join(", ");
+        // Every expected pin open almost always means no chip is seated.
+        let detail = if all_open {
+            format!("all {count} expected pins open — is a chip seated in the socket?")
+        } else {
+            format!("bad contact on pin(s) {pin_list}")
+        };
         emit_log(
             window,
             "warn",
-            &format!(
-                "Pin contact check failed: bad contact on pin(s) {}. Operation aborted.",
-                pin_list
-            ),
+            &format!("Pin contact check failed: {detail}. Operation aborted."),
         );
         emit_pin_test_result(window, &dto);
         return Err(format!(
@@ -2714,12 +2720,18 @@ pub async fn do_spi_autodetect(
                     Ok(r) => {
                         let count = r.bad_pins.len();
                         let pin_list = r.bad_pins.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
-                        let msg = format!("Pin contact check failed: bad contact on pin(s) {}. Autodetect aborted.", pin_list);
+                        let detail = if r.all_expected_open() {
+                            format!("all {count} expected pins open — is a chip seated in the socket?")
+                        } else {
+                            format!("bad contact on pin(s) {pin_list}")
+                        };
+                        let msg = format!("Pin contact check failed: {detail}. Autodetect aborted.");
                         emit_log(&window_clone, "warn", &msg);
                         emit_pin_test_result(&window_clone, &PinTestResultDto {
                             supported: true,
                             pass: false,
                             bad_pins: r.bad_pins,
+                            expected_pins: r.expected_pins,
                             message: format!("Bad contact on {} pin(s)", count),
                         });
                         return Err(msg);
@@ -3332,6 +3344,9 @@ pub struct PinTestResultDto {
     pub pass: bool,
     /// Device pin numbers (1-based) that failed contact.
     pub bad_pins: Vec<u16>,
+    /// Device pin numbers (1-based) the mask actually tested — lets the
+    /// diagram distinguish tested-good from untested (e.g. GND) pins.
+    pub expected_pins: Vec<u16>,
     /// Human-readable status message.
     pub message: String,
 }
@@ -3367,6 +3382,7 @@ pub async fn do_pin_test(
                     supported: false,
                     pass: false,
                     bad_pins: vec![],
+                    expected_pins: vec![],
                     message: "Pin test not supported on this programmer model".into(),
                 });
             }
@@ -3378,6 +3394,7 @@ pub async fn do_pin_test(
                     supported: false,
                     pass: false,
                     bad_pins: vec![],
+                    expected_pins: vec![],
                     message: "Pin test is only available in ZIF mode".into(),
                 });
             }
@@ -3403,6 +3420,7 @@ pub async fn do_pin_test(
                 supported: true,
                 pass,
                 bad_pins: result.bad_pins,
+                expected_pins: result.expected_pins,
                 message: if pass {
                     "All pins OK".into()
                 } else {
