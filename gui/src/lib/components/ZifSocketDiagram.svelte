@@ -305,5 +305,22 @@
       {/if}
       </g>
     </svg>
+    <!-- Color legend — only meaningful while pin-test results are shown
+         (green/red appear then). Gray covers both untested chip pins
+         (e.g. GND, outside the mask) and unoccupied socket holes; the
+         chip overlay shows which is which. -->
+    {#if pinTestActive}
+      <div class="flex items-center justify-center gap-3 mt-1 text-[10px] opacity-70 select-none">
+        <span class="flex items-center gap-1">
+          <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:#4ade80;"></span>tested ok
+        </span>
+        <span class="flex items-center gap-1">
+          <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:#f38ba8;"></span>bad contact
+        </span>
+        <span class="flex items-center gap-1">
+          <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:currentColor;opacity:0.25;border:1px solid currentColor;"></span>not tested
+        </span>
+      </div>
+    {/if}
   {/if}
 </div>
