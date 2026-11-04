@@ -556,6 +556,32 @@ concurrently with chip operations.
   `is_dir()` branch via the shared `open_dir_in_manager` helper, so it
   accepts directory paths too (previously it opened the *parent*).
 
+## Firmware update — downloaded-image resolution
+
+Diagnostics → Firmware Update first calls `find_downloaded_firmware`
+(`commands.rs`), which scans `customDir` then `user_data_dir()` for
+`firmware-<model>-*.dat`, parses `a.b.c` versions out of filenames,
+sorts newest-first and dedups by version. Match by exact
+`firmware-<model>-` prefix — model-safe by construction, which matters
+because flashing a wrong-model image is the brick path. Empty result
+(TL866A/CS — see below — or a fresh install) falls through to the
+existing file picker.
+
+The confirm dialog appends a version note comparing installed vs
+candidate: first-component mismatch = hardware-revision warning (warn
+only, never a hard block — upstream posture); strictly-lower = explicit
+DOWNGRADE note; equal = "reflash only to recover".
+
+**TL866A/CS clone warning:** `CLONE_RISK_MODELS` in DiagnosticsPanel
+adds an extra paragraph for those models on *every* path (auto-found or
+picked). MiniPro 6.82+ firmware (3.2.85/3.2.86, the final TL866A
+release) detects clones and disables boot mode — a brick recoverable
+only by forcing boot mode with a resistor on the PCB test points. We
+deliberately do **not** auto-download TL866A firmware: the only source
+(`minipro_setup685.rar`) embeds a RAR4 archive `rar-codec` can't read,
+and the image is itself the brick vector. Rejected approach — see
+ROADMAP's downloader entry.
+
 ### Rust format specifiers
 
 - `{:<3}` = left-align in 3-char field (`"1  "`)

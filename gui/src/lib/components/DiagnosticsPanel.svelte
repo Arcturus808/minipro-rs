@@ -37,33 +37,94 @@
     "TL866II+",
   ]);
 
-  $: hardwareCheckSupported = $programmer
-    ? HARDWARE_CHECK_SUPPORTED.has($programmer.model)
-    : false;
+  const hardwareCheckSupported = $derived(
+    $programmer ? HARDWARE_CHECK_SUPPORTED.has($programmer.model) : false,
+  );
 
-  $: firmwareUpdateSupported = $programmer
-    ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model)
-    : false;
+  const firmwareUpdateSupported = $derived(
+    $programmer ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model) : false,
+  );
 
-  $: pinTestSupported = $programmer
-    ? PIN_TEST_SUPPORTED.has($programmer.model)
-    : false;
+  const pinTestSupported = $derived(
+    $programmer ? PIN_TEST_SUPPORTED.has($programmer.model) : false,
+  );
 
   // Pin test requires a device with pin_map data and ZIF mode
-  $: pinTestEnabled = pinTestSupported
-    && $programmer !== null
-    && $selectedDevice !== null
-    && $selectedDevice.pin_map !== 0
-    && $settings.icspMode === "zif"
-    && !$pinTestRunning;
+  const pinTestEnabled = $derived(
+    pinTestSupported
+      && $programmer !== null
+      && $selectedDevice !== null
+      && $selectedDevice.pin_map !== 0
+      && $settings.icspMode === "zif"
+      && !$pinTestRunning,
+  );
+
+  // TL866A/CS clones are ubiquitous — firmware >=3.2.85 (MiniPro 6.82+)
+  // detects them and disables boot mode, bricking the unit until boot
+  // mode is forced in hardware. Warn on every firmware-update path.
+  const CLONE_RISK_MODELS = new Set(["TL866A", "TL866CS"]);
+
+  function parseFwVersion(v: string): number[] | null {
+    const m = String(v).match(/(\d+)\.(\d+)\.(\d+)/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  }
+
+  // Extra confirm-dialog note comparing installed vs candidate firmware.
+  // The first version component is the hardware revision — a mismatch
+  // gets a loud warning rather than a hard block, matching upstream's
+  // warn-only posture.
+  function firmwareVersionNote(installed: string, file: string): string {
+    const a = parseFwVersion(installed);
+    const b = parseFwVersion(file);
+    if (!a || !b) return "";
+    if (a[0] !== b[0]) {
+      return `\n\nWARNING: hardware revision differs — installed ${installed}, file ${file}. Flashing a different revision can brick the device.`;
+    }
+    const cmp = b[1] - a[1] || b[2] - a[2];
+    if (cmp < 0) {
+      return `\n\nNote: this is a DOWNGRADE (installed ${installed}, file ${file}).`;
+    }
+    if (cmp === 0) {
+      return `\n\nFile version matches installed (${installed}) — reflash only to recover from a fault.`;
+    }
+    return `\n\nFile version: ${file} (installed: ${installed}).`;
+  }
 
   async function updateFirmware() {
-    const path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
-    if (!path) return;
-    const fileName = path.split(/[\\/]/).pop() ?? path;
+    // Prefer a firmware image previously fetched by the algorithm
+    // downloader — the firmware-<model>-*.dat naming makes the match
+    // model-safe by construction. Fall back to manual file selection
+    // when none exists (e.g. TL866A/CS, not in the pinned archives).
+    let path = null;
+    let fileName = "";
+    let versionNote = "";
+    try {
+      const found = await invoke<{ path: string; model: string; version: string }[]>(
+        "find_downloaded_firmware",
+        {
+          model: $programmer.model,
+          customDir: $settings.customDbDir ?? null,
+        },
+      );
+      if (found.length > 0) {
+        path = found[0].path;
+        fileName = path.split(/[\\/]/).pop() ?? path;
+        versionNote = firmwareVersionNote($programmer.firmware, found[0].version);
+      }
+    } catch {
+      // resolution failure is non-fatal — fall through to the picker
+    }
+    if (!path) {
+      path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
+      if (!path) return;
+      fileName = path.split(/[\\/]/).pop() ?? path;
+    }
+    const cloneNote = CLONE_RISK_MODELS.has($programmer.model)
+      ? "\n\nCLONE WARNING: many TL866A/CS units in circulation are clones, often without the owner's knowledge. Firmware 3.2.85/3.2.86 (MiniPro 6.82+) contains clone detection that disables boot mode — flashing it on a clone bricks the device, recoverable only by forcing boot mode in hardware. Proceed only if you know your unit is genuine."
+      : "";
     const confirmed = await confirmDialog(
       "Firmware Update — EXPERIMENTAL",
-      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}\n\nProceed at your own risk?`,
+      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}${versionNote}${cloneNote}\n\nProceed at your own risk?`,
       "warning",
     );
     if (!confirmed) return;

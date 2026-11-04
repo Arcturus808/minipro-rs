@@ -186,6 +186,7 @@ pub fn run() {
             commands::download_algorithms,
             commands::cancel_algo_download,
             commands::open_download_dir,
+            commands::find_downloaded_firmware,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
