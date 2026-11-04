@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **SPI Auto Detect on T76** — the "8-Pin" / "16-Pin" autodetect buttons now work on the T76, which was previously gated off in the GUI. Mirrors upstream `t76_spi_autodetect`: a synthetic SPI device resolves `SPI25F11` (8-pin) or `SPI25F21` (16-pin) from `algorithm.xml`, the FPGA bitstream is uploaded, then the T76-specific 12-byte `0x37` request returns the JEDEC ID for database matching. The autodetect bitstream is invalidated afterwards so the next selected-device transaction re-uploads its own algorithm. T56 remains gated (protocol implementation pending).
 
+- **T48 firmware update** — Diagnostics → Firmware Update and CLI `-F` now actually flash T48 images: ports upstream's dedicated `t48_firmware_update` (`0xf048` family header, 276-byte blocks, `0xCDEF89AB45670123` bootloader magic, erase → block writes → trailer → reset, with USB re-enumeration into and out of bootloader mode via `handle.reconnect`). Previously a T48 `.dat` hit the shared TL866II+ parser and was rejected at the family-magic check before any USB write — the feature was a stub. A device stuck in bootloader mid-update can be recovered by re-running the update.
+
 ### Fixed
+
+- **Firmware-update confirm no longer raises a bogus hardware-revision warning on T48/T56/T76** — those models always report hardware version `0` (it's a display constant), while downloaded `firmware-<model>-*.dat` filenames carry XGecu's product-line prefix (`firmware-T48-01.1.35.dat` vs installed `00.1.03`), so the first-component comparison fired on every T48 update. The note now compares the real firmware version (`major.minor`, the low u16 of the file header) and only evaluates the hardware-revision warning on models reporting a real hw byte (TL866A/II+).
 
 - **TL866A/CS firmware update now warns about clone-brick risk** — MiniPro 6.82+ firmware (3.2.85/3.2.86, the last TL866A release) contains clone detection that disables the bootloader on counterfeit units; recovery requires forcing boot mode in hardware. The firmware-update confirmation now spells this out for TL866A/CS models, on both the auto-found and manually-picked file paths.
 

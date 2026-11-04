@@ -70,14 +70,16 @@
   }
 
   // Extra confirm-dialog note comparing installed vs candidate firmware.
-  // The first version component is the hardware revision — a mismatch
-  // gets a loud warning rather than a hard block, matching upstream's
-  // warn-only posture.
+  // The first version component is the hardware revision — but only on
+  // models that report one: T48/T56/T76 hardcode it to 0, and their file
+  // prefixes are product-line labels (installed 00.1.03 vs file 01.1.35
+  // on a T48 is a routine upgrade, not a revision mismatch). Gate the
+  // warning on a real hw byte (TL866A/II+) and compare {major}.{minor}.
   function firmwareVersionNote(installed: string, file: string): string {
     const a = parseFwVersion(installed);
     const b = parseFwVersion(file);
     if (!a || !b) return "";
-    if (a[0] !== b[0]) {
+    if (a[0] !== 0 && a[0] !== b[0]) {
       return `\n\nWARNING: hardware revision differs — installed ${installed}, file ${file}. Flashing a different revision can brick the device.`;
     }
     const cmp = b[1] - a[1] || b[2] - a[2];

@@ -15,7 +15,7 @@ use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::{t56, tl866a, DataSet},
+    protocol::{t48, t56, tl866a, DataSet},
 };
 
 /// When the file is smaller than the device, byte-programmable chips (UV
@@ -1366,7 +1366,9 @@ pub fn logic_auto_find(
 ///
 /// Supported formats:
 ///  - TL866A/CS: `update.dat`
-///  - TL866II+/T48: `UpdateII.dat`
+///  - TL866II+: `UpdateII.dat`
+///  - T48: `updateT48.dat`
+///  - T56: `updateT56.dat`
 ///  - T76: `updateT76.dat`
 pub fn firmware_update(
     handle: &mut MiniproHandle,
@@ -1378,6 +1380,7 @@ pub fn firmware_update(
         ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
             tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)
         }
+        ProgrammerModel::T48 => t48::firmware_update_t48(handle, firmware_data, out, progress),
         ProgrammerModel::T56 => t56::firmware_update_t56(handle, firmware_data, out, progress),
         _ => handle.protocol.firmware_update(&handle.usb, firmware_data),
     }
