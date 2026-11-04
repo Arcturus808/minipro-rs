@@ -586,14 +586,18 @@ This is a living list of features and improvements planned for minipro-rs.
   (eMMC).
 
 - [x] **T48 pin contact detection (`0x3E`)** — implement XGPro's "Pin
-  Detect" for the T48. **Status: implemented, pending hardware
-  validation.** `pin_test_t48` in `tl866iiplus.rs` sends `0x3E` +
-  `device.variant` (u16 LE) and diffs the returned 7-byte bitmap
-  (bit-set = contact assumed) against `pin_map.mask`; CLI `-z` and the
-  GUI button/pre-op gate now allow T48. Upstream C minipro only
-  implements pin test for the TL866II+ (per-pin bit-banging via
-  0x2D–0x36), so our pin test is gated to that model — but the T48 has
-  its own, simpler protocol.
+  Detect" for the T48. **Status: implemented, hardware-validated.**
+  `pin_test_t48` in `tl866iiplus.rs` ends the active transaction (the
+  bitmap reads driven-pin state, not contact, inside one), sends `0x3E`
+  + `device.variant` (u16 LE — field ignored by firmware), diffs the
+  returned bitmap (bit-set = contact, `resp[8..13]` = ZIF1-40
+  LSB-first) against `pin_map.mask`, then re-begins the transaction so
+  callers stay transparent. Seated DIP-8 verifies:
+  `0F 00 00 00 F0` = ZIF 1-4 + 37-40. CLI `-z` and the GUI button/
+  pre-op gate now allow T48. Upstream C minipro only implements pin
+  test for the TL866II+ (per-pin bit-banging via 0x2D–0x36), so our pin
+  test is gated to that model — but the T48 has its own, simpler
+  protocol.
   - **Protocol** (documented with USB captures at
     https://proghq.org/wiki/XGecu_Protocol):
     `send 3E 00 <chip_id_lo> <chip_id_hi> 00 00 00 00` →
