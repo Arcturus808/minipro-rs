@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Pin-test result Clear moved to the card's top-right** — matches the Log panel header and IdentifyResults conventions (result-card actions live top-right); the button no longer trails the status text at bottom-left.
+
 - **Accent hover cue extended to the remaining `preset-tonal` buttons** — SPI Auto Detect (8-pin/16-pin), Scroll/Paginate toggle, Prev/Next pagination, and the Settings gear now use the Settings-modal hover convention (accent-tinted background/border with transition). Every `preset-tonal` button in the app now cues on hover.
 
 - **Log panel Copy button now gives feedback** — it silently swallowed both success and clipboard-API failures, and had no tooltip or hover cue unlike every other button. It now swaps to a checkmark "Copied" state for ~1.5 s (ChatGPT/Claude-style), keeps a warning in the log on failure, and both Log buttons carry tooltips plus the Settings-modal hover convention (accent-tinted background/border).

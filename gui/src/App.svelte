@@ -1768,27 +1768,29 @@
         {:else}
           <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
           {#if $pinTestResult}
-            <div class="border border-surface-200-800 p-2 mt-1">
-              {#if $pinTestResult.supported && $pinTestResult.pass}
-                <div class="flex items-center gap-2 text-sm text-success-500-400">
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>
-                  All pins OK
-                </div>
-                <p class="text-xs opacity-60 mt-1">All contacted pins passed.</p>
-              {:else if $pinTestResult.supported && !$pinTestResult.pass}
-                <div class="flex items-center gap-2 text-sm text-error-500-400">
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 1.667L18.333 16.667H1.667L10 1.667z M10 7.5v5 M10 14.167v0.833"/></svg>
-                  Bad contact on {$pinTestResult.bad_pins.length} pin(s)
-                </div>
-                <div class="text-xs font-mono text-error-500-400 mt-1">
-                  Bad pins: {$pinTestResult.bad_pins.join(", ")}
-                </div>
-                <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
-              {:else}
-                <div class="text-sm text-warning-500-400">{$pinTestResult.message}</div>
-              {/if}
+            <div class="border border-surface-200-800 p-2 mt-1 flex items-start justify-between gap-2">
+              <div>
+                {#if $pinTestResult.supported && $pinTestResult.pass}
+                  <div class="flex items-center gap-2 text-sm text-success-500-400">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>
+                    All pins OK
+                  </div>
+                  <p class="text-xs opacity-60 mt-1">All contacted pins passed.</p>
+                {:else if $pinTestResult.supported && !$pinTestResult.pass}
+                  <div class="flex items-center gap-2 text-sm text-error-500-400">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 1.667L18.333 16.667H1.667L10 1.667z M10 7.5v5 M10 14.167v0.833"/></svg>
+                    Bad contact on {$pinTestResult.bad_pins.length} pin(s)
+                  </div>
+                  <div class="text-xs font-mono text-error-500-400 mt-1">
+                    Bad pins: {$pinTestResult.bad_pins.join(", ")}
+                  </div>
+                  <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
+                {:else}
+                  <div class="text-sm text-warning-500-400">{$pinTestResult.message}</div>
+                {/if}
+              </div>
               <button
-                class="mt-2 text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800 opacity-70 hover:opacity-100"
+                class="shrink-0 text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800 opacity-70 hover:opacity-100 transition-opacity"
                 onclick={() => clearPinTestResult()}
               >Clear</button>
             </div>
