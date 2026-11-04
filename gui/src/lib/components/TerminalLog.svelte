@@ -100,11 +100,13 @@
     <div class="flex items-center gap-1.5">
       <button
         class="btn preset-tonal text-xs px-2 py-1 flex items-center gap-1"
+        title="Copy log contents to clipboard"
         onclick={async () => {
           try {
             await navigator.clipboard.writeText($logText);
+            logs.info(`Copied ${$logs.length} log entries to clipboard`);
           } catch {
-            // Fallback for environments where clipboard API fails
+            logs.warn("Failed to copy log to clipboard");
           }
         }}
       >
@@ -115,6 +117,7 @@
       </button>
       <button
         class="btn preset-tonal-primary text-xs px-2 py-1"
+        title="Clear log contents"
         onclick={() => logs.clear()}
       >
         Clear

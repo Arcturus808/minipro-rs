@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Log panel Copy button now gives feedback** — it silently swallowed both success and clipboard-API failures, and had no tooltip unlike every other button. It now logs "Copied N log entries to clipboard" / a warning on failure (matching LogicTestGrid/HexViewer copy actions) and both Log buttons carry tooltips.
+
 - **Firmware-update confirm no longer raises a bogus hardware-revision warning on T48/T56/T76** — those models always report hardware version `0` (it's a display constant), while downloaded `firmware-<model>-*.dat` filenames carry XGecu's product-line prefix (`firmware-T48-01.1.35.dat` vs installed `00.1.03`), so the first-component comparison fired on every T48 update. The note now compares the real firmware version (`major.minor`, the low u16 of the file header) and only evaluates the hardware-revision warning on models reporting a real hw byte (TL866A/II+).
 
 - **TL866A/CS firmware update now warns about clone-brick risk** — MiniPro 6.82+ firmware (3.2.85/3.2.86, the last TL866A release) contains clone detection that disables the bootloader on counterfeit units; recovery requires forcing boot mode in hardware. The firmware-update confirmation now spells this out for TL866A/CS models, on both the auto-found and manually-picked file paths.
