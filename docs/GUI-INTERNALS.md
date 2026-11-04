@@ -568,9 +568,15 @@ because flashing a wrong-model image is the brick path. Empty result
 existing file picker.
 
 The confirm dialog appends a version note comparing installed vs
-candidate: first-component mismatch = hardware-revision warning (warn
-only, never a hard block — upstream posture); strictly-lower = explicit
-DOWNGRADE note; equal = "reflash only to recover".
+candidate. Comparison is on `{major}.{minor}` — the low u16 of the file
+version, which is what the device actually reports. The
+hardware-revision warning (first-component mismatch) only applies when
+the installed side reports a real hw byte — `installed[0] !== 0`, i.e.
+TL866A/II+; T48/T56/T76 hardcode hw to 0 so their `00` display prefix is
+a constant and file prefixes like `01.1.35` are product-line labels, not
+revisions (see `docs/FIRMWARE-FORMATS.md`). Warn only, never a hard
+block — upstream posture; strictly-lower = explicit DOWNGRADE note;
+equal = "reflash only to recover".
 
 **TL866A/CS clone warning:** `CLONE_RISK_MODELS` in DiagnosticsPanel
 adds an extra paragraph for those models on *every* path (auto-found or

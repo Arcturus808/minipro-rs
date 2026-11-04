@@ -446,3 +446,41 @@ stay in `localStorage` and reappear on a compatible programmer. An earlier
 approach that auto-selected a same-base-name variant on click was reverted —
 substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
 potentially different package variant and was too surprising.
+
+## T48 firmware update silently shared the TL866II+ parser — wrong format, always rejected (fixed)
+
+`t48.rs` re-exports `Tl866iiPlusProtocol` as `T48Protocol`, so
+`Protocol::firmware_update` on a T48 ran `firmware_update_tl866` — the
+`UpdateII.dat` parser, which gates on family `0xf8cc`. Every genuine T48
+image (`0xf048` family, 276-byte blocks, no XOR table) failed the version
+check with "Unsupported firmware version". Safe-fail — the check precedes
+any USB write — but the feature was a stub: upstream has a dedicated
+`t48_firmware_update` that was never ported.
+
+**Fix:** `t48::firmware_update_t48(handle, dat, out, progress)` ports
+`t48.c::t48_firmware_update` verbatim (16-byte header, `0x114`-byte
+blocks, `0xCDEF89AB45670123` bootloader magic @8, `0x3F` reset +
+`handle.reconnect(bool)` following the T56 handle-based pattern), and
+`operations::firmware_update` dispatches `ProgrammerModel::T48` to it.
+The shared trait impl returns `UnsupportedOperation` when `is_t48`,
+mirroring T56. Full format + wire spec: `docs/FIRMWARE-FORMATS.md`.
+
+## "Hardware version" is always 0 on T48/T56/T76 — never compare it (fixed)
+
+Upstream `minipro.c` hardcodes `handle->hw = 0` for T48/T56/T76; only
+TL866A/CS/II+ read a real hardware byte (sysinfo `msg[40]`). The firmware
+display string is `{hw}.{major}.{minor:02}`, so `00.1.03` on a T48 means
+firmware **1.03** — the `00` is a constant, not a revision. Downloader
+filenames (`firmware-T48-01.1.35.dat`) carry XGecu's product-line label,
+so the file's first component is *always* `01` while the device's is
+*always* `00`.
+
+The GUI's update-confirm `firmwareVersionNote` treated first-component
+mismatch as a "hardware revision differs" warning — it would have fired
+on every T48 update, telling users their image was incompatible when
+`1.03 → 1.35` is a routine same-line upgrade.
+
+**Fix:** `firmwareVersionNote` compares `{major}.{minor}` (the low u16 of
+the file version, which is what the device reports) and only evaluates
+the hw-rev warning when the installed side reports a real hw byte
+(`installed[0] !== 0` — TL866A/II+).
