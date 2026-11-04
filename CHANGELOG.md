@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ZIF diagram shows a color legend while pin-test results are active** — "tested ok" (green), "bad contact" (red), "not tested" (gray) swatches under the socket, matching the LogicTestGrid legend pattern. Appears only when a result is shown, since that's when the colors carry meaning.
+
 - **Pin-contact test now distinguishes tested / untested / empty socket** — the ZIF diagram renders three states: bad pins red, tested-good pins green, and untested pins (e.g. the GND pin excluded from `pin_map` masks) neutral — previously "not red" could be misread as "passed". When *every* expected pin is open, the CLI, GUI log, and result card now hint "is a chip seated in the socket?" instead of reporting N bad contacts — an all-open bitmap almost always means no chip is inserted. `PinTestResult` gained `expected_pins` (device pins actually tested) to support it.
 
 - **GUI algorithm downloader** — Settings → Database now has a "Download algorithm.xml + firmware…" button backed by the same `xgpro_fetch` core as the CLI: progress rides the standard progress panel + terminal log, Cancel is supported, and output goes to the configured custom database directory when one is set (otherwise the per-user data dir). An adjacent "Open folder" button opens the save directory in the OS file manager (creating it if needed).
