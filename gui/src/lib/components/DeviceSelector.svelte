@@ -244,7 +244,7 @@
       <div class="flex items-center gap-2 mt-2">
         <span class="text-xs opacity-60">SPI Auto Detect:</span>
         <button
-          class="btn preset-tonal text-xs px-2 py-1"
+          class="btn preset-tonal text-xs px-2 py-1 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
           onclick={() => doAutoDetect(0)}
           disabled={autodetecting}
           title="Detect 8-pin SPI flash (25xx)"
@@ -252,7 +252,7 @@
           {autodetecting ? "..." : "8-pin"}
         </button>
         <button
-          class="btn preset-tonal text-xs px-2 py-1"
+          class="btn preset-tonal text-xs px-2 py-1 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
           onclick={() => doAutoDetect(1)}
           disabled={autodetecting}
           title="Detect 16-pin SPI flash (25xx)"
@@ -372,7 +372,7 @@
             <span>Page {page + 1} / {totalPages}</span>
           {/if}
           <button
-            class="btn preset-tonal text-xs px-2 py-0.5"
+            class="btn preset-tonal text-xs px-2 py-0.5 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={toggleView}
             title={viewMode === "paginated" ? "Switch to scroll view" : "Switch to paginated view"}
           >
@@ -387,8 +387,8 @@
       </ul>
       {#if viewMode === "paginated" && results.length > PAGE_SIZE}
         <div class="flex justify-between mt-2">
-          <button class="btn preset-tonal text-xs px-2" onclick={goPrev} disabled={page === 0}>Prev</button>
-          <button class="btn preset-tonal text-xs px-2" onclick={goNext} disabled={page + 1 >= totalPages}>Next</button>
+          <button class="btn preset-tonal text-xs px-2 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors" onclick={goPrev} disabled={page === 0}>Prev</button>
+          <button class="btn preset-tonal text-xs px-2 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors" onclick={goNext} disabled={page + 1 >= totalPages}>Next</button>
         </div>
       {/if}
     {/if}

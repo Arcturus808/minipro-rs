@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Device-selector buttons get the accent hover cue** — SPI Auto Detect (8-pin/16-pin), Scroll/Paginate toggle, and Prev/Next pagination now use the Settings-modal hover convention (accent-tinted background/border with transition).
+
 - **Log panel Copy button now gives feedback** — it silently swallowed both success and clipboard-API failures, and had no tooltip or hover cue unlike every other button. It now swaps to a checkmark "Copied" state for ~1.5 s (ChatGPT/Claude-style), keeps a warning in the log on failure, and both Log buttons carry tooltips plus the Settings-modal hover convention (accent-tinted background/border).
 
 - **Firmware-update confirm no longer raises a bogus hardware-revision warning on T48/T56/T76** — those models always report hardware version `0` (it's a display constant), while downloaded `firmware-<model>-*.dat` filenames carry XGecu's product-line prefix (`firmware-T48-01.1.35.dat` vs installed `00.1.03`), so the first-component comparison fired on every T48 update. The note now compares the real firmware version (`major.minor`, the low u16 of the file header) and only evaluates the hardware-revision warning on models reporting a real hw byte (TL866A/II+).
