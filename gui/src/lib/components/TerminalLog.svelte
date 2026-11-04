@@ -112,7 +112,7 @@
     <span class="text-sm font-semibold">Log</span>
     <div class="flex items-center gap-1.5">
       <button
-        class="btn preset-tonal text-xs px-2 py-1 flex items-center gap-1"
+        class="btn preset-tonal text-xs px-2 py-1 flex items-center gap-1 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
         title="Copy log contents to clipboard"
         onclick={copyLog}
       >
@@ -129,7 +129,7 @@
         {/if}
       </button>
       <button
-        class="btn preset-tonal-primary text-xs px-2 py-1"
+        class="btn preset-tonal-primary text-xs px-2 py-1 hover:bg-primary-500/40 hover:border-primary-500/60 transition-colors"
         title="Clear log contents"
         onclick={() => logs.clear()}
       >
