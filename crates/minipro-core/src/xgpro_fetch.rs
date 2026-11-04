@@ -393,6 +393,13 @@ fn acquire_archive(
     if let Ok(cached) = fs::read(&cache_path) {
         let got = format!("{:x}", Sha256::digest(&cached));
         if got.eq_ignore_ascii_case(spec.sha256) {
+            emit(
+                opts,
+                Progress::Stage {
+                    archive: spec.file,
+                    stage: "using cached archive",
+                },
+            )?;
             return Ok(cached);
         }
         warnings.push(format!(
