@@ -1285,7 +1285,7 @@ impl Protocol for Tl866iiPlusProtocol {
     ) -> Result<crate::protocol::PinTestResult> {
         // Upstream maps no pin_test handler for the T48.
         if self.is_t48 {
-            return pin_test_t48(usb, device, pin_map);
+            return pin_test_t48(self, usb, device, pin_map);
         }
         pin_test_tl866(usb, device, pin_map)
     }
@@ -1708,21 +1708,31 @@ pub(super) fn pin_test_tl866(
 ///
 /// ```text
 /// send 3E 00 <chip_id_lo> <chip_id_hi> 00 00 00 00
-/// recv 3E 00 <id_lo> <id_hi> 00 00 00 00 b0 b1 b2 b3 b4 b5 b6 00
+/// recv 3E 00 xx xx xx xx xx xx b0 b1 b2 b3 b4 b5 b6 00
 /// ```
 ///
 /// `b0..b4` is the ZIF1–ZIF40 contact bitmap (LSB-first, bit `p-1` of
 /// `resp[8 + (p-1)/8]`); `b5..b6` is the ISP1–ISP16 bitmap (unused — this
 /// surface is ZIF-mode only). A set bit means contact; every
-/// `pin_map.mask` pin whose bit is clear is reported bad. `chip_id` is
-/// the device `variant` (u16 LE) — the record identifier already sent in
-/// transaction packets — echoed back in the response.
+/// `pin_map.mask` pin whose bit is clear is reported bad. The request's
+/// `chip_id` field is ignored by the firmware (the response carries
+/// constant fields, not an echo) — `variant` is sent per the captures.
+///
+/// The bitmap is only valid with the pin drivers idle: inside a
+/// transaction, configured/driven pins read as open (hardware-verified —
+/// a fully seated DIP-8 reads `0F 00 00 00 F0` idle but `01 00 00 00 C0`
+/// in-transaction). XGPro runs pin detect before the transaction begins;
+/// callers run inside one, so end it, measure, then re-begin to leave the
+/// caller's state untouched.
 fn pin_test_t48(
+    proto: &Tl866iiPlusProtocol,
     usb: &UsbDevice,
     device: &Device,
     pin_map: &crate::database::PinMap,
 ) -> Result<crate::protocol::PinTestResult> {
     const T48_PIN_DETECT: u8 = 0x3E;
+
+    proto.end_transaction(usb)?;
 
     let mut msg = [0u8; 8];
     msg[0] = T48_PIN_DETECT;
@@ -1730,6 +1740,8 @@ fn pin_test_t48(
     usb.msg_send(&msg)?;
 
     let resp = usb.msg_recv(16)?;
+    proto.begin_transaction(usb, device, 0)?;
+
     if resp.first().copied() != Some(T48_PIN_DETECT) || resp.len() < 15 {
         return Err(MiniproError::Protocol("T48 pin detect failed".into()));
     }

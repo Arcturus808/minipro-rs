@@ -154,12 +154,20 @@ a tooltip.
 
 The T48 path (`pin_test_t48` in `tl866iiplus.rs`) uses XGPro's own
 single-command protocol — `0x3E` carrying the device `variant` as chip
-ID (u16 LE), returning a 7-byte contact bitmap (ZIF1-40 in `resp[8..13]`
-LSB-first + ISP1-16 in `resp[13..15]`), documented with USB captures at
-https://proghq.org/wiki/XGecu_Protocol. Upstream never implemented it;
-this is a reverse-engineered port — bit-set = contact assumed, compare
-the bitmap against the device's `pin_map` mask. Bit semantics pending
-hardware validation.
+ID (u16 LE — the field is ignored by firmware; the response carries
+constant fields, not an echo), returning a contact bitmap (ZIF1-40 in
+`resp[8..13]` LSB-first + ISP1-16 in `resp[13..15]`), documented with
+USB captures at https://proghq.org/wiki/XGecu_Protocol. Upstream never
+implemented it; this is a reverse-engineered port — bit set = contact,
+compared against the device's `pin_map` mask. Hardware-validated on a
+fully seated DIP-8: bitmap `0F 00 00 00 F0` = ZIF 1-4 + 37-40.
+
+**The bitmap is only valid with the pin drivers idle** — inside a
+transaction, configured/driven pins read as open (the same seated DIP-8
+read `01 00 00 00 C0` in-transaction, reporting half its pins bad).
+XGPro runs pin detect before beginning the transaction, so
+`pin_test_t48` ends the transaction, measures, then re-begins — callers
+stay inside a transaction transparently. See KNOWN-BUGS.md.
 
 Do NOT run `0x3E` standalone on a T76: there it is an adapter-init
 pin-driver configuration step, not a contact test — running it

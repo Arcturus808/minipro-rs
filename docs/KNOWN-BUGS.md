@@ -484,3 +484,21 @@ on every T48 update, telling users their image was incompatible when
 the file version, which is what the device reports) and only evaluates
 the hw-rev warning when the installed side reports a real hw byte
 (`installed[0] !== 0` — TL866A/II+).
+
+## T48 `0x3E` pin-detect only works with pin drivers idle (fixed)
+
+The T48 contact bitmap reads **driven-pin state**, not socket contact,
+when a transaction is active: a fully seated DIP-8 returns
+`0F 00 00 00 F0` (ZIF 1-4 + 37-40, all contacts good) after
+`end_transaction`, but `01 00 00 00 C0` inside one — every driven pin
+reads open, so good chips report random bad contacts and operations
+abort on the pre-op gate. XGPro runs pin detect *before* beginning the
+transaction for the same reason.
+
+**Fix:** `pin_test_t48` sends `end_transaction` (0x04), issues `0x3E`,
+then re-issues `begin_transaction` so the caller's transaction state is
+restored transparently. Do not hoist the `0x3E` send above the end, and
+do not run it "inline" to save the re-begin — in-transaction results are
+garbage by design. Also confirmed from the same capture: the request's
+`chip_id` field is ignored (all values return identical responses); the
+bitmap is `resp[8..13]` LSB-first, bit set = contact.
