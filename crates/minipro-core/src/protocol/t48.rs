@@ -774,3 +774,296 @@ pub(super) fn hardware_check(proto: &Tl866iiPlusProtocol, usb: &UsbDevice) -> Re
     }
     Ok(())
 }
+
+// ── T48 Firmware update ───────────────────────────────────────────────────────
+
+/// XGECU reset command (used to switch between normal and bootloader modes).
+const XGECU_RESET: u8 = 0x3F;
+
+// Bootloader-mode commands (upstream t48.c).
+const T48_SWITCH: u8 = 0x3D; // Switch to bootloader (with magic)
+const T48_BTLDR_ERASE: u8 = 0x3C; // Erase flash (bootloader mode)
+const T48_BTLDR_WRITE: u8 = 0x3B; // Write flash block (bootloader mode)
+const T48_BTLDR_MAGIC: u64 = 0xCDEF_89AB_4567_0123; // Bootloader entry magic
+const T48_TRAILER_MAGIC: u32 = 0xCDEF_8668; // Last-block trailer magic
+
+// Firmware update file format.
+const T48_UPDATE_FILE_VERSION: u32 = 0xf048_0000; // (version & 0xFFFF0000) must equal this
+const T48_UPDATE_VERS_MASK: u32 = 0xFFFF_0000;
+const T48_BLOCK_SIZE: usize = 0x114; // 276 bytes per firmware block
+const T48_BLOCK_MSG_SIZE: usize = 8 + T48_BLOCK_SIZE; // 0x11c = 284
+const T48_TRAILER_MSG_SIZE: usize = 264;
+
+/// Validate an `updateT48.dat` image and return the firmware block count.
+///
+/// Checks the family magic, the exact file size and the block-region CRC —
+/// everything that can be verified without hardware.
+///
+/// File layout (from upstream `t48.c::t48_firmware_update`):
+/// ```text
+/// [0..4]    version (LE32)   must have (version & 0xffff0000) == 0xf0480000
+/// [4..8]    CRC32 of data blocks (LE32)
+/// [8..12]   unknown
+/// [12..16]  block count N (LE32)
+/// [16 .. 16+N*0x114]  N blocks of 276 bytes each
+/// Total size = N*0x114 + 16
+/// ```
+fn validate_update_dat(dat: &[u8]) -> Result<usize> {
+    use crate::util::crc_32;
+
+    if dat.len() < 16 {
+        return Err(MiniproError::FileFormat("updateT48.dat too short".into()));
+    }
+    let version = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]);
+    let file_crc = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
+    let n_blocks = u32::from_le_bytes([dat[12], dat[13], dat[14], dat[15]]) as usize;
+
+    if version & T48_UPDATE_VERS_MASK != T48_UPDATE_FILE_VERSION {
+        return Err(MiniproError::FileFormat(format!(
+            "Unsupported T48 firmware version {:#010x}",
+            version
+        )));
+    }
+    let expected = n_blocks * T48_BLOCK_SIZE + 16;
+    if dat.len() != expected {
+        return Err(MiniproError::FileFormat(format!(
+            "updateT48.dat wrong size: got {}, expected {}",
+            dat.len(),
+            expected
+        )));
+    }
+
+    // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
+    // The result (NOT inverted) must equal file_crc.
+    let computed = crc_32(&dat[16..], 0xFFFF_FFFF);
+    if computed != file_crc {
+        return Err(MiniproError::AlgorithmCrc);
+    }
+    Ok(n_blocks)
+}
+
+/// Parse and flash an `updateT48.dat` firmware image.
+///
+/// Protocol (upstream `t48.c::t48_firmware_update`, 16-byte messages unless
+/// noted; magic at msg[8..16]):
+/// 1. If in normal mode: send switch-to-bootloader (`0x3D` + magic), then
+///    reset (`0x3F`) and reconnect — the device re-enumerates.
+/// 2. Erase flash (`0x3C` + magic).
+/// 3. Begin write (`0x3B`/`1` + magic), write each block
+///    (`0x3B`/`0`, `0x11c`-byte messages), write the trailer message
+///    (`0x3B`/`3`, 264 bytes, `0xCDEF8668` @260), end write (`0x3B`/`2` +
+///    magic).
+/// 4. Reset back to normal mode (`0x3F`) and reconnect.
+pub fn firmware_update_t48(
+    handle: &mut crate::handle::MiniproHandle,
+    dat: &[u8],
+    out: &mut dyn std::io::Write,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
+    use crate::device::ProgrammerStatus;
+
+    let n_blocks = validate_update_dat(dat)?;
+
+    let version = u32::from_le_bytes([dat[0], dat[1], dat[2], dat[3]]) & 0xFFFF;
+    writeln!(
+        out,
+        "Firmware image OK ({} blocks, version 00.{}.{:02}).",
+        n_blocks,
+        (version >> 8) & 0xFF,
+        version & 0xFF
+    )
+    .ok();
+
+    // ── Switch to bootloader if necessary ────────────────────────────────────
+    if handle.info.status == ProgrammerStatus::Normal {
+        write!(out, "Switching to bootloader... ").ok();
+        {
+            let mut msg = [0u8; 16];
+            msg[0] = T48_SWITCH;
+            msg[8..16].copy_from_slice(&T48_BTLDR_MAGIC.to_le_bytes());
+            handle.usb.msg_send(&msg)?;
+            let resp = handle.usb.msg_recv(32)?;
+            if resp.first().copied().unwrap_or(1) != 0 {
+                return Err(MiniproError::Protocol(
+                    "T48 bootloader switch failed".into(),
+                ));
+            }
+        }
+        // Reset and reconnect in bootloader mode.
+        {
+            let mut msg = [0u8; 8];
+            msg[0] = XGECU_RESET;
+            handle.usb.msg_send(&msg)?;
+        }
+        handle.reconnect(true)?;
+        if handle.info.status != ProgrammerStatus::Bootloader {
+            return Err(MiniproError::Protocol(
+                "T48 did not enter bootloader mode".into(),
+            ));
+        }
+        writeln!(out, "OK").ok();
+    }
+
+    // ── Erase ────────────────────────────────────────────────────────────────
+    write!(out, "Erasing... ").ok();
+    {
+        let mut msg = [0u8; 16];
+        msg[0] = T48_BTLDR_ERASE;
+        msg[8..16].copy_from_slice(&T48_BTLDR_MAGIC.to_le_bytes());
+        handle.usb.msg_send(&msg)?;
+        let resp = handle.usb.msg_recv(32)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T48 bootloader erase failed".into()));
+        }
+    }
+    writeln!(out, "OK").ok();
+
+    // ── Begin write sequence ─────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 16];
+        msg[0] = T48_BTLDR_WRITE;
+        msg[1] = 1; // begin
+        msg[8..16].copy_from_slice(&T48_BTLDR_MAGIC.to_le_bytes());
+        handle.usb.msg_send(&msg)?;
+    }
+
+    // ── Flash blocks ─────────────────────────────────────────────────────────
+    write!(out, "Reflashing... ").ok();
+    for b in 0..n_blocks {
+        let blk_off = 16 + b * T48_BLOCK_SIZE;
+        let blk = &dat[blk_off..blk_off + T48_BLOCK_SIZE];
+
+        // Block write: 0x11c (= 8 header + 0x114 data) bytes total
+        let mut msg = vec![0u8; T48_BLOCK_MSG_SIZE];
+        msg[0] = T48_BTLDR_WRITE;
+        msg[1] = 0; // data block
+        msg[2] = 0x14; // Data Length LSB (0x0114)
+        msg[3] = 0x01; // Data Length MSB
+        msg[8..8 + T48_BLOCK_SIZE].copy_from_slice(blk);
+        handle.usb.msg_send_large(&msg)?;
+
+        let resp = handle.usb.msg_recv(32)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol(format!(
+                "T48 block {} write failed",
+                b
+            )));
+        }
+
+        if let Some(ref mut cb) = progress {
+            cb(b + 1, n_blocks);
+        }
+    }
+
+    // ── Trailer message (upstream "last block") ──────────────────────────────
+    {
+        let mut msg = [0u8; T48_TRAILER_MSG_SIZE];
+        msg[0] = T48_BTLDR_WRITE;
+        msg[1] = 3; // last block
+        msg[3] = 1;
+        msg[5] = 0xFF;
+        msg[6] = 3;
+        msg[7] = 8;
+        msg[260..264].copy_from_slice(&T48_TRAILER_MAGIC.to_le_bytes());
+        handle.usb.msg_send_large(&msg)?;
+
+        let resp = handle.usb.msg_recv(32)?;
+        if resp.get(1).copied().unwrap_or(1) != 0 {
+            return Err(MiniproError::Protocol("T48 trailer write failed".into()));
+        }
+    }
+
+    // ── End write sequence ───────────────────────────────────────────────────
+    {
+        let mut msg = [0u8; 16];
+        msg[0] = T48_BTLDR_WRITE;
+        msg[1] = 2; // end
+        msg[8..16].copy_from_slice(&T48_BTLDR_MAGIC.to_le_bytes());
+        handle.usb.msg_send(&msg)?;
+    }
+    writeln!(out, "100%").ok();
+
+    // ── Reset back to normal mode ────────────────────────────────────────────
+    write!(out, "Resetting device... ").ok();
+    {
+        let mut msg = [0u8; 8];
+        msg[0] = XGECU_RESET;
+        handle.usb.msg_send(&msg)?;
+    }
+    handle.reconnect(false)?;
+    if handle.info.status != ProgrammerStatus::Normal {
+        return Err(MiniproError::Protocol(
+            "T48 did not return to normal mode after firmware update".into(),
+        ));
+    }
+    writeln!(out, "OK").ok();
+    writeln!(out, "Reflash... OK").ok();
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::crc_32;
+
+    /// Build a synthetic `updateT48.dat` with `n` blocks and a correct CRC.
+    fn make_dat(n_blocks: u32, version: u32, corrupt: bool) -> Vec<u8> {
+        let n = n_blocks as usize;
+        let mut dat = vec![0u8; 16 + n * T48_BLOCK_SIZE];
+        let blocks_region = &mut dat[16..];
+        for (i, b) in blocks_region.iter_mut().enumerate() {
+            *b = (i & 0xFF) as u8;
+        }
+        let crc = crc_32(&dat[16..], 0xFFFF_FFFF);
+        if corrupt {
+            dat[16] ^= 0xFF;
+        }
+        dat[0..4].copy_from_slice(&version.to_le_bytes());
+        dat[4..8].copy_from_slice(&crc.to_le_bytes());
+        dat[12..16].copy_from_slice(&n_blocks.to_le_bytes());
+        dat
+    }
+
+    #[test]
+    fn valid_image_passes() {
+        let dat = make_dat(2, 0xf048_0123, false);
+        assert!(matches!(validate_update_dat(&dat), Ok(2)));
+    }
+
+    #[test]
+    fn wrong_family_rejected() {
+        // TL866II+ family magic must not parse as T48.
+        let dat = make_dat(1, 0xf8cc_0123, false);
+        assert!(matches!(
+            validate_update_dat(&dat),
+            Err(MiniproError::FileFormat(_))
+        ));
+    }
+
+    #[test]
+    fn wrong_size_rejected() {
+        let mut dat = make_dat(1, 0xf048_0123, false);
+        dat.truncate(dat.len() - 1);
+        assert!(matches!(
+            validate_update_dat(&dat),
+            Err(MiniproError::FileFormat(_))
+        ));
+    }
+
+    #[test]
+    fn corrupt_blocks_fail_crc() {
+        let dat = make_dat(1, 0xf048_0123, true);
+        assert!(matches!(
+            validate_update_dat(&dat),
+            Err(MiniproError::AlgorithmCrc)
+        ));
+    }
+
+    #[test]
+    fn real_image_layout_matches() {
+        // The bundled firmware-T48-01.1.35.dat: 942 blocks, 260008 bytes,
+        // version 0xf0480123. Verify the layout math holds for its header.
+        assert_eq!(942usize * T48_BLOCK_SIZE + 16, 260008);
+    }
+}

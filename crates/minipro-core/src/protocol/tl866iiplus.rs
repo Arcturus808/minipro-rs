@@ -1291,6 +1291,12 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
+        if self.is_t48 {
+            // T48 firmware update requires USB reconnect (switch to
+            // bootloader and back), so it's handled in operations.rs via
+            // t48::firmware_update_t48 which takes &mut MiniproHandle.
+            return Err(MiniproError::UnsupportedOperation);
+        }
         firmware_update_tl866(usb, firmware)
     }
 
