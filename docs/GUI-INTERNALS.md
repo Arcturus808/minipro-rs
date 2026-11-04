@@ -148,17 +148,18 @@ the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
 if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
-**Model support:** TL866II+ only — the sole model upstream implements
-pin test for, so the backend returns `UnsupportedOperation` on every
-other model and the button is disabled with a tooltip.
+**Model support:** TL866II+ and T48. The backend returns
+`UnsupportedOperation` on other models and the button is disabled with
+a tooltip.
 
-The T48's absence is an upstream gap, not a hardware limit: XGPro's
-"Pin Detect" works on T48 (vendor manual, XGecu forum tid=802) via its
-own single-command protocol — `0x3E` carrying the chip ID, returning a
-per-pin contact bitmap (ZIF1-40 + ISP1-16), documented with USB
-captures at https://proghq.org/wiki/XGecu_Protocol. Implementing it
-means sending one command and diffing the bitmap against the device's
-`pin_map` mask — tracked in ROADMAP.md.
+The T48 path (`pin_test_t48` in `tl866iiplus.rs`) uses XGPro's own
+single-command protocol — `0x3E` carrying the device `variant` as chip
+ID (u16 LE), returning a 7-byte contact bitmap (ZIF1-40 in `resp[8..13]`
+LSB-first + ISP1-16 in `resp[13..15]`), documented with USB captures at
+https://proghq.org/wiki/XGecu_Protocol. Upstream never implemented it;
+this is a reverse-engineered port — bit-set = contact assumed, compare
+the bitmap against the device's `pin_map` mask. Bit semantics pending
+hardware validation.
 
 Do NOT run `0x3E` standalone on a T76: there it is an adapter-init
 pin-driver configuration step, not a contact test — running it

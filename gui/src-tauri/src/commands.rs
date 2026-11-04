@@ -97,7 +97,10 @@ fn run_pin_check_if_enabled(
     if !enabled {
         return Ok(());
     }
-    if !matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) {
+    if !matches!(
+        handle.info.model,
+        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+    ) {
         return Ok(());
     }
     if icsp_mode != "zif" {
@@ -2687,8 +2690,9 @@ pub async fn do_spi_autodetect(
             // Constructs a temporary device with pin_map based on package type,
             // matching upstream minipro's auto_detect function (main.c line 482-503).
             // Upstream runs this check on the TL866II+ only. The T48's own
-            // 0x3E pin-detect command is a different protocol that upstream
-            // never implemented.
+            // 0x3E pin-detect is implemented, but the synthetic pin_map
+            // indices below (0x01/0x03) are II+ conventions — leave the
+            // autodetect pre-check II+-only.
             if matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) && handle.icsp == 0
             {
                 let pin_count = if idType == 0 { 8 } else { 16 };
@@ -3335,8 +3339,8 @@ pub struct PinTestResultDto {
 /// Run a ZIF socket pin-contact test.
 ///
 /// Requires a selected device with pin-map data in the database.
-/// Only supported on TL866II+, T48, and T76 (models with bit-banging
-/// hardware). Returns structured bad-pin data for diagram highlighting.
+/// Supported on TL866II+ (upstream bit-bang) and T48 (`0x3E` contact
+/// bitmap). Returns structured bad-pin data for diagram highlighting.
 #[tauri::command]
 pub async fn do_pin_test(
     icspMode: String,

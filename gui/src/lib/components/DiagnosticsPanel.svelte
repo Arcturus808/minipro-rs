@@ -22,19 +22,18 @@
     "T76",
   ]);
 
-  // Pin test is implemented for TL866II+ only — the sole model upstream
-  // supports. The T48 has its own single-command pin-detect protocol
-  // (0x3E → per-pin contact bitmap, documented at
-  // proghq.org/wiki/XGecu_Protocol and used by XGPro's "Pin Detect") that
-  // upstream never implemented, so the II+ bit-banging commands
-  // (0x2D-0x36) don't apply. TL866A/CS and T56 are likewise unimplemented
-  // upstream. T76 is FPGA-based with no dedicated contact-test bitstream;
-  // Matt Brown's t76-improvements branch discovered that its 0x3E command
-  // is an adapter-init pin-driver configuration step, not a standalone
-  // test — the xgecu-pro project confirmed on real hardware that it
-  // "measured nothing and corrupted every read."
+  // Pin test: TL866II+ uses upstream's per-pin bit-bang (0x2D-0x36);
+  // T48 has its own single-command pin detect (0x3E → 7-byte contact
+  // bitmap, documented at proghq.org/wiki/XGecu_Protocol and used by
+  // XGPro's "Pin Detect" — upstream never implemented it, ported from
+  // USB captures). TL866A/CS and T56 are likewise unimplemented. T76 is
+  // FPGA-based with no dedicated contact-test bitstream; its 0x3E
+  // command is an adapter-init pin-driver configuration step, not a
+  // standalone test — the xgecu-pro project confirmed it "measured
+  // nothing and corrupted every read."
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
+    "T48",
   ]);
 
   const hardwareCheckSupported = $derived(
