@@ -1691,15 +1691,23 @@ pub(super) fn pin_test_tl866(
 
     // ── Step 14: Check contact for each masked pin ────────────────────────
     let mut bad_pins = Vec::new();
+    let mut expected_pins = Vec::new();
     for &p_pin in &pin_map.mask {
         let p = p_pin as usize;
+        if !(1..=40).contains(&p) {
+            continue;
+        }
         let d_pin = if p > x_pin { p - pno } else { p };
-        if (1..=40).contains(&p) && pins[p - 1] == 0 {
+        expected_pins.push(d_pin as u16);
+        if pins[p - 1] == 0 {
             bad_pins.push(d_pin as u16);
         }
     }
 
-    Ok(crate::protocol::PinTestResult { bad_pins })
+    Ok(crate::protocol::PinTestResult {
+        bad_pins,
+        expected_pins,
+    })
 }
 
 /// T48 pin-contact check (`0x3E`) — a single command returning a per-pin
@@ -1751,15 +1759,23 @@ fn pin_test_t48(
     let pno = ZIF_PINS - d_pins;
 
     let mut bad_pins = Vec::new();
+    let mut expected_pins = Vec::new();
     for &p_pin in &pin_map.mask {
         let p = p_pin as usize;
+        if !(1..=40).contains(&p) {
+            continue;
+        }
         let d_pin = if p > x_pin { p - pno } else { p };
-        if (1..=40).contains(&p) && resp[8 + (p - 1) / 8] & (1 << ((p - 1) & 7)) == 0 {
+        expected_pins.push(d_pin as u16);
+        if resp[8 + (p - 1) / 8] & (1 << ((p - 1) & 7)) == 0 {
             bad_pins.push(d_pin as u16);
         }
     }
 
-    Ok(crate::protocol::PinTestResult { bad_pins })
+    Ok(crate::protocol::PinTestResult {
+        bad_pins,
+        expected_pins,
+    })
 }
 
 pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {

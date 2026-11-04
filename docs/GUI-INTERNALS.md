@@ -183,6 +183,16 @@ The T56 also defines `0x3E`, labelled pin detect on proghq like the
 T48's — but whether it is the pin-detect variant or the T76-style
 adapter-init is unverified on hardware.
 
+**Result semantics:** the backend's `PinTestResult` carries both
+`bad_pins` and `expected_pins` (every device pin the `pin_map` mask
+actually tested — the GND pin on SPI flashes is excluded and never
+measured). The ZIF diagram renders three states: tested-bad (red +
+label), tested-good (green), and untested/unoccupied (neutral gray) —
+so untested pins are never implied "good". When every expected pin is
+open (`bad == expected`), the surfaces treat it as an empty socket:
+the log/card say "is a chip seated?" instead of implying N bad
+contacts. The CLI `-z` prints the same hint.
+
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
 active, unsupported programmer model, or a test is already running.

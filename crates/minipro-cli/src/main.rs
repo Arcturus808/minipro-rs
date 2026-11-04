@@ -725,6 +725,11 @@ fn do_operations(
                     None => eprintln!("Bad contact on pin: {}", pin),
                 }
             }
+            // Every expected pin open almost always means no chip is
+            // seated — say so rather than implying N bad contacts.
+            if result.all_expected_open() {
+                eprintln!("All expected pins are open — is a chip seated in the socket?");
+            }
             return Err(anyhow::anyhow!(
                 "Pin contact test failed: {} bad pin(s)",
                 result.bad_pins.len()
