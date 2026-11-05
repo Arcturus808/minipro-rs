@@ -512,13 +512,35 @@ same chip works on T48 and TL866A. Upstream C minipro on the same T76
 reproduces the failure identically (`expected 0x1E930B, got 0x0000` —
 same `ATTINY_A2` algorithm, FPGA reset OK), so the port is faithful:
 the T76's FPGA-driven timing exposes a marginal die that the
-bit-banged paths tolerate. Remark/clone ATtiny parts are a plausible
-cause.
+bit-banged paths tolerate.
+
+The observed part was genuine (new from an authorized distributor),
+so clone/remark is not required for this failure — parametric
+outliers ship in genuine lots. Eliminations performed on chip B:
+reseat + lead inspection, per-pin ESD-diode DMM test (all pins
+healthy ~0.5-0.6 V), `--pulse` stretch to 500 us, and the ICSP
+physical path — all failed identically on the T76. Note the
+diagnostic flags that *don't* reach this device: `--spi_clock` is
+silently ignored (`can_adjust_clock` only arms for SPI-flash
+protocols, not AVR `0x1e`), and `--vcc`/`--vdd`/`--vpp` are rejected
+(`chip_info=0x81` is not a voltage-adjustable class). `--pulse`
+(`msg[12]`) is the only timing knob that flows to the T76 algorithm
+for this entry.
+
+Mechanism: same `ATTINY_A2` bitstream, different execution
+substrate. The T48/TL866A drive pins from MCU firmware loops with
+microseconds of natural slop; the T76 runs the algorithm as an FPGA
+bitstream at hardware-clock precision, likely at minimum legal
+setup/hold. A die whose HVSP-entry or input-threshold window is
+narrower than nominal gets forgiven by the sloppy path and missed by
+the precise one — direction is not inherent, a different marginal
+unit could fail on T48 and pass on T76.
 
 **Diagnostic rule before suspecting a port bug:** if one unit fails
 but a sibling of the same device entry succeeds on the same
 programmer and algorithm, and upstream C minipro reproduces the
 failure, treat it as chip marginality — reseat, inspect/clean leads,
-try a slower `--spi_clock` where supported, and swap the chip. A
-`0x0000` ID with a successful "FPGA Reset OK" means transport and
-bitstream are working; the die simply isn't answering within spec.
+DMM-compare ESD diode drops, try `--pulse` and the ICSP path, and
+swap the chip. A `0x0000` ID with a successful "FPGA Reset OK" means
+transport and bitstream are working; the die simply isn't answering
+within the programmer's window.
