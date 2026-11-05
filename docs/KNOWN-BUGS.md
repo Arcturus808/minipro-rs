@@ -502,3 +502,23 @@ do not run it "inline" to save the re-begin — in-transaction results are
 garbage by design. Also confirmed from the same capture: the request's
 `chip_id` field is ignored (all values return identical responses); the
 bitmap is `resp[8..13]` LSB-first, bit set = contact.
+
+## T76 all-zeros chip ID / reads on one physical chip can be silicon marginality (environmental)
+
+Observed on a pair of ATTINY85V DIP-8 parts: chip A reads
+`0x1e930b` and programs fine on T48, T76, and TL866A; chip B reads
+`0x0000` chip ID and all-`0x00` data **on the T76 only**, while the
+same chip works on T48 and TL866A. Upstream C minipro on the same T76
+reproduces the failure identically (`expected 0x1E930B, got 0x0000` —
+same `ATTINY_A2` algorithm, FPGA reset OK), so the port is faithful:
+the T76's FPGA-driven timing exposes a marginal die that the
+bit-banged paths tolerate. Remark/clone ATtiny parts are a plausible
+cause.
+
+**Diagnostic rule before suspecting a port bug:** if one unit fails
+but a sibling of the same device entry succeeds on the same
+programmer and algorithm, and upstream C minipro reproduces the
+failure, treat it as chip marginality — reseat, inspect/clean leads,
+try a slower `--spi_clock` where supported, and swap the chip. A
+`0x0000` ID with a successful "FPGA Reset OK" means transport and
+bitstream are working; the die simply isn't answering within spec.
