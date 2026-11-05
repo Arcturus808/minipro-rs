@@ -13,7 +13,8 @@ use minipro_core::{
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
         blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, health_check,
-        logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip,
+        logic_auto_find, logic_ic_test, normalize_chip_id, pin_check_gate_applies,
+        pin_contact_check, read_chip,
         read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes,
         write_chip, write_chip_bytes,
         write_file, OpStats, SizeMismatch,
@@ -99,17 +100,8 @@ fn run_pin_check_if_enabled(
     if !enabled {
         return Ok(());
     }
-    if !matches!(
-        handle.info.model,
-        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-    ) {
-        return Ok(());
-    }
-    if icsp_mode != "zif" {
-        return Ok(());
-    }
     let device = handle.device().map_err(|e| e.to_string())?.clone();
-    if device.pin_map & 0xFF == 0 {
+    if !pin_check_gate_applies(handle.info.model, icsp_mode != "zif", device.pin_map) {
         return Ok(());
     }
 
@@ -711,29 +703,18 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 /// programmer of that model so the GUI can be exercised without hardware.
 /// No USB handle is opened — operations that need the device will fail.
 fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
-    let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
+    let Some(info) = minipro_core::device::ProgrammerInfo::fake_from_env()
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
-    let name = name.trim();
-    if name.is_empty() {
-        return Ok(None);
-    }
-    let model = name.parse::<ProgrammerModel>()?;
-    let info = minipro_core::device::ProgrammerInfo {
-        model,
-        status: minipro_core::device::ProgrammerStatus::Normal,
-        firmware: 0,
-        firmware_str: "fake".to_string(),
-        device_code: "00".to_string(),
-        serial_number: "FAKE".to_string(),
-        hardware_version: 0,
-    };
+    let model = info.model;
     {
         let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         *guard = Some(info);
     }
     let _ = state.reload_device_names_for_model(model);
-    log::warn!("MINIPRO_FAKE_PROGRAMMER={name}: no hardware connected, model faked");
+    log::warn!("MINIPRO_FAKE_PROGRAMMER={model}: no hardware connected, model faked");
     Ok(Some(ProgrammerInfoDto {
         model: model.to_string(),
         firmware: "fake".to_string(),
