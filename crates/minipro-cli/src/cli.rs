@@ -150,6 +150,17 @@ struct Cli {
     #[arg(long = "logicic-out", alias = "logicic_out", value_name = "FILE")]
     logicic_out: Option<PathBuf>,
 
+    /// Chip read-stability health check: repeat chip-ID and full-memory
+    /// reads N times, then report how the results disagree. Read-only —
+    /// detects marginal/degrading chips. [default: 5 passes]
+    #[arg(long = "health-check", alias = "health_check", num_args = 0..=1, default_missing_value = "5", value_name = "PASSES")]
+    health_check: Option<u32>,
+
+    /// Write the majority-vote consensus buffer to FILE when the health
+    /// check finds instability (best-effort recovery dump).
+    #[arg(long = "consensus-out", alias = "consensus_out", value_name = "FILE")]
+    consensus_out: Option<PathBuf>,
+
     /// Identify an unknown logic IC by testing all database entries
     /// with the given pin count. Requires --pin-count.
     #[arg(long = "logic-identify", action = ArgAction::SetTrue)]

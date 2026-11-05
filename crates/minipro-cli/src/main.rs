@@ -25,9 +25,9 @@ use minipro_core::{
     find_device, find_device_any, list_devices, list_devices_for_model,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
-        logic_auto_find, logic_ic_test, pin_contact_check, read_chip, read_chip_calibration,
-        read_fuses, spi_autodetect_and_lookup, verify_chip, write_chip, write_fuses, FuseValue,
-        SizeMismatch,
+        health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
+        read_chip_calibration, read_fuses, spi_autodetect_and_lookup, verify_chip, write_chip,
+        write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -124,6 +124,77 @@ fn format_logic_test_output(result: &minipro_core::LogicTestResult) -> String {
             }
         }
         out.push('\n');
+    }
+    out
+}
+
+/// Format a `HealthReport` as human-readable text: verdict banner, chip-ID
+/// summary, per-pass CRCs, disagreement map, and characterization notes.
+fn format_health_report(report: &minipro_core::HealthReport) -> String {
+    use minipro_core::HealthVerdict as HV;
+    let mut out = String::new();
+    out.push_str(&format!("Health check: {}\n", report.device_name));
+    out.push_str(&format!("Verdict: {}\n", report.verdict.label()));
+    out.push_str(&format!(
+        "Read passes: {}/{} completed ({} bytes each)\n",
+        report.read_passes_completed, report.read_passes_requested, report.size
+    ));
+    if !report.chip_ids.is_empty() {
+        let mut unique = report.chip_ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        let seen: Vec<String> = unique.iter().map(|id| format!("0x{:06x}", id)).collect();
+        out.push_str(&format!(
+            "Chip IDs ({} reads): {}{}\n",
+            report.chip_ids.len(),
+            seen.join(", "),
+            match report.chip_id_expected {
+                Some(e) => format!(" (expected 0x{:06x})", e),
+                None => String::new(),
+            }
+        ));
+    }
+    for (i, crc) in report.pass_crcs.iter().enumerate() {
+        out.push_str(&format!("  pass {}: CRC-32 {:08x}\n", i + 1, crc));
+    }
+    for e in &report.pass_errors {
+        out.push_str(&format!("  ERROR: {}\n", e));
+    }
+    for e in &report.chip_id_errors {
+        out.push_str(&format!("  ID ERROR: {}\n", e));
+    }
+    if report.unstable_bytes > 0 {
+        out.push_str(&format!(
+            "Unstable bytes: {} of {}\n",
+            report.unstable_bytes, report.size
+        ));
+        // Show the worst regions (top 10).
+        let mut regions = report.regions.clone();
+        regions.sort_by_key(|r| std::cmp::Reverse(r.unstable));
+        for r in regions.iter().take(10) {
+            out.push_str(&format!(
+                "  0x{:06x}..0x{:06x}: {} unstable\n",
+                r.start,
+                r.start + r.len - 1,
+                r.unstable
+            ));
+        }
+        if regions.len() > 10 {
+            out.push_str(&format!("  ... and {} more regions\n", regions.len() - 10));
+        }
+        out.push_str(&format!(
+            "Bit flips: {} (0→1), {} (1→0)\n",
+            report.flips_up, report.flips_down
+        ));
+        if let Some(d) = report.periodicity {
+            out.push_str(&format!("Dominant spacing: every {} bytes\n", d));
+        }
+    }
+    for n in &report.notes {
+        out.push_str(&format!("  {}\n", n));
+    }
+    if report.verdict == HV::Stable {
+        out.push_str("Chip appears healthy — all read passes identical.\n");
     }
     out
 }
@@ -769,6 +840,45 @@ fn do_operations(
             Err(e) => return Err(e.into()),
         }
         return Ok(());
+    }
+
+    // ── Health check (read-only stability test) ──────────────────────────────
+    if let Some(passes) = cli.health_check {
+        let passes = (passes as usize).clamp(2, 64);
+        const ID_RUNS: usize = 20;
+        let pb = ProgressBar::new((ID_RUNS + passes) as u64);
+        pb.set_style(
+            ProgressStyle::with_template("{msg} {pos}/{len}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
+        pb.set_message("Health check");
+        let mut cb = |done: usize, total: usize| {
+            pb.set_length(total as u64);
+            pb.set_position(done as u64);
+        };
+        let report = health_check(handle, passes, ID_RUNS, Some(&mut cb))?;
+        pb.finish_and_clear();
+        print!("{}", format_health_report(&report));
+        if let Some(consensus) = &report.consensus {
+            if let Some(ref out) = cli.consensus_out {
+                std::fs::write(out, consensus)
+                    .with_context(|| format!("cannot write consensus dump '{}'", out.display()))?;
+                eprintln!("Consensus dump written to {}", out.display());
+            } else {
+                eprintln!(
+                    "Consensus (majority-vote) reconstruction available — re-run with \
+                     --consensus-out FILE to save it."
+                );
+            }
+        }
+        use minipro_core::HealthVerdict as HV;
+        std::process::exit(match report.verdict {
+            HV::Stable => 0,
+            HV::MarginalId => 2,
+            HV::MarginalData => 3,
+            HV::Incomplete => 4,
+            HV::TransportError => 1,
+        });
     }
 
     // ── Chip ID verification (single check before all ops) ───────────────────

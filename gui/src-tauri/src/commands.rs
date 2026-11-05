@@ -12,8 +12,8 @@ use minipro_core::{
     database::{find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
-        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find,
-        logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file,
+        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, health_check,
+        logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file,
         spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes,
         write_file, OpStats, SizeMismatch,
     },
@@ -2447,6 +2447,163 @@ pub async fn do_chip_id(
                 is_match,
                 is_variant,
             })
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(dto)) => Ok(dto),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// A single instability region (4 KiB bucket) from the health check.
+#[derive(Serialize)]
+pub struct HealthRegionDto {
+    pub start: usize,
+    pub len: usize,
+    pub unstable: usize,
+}
+
+/// Structured health-check result for the GUI.
+#[derive(Serialize)]
+pub struct HealthCheckResultDto {
+    pub verdict: String,
+    pub deviceName: String,
+    pub size: usize,
+    pub passesRequested: usize,
+    pub passesCompleted: usize,
+    pub idRunsCompleted: usize,
+    pub uniqueChipIds: Vec<String>,
+    pub unstableBytes: usize,
+    pub flipsUp: u64,
+    pub flipsDown: u64,
+    pub periodicity: Option<u32>,
+    pub regions: Vec<HealthRegionDto>,
+    pub passErrors: Vec<String>,
+    pub chipIdErrors: Vec<String>,
+    pub notes: Vec<String>,
+    /// Majority-vote reconstruction (present only when instability was found).
+    pub consensusB64: Option<String>,
+}
+
+/// Read-only chip health check: repeat chip-ID and full-memory reads, then
+/// report how the results disagree. Intended to flag marginal/degrading
+/// chips (drifting IDs, bit flips) without touching flash contents.
+#[tauri::command]
+pub async fn run_health_check(
+    icspMode: String,
+    pinCheck: bool,
+    passes: u32,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<HealthCheckResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let window_inner = window_clone.clone();
+
+        let result = (|| {
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
+            let passes = (passes as usize).clamp(2, 64);
+            let mut cb = |done: usize, total: usize| {
+                let _ = window_inner.emit(
+                    "progress",
+                    ProgressPayload {
+                        done,
+                        total,
+                        operation: "Health check".to_string(),
+                    },
+                );
+            };
+            const ID_RUNS: usize = 20;
+            let report = health_check(&mut handle, passes, ID_RUNS, Some(&mut cb))
+                .map_err(|e| e.to_string())?;
+
+            use minipro_core::HealthVerdict as HV;
+            let mut unique: Vec<u32> = report.chip_ids.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            let mut regions = report.regions;
+            regions.sort_by_key(|r| std::cmp::Reverse(r.unstable));
+            regions.truncate(20);
+            let dto = HealthCheckResultDto {
+                verdict: report.verdict.label().to_string(),
+                deviceName: report.device_name,
+                size: report.size,
+                passesRequested: report.read_passes_requested,
+                passesCompleted: report.read_passes_completed,
+                idRunsCompleted: report.chip_ids.len(),
+                uniqueChipIds: unique.iter().map(|id| format!("0x{:06x}", id)).collect(),
+                unstableBytes: report.unstable_bytes,
+                flipsUp: report.flips_up,
+                flipsDown: report.flips_down,
+                periodicity: report.periodicity,
+                regions: regions
+                    .into_iter()
+                    .map(|r| HealthRegionDto {
+                        start: r.start,
+                        len: r.len,
+                        unstable: r.unstable,
+                    })
+                    .collect(),
+                passErrors: report.pass_errors.clone(),
+                chipIdErrors: report.chip_id_errors.clone(),
+                notes: report.notes.clone(),
+                consensusB64: report.consensus.map(|c| {
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, c)
+                }),
+            };
+            let level = match report.verdict {
+                HV::Stable => "info",
+                HV::TransportError => "error",
+                _ => "warn",
+            };
+            emit_log(
+                &window_inner,
+                level,
+                &format!(
+                    "Health check — {}: {} pass(es) completed, {} unstable byte(s)",
+                    report.verdict.label(),
+                    report.read_passes_completed,
+                    report.unstable_bytes
+                ),
+            );
+            for n in &report.notes {
+                emit_log(&window_inner, "info", &format!("  {}", n));
+            }
+            Ok::<HealthCheckResultDto, String>(dto)
         })();
 
         let _ = handle.end_transaction();

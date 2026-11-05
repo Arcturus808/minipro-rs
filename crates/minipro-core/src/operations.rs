@@ -157,8 +157,28 @@ pub fn read_chip(
     page: u8,
     format: &str,
     check_device_id: bool,
-    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+    progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
+    let device_name = handle.device()?.name.clone();
+    let buf = read_chip_buffer(handle, page, check_device_id, progress)?;
+    write_file(path, format, &buf, Some(&device_name))?;
+    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
+    Ok(OpStats {
+        bytes: buf.len(),
+        crc32,
+    })
+}
+
+/// Read chip memory into a buffer (no file output).
+///
+/// Shared by `read_chip` and `health_check` — repeated reads need the raw
+/// data, not a file.
+pub fn read_chip_buffer(
+    handle: &mut MiniproHandle,
+    page: u8,
+    check_device_id: bool,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<Vec<u8>> {
     if check_device_id {
         check_chip_id(handle)?;
     }
@@ -211,9 +231,7 @@ pub fn read_chip(
         }
     }
 
-    write_file(path, format, &buf, Some(&device.name))?;
-    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
-    Ok(OpStats { bytes: size, crc32 })
+    Ok(buf)
 }
 
 /// Write `path` to chip memory.
@@ -1528,4 +1546,73 @@ pub fn spi_autodetect_and_lookup(
     let matches =
         crate::database::find_devices_by_chip_id(paths, jedec_id, pin_count, handle.info.model)?;
     Ok(SpiAutodetectResult { jedec_id, matches })
+}
+
+/// Chip read-stability health check.
+///
+/// Reads the chip `read_passes` times plus `id_runs` chip-ID reads, then
+/// characterizes how the results disagree. Read-only — never modifies chip
+/// contents. The device must already be open (`begin_transaction`).
+///
+/// `progress` reports `(done, total)` in operation units (ID reads + full
+/// reads). Mid-read failures are recorded and the remaining passes still
+/// run — an intermittent chip may answer some passes and not others.
+pub fn health_check(
+    handle: &mut MiniproHandle,
+    read_passes: usize,
+    id_runs: usize,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<crate::health::HealthReport> {
+    let device = handle.device()?.clone();
+    let size = handle.protocol.effective_code_size(&device) as usize;
+    let total = id_runs + read_passes;
+    let mut done = 0usize;
+
+    // ── Chip-ID runs (cheap; a drifting ID is itself diagnostic) ────────
+    let mut chip_ids = Vec::new();
+    let mut chip_id_errors = Vec::new();
+    if device.flags.has_chip_id {
+        for _ in 0..id_runs {
+            match handle.protocol.get_chip_id(&handle.usb, &device) {
+                Ok((_id_type, id)) => chip_ids.push(id),
+                Err(e) => chip_id_errors.push(e.to_string()),
+            }
+            done += 1;
+            if let Some(ref mut f) = progress {
+                f(done, total);
+            }
+        }
+    }
+
+    // ── Full-read passes ────────────────────────────────────────────────
+    let mut reads = Vec::with_capacity(read_passes);
+    let mut pass_errors = Vec::new();
+    for i in 0..read_passes {
+        // Device already validated once; per-pass ID check disabled — the
+        // dedicated ID runs above capture drift better anyway.
+        match read_chip_buffer(handle, 0x00, false, None) {
+            Ok(buf) => reads.push(buf),
+            Err(e) => pass_errors.push(format!("read pass {}: {}", i + 1, e)),
+        }
+        done += 1;
+        if let Some(ref mut f) = progress {
+            f(done, total);
+        }
+    }
+
+    let expected = if device.chip_id != 0 {
+        Some(device.chip_id)
+    } else {
+        None
+    };
+    Ok(crate::health::build_report(
+        device.name.clone(),
+        size,
+        read_passes,
+        chip_ids,
+        expected,
+        chip_id_errors,
+        reads,
+        pass_errors,
+    ))
 }

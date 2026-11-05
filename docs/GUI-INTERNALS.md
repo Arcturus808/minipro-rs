@@ -23,7 +23,7 @@ gui/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list (syncs from external selection via $effect)
-        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test (buttons collapsible)
+        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test, chip health check (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
         IcspConnectorDiagram.svelte — ICSP connector diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc"); renders pin numbering plus per-class signal wiring when a verified table exists
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
@@ -261,6 +261,26 @@ the CLI's placement hints (`-d` output, `-z` bad-pin annotation).
 **Result panel:** Below the ZIF diagram, a compact panel shows
 "✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
 pin list and a "Clear" button to dismiss results.
+
+## Chip health check (GUI)
+
+Diagnostics → "Chip Health Check" invokes `run_health_check` (enabled
+whenever a device is selected — it needs `-p`-equivalent context for the
+transaction). Params: `icspMode`, `pinCheck: true` (pre-op pin gate like
+other operations), `passes: 5`. The backend runs `operations::health_check`
+(20 chip-ID reads + N full reads), emits progress on the standard
+`"progress"` channel under the "Health check" operation name, and logs a
+verdict line + notes via `app-log`.
+
+The returned `HealthCheckResultDto` renders as a result card inside the
+Diagnostics disclosure: colored verdict (`Stable` green, `Transport error`
+red, others amber), pass/ID-run counts, unique chip IDs seen, unstable-byte
+count with `0→1`/`1→0` flip split and dominant periodic spacing, top
+instability regions (4 KiB buckets), analysis notes, and — when
+`consensusB64` is present — a "Save consensus dump" button routing through
+`pickSaveFile` + `save_bytes_to_file`. Read-only: the command never writes
+to the chip. See `docs/CLI-INTERNALS.md` "Health check" for the analysis
+semantics and transport limitations.
 
 ## ICSP wiring diagrams (IcspConnectorDiagram.svelte)
 

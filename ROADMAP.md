@@ -1052,7 +1052,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** implemented
 
 
-- [ ] **Chip read-stability health check** — repeated reads to detect marginal/degrading chips
+- [x] **Chip read-stability health check** — repeated reads to detect marginal/degrading chips *(Phase 1 read-only shipped; extensions below remain open)*
   - **Motivation (real case, 2026-11):** a PM25LV010 read cleanly on a TL866A in June but produced non-deterministic corruption on *both* a TL866A and a T76 months later — scattered `0→1` bit flips, different garbage every run, ~34% of bytes wrong. The chip's output driver had degraded (flash contents likely still intact — the stored bits aren't what's failing, the MISO drive is). Diagnosis took cross-comparing four dumps; a built-in check would have surfaced "chip is marginal" in seconds and prevented "is the programmer broken?" confusion.
   - **What it detects:** *read-path* instability — weak/floating DO drivers, marginal contacts, intermittent HOLD#/WP# faults. Signature: bytes that differ between repeated reads. What it does NOT detect: stored-cell charge loss (a uniformly-rotten cell reads consistently — needs a known-good reference) or deterministic decode bugs (also consistent).
   - **Design sketch:**
@@ -1067,7 +1067,8 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Edge cases:** N reads of large chips (16 MB NAND/eMMC) take time — cap default passes or read a sampled subset of regions; chips with volatile regions (status registers mirrored in the address space) need a mask mechanism; `--continue-on-error` behavior when a pass fails mid-read.
   - **Difficulty: Low-Medium** — reuses existing `read_block`/`read_chip` plumbing; analysis is pure buffer math; no protocol work. GUI surface is the larger half.
   - **Priority: medium** — genuinely unique diagnostic (neither XGPro nor upstream minipro has it); salvaging old/suspect chips is a common workflow for this tool's audience.
-  - **Status:** not started
+  - **Status:** **Phase 1 shipped** (read-only) — `health.rs` analysis module + `operations::health_check(handle, passes, id_runs, cb)`; CLI `--health-check [N]` + `--consensus-out FILE` (verdict exit codes: 0 stable / 2 marginal-ID / 3 marginal-data / 4 incomplete / 1 transport error); GUI "Chip Health Check" button in Diagnostics with a result card (verdict, IDs seen, unstable-byte count, worst regions, flip direction, periodicity) and a Save-consensus-dump button when instability is found. Verdicts shipped as `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete` / `Transport-Error` (finer-grained than the sketch's three-way). Consensus majority-vote buffer implemented; transport errors are distinguished from diagnostic failures, and blank/uniform reads are *not* treated as a dead-chip verdict.
+  - **Still open:** Read-panel opt-in "stability check" checkbox (designed, not wired); compare-with-reference mode; large-chip pass caps/sampling; destructive Phase-2 tests (pattern programming, erase verification, endurance/retention screening) — explicitly out of the XGecu transport's reach are opcode-level tests, SPI mode switching, clock sweeps, direct power cycling, and raw status-register access.
 
 - [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI
   - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.
