@@ -75,6 +75,18 @@ pub struct OpStats {
     pub crc32: u32,
 }
 
+impl OpStats {
+    /// Stats for an in-memory buffer (e.g. a stability-checked read that
+    /// bypasses `read_chip`).
+    pub fn from_buffer(buf: &[u8]) -> Self {
+        let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(buf);
+        Self {
+            bytes: buf.len(),
+            crc32,
+        }
+    }
+}
+
 /// Resolve the effective file format: use `fmt` unless it is `"auto"`, in
 /// which case infer from the file extension.
 fn effective_format<'a>(fmt: &'a str, path: &Path) -> &'a str {
@@ -156,17 +168,83 @@ pub fn read_chip(
     path: &Path,
     page: u8,
     format: &str,
-    check_device_id: bool,
     progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
     let device_name = handle.device()?.name.clone();
-    let buf = read_chip_buffer(handle, page, check_device_id, progress)?;
+    let buf = read_chip_buffer(handle, page, progress)?;
     write_file(path, format, &buf, Some(&device_name))?;
-    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
-    Ok(OpStats {
-        bytes: buf.len(),
-        crc32,
-    })
+    Ok(OpStats::from_buffer(&buf))
+}
+
+/// Read chip memory `passes` times, comparing passes for read-path
+/// stability (the Read-panel counterpart of [`health_check`]).
+///
+/// Returns the effective image plus a [`crate::health::HealthReport`]:
+/// the consistent buffer when all completed passes agree, or the
+/// majority-vote consensus (`report.consensus`) when they disagree.
+/// Errors only when no pass completes; a partial run returns the
+/// completed subset with `report.verdict == Incomplete`.
+///
+/// `progress` reports cumulative `(bytes_done, bytes_total)` across all
+/// passes.
+pub fn read_chip_stable(
+    handle: &mut MiniproHandle,
+    page: u8,
+    passes: usize,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<(Vec<u8>, crate::health::HealthReport)> {
+    let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
+    let pass_size = match page {
+        0x00 => code_size,
+        0x01 => device.data_memory_size as usize,
+        _ => code_size,
+    };
+    let total = pass_size.saturating_mul(passes);
+    let mut reads = Vec::with_capacity(passes);
+    let mut pass_errors = Vec::new();
+    let mut first_error = None;
+    for i in 0..passes {
+        let base = i * pass_size;
+        let result = match progress.as_mut() {
+            Some(f) => read_chip_buffer(handle, page, Some(&mut |done, _| f(base + done, total))),
+            None => read_chip_buffer(handle, page, None),
+        };
+        match result {
+            Ok(buf) => reads.push(buf),
+            Err(e) => {
+                pass_errors.push(format!("read pass {}: {}", i + 1, e));
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+                if let Some(f) = progress.as_mut() {
+                    f(base + pass_size, total);
+                }
+            }
+        }
+    }
+    if reads.is_empty() {
+        return Err(first_error
+            .unwrap_or_else(|| MiniproError::Protocol("no read passes completed".to_string())));
+    }
+    let first = reads[0].clone();
+    let report = crate::health::build_report(
+        device.name.clone(),
+        pass_size,
+        passes,
+        Vec::new(),
+        if device.chip_id != 0 {
+            Some(device.chip_id)
+        } else {
+            None
+        },
+        Vec::new(),
+        reads,
+        pass_errors,
+        None,
+    );
+    let data = report.consensus.clone().unwrap_or(first);
+    Ok((data, report))
 }
 
 /// Read chip memory into a buffer (no file output).
@@ -176,12 +254,8 @@ pub fn read_chip(
 pub fn read_chip_buffer(
     handle: &mut MiniproHandle,
     page: u8,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<Vec<u8>> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -249,12 +323,8 @@ pub fn write_chip(
     format: &str,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -383,12 +453,8 @@ pub fn write_chip_bytes(
     page: u8,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -506,12 +572,8 @@ pub fn verify_chip(
     path: &Path,
     page: u8,
     format: &str,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -582,12 +644,8 @@ pub fn verify_chip_bytes(
     handle: &mut MiniproHandle,
     mut expected: Vec<u8>,
     page: u8,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -766,10 +824,7 @@ fn write_osccal(handle: &mut MiniproHandle, data: &[u8]) -> Result<()> {
 /// Silently returns `Ok(())` if the device does not support electrical erase
 /// (`can_erase` is false, e.g. UV EPROMs). This matches upstream minipro's
 /// `erase_device()` which checks `device->flags.can_erase` before erasing.
-pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
+pub fn erase_chip(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
 
     // Not all chips can be erased (e.g. UV EPROMs require UV light, not
@@ -1598,9 +1653,7 @@ pub fn health_check(
     let mut reads = Vec::with_capacity(read_passes);
     let mut pass_errors = Vec::new();
     for i in 0..read_passes {
-        // Device already validated once; per-pass ID check disabled — the
-        // dedicated ID runs above capture drift better anyway.
-        match read_chip_buffer(handle, 0x00, false, None) {
+        match read_chip_buffer(handle, 0x00, None) {
             Ok(buf) => reads.push(buf),
             Err(e) => pass_errors.push(format!("read pass {}: {}", i + 1, e)),
         }

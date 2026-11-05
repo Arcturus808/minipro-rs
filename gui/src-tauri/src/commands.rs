@@ -13,8 +13,9 @@ use minipro_core::{
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
         blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, health_check,
-        logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file,
-        spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes,
+        logic_auto_find, logic_ic_test, normalize_chip_id, pin_contact_check, read_chip,
+        read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes,
+        write_chip, write_chip_bytes,
         write_file, OpStats, SizeMismatch,
     },
     MiniproHandle,
@@ -473,6 +474,9 @@ pub struct OperationOptions {
     /// Run pin contact check before the operation (matches XGPro "Pin Detect").
     #[serde(default = "default_true")]
     pub pin_check: bool,
+    /// Read the chip several times and compare passes (read path only).
+    #[serde(default)]
+    pub stability_check: bool,
 }
 
 fn default_icsp_mode() -> String {
@@ -1158,6 +1162,71 @@ pub async fn deselect_device(state: State<'_, Arc<AppState>>) -> Result<(), Stri
 
 // ── Chip operations ───────────────────────────────────────────────────────
 
+/// Read passes for the stability-check read option.
+const READ_STABILITY_PASSES: usize = 5;
+
+/// Shared stability-checked read for `do_read` / `read_chip_to_bytes`:
+/// runs `read_chip_stable` with progress events and logs the outcome.
+/// Returns the effective image — the consistent buffer when all passes
+/// agree, or the majority-vote consensus when they disagree.
+fn read_chip_stable_logged(
+    handle: &mut MiniproHandle,
+    page: u8,
+    window: &Window,
+    op_name: &str,
+) -> Result<(Vec<u8>, OpStats), String> {
+    emit_log(
+        window,
+        "info",
+        &format!("Read stability check: {} passes", READ_STABILITY_PASSES),
+    );
+    let win = window.clone();
+    let op = op_name.to_string();
+    let (data, report) = read_chip_stable(
+        handle,
+        page,
+        READ_STABILITY_PASSES,
+        Some(&mut |done, total| {
+            let _ = win.emit(
+                "progress",
+                ProgressPayload {
+                    done,
+                    total,
+                    operation: op.clone(),
+                },
+            );
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+    for note in &report.notes {
+        emit_log(window, "info", note);
+    }
+    for err in &report.pass_errors {
+        emit_log(window, "warn", err);
+    }
+    if report.unstable_bytes > 0 {
+        emit_log(
+            window,
+            "warn",
+            &format!(
+                "Read instability: {} byte position(s) disagreed across {}/{} passes — using majority-vote consensus",
+                report.unstable_bytes, report.read_passes_completed, report.read_passes_requested
+            ),
+        );
+    } else {
+        emit_log(
+            window,
+            "info",
+            &format!(
+                "Read stable: {}/{} passes byte-identical",
+                report.read_passes_completed, report.read_passes_requested
+            ),
+        );
+    }
+    let stats = OpStats::from_buffer(&data);
+    Ok((data, stats))
+}
+
 /// Read chip memory to a file.
 #[tauri::command]
 pub async fn do_read(
@@ -1229,24 +1298,36 @@ pub async fn do_read(
                 }
             }
 
-            let stats = read_chip(
-                &mut handle,
-                Path::new(&path_clone),
-                page,
-                &options_clone.format,
-                false, // chip ID already checked above
-                Some(&mut |done, total| {
-                    let _ = window_clone.emit(
-                        "progress",
-                        ProgressPayload {
-                            done,
-                            total,
-                            operation: op_name.clone(),
-                        },
-                    );
-                }),
-            )
-            .map_err(|e| e.to_string())?;
+            let stats = if options_clone.stability_check {
+                let (data, stats) =
+                    read_chip_stable_logged(&mut handle, page, &window_clone, &op_name)?;
+                write_file(
+                    Path::new(&path_clone),
+                    &options_clone.format,
+                    &data,
+                    Some(&device.name),
+                )
+                .map_err(|e| e.to_string())?;
+                stats
+            } else {
+                read_chip(
+                    &mut handle,
+                    Path::new(&path_clone),
+                    page,
+                    &options_clone.format,
+                    Some(&mut |done, total| {
+                        let _ = window_clone.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: op_name.clone(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?
+            };
 
             Ok::<OpStats, String>(stats)
         })();
@@ -1330,33 +1411,56 @@ pub async fn read_chip_to_bytes(
                 &db_paths.infoic,
             )?;
 
-            let stats = read_chip(
-                &mut handle,
-                &temp_path,
-                page,
-                "bin", // always read raw binary for the hex viewer
-                options_clone.check_device_id,
-                Some(&mut |done, total| {
-                    let _ = window_clone.emit(
-                        "progress",
-                        ProgressPayload {
-                            done,
-                            total,
-                            operation: op_name.clone(),
-                        },
-                    );
-                }),
-            )
-            .map_err(|e| e.to_string())?;
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
 
-            // Read the temp file bytes
-            let bytes = std::fs::read(&temp_path)
-                .map_err(|e| format!("Failed to read temp file: {}", e))?;
+            let (base64, stats) = if options_clone.stability_check {
+                let (data, stats) =
+                    read_chip_stable_logged(&mut handle, page, &window_clone, &op_name)?;
+                (
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data),
+                    stats,
+                )
+            } else {
+                let stats = read_chip(
+                    &mut handle,
+                    &temp_path,
+                    page,
+                    "bin", // always read raw binary for the hex viewer
+                    Some(&mut |done, total| {
+                        let _ = window_clone.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: op_name.clone(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
 
-            // Clean up temp file
-            let _ = std::fs::remove_file(&temp_path);
+                // Read the temp file bytes
+                let bytes = std::fs::read(&temp_path)
+                    .map_err(|e| format!("Failed to read temp file: {}", e))?;
 
-            let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+                // Clean up temp file
+                let _ = std::fs::remove_file(&temp_path);
+
+                (
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes),
+                    stats,
+                )
+            };
             Ok::<(String, OpStats), String>((base64, stats))
         })();
 
@@ -1571,7 +1675,7 @@ pub async fn do_write(
             }
 
             if !options_clone.skip_erase {
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -1585,7 +1689,6 @@ pub async fn do_write(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -1606,7 +1709,6 @@ pub async fn do_write(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
-                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -1767,7 +1869,7 @@ pub async fn do_batch_write_chip(
                     "info",
                     &format!("Chip {}: erasing...", chipNumber),
                 );
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -1811,7 +1913,6 @@ pub async fn do_batch_write_chip(
                     page,
                     size_mismatch,
                     options_clone.skip_blank,
-                    false,
                     Some(&mut |done, total| {
                         let _ = write_window.emit(
                             "progress",
@@ -1831,7 +1932,6 @@ pub async fn do_batch_write_chip(
                         &mut handle,
                         buf,
                         page,
-                        false,
                         Some(&mut |done, total| {
                             let _ = verify_window.emit(
                                 "progress",
@@ -1876,7 +1976,6 @@ pub async fn do_batch_write_chip(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
-                false,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -1897,7 +1996,6 @@ pub async fn do_batch_write_chip(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
-                    false,
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -2040,7 +2138,7 @@ pub async fn do_write_bytes(
             }
 
             if !options_clone.skip_erase {
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -2054,7 +2152,6 @@ pub async fn do_write_bytes(
                 page,
                 size_mismatch,
                 options_clone.skip_blank,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -2074,7 +2171,6 @@ pub async fn do_write_bytes(
                     &mut handle,
                     verify_bytes,
                     page,
-                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -2180,7 +2276,6 @@ pub async fn do_verify(
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -2267,7 +2362,7 @@ pub async fn do_erase(
                 }
             }
 
-            erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+            erase_chip(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
         })();
 
@@ -2700,6 +2795,7 @@ pub async fn do_logic_test(
                         unprotect_before: false,
                         protect_after_op: false,
                         pin_check: false,
+                        stability_check: false,
                     };
                     apply_voltage_overrides(&mut dev, &options, Some(model))
                         .map_err(|e| e.to_string())?;

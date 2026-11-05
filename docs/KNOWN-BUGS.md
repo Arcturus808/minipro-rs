@@ -406,10 +406,13 @@ and the default (error) in one place. This also fixes batch mode:
 previously the ID was re-checked for every chip in a batch; now it's
 checked once at the start.
 
-**Remaining cleanup:** The `check_device_id: bool` parameter is still in
-the core API signatures (`operations.rs`) and the GUI still passes `true`
-to per-operation calls (with its own separate `check_chip_id` calls before
-each op). Removing the parameter entirely is tracked in ROADMAP.md.
+**Cleanup (done):** The `check_device_id: bool` parameter has been removed
+from the core API (`read_chip`, `read_chip_buffer`, `write_chip`,
+`write_chip_bytes`, `verify_chip`, `verify_chip_bytes`, `erase_chip`) and
+from `BatchConfig` — callers had all passed `false` since the
+consolidation above. The GUI keeps its `check_device_id` *option*, which
+gates the explicit pre-operation `check_chip_id` calls (the user's
+"skip ID check" escape hatch, analogous to CLI `-x`).
 
 ## `erase_chip` didn't check `can_erase` flag (fixed)
 

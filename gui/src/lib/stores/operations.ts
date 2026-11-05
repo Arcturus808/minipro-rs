@@ -26,6 +26,7 @@ export interface OperationOptions {
   unprotect_before: boolean;
   protect_after_op: boolean;
   pin_check: boolean;
+  stability_check: boolean;
 }
 
 export const isRunning = writable(false);
@@ -98,6 +99,7 @@ function defaultOptions(): OperationOptions {
     format: "auto",
     size_mismatch: "error",
     pin_check: true,
+    stability_check: false,
   };
 }
 
