@@ -72,14 +72,17 @@ jobs:
             target: 'aarch64-apple-darwin'
             args: '--target aarch64-apple-darwin'
             cli_name: 'minipro-cli-macos-aarch64'
+            tui_name: 'minipro-tui-macos-aarch64'
           - platform: 'ubuntu-22.04'
             target: 'x86_64-unknown-linux-gnu'
             args: ''
             cli_name: 'minipro-cli-linux-x86_64'
+            tui_name: 'minipro-tui-linux-x86_64'
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             args: ''
             cli_name: 'minipro-cli-windows-x86_64.exe'
+            tui_name: 'minipro-tui-windows-x86_64.exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -108,31 +111,35 @@ jobs:
             patchelf \
             file
 
-      - name: Build CLI
-        run: cargo build --release --locked --bin minipro ${{ matrix.args }}
+      - name: Build CLI + TUI
+        run: cargo build --release --locked --bin minipro --bin minipro-tui ${{ matrix.args }}
 
       - name: Strip and stage CLI tarball (Unix)
         if: matrix.platform != 'windows-latest'
         run: |
           if [ -n "${{ matrix.args }}" ]; then
             BIN="target/${{ matrix.target }}/release/minipro"
+            TUI="target/${{ matrix.target }}/release/minipro-tui"
           else
             BIN="target/release/minipro"
+            TUI="target/release/minipro-tui"
           fi
-          strip "$BIN"
+          strip "$BIN" "$TUI"
           PKGDIR="${{ matrix.cli_name }}"
           mkdir -p "$PKGDIR/man/man1" "$PKGDIR/completions"
           cp "$BIN" "$PKGDIR/minipro"
+          cp "$TUI" "$PKGDIR/minipro-tui"
           "$BIN" --generate-man | gzip -9 > "$PKGDIR/man/man1/minipro.1.gz"
           "$BIN" --generate-completions bash > "$PKGDIR/completions/minipro.bash"
           "$BIN" --generate-completions zsh  > "$PKGDIR/completions/_minipro"
           "$BIN" --generate-completions fish > "$PKGDIR/completions/minipro.fish"
           tar -czf "${{ matrix.cli_name }}.tar.gz" "$PKGDIR"
 
-      - name: Strip and stage CLI binary (Windows)
+      - name: Strip and stage binaries (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
           copy target\release\minipro.exe ${{ matrix.cli_name }}
+          copy target\release\minipro-tui.exe ${{ matrix.tui_name }}
 
       - name: Install frontend dependencies
         working-directory: ./gui
@@ -155,28 +162,28 @@ jobs:
 
             > **macOS users:** If you see "'MINIPRO-RS-GUI' is damaged and can't be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.
 
-            ## CLI Binaries
-            `minipro` CLI binaries for each platform are attached below.
-            Unix releases are `.tar.gz` archives bundling the binary with the man page
+            ## CLI + TUI Binaries
+            `minipro` CLI binaries for each platform are attached below, with the
+            `minipro-tui` terminal UI (MVP — feedback welcome) bundled alongside.
+            Unix releases are `.tar.gz` archives bundling both binaries with the man page
             (`man/man1/minipro.1.gz`) and bash/zsh/fish completions (`completions/`);
-            Windows is a standalone `.exe`.
+            Windows is a pair of standalone `.exe` files.
 
             See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Upload CLI binary to release
+      - name: Upload CLI + TUI binaries to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            ARTIFACT="${{ matrix.cli_name }}"
+            gh release upload ${{ github.ref_name }} "${{ matrix.cli_name }}" "${{ matrix.tui_name }}" --clobber
           else
-            ARTIFACT="${{ matrix.cli_name }}.tar.gz"
+            gh release upload ${{ github.ref_name }} "${{ matrix.cli_name }}.tar.gz" --clobber
           fi
-          gh release upload ${{ github.ref_name }} "$ARTIFACT" --clobber
 
       - name: Update release body from CHANGELOG (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -200,8 +207,8 @@ jobs:
             echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
             echo '- **macOS users**: If you see "MINIPRO-RS-GUI is damaged and can'"'"'t be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.'
             echo ''
-            echo '## CLI Binaries'
-            echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below.'
+            echo '## CLI + TUI Binaries'
+            echo 'Standalone `minipro` CLI binaries for Linux and Windows are attached below, with the `minipro-tui` terminal UI (MVP — feedback welcome) bundled alongside.'
             echo ''
             echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
           } > /tmp/release_notes.md
