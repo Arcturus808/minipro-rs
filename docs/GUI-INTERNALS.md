@@ -290,6 +290,19 @@ the result. Read-only: the command never writes
 to the chip. See `docs/CLI-INTERNALS.md` "Health check" for the analysis
 semantics and transport limitations.
 
+**Read-panel "Stability check"** (`OperationOptions.stability_check`,
+serde default `false`): a checkbox in the read operation's options row
+applies the same analysis inline — `do_read` and `read_chip_to_bytes`
+route through `read_chip_stable_logged` → `operations::read_chip_stable`
+(5 passes, cumulative progress across all passes). Stable → the consistent
+buffer is saved/loaded as usual; unstable → the majority-vote consensus
+is used and a warn log reports unstable-byte count, pass errors, and
+notes. Core op functions no longer take a `check_device_id` parameter
+(the single top-level `check_chip_id` handles it); the GUI's
+`check_device_id` *option* remains, gating the explicit pre-operation
+ID check — `read_chip_to_bytes` previously relied on the parameter and
+now runs the same explicit pre-check as `do_read`.
+
 ## ICSP wiring diagrams (IcspConnectorDiagram.svelte)
 
 The `package_details` field in `infoic.xml` encodes a *wiring-class*

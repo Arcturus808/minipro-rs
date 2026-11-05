@@ -326,8 +326,6 @@ pub struct BatchConfig {
     pub size_mismatch: SizeMismatch,
     /// Skip writing blank pages (all erase-value).
     pub skip_blank: bool,
-    /// Whether to verify chip ID before operations.
-    pub check_device_id: bool,
     /// Whether to erase before writing.
     pub erase: bool,
     /// Whether to verify after writing.
@@ -494,7 +492,7 @@ fn batch_write_single(
         if let Some(ref mut on_progress) = callbacks.on_progress {
             on_progress(chip_num, config.count, "erase");
         }
-        erase_chip(handle, config.check_device_id)?;
+        erase_chip(handle)?;
 
         // Transaction reset after erase (same as CLI write flow)
         let device_arc = handle
@@ -523,7 +521,6 @@ fn batch_write_single(
         config.page,
         config.size_mismatch,
         config.skip_blank,
-        config.check_device_id,
         None,
     )?;
 
@@ -543,13 +540,7 @@ fn batch_write_single(
 
         // Use verify_chip_bytes to verify against the patched buffer,
         // not the original file (which lacks the serial number).
-        verify_chip_bytes(
-            handle,
-            verify_buf.unwrap(),
-            config.page,
-            config.check_device_id,
-            None,
-        )?;
+        verify_chip_bytes(handle, verify_buf.unwrap(), config.page, None)?;
     }
 
     // ── Protect on (after write + verify) ──────────────────────────────────

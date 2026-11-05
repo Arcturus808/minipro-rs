@@ -70,6 +70,7 @@
   let skipBlank = $state(false);
   let checkDeviceId = $state(true);
   let pinCheck = $state(true);
+  let stabilityCheck = $state(false);
   let unprotectBefore = $state(true);
   let protectAfterOp = $state(false);
   let showAdvanced = $state(false);
@@ -487,6 +488,7 @@
       unprotect_before: unprotectBefore,
       protect_after_op: protectAfterOp,
       pin_check: pinCheck,
+      stability_check: stabilityCheck,
     };
   }
 
@@ -498,6 +500,7 @@
       case "read":
         page = "code";
         format = "auto";
+        stabilityCheck = false;
         break;
       case "write":
         page = "code";
@@ -1083,6 +1086,12 @@
                     <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
                     Pin Contact Check
                   </label>
+                  {#if $activeOperation === "read"}
+                    <label class="flex items-center gap-2" title="Read the chip 5 times and compare passes — saves the majority-vote image if reads disagree">
+                      <input type="checkbox" class="checkbox" bind:checked={stabilityCheck} />
+                      Stability check
+                    </label>
+                  {/if}
                 </div>
               {/if}
               <!-- Row 2: Checkboxes + Advanced toggle -->

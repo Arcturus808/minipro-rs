@@ -897,7 +897,6 @@ fn do_operations(
     // Upstream minipro has one check_chip_id call in the main flow (main.c
     // line 3563), not per-operation checks.  We do the same here: one check
     // that handles -x (skip), -y (warn + continue), and the default (error).
-    // Per-operation check_device_id params are all false (see below).
     if !cli.skip_id
         && (cli.write.is_some() || cli.read.is_some() || cli.erase || cli.verify.is_some())
     {
@@ -923,7 +922,7 @@ fn do_operations(
                     .unwrap_or_else(|_| ProgressStyle::default_spinner()),
             );
             pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            erase_chip(handle, false)?;
+            erase_chip(handle)?;
             pb.finish_with_message("Erasing... done.");
         } else {
             eprintln!("This chip does not support electrical erase (use UV light for UV EPROMs).");
@@ -969,7 +968,6 @@ fn do_operations(
                 format: cli.format.clone(),
                 size_mismatch,
                 skip_blank: cli.skip_blank,
-                check_device_id: false,
                 erase: !cli.no_erase,
                 verify: !cli.no_verify,
                 count,
@@ -1137,7 +1135,7 @@ fn do_operations(
                             .unwrap_or_else(|_| ProgressStyle::default_spinner()),
                     );
                     pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                    erase_chip(handle, false)?;
+                    erase_chip(handle)?;
                     pb.finish_with_message("Erasing... done.");
                     // The firmware requires a transaction reset after erase before
                     // writing (same as the C reference: end_transaction then
@@ -1172,7 +1170,6 @@ fn do_operations(
                 &cli.format,
                 size_mismatch,
                 cli.skip_blank,
-                false,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -1215,7 +1212,6 @@ fn do_operations(
                     path,
                     proto_page,
                     &cli.format,
-                    false,
                     Some(&mut |done, total| {
                         pb.set_length(total as u64);
                         pb.set_position(done as u64);
@@ -1286,7 +1282,6 @@ fn do_operations(
                 path,
                 proto_page,
                 &cli.format,
-                false,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -1327,7 +1322,6 @@ fn do_operations(
             path,
             proto_page,
             &cli.format,
-            false,
             Some(&mut |done, total| {
                 pb.set_length(total as u64);
                 pb.set_position(done as u64);
