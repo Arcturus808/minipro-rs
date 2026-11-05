@@ -57,7 +57,11 @@ the orchestrator `operations::health_check` reuses `read_chip_buffer`
 CRC-32s, unique chip IDs seen, per-byte disagreement → unstable-byte
 total, worst 4 KiB regions, `0→1`/`1→0` flip counts, dominant periodic
 spacing, plus a consensus (majority-vote) buffer when instability was
-found — save it with `--consensus-out FILE`.
+found — save it with `--consensus-out FILE`. Chip-ID characterization
+distinguishes drift (multiple plausible IDs) from no-response: when
+every observed ID is a stuck-bus value (`0x0` or any-width all-ones —
+MISO held low / floating high), the report says the chip isn't
+answering the ID command rather than calling the ID unstable.
 
 Verdicts: `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete`
 (some passes erred) / `Transport-Error` (no pass completed — programmer

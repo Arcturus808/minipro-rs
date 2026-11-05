@@ -278,7 +278,9 @@ red, others amber), pass/ID-run counts, unique chip IDs seen, unstable-byte
 count with `0→1`/`1→0` flip split and dominant periodic spacing, top
 instability regions (4 KiB buckets), analysis notes, and — when
 `consensusB64` is present — a "Save consensus dump" button routing through
-`pickSaveFile` + `save_bytes_to_file`. Read-only: the command never writes
+`pickSaveFile` + `save_bytes_to_file` (absent when passes all agree —
+nothing to reconstruct). A "Clear" button in the card header dismisses
+the result. Read-only: the command never writes
 to the chip. See `docs/CLI-INTERNALS.md` "Health check" for the analysis
 semantics and transport limitations.
 
