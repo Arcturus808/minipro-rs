@@ -1234,7 +1234,76 @@ pub fn pin_contact_check(
 /// states, and error count.  Returns an error if the IC fails any vector.
 pub fn logic_ic_test(handle: &mut MiniproHandle) -> Result<crate::protocol::LogicTestResult> {
     let device = handle.device()?.clone();
+    if handle.info.model == ProgrammerModel::T76 {
+        return logic_ic_test_t76(handle, &device);
+    }
     handle.protocol.logic_ic_test(&handle.usb, &device)
+}
+
+/// T76 logic IC test. Unlike the TL866-family (and the T56, which uses a
+/// single TTL1/TTL2 bitstream with a runtime pull flag), the T76 bakes the
+/// pull direction into the FPGA config — upstream `t76_logic_ic_test`
+/// uploads `TestLgcPull` before the pull-up pass and `TestLgcDown` before
+/// the pull-down pass (`protocol_id = IC2_ALG_NONE`, utility-algorithm
+/// variants 0x0300/0x0200 in `algorithm.xml`).
+fn logic_ic_test_t76(
+    handle: &mut MiniproHandle,
+    device: &Device,
+) -> Result<crate::protocol::LogicTestResult> {
+    crate::protocol::tl866iiplus::logic_test_params(device)?;
+    let algo_path = handle
+        .db_paths
+        .as_ref()
+        .and_then(|p| p.algorithms.as_ref())
+        .ok_or_else(|| {
+            MiniproError::Protocol(
+                "algorithm.xml not found — required to upload the logic-test \
+                 bitstreams on T76"
+                    .into(),
+            )
+        })?
+        .clone();
+
+    let result: Result<(Vec<u8>, Vec<u8>)> = (|| {
+        let step1 = t76_ic_test_pass_with_bitstream(handle, device, &algo_path, false)?;
+        let step2 = t76_ic_test_pass_with_bitstream(handle, device, &algo_path, true)?;
+        Ok((step1, step2))
+    })();
+    // The last upload was TestLgcDown, not the selected device's algorithm —
+    // force the next begin_transaction to re-upload.
+    handle.protocol.invalidate_bitstream();
+    let (step1, step2) = result?;
+
+    Ok(crate::protocol::tl866iiplus::build_logic_test_result(
+        device, step1, step2,
+    ))
+}
+
+/// Upload the pull-specific T76 utility bitstream, then run one vector pass.
+fn t76_ic_test_pass_with_bitstream(
+    handle: &mut MiniproHandle,
+    device: &Device,
+    algo_path: &Path,
+    pull: bool,
+) -> Result<Vec<u8>> {
+    // IC2_ALG_NONE → T76_UTIL_TABLE[variant >> 8]: 0x03 = TestLgcPull,
+    // 0x02 = TestLgcDown (matches upstream do_ic_test in t76.c).
+    let probe = Device {
+        protocol_id: 0x00,
+        variant: if pull { 0x0200 } else { 0x0300 },
+        ..Default::default()
+    };
+    let algo = crate::algorithm::get_algorithm(
+        &probe,
+        handle.info.model,
+        handle.icsp,
+        crate::algorithm::V_3V3,
+        algo_path,
+    )?;
+    handle
+        .protocol
+        .upload_bitstream(&handle.usb, &algo.bitstream)?;
+    crate::protocol::tl866iiplus::do_ic_test_pass(&handle.usb, device, pull)
 }
 
 /// A single result from the logic IC auto-identify (auto-find) scan.
