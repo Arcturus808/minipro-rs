@@ -221,7 +221,23 @@ pub(crate) fn build_report(
     unique_ids.sort_unstable();
     unique_ids.dedup();
     if !chip_ids.is_empty() {
-        if unique_ids.len() > 1 {
+        // Stuck-bus detection: 0x0 and any-width all-ones (0xFF, 0xFFFF, …)
+        // are the MISO-held-low / floating-high signatures, not real IDs.
+        // `(id + 1).is_power_of_two()` matches both cases at any width.
+        let all_stuck = unique_ids
+            .iter()
+            .all(|&id| id.wrapping_add(1).is_power_of_two());
+        if all_stuck {
+            let seen: Vec<String> = unique_ids
+                .iter()
+                .map(|id| format!("0x{:06x}", id))
+                .collect();
+            notes.push(format!(
+                "chip-ID reads returned only stuck-bus values ({}) — chip is not \
+                 answering the ID command (contact, HOLD#/WP#, or dead output stage)",
+                seen.join(", ")
+            ));
+        } else if unique_ids.len() > 1 {
             let seen: Vec<String> = unique_ids
                 .iter()
                 .map(|id| format!("0x{:06x}", id))
@@ -444,6 +460,24 @@ mod tests {
         );
         assert_eq!(r.verdict, HealthVerdict::MarginalId);
         assert!(r.notes.iter().any(|n| n.contains("chip ID unstable")));
+    }
+
+    #[test]
+    fn stuck_bus_ids_reported_as_no_response() {
+        // Real case: PM25LV010 on T48 returned only 0x000000/0x00ffff across
+        // 20 ID reads while data stayed stable — MISO stuck, not drifting.
+        let r = build_report(
+            "pm25".into(),
+            4,
+            2,
+            vec![0, 0xffff, 0, 0xffff],
+            Some(0x9d7c),
+            Vec::new(),
+            vec![vec![0xAA; 4], vec![0xAA; 4]],
+            Vec::new(),
+        );
+        assert_eq!(r.verdict, HealthVerdict::MarginalId);
+        assert!(r.notes.iter().any(|n| n.contains("stuck-bus")));
     }
 
     #[test]
