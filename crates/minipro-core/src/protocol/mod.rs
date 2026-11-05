@@ -129,6 +129,12 @@ pub trait Protocol: Send + Sync {
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 
+    /// Invalidate any cached FPGA-bitstream state so the next
+    /// `begin_transaction` re-uploads the selected device's algorithm.
+    /// Needed after out-of-band uploads (autodetect, logic test) clobber
+    /// the device algorithm. Default no-op for models without caching.
+    fn invalidate_bitstream(&self) {}
+
     /// Read fuse / lock bytes.
     fn read_fuses(
         &self,

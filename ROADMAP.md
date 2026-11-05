@@ -579,7 +579,7 @@ This is a living list of features and improvements planned for minipro-rs.
   - [ ] T76 parallel NOR — read/erase (program known broken)
   - [ ] T56 all chip classes — read/erase/program
   - [ ] T76 firmware update
-  - [ ] T76 logic IC test (two-pass with bitstream reload)
+  - [x] T76 logic IC test (two-pass with bitstream reload — 7408 verified)
 
   Matt Brown's MR #292 was validated on: ZB25VQ64A, MX25L12845E (SPI NOR),
   S29GL512N (parallel NOR), W29N02GZ and GD5F1GM7UEYIG (NAND), KLM8G1GEAC-B001

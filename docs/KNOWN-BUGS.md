@@ -544,3 +544,27 @@ DMM-compare ESD diode drops, try `--pulse` and the ICSP path, and
 swap the chip. A `0x0000` ID with a successful "FPGA Reset OK" means
 transport and bitstream are working; the die simply isn't answering
 within the programmer's window.
+
+## T76 logic test ran against the wrong FPGA bitstream (fixed)
+
+`T76Protocol::logic_ic_test` reused the TL866 two-pass path verbatim,
+which assumes the pull-up/pull-down direction is a runtime flag on one
+engine. On the T76 the pull direction is baked into the FPGA
+configuration: upstream `t76_logic_ic_test` uploads `TestLgcPull`
+before the pull-up pass and `TestLgcDown` before the pull-down pass
+(`protocol_id = IC2_ALG_NONE`, util-algorithm variants `0x0300`/`0x0200`
+from `algorithm.xml`).
+
+The visible symptom was diagnostic: a good 7408 (verified on T48 and
+TL866A) failed every vector expecting `H`. `begin_transaction` had
+loaded `Test_100M` (util index 0 — logic devices carry `variant = 0`),
+so the 0x28 vector command ran on the SRAM-test engine and outputs
+read low. Vectors expecting `L` passed trivially; only the all-high
+vector failed — the signature to look for.
+
+The fix orchestrates bitstream upload + vector pass per direction in
+`operations::logic_ic_test` (T76 branch), shares `do_ic_test_pass`
+with the TL866 path, and calls `protocol.invalidate_bitstream()`
+afterwards so a stale `TestLgcDown` isn't mistaken for the next
+device's algorithm. T56 needs no per-pass upload — its TTL1/TTL2
+bitstream honors the runtime pull flag, so the shared path stays.

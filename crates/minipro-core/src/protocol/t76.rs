@@ -13,8 +13,7 @@
 //! slightly different layouts.
 
 use super::t56::build_begin_msg;
-use super::tl866iiplus::logic_ic_test_tl866;
-use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -1299,12 +1298,8 @@ impl Protocol for T76Protocol {
         firmware_update_t76(usb, firmware)
     }
 
-    fn logic_ic_test(&self, usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
-        // T76 uses the same test-vector command (0x28) as the TL866II+.
-        // A full implementation would reload the FPGA bitstream between the
-        // pull-up and pull-down passes; here we reuse the TL866II+ two-pass
-        // logic without FPGA switching (known limitation for T76).
-        logic_ic_test_tl866(usb, device)
+    fn invalidate_bitstream(&self) {
+        self.bitstream_uploaded.store(false, Ordering::Relaxed);
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {

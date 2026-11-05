@@ -142,8 +142,10 @@ placeholder. Real capacity is detected at runtime (see above).
 6. **Parallel NOR program** — non-functional (upstream limitation)
 7. **eMMC partition selection** — only USER partition accessible;
    BOOT1/BOOT2/RPMB need a `--partition` CLI flag
-8. **Logic IC test** — T76 needs bitstream reload between pull-up/pull-
-   down passes (known limitation, reuses TL866II+ two-pass logic)
+8. ~~**Logic IC test** — T76 needs bitstream reload between
+   pull-up/pull-down passes~~ FIXED: `operations::logic_ic_test` now
+   uploads `TestLgcPull`/`TestLgcDown` per pass and invalidates the
+   bitstream cache afterwards, matching upstream. Verified on a 7408.
 
 ## Comparison with Matt Brown's t76-improvements branch
 

@@ -1477,7 +1477,70 @@ fn set_voltages_tl866(usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
 ///
 /// Returns a flat buffer of `vector_count * pin_count` nibble values (one per pin per
 /// vector), each holding the firmware-reported logic level (0 = low, non-zero = high).
-pub(super) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> Result<Vec<u8>> {
+/// Validate that the device has test vectors; returns
+/// `(vectors, pin_count, vec_count)`.
+pub(crate) fn logic_test_params(device: &Device) -> Result<(&[u8], usize, usize)> {
+    let vectors = match device.vectors.as_deref() {
+        Some(v) if !v.is_empty() => v,
+        _ => {
+            return Err(MiniproError::Protocol(
+                "no test vectors for this device".into(),
+            ))
+        }
+    };
+    let pin_count = device.package_details.pin_count as usize;
+    let vec_count = device.vector_count;
+    if vec_count == 0 || pin_count == 0 {
+        return Err(MiniproError::Protocol(
+            "no test vectors for this device".into(),
+        ));
+    }
+    Ok((vectors, pin_count, vec_count))
+}
+
+/// Count mismatches across the two passes and build the result struct.
+/// `logic_test_params` must have been called first (validates vectors exist).
+pub(crate) fn build_logic_test_result(
+    device: &Device,
+    step1: Vec<u8>,
+    step2: Vec<u8>,
+) -> LogicTestResult {
+    let vectors = device.vectors.as_deref().unwrap_or(&[]);
+    let pin_count = device.package_details.pin_count as usize;
+    let vec_count = device.vector_count;
+
+    let mut errors = 0u32;
+    for v in 0..vec_count {
+        for p in 0..pin_count {
+            let idx = v * pin_count + p;
+            let state = vectors[idx];
+            let s1 = step1[idx];
+            let s2 = step2[idx];
+            let err = match state {
+                LOGIC_L => s1 != 0 || s2 != 0,
+                LOGIC_H => s1 == 0 || s2 == 0,
+                LOGIC_Z => s1 == 0 || s2 != 0,
+                _ => false,
+            };
+            if err {
+                errors += 1;
+            }
+        }
+    }
+
+    let pass = errors == 0;
+    LogicTestResult {
+        pin_count: pin_count as u16,
+        vector_count: vec_count as u16,
+        vectors: vectors.to_vec(),
+        step1,
+        step2,
+        errors,
+        pass,
+    }
+}
+
+pub(crate) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> Result<Vec<u8>> {
     let vectors = device.vectors.as_deref().unwrap_or(&[]);
     let pin_count = device.package_details.pin_count as usize;
     let vec_count = device.vector_count;
@@ -1530,58 +1593,12 @@ pub(super) fn do_ic_test_pass(usb: &UsbDevice, device: &Device, pull: bool) -> R
 
 /// Run the full two-pass logic-IC test and print a pass/fail table.
 pub(super) fn logic_ic_test_tl866(usb: &UsbDevice, device: &Device) -> Result<LogicTestResult> {
-    let vectors = match device.vectors.as_deref() {
-        Some(v) if !v.is_empty() => v,
-        _ => {
-            return Err(MiniproError::Protocol(
-                "no test vectors for this device".into(),
-            ))
-        }
-    };
-    let pin_count = device.package_details.pin_count as usize;
-    let vec_count = device.vector_count;
-    if vec_count == 0 || pin_count == 0 {
-        return Err(MiniproError::Protocol(
-            "no test vectors for this device".into(),
-        ));
-    }
-
+    logic_test_params(device)?;
     // Step 1: pull-ups active (pull = 0)
     let step1 = do_ic_test_pass(usb, device, false)?;
     // Step 2: pull-downs active (pull = 1)
     let step2 = do_ic_test_pass(usb, device, true)?;
-
-    // Count errors
-    let mut errors = 0u32;
-    for v in 0..vec_count {
-        for p in 0..pin_count {
-            let idx = v * pin_count + p;
-            let state = vectors[idx];
-            let s1 = step1[idx];
-            let s2 = step2[idx];
-            let err = match state {
-                LOGIC_L => s1 != 0 || s2 != 0,
-                LOGIC_H => s1 == 0 || s2 == 0,
-                LOGIC_Z => s1 == 0 || s2 != 0,
-                _ => false,
-            };
-            if err {
-                errors += 1;
-            }
-        }
-    }
-
-    let pass = errors == 0;
-
-    Ok(LogicTestResult {
-        pin_count: pin_count as u16,
-        vector_count: vec_count as u16,
-        vectors: vectors.to_vec(),
-        step1,
-        step2,
-        errors,
-        pass,
-    })
+    Ok(build_logic_test_result(device, step1, step2))
 }
 
 // ── Firmware update (TL866II+ / T48) ─────────────────────────────────────────

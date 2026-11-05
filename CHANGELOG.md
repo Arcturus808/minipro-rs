@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **T76 logic-IC test reported good chips as failed (all-high vectors only)** — the shared TL866 two-pass path ran both vector passes against whatever bitstream `begin_transaction` had loaded (for logic devices, `Test_100M` — the SRAM tester), so outputs read low and every vector expecting `H` errored. Matching upstream `t76_logic_ic_test`, the pull direction is now baked into the FPGA per pass: `TestLgcPull` is uploaded before the pull-up pass and `TestLgcDown` before the pull-down pass (utility algorithms 0x0300/0x0200 from `algorithm.xml`), and the bitstream cache is invalidated afterwards. 7408 and other logic ICs now test correctly on T76. T56 was unaffected (its TTL1/TTL2 bitstream honors the runtime pull flag). Hardware-verified with a 7408.
+
 ### Added
 
 - **ZIF diagram shows a color legend while pin-test results are active** — "tested ok" (green), "bad contact" (red), "not tested" (gray) swatches under the socket, matching the LogicTestGrid legend pattern. Appears only when a result is shown, since that's when the colors carry meaning.
