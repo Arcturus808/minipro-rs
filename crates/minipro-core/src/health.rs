@@ -681,9 +681,9 @@ mod tests {
         // Consensus vote determines the effective image for the reference
         // comparison; instability still wins the verdict (MarginalData).
         let mut a = vec![0x00; 16];
-        let mut b = vec![0x00; 16];
+        let b = vec![0x00; 16];
         a[4] = 0xFF;
-        let r = reads_ref(&[a, b, vec![0x00; 16]], &vec![0x00; 16]);
+        let r = reads_ref(&[a, b, vec![0x00; 16]], &[0x00; 16]);
         assert_eq!(r.verdict, HealthVerdict::MarginalData);
         assert_eq!(r.reference_mismatches, Some(0));
     }
@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn shorter_reference_compares_prefix() {
         let reads = vec![vec![0x77; 64], vec![0x77; 64]];
-        let r = reads_ref(&reads, &vec![0x77; 32]);
+        let r = reads_ref(&reads, &[0x77; 32]);
         assert_eq!(r.reference_mismatches, Some(0));
         assert!(r
             .notes
