@@ -290,10 +290,13 @@
       </button>
       {#if healthResult}
         <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
-          <div>
-            Verdict:
-            <span class={"font-semibold " + verdictClass(healthResult.verdict)}>{healthResult.verdict}</span>
-            — {healthResult.deviceName}
+          <div class="flex items-center justify-between gap-2">
+            <span>
+              Verdict:
+              <span class={"font-semibold " + verdictClass(healthResult.verdict)}>{healthResult.verdict}</span>
+              — {healthResult.deviceName}
+            </span>
+            <button class="opacity-60 hover:opacity-100 px-1" onclick={() => (healthResult = null)} title="Dismiss result">Clear</button>
           </div>
           <div class="opacity-80">
             {healthResult.passesCompleted}/{healthResult.passesRequested} read passes,
