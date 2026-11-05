@@ -114,6 +114,28 @@ impl MiniproHandle {
         self.icsp = crate::device::ICSP_ENABLE | if with_vcc { crate::device::ICSP_VCC } else { 0 };
     }
 
+    /// Set ICSP mode from a mode string, honoring device constraints.
+    ///
+    /// `"icsp"` → ICSP with VCC (0x81), `"icsp_no_vcc"` → ICSP without VCC
+    /// (0x80), `"zif"` (or anything else) → ZIF socket mode (0x00).
+    /// ICSP-only devices (`MP_ICSP_ONLY`) always activate ICSP+VCC and
+    /// ZIF-only devices (`MP_ZIF_ONLY`) always stay in ZIF, regardless of
+    /// `mode` — this is upstream C minipro's auto-activation behavior.
+    pub fn set_icsp_mode(&mut self, mode: &str, device: &Device) {
+        use crate::device::{MP_ICSP_ONLY, MP_ZIF_ONLY};
+        if device.flags.prog_support == MP_ICSP_ONLY {
+            self.set_icsp(true);
+        } else if device.flags.prog_support == MP_ZIF_ONLY {
+            self.icsp = 0;
+        } else {
+            match mode {
+                "icsp" => self.set_icsp(true),
+                "icsp_no_vcc" => self.set_icsp(false),
+                _ => self.icsp = 0,
+            }
+        }
+    }
+
     /// Set the active chip device and send `begin_transaction` to the hardware.
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
         info!("Device: {}", device.name);
