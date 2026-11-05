@@ -191,10 +191,14 @@
 
   let healthRunning = $state(false);
   let healthResult = $state<HealthCheckResult | null>(null);
+  let healthRefCompare = $state(false);
   let healthRefPath = $state<string | null>(null);
 
   const healthCheckEnabled = $derived(
-    $programmer !== null && $selectedDevice !== null && !healthRunning,
+    $programmer !== null
+      && $selectedDevice !== null
+      && !healthRunning
+      && !(healthRefCompare && !healthRefPath),
   );
 
   async function pickHealthReference() {
@@ -210,7 +214,7 @@
         icspMode: $settings.icspMode,
         pinCheck: true,
         passes: 5,
-        referencePath: healthRefPath,
+        referencePath: healthRefCompare ? healthRefPath : null,
       });
     } catch (e) {
       logs.error(`Health check failed: ${e}`);
@@ -288,7 +292,7 @@
         class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
         onclick={runHealthCheck}
         disabled={!healthCheckEnabled}
-        title={!$selectedDevice ? "Select a device first" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
+        title={!$selectedDevice ? "Select a device first" : healthRefCompare && !healthRefPath ? "Choose a reference file or uncheck the option" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
       >
         {#if healthRunning}
           Chip Health Check (running...)
@@ -296,20 +300,25 @@
           Chip Health Check
         {/if}
       </button>
-      <div class="flex items-center gap-1 px-1 text-xs">
-        <span class="opacity-60">Reference:</span>
-        <button
-          class="opacity-80 hover:opacity-100 underline truncate flex-1 text-left disabled:opacity-40"
-          onclick={pickHealthReference}
-          disabled={healthRunning}
-          title="Optional known-good image to compare reads against"
-        >
-          {healthRefPath ? healthRefPath.split(/[\\/]/).pop() : "none (optional)"}
-        </button>
-        {#if healthRefPath}
-          <button class="opacity-60 hover:opacity-100 px-0.5" onclick={() => (healthRefPath = null)} title="Clear reference">×</button>
-        {/if}
-      </div>
+      <label class="flex items-center gap-1.5 px-1 text-xs cursor-pointer" title="After the read passes, compare the image against a known-good file — catches consistent corruption that repeated reads can't">
+        <input type="checkbox" bind:checked={healthRefCompare} disabled={healthRunning} />
+        Compare against file
+      </label>
+      {#if healthRefCompare}
+        <div class="flex items-center gap-1 px-1 pl-5 text-xs">
+          <button
+            class="opacity-80 hover:opacity-100 underline truncate flex-1 text-left disabled:opacity-40"
+            onclick={pickHealthReference}
+            disabled={healthRunning}
+            title="Known-good image (bin / ihex / srec) — e.g. the file that was written to this chip"
+          >
+            {healthRefPath ? healthRefPath.split(/[\\/]/).pop() : "choose file…"}
+          </button>
+          {#if healthRefPath}
+            <button class="opacity-60 hover:opacity-100 px-0.5" onclick={() => (healthRefPath = null)} title="Clear reference">×</button>
+          {/if}
+        </div>
+      {/if}
       {#if healthResult}
         <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
           <div class="flex items-center justify-between gap-2">
