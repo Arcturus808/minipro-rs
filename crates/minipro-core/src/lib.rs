@@ -71,7 +71,8 @@ pub use health::{HealthReport, HealthVerdict, RegionStat};
 pub use icsp::{icsp_wiring, IcspWire, IcspWiring};
 pub use operations::{
     firmware_update, hardware_check, health_check, logic_auto_find, logic_ic_test,
-    pin_contact_check, read_fuses, spi_autodetect, spi_autodetect_and_lookup, write_fuses,
-    AutoFindEntry, FuseValue, OpStats, SizeMismatch, SpiAutodetectResult,
+    pin_check_gate_applies, pin_contact_check, read_fuses, spi_autodetect,
+    spi_autodetect_and_lookup, write_fuses, AutoFindEntry, FuseValue, OpStats, SizeMismatch,
+    SpiAutodetectResult,
 };
 pub use protocol::{LogicTestResult, PinTestResult};

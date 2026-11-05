@@ -1280,6 +1280,21 @@ pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
     handle.protocol.hardware_check(&handle.usb)
 }
 
+/// Whether the pre-operation pin-contact gate should run for this
+/// model/mode/device.
+///
+/// The gate applies only on TL866II+/T48 (the two models with a real
+/// `0x3E` pin-detect command — T76's `0x3E` is an unrelated adapter-init
+/// that corrupts subsequent reads), only in ZIF mode, and only when the
+/// device carries contact-test data (`pin_map` low byte nonzero).
+/// Frontends call [`pin_contact_check`] when this returns true and abort
+/// the operation if `bad_pins` is non-empty.
+pub fn pin_check_gate_applies(model: ProgrammerModel, icsp_active: bool, pin_map: u32) -> bool {
+    matches!(model, ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48)
+        && !icsp_active
+        && pin_map & 0xFF != 0
+}
+
 /// Perform a pin-contact test on the device currently loaded in the ZIF socket.
 ///
 /// `infoic_path` must point to `infoic.xml` so that the programmer-independent
