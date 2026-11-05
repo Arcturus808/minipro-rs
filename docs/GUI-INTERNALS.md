@@ -267,8 +267,10 @@ pin list and a "Clear" button to dismiss results.
 Diagnostics → "Chip Health Check" invokes `run_health_check` (enabled
 whenever a device is selected — it needs `-p`-equivalent context for the
 transaction). Params: `icspMode`, `pinCheck: true` (pre-op pin gate like
-other operations), `passes: 5`, and optional `referencePath` — set via the
-small "Reference:" file row under the button; the backend loads it through
+other operations), `passes: 5`, and optional `referencePath` — enabled via the "Compare
+against file" checkbox under the button (opt-in modifier, matching the
+app's checkbox convention; reveals the file picker only when checked and
+disables the run button while a file is unchosen); the backend loads it through
 `operations::read_file` (auto format, padded to device size) and compares
 the effective image against it (`referenceMismatches` renders in the
 card — amber when >0). The backend runs `operations::health_check`
