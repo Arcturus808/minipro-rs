@@ -37,7 +37,7 @@ pub struct ZifDiagram {
     /// e.g. "ZIF-40".
     pub socket: &'static str,
     /// e.g. "DIP8".
-    pub package: &'static str,
+    pub package: String,
     pub justify: Justify,
     pub lever: Lever,
     /// Pins per column — ZIF-40 → 20.
@@ -46,6 +46,13 @@ pub struct ZifDiagram {
     pub occupied: BTreeSet<u8>,
     /// ZIF pins that failed the pin-contact check.
     pub bad: BTreeSet<u8>,
+    /// ZIF pins the pin-contact check measured (pass or fail) — the
+    /// 3-state distinction: occupied-but-untested renders faint instead
+    /// of implying "good". Only used while `show_test` is set.
+    pub tested: BTreeSet<u8>,
+    /// A pin-test result is on screen — enables the tested/untested
+    /// split. False paints every occupied slot green (no result yet).
+    pub show_test: bool,
     /// Left-column pin rows spanning the chip body — pin-1 end = `chip_top`.
     pub chip_top: u8,
     pub chip_bot: u8,
@@ -94,25 +101,28 @@ impl ZifDiagram {
         rows
     }
 
-    fn slot_style(&self, bad: bool, occupied: bool) -> ratatui::style::Style {
-        if bad {
+    /// Slot cell (and pin-tip) color: bad → red; empty → faint;
+    /// occupied → green, except occupied-but-untested under an active
+    /// pin-test result, which reads faint rather than implying "good".
+    fn slot_style(&self, pin: u8) -> ratatui::style::Style {
+        if self.bad.contains(&pin) {
             theme::red()
-        } else if occupied {
-            theme::green()
-        } else {
+        } else if !self.occupied.contains(&pin) || (self.show_test && !self.tested.contains(&pin)) {
             theme::faint()
+        } else {
+            theme::green()
         }
     }
 
     /// Spans for the `mid` region (interior - 2 cells): the chip body on
     /// pin rows, blank elsewhere. `▪` pin tips flank `█` fill; the
     /// `chip_top` row carries the painted `●` dimple + `╰╯` notch.
-    fn mid_spans(&self, lp: u8, lbad: bool, rbad: bool) -> Vec<Span<'static>> {
+    fn mid_spans(&self, lp: u8, rp: u8) -> Vec<Span<'static>> {
         if !(self.chip_top..=self.chip_bot).contains(&lp) {
             return vec![Span::raw(" ".repeat(self.interior - 2))];
         }
-        let lj = if lbad { theme::red() } else { theme::green() };
-        let rj = if rbad { theme::red() } else { theme::green() };
+        let lj = self.slot_style(lp);
+        let rj = self.slot_style(rp);
         let body_w = self.interior - 4;
         let mut body = Vec::new();
         for i in 0..body_w {
@@ -137,7 +147,6 @@ impl ZifDiagram {
     fn pin_line(&self, pad: &str, lp: u8) -> Line<'static> {
         let rp = self.right_pin(lp);
         let (lbad, rbad) = (self.bad.contains(&lp), self.bad.contains(&rp));
-        let (locc, rocc) = (self.occupied.contains(&lp), self.occupied.contains(&rp));
         let ll = if lbad { theme::red() } else { theme::dim() };
         let rl = if rbad { theme::red() } else { theme::dim() };
         let mut spans = vec![
@@ -145,11 +154,11 @@ impl ZifDiagram {
             Span::styled(format!("{lp:>2}"), ll),
             Span::styled(if lbad { "►" } else { " " }, theme::red()),
             Span::styled("│", theme::border()),
-            Span::styled("▭", self.slot_style(lbad, locc)),
+            Span::styled("▭", self.slot_style(lp)),
         ];
-        spans.extend(self.mid_spans(lp, lbad, rbad));
+        spans.extend(self.mid_spans(lp, rp));
         spans.extend([
-            Span::styled("▭", self.slot_style(rbad, rocc)),
+            Span::styled("▭", self.slot_style(rp)),
             Span::styled("│", theme::border()),
             Span::styled(if rbad { "◄" } else { " " }, theme::red()),
             Span::styled(rp.to_string(), rl),
@@ -194,7 +203,7 @@ impl Widget for &ZifDiagram {
             Span::styled(
                 format!(
                     " · {} · {}-justified",
-                    self.package,
+                    self.package.as_str(),
                     match self.justify {
                         Justify::Top => "top",
                         Justify::Bottom => "bottom",
@@ -235,12 +244,14 @@ mod tests {
     fn diagram() -> ZifDiagram {
         ZifDiagram {
             socket: "ZIF-40",
-            package: "DIP8",
+            package: "DIP8".into(),
             justify: Justify::Top,
             lever: Lever::Top,
             pins_per_col: 20,
             occupied: BTreeSet::from([1, 2, 3, 4, 37, 38, 39, 40]),
             bad: BTreeSet::from([3]),
+            tested: BTreeSet::from([1, 2, 4, 37, 38, 39, 40]),
+            show_test: false,
             chip_top: 1,
             chip_bot: 4,
             interior: 10,

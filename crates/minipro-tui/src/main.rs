@@ -1,26 +1,32 @@
-//! minipro-tui — scaffold.
+//! minipro-tui — terminal UI for minipro-rs (P0+P1 MVP).
 //!
-//! Renders the docs/TUI-PLAN.md mockup with real ratatui widgets. The
-//! device list and search run against the real `minipro-core` database;
-//! operation options track real state. Hardware operations are not wired
-//! yet — see docs/TUI-PLAN.md for the roadmap.
+//! Three-pane ratatui layout per docs/TUI-PLAN.md: device browser,
+//! operation tabs/options/progress, log + ZIF diagram. A worker thread
+//! owns `MiniproHandle` and runs the six core ops (read/write/verify/
+//! erase/blank/chip-id) behind `WorkerCmd`/`AppEvent` channels; the log
+//! crate is forwarded into the log pane. Modals cover file paths and
+//! destructive-op confirms — no native dialogs.
 
 mod app;
+mod events;
 mod theme;
+mod worker;
 mod zif;
 
 use std::{
     error::Error,
     io,
+    sync::mpsc,
     time::{Duration, Instant},
 };
 
-use app::{App, Pane, OPS, OPT_COLS};
+use app::{App, ConnState, Modal, OptZone, Pane, OPS, OPT_COLS, SEL_DEFS};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use events::AppEvent;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -29,13 +35,20 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Gauge, HighlightSpacing, List, ListItem, Paragraph, Tabs},
     Frame, Terminal,
 };
-use zif::{Justify, Lever, ZifDiagram};
+use worker::WorkerCmd;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Load the device DB before touching the terminal — a resolution
     // failure prints to the normal screen, not a raw-mode alt buffer.
     let mut app = App::new()?;
     install_panic_hook();
+
+    // Worker thread + event channel. The logger forwards core's
+    // info!/warn! records as AppEvent::Log.
+    let (ev_tx, ev_rx) = mpsc::channel::<AppEvent>();
+    events::install_logger(ev_tx.clone());
+    let cmd_tx = worker::spawn(app.paths().clone(), ev_tx);
+    app.cmd_tx = Some(cmd_tx.clone());
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -48,7 +61,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let stdout = io::BufWriter::with_capacity(256 * 1024, stdout);
     let mut term = Terminal::new(CrosstermBackend::new(stdout))?;
 
-    let res = run(&mut term, &mut app);
+    // Auto-connect at startup (F5 re-sends this).
+    let _ = cmd_tx.send(WorkerCmd::Connect);
+
+    let res = run(&mut term, &mut app, &ev_rx);
 
     disable_raw_mode()?;
     execute!(term.backend_mut(), LeaveAlternateScreen)?;
@@ -67,7 +83,11 @@ fn install_panic_hook() {
     }));
 }
 
-fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) -> io::Result<()> {
+fn run<W: io::Write>(
+    term: &mut Terminal<CrosstermBackend<W>>,
+    app: &mut App,
+    ev_rx: &mpsc::Receiver<AppEvent>,
+) -> io::Result<()> {
     // MINIPRO_TUI_DEBUG_PAINT (any value) overlays draws-per-second and
     // the painted size — diagnoses whether mid-drag blank frames are
     // starved repaints (0 d/s) or terminal-side compositing.
@@ -75,6 +95,16 @@ fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) ->
     let mut paints = 0u32;
     let mut meter = Instant::now();
     loop {
+        // Worker/logger events first — they're cheap and drive progress
+        // + log lines. try_recv drains without blocking.
+        while let Ok(ev) = ev_rx.try_recv() {
+            app.handle_event(ev);
+        }
+        // Spinner advances once per paint while an op runs (~4 Hz at the
+        // poll interval below — the plan's tick cadence).
+        if app.op_running.is_some() {
+            app.spin = app.spin.wrapping_add(1);
+        }
         // Transient degenerate sizes (0 rows/cols) surface mid-drag on
         // conpty — drawing at one clears the screen to blank.
         let (w, h) = crossterm::terminal::size().unwrap_or((0, 0));
@@ -87,7 +117,9 @@ fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) ->
             paints = 0;
             meter = Instant::now();
         }
-        if !event::poll(Duration::from_millis(250))? {
+        // 100 ms poll: worker events don't wake it, but progress is
+        // drained every loop anyway — ~10 Hz worst-case event latency.
+        if !event::poll(Duration::from_millis(100))? {
             continue;
         }
         // Drain the queued events before the next draw — a resize drag
@@ -120,6 +152,46 @@ fn run<W: io::Write>(term: &mut Terminal<CrosstermBackend<W>>, app: &mut App) ->
     Ok(())
 }
 
+/// Header badge for the current connection state.
+fn conn_badge(app: &App) -> Line<'static> {
+    match &app.conn {
+        ConnState::Connected { info, fake } => Line::from(vec![
+            sp(" ● ", theme::green()),
+            sp(
+                format!(
+                    "{} · FW {} · S/N {}",
+                    info.model, info.firmware_str, info.serial_number
+                ),
+                if *fake { theme::amber() } else { theme::dim() },
+            ),
+            if *fake {
+                sp(" (FAKE)", theme::amber())
+            } else {
+                Span::raw("")
+            },
+            Span::raw(" "),
+        ]),
+        ConnState::Connecting => Line::from(vec![
+            sp(" … ", theme::amber()),
+            sp("connecting", theme::dim()),
+            Span::raw(" "),
+        ]),
+        ConnState::Failed(e) => Line::from(vec![
+            sp(" ○ ", theme::red()),
+            sp(
+                format!("{} — F5", e.chars().take(40).collect::<String>()),
+                theme::dim(),
+            ),
+            Span::raw(" "),
+        ]),
+        ConnState::Disconnected => Line::from(vec![
+            sp(" ○ ", theme::dim()),
+            sp("disconnected — F5", theme::faint()),
+            Span::raw(" "),
+        ]),
+    }
+}
+
 fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
     app.note_size(area.width, area.height);
@@ -136,14 +208,11 @@ fn draw(f: &mut Frame, app: &mut App) {
     let outer = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme::border())
-        .title(Span::styled(" minipro-rs 0.9.0 ", theme::text()))
-        .title(
-            Line::from(Span::styled(
-                " ● TL866II+ · FW 04.2.86 · S/N 5A3F ",
-                theme::dim(),
-            ))
-            .alignment(Alignment::Center),
-        )
+        .title(Span::styled(
+            format!(" minipro-rs {} ", env!("CARGO_PKG_VERSION")),
+            theme::text(),
+        ))
+        .title(conn_badge(app).alignment(Alignment::Center))
         .title(Line::from(Span::styled(" [?] help ", theme::dim())).alignment(Alignment::Right));
     let inner = outer.inner(area);
     f.render_widget(outer, area);
@@ -221,10 +290,13 @@ fn draw(f: &mut Frame, app: &mut App) {
     if let Some(ra) = right_area {
         right_pane(f, ra, app);
     }
-    keybar(f, v[2]);
+    keybar(f, v[2], app);
 
     if app.show_help {
         help_overlay(f, area);
+    }
+    if let Some(m) = &app.modal {
+        modal_overlay(f, area, m);
     }
 
     // Debug paint meter (MINIPRO_TUI_DEBUG_PAINT) — right end of keybar.
@@ -326,8 +398,31 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         v[2],
     );
     let favs = Layout::vertical([Constraint::Length(1); 2]).split(v[3]);
-    f.render_widget(Paragraph::new(fav("AT28C256", "Atmel")), favs[0]);
-    f.render_widget(Paragraph::new(fav("PIC16F628A", "Microchip")), favs[1]);
+    if app.favorites.is_empty() {
+        f.render_widget(
+            Paragraph::new(Line::from(sp(" (f — favorite)", theme::faint()))),
+            favs[0],
+        );
+    } else {
+        for (i, name) in app.favorites.iter().take(2).enumerate() {
+            let mfr = app
+                .devices
+                .iter()
+                .find(|d| &d.name == name)
+                .map(|d| d.manufacturer.clone())
+                .unwrap_or_default();
+            f.render_widget(Paragraph::new(fav(name, &mfr)), favs[i]);
+        }
+        if app.favorites.len() > 2 {
+            f.render_widget(
+                Paragraph::new(Line::from(sp(
+                    format!(" ▸ {} more", app.favorites.len() - 2),
+                    theme::faint(),
+                ))),
+                favs[1],
+            );
+        }
+    }
     f.render_widget(Paragraph::new(sep_line(area.width)), v[4]);
 
     // Results header — count plus a scroll hint driven by ListState.
@@ -355,8 +450,13 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .map(|&i| {
             let d = &app.devices[i];
+            let star = if app.favorites.iter().any(|f| f == &d.name) {
+                "★"
+            } else {
+                " "
+            };
             ListItem::new(Line::from(vec![
-                sp(format!("{:<11}", d.name), theme::text()),
+                sp(format!("{star}{:<11}", d.name), theme::text()),
                 sp(d.manufacturer.clone(), theme::dim()),
             ]))
         })
@@ -395,26 +495,30 @@ fn selected_lines(app: &App) -> Vec<Line<'static>> {
     )));
     match &app.selected {
         Some(d) if d.name == item.name => {
-            lines.push(Line::from(vec![
-                Span::raw(" "),
-                sp(
-                    format!(
-                        "{} code · {}-pin",
-                        human_size(d.code_memory_bytes()),
-                        d.package_details.pin_count
+            if d.chip_type == minipro_core::device::ChipType::Logic as u32 {
+                lines.push(Line::from(sp(" logic IC — Logic op only", theme::amber())));
+            } else {
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    sp(
+                        format!(
+                            "{} code · {}-pin",
+                            human_size(d.code_memory_bytes()),
+                            d.package_details.pin_count
+                        ),
+                        theme::dim(),
                     ),
-                    theme::dim(),
-                ),
-            ]));
-            lines.push(Line::from(vec![
-                Span::raw(" "),
-                sp("Chip ID ", theme::dim()),
-                if d.chip_id_bytes_count > 0 {
-                    sp("✓", theme::green())
-                } else {
-                    sp("✗", theme::faint())
-                },
-            ]));
+                ]));
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    sp("Chip ID ", theme::dim()),
+                    if d.chip_id_bytes_count > 0 {
+                        sp("✓", theme::green())
+                    } else {
+                        sp("✗", theme::faint())
+                    },
+                ]));
+            }
         }
         _ => lines.push(Line::from(sp(" Enter — details", theme::faint()))),
     }
@@ -431,12 +535,12 @@ fn human_size(b: usize) -> String {
     }
 }
 
-fn fav(name: &'static str, mfr: &'static str) -> Line<'static> {
+fn fav(name: &str, mfr: &str) -> Line<'static> {
     Line::from(vec![
         sp(" ★ ", theme::accent()),
-        sp(name, theme::text()),
-        Span::raw(" ".repeat(10usize.saturating_sub(name.len()))),
-        sp(mfr, theme::dim()),
+        sp(name.to_string(), theme::text()),
+        Span::raw(" ".repeat(11usize.saturating_sub(name.len()))),
+        sp(mfr.to_string(), theme::dim()),
     ])
 }
 
@@ -468,21 +572,22 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
         v[0],
     );
     let w = v[1].width;
-    let opt = |name: &'static str, val: &'static str| {
-        Line::from(vec![
-            Span::raw(format!(" {name:<13}")),
-            sp(val, theme::text()),
-            sp("  ▾", theme::accent()),
-        ])
-    };
-    let mut lines = vec![
-        Line::default(),
-        opt("Interface", "ZIF socket"),
-        opt("Page", "Code"),
-        opt("Format", "Auto"),
-        opt("Size diff", "Error"),
-        Line::default(),
-    ];
+    // Select rows — real values, cursor per opt_zone.
+    let mut lines = vec![Line::default()];
+    for (i, (name, vals)) in SEL_DEFS.iter().enumerate() {
+        let cur = focused && app.opt_zone == OptZone::Selects && app.sel_row == i;
+        let val = vals[app.selects[i].min(vals.len() - 1)];
+        let mut spans = vec![Span::raw(format!(" {name:<13}"))];
+        if cur {
+            spans.push(sp(format!("[{val:<14}]"), theme::sel()));
+            spans.push(sp("▾", theme::accent()));
+        } else {
+            spans.push(sp(format!("[{val:<14}]",), theme::text()));
+            spans.push(sp("▾", theme::accent()));
+        }
+        lines.push(Line::from(spans));
+    }
+    lines.push(Line::default());
     // Two checkbox columns; the option cursor is row+col per OPT_COLS.
     for row in 0..OPT_COLS[0].len().max(OPT_COLS[1].len()) {
         let mut spans = Vec::new();
@@ -490,7 +595,10 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
             let base = if col == 0 { 0 } else { OPT_COLS[0].len() };
             if let Some(&label) = labels.get(row) {
                 let i = base + row;
-                let cur = focused && app.opt_col == col && app.opt_row == row;
+                let cur = focused
+                    && app.opt_zone == OptZone::Checks
+                    && app.opt_col == col
+                    && app.opt_row == row;
                 if cur {
                     spans.push(sp(" ▸", theme::accent()));
                 } else {
@@ -507,32 +615,42 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
         }
         lines.push(Line::from(spans));
     }
-    lines.extend([
-        Line::default(),
-        Line::from(vec![
-            sp(" ▸ Advanced", theme::accent()),
-            sp("  (VPP / VCC / VDD overrides)", theme::faint()),
-        ]),
-        sep_line(w),
-        Line::from(vec![
-            sp(" Buffer  ", theme::dim()),
-            sp("W25Q64JV_dump.bin", theme::text()),
-            sp("  · 8,388,608 B", theme::dim()),
-        ]),
-        Line::from(vec![
-            Span::raw("          "),
-            sp("CRC-32 A1B2C3D4", theme::cyan()),
-            sp("  · format bin", theme::dim()),
-        ]),
-        sep_line(w),
-        Line::from(vec![
-            sp(" [f]", theme::accent()),
-            sp(" write from file", theme::text()),
-            sp("    [b]", theme::accent()),
-            sp(" write buffer", theme::text()),
-        ]),
-        Line::default(),
-    ]);
+    lines.push(Line::default());
+    lines.push(Line::from(vec![
+        sp(" ▸ Advanced", theme::faint()),
+        sp("  (VPP / VCC / VDD overrides — later)", theme::faint()),
+    ]));
+    lines.push(sep_line(w));
+    // Buffer line — last op's file + stats, or the empty state.
+    match (&app.last_path, app.last_stats) {
+        (Some(path), Some(stats)) => {
+            lines.push(Line::from(vec![
+                sp(" Buffer  ", theme::dim()),
+                sp(path.clone(), theme::text()),
+                sp(format!("  · {} B", stats.bytes), theme::dim()),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("          "),
+                sp(format!("CRC-32 {:08X}", stats.crc32), theme::cyan()),
+            ]));
+        }
+        _ => {
+            lines.push(Line::from(vec![
+                sp(" Buffer  ", theme::dim()),
+                sp("—", theme::faint()),
+            ]));
+        }
+    }
+    lines.push(sep_line(w));
+    lines.push(Line::from(vec![
+        sp(" Enter", theme::accent()),
+        sp(" run op", theme::text()),
+        sp("    Space", theme::accent()),
+        sp(" toggle", theme::text()),
+        sp("    ←→", theme::accent()),
+        sp(" change", theme::text()),
+    ]));
+    lines.push(Line::default());
     f.render_widget(Paragraph::new(lines), v[1]);
     let p = Layout::horizontal([
         Constraint::Length(13),
@@ -540,17 +658,47 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(5),
     ])
     .split(v[2]);
-    f.render_widget(Paragraph::new(sp(" ◐ Writing", theme::accent())), p[0]);
-    f.render_widget(
-        Gauge::default()
-            .ratio(0.72)
-            .gauge_style(Style::default().fg(theme::GREEN).bg(theme::PROG_EMPTY)),
-        p[1],
-    );
-    f.render_widget(Paragraph::new(sp(" 72%", theme::dim())), p[2]);
+    // Progress: live while an op runs, idle otherwise.
+    const SPINNER: [char; 4] = ['◐', '◓', '◑', '◒'];
+    match (app.op_running, app.progress) {
+        (Some(op), Some((done, total))) => {
+            let ratio = if total > 0 {
+                done as f64 / total as f64
+            } else {
+                0.0
+            };
+            f.render_widget(
+                Paragraph::new(sp(
+                    format!(" {} {}", SPINNER[app.spin as usize % 4], op.name()),
+                    theme::accent(),
+                )),
+                p[0],
+            );
+            f.render_widget(
+                Gauge::default()
+                    .ratio(ratio.clamp(0.0, 1.0))
+                    .gauge_style(Style::default().fg(theme::GREEN).bg(theme::PROG_EMPTY)),
+                p[1],
+            );
+            f.render_widget(
+                Paragraph::new(sp(format!(" {:>3.0}%", ratio * 100.0), theme::dim())),
+                p[2],
+            );
+        }
+        _ => {
+            f.render_widget(Paragraph::new(sp(" · idle", theme::faint())), p[0]);
+            f.render_widget(
+                Gauge::default()
+                    .ratio(0.0)
+                    .gauge_style(Style::default().fg(theme::GREEN).bg(theme::PROG_EMPTY)),
+                p[1],
+            );
+            f.render_widget(Paragraph::new(sp("", theme::dim())), p[2]);
+        }
+    }
 }
 
-fn right_pane(f: &mut Frame, area: Rect, app: &App) {
+fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
     let focused = app.pane == Pane::Right;
     let v = Layout::vertical([
         Constraint::Length(8), // LOG
@@ -560,64 +708,75 @@ fn right_pane(f: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(1), // pin-test strip
     ])
     .split(area);
-    let log = vec![
-        hdr("LOG", focused),
-        log_line("09:12:04", "● TL866II+ connected", theme::green()),
-        log_line("09:12:31", "device W25Q64JV", theme::dim()),
-        Line::from(vec![
-            sp(" 09:13:02 ", theme::faint()),
-            sp("Chip ID OK ", theme::text()),
-            sp("0xEF4017", theme::cyan()),
-        ]),
-        log_line("09:13:02", "Writing 8388608 B…", theme::text()),
-        log_line("09:13:09", "OVC check ok", theme::amber()),
-        log_line("09:13:14", "…", theme::faint()),
-        Line::default(),
-    ];
+
+    // Log pane — newest at the bottom; log_scroll shifts the window up.
+    let log_h = v[0].height.saturating_sub(1) as usize;
+    let total = app.log_lines.len();
+    let end = total.saturating_sub(app.log_scroll);
+    let start = end.saturating_sub(log_h);
+    let mut log: Vec<Line> = vec![hdr("LOG", focused)];
+    for l in app.log_lines.iter().skip(start).take(end - start) {
+        let style = match l.level {
+            log::Level::Error => theme::red(),
+            log::Level::Warn => theme::amber(),
+            log::Level::Info => theme::text(),
+            _ => theme::faint(),
+        };
+        log.push(Line::from(vec![
+            sp(format!(" {} ", l.ts), theme::faint()),
+            Span::styled(l.msg.clone(), style),
+        ]));
+    }
+    if log.is_empty() {
+        log.push(Line::from(sp(" —", theme::faint())));
+    }
     f.render_widget(Paragraph::new(log), v[0]);
     f.render_widget(Paragraph::new(sep_line(v[1].width)), v[1]);
 
-    // TODO(scaffold): once `selected` drives this, occupied/chip rows
-    // come from core::zif's pin map for the device + model.
-    let zif = ZifDiagram {
-        socket: "ZIF-40",
-        package: "DIP8",
-        justify: Justify::Top,
-        lever: Lever::Top,
-        pins_per_col: 20,
-        occupied: [1, 2, 3, 4, 37, 38, 39, 40].into_iter().collect(),
-        bad: [3].into_iter().collect(),
-        chip_top: 1,
-        chip_bot: 4,
-        interior: 10,
-    };
+    let zif = app.zif_diagram();
     f.render_widget(&zif, v[2]);
     f.render_widget(Paragraph::new(sep_line(v[3].width)), v[3]);
-    f.render_widget(
-        Paragraph::new(Line::from(vec![
+
+    // Pin-test strip — mirrors the ZIF colors.
+    let strip = match &app.pin_test {
+        Some(pt) if !pt.bad_device_pins.is_empty() => {
+            let pins = pt
+                .bad_device_pins
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            if pt.all_open {
+                Line::from(vec![
+                    Span::raw(" "),
+                    sp("✗", theme::amber()),
+                    sp(" Pin test: ", theme::text()),
+                    sp("all pins open — chip seated?", theme::amber()),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::raw(" "),
+                    sp("✗", theme::red()),
+                    sp(" Pin test: ", theme::text()),
+                    sp(format!("bad contact pin {pins}"), theme::red()),
+                ])
+            }
+        }
+        Some(_) => Line::from(vec![
             Span::raw(" "),
-            sp("✗", theme::red()),
-            sp(" Pin test: ", theme::text()),
-            sp("bad contact on pin 3", theme::red()),
-        ])),
-        v[4],
-    );
+            sp("✓", theme::green()),
+            sp(" Pin test: all pins OK", theme::green()),
+        ]),
+        None => Line::from(vec![Span::raw(" "), sp("Pin test: —", theme::faint())]),
+    };
+    f.render_widget(Paragraph::new(strip), v[4]);
 }
 
-fn log_line(ts: &'static str, msg: &'static str, style: Style) -> Line<'static> {
-    Line::from(vec![
-        Span::raw(" "),
-        sp(ts, theme::faint()),
-        Span::raw(" "),
-        Span::styled(msg, style),
-    ])
-}
-
-/// Centered help modal — the first overlay; settings/confirm dialogs
-/// will reuse this pattern. Lists only keys that are actually bound.
+/// Centered help modal — the first overlay; path/confirm dialogs reuse
+/// this pattern. Lists only keys that are actually bound.
 fn help_overlay(f: &mut Frame, area: Rect) {
     let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 21u16.min(area.height.saturating_sub(2));
+    let h = 24u16.min(area.height.saturating_sub(2));
     let r = Rect::new(
         area.x + area.width.saturating_sub(w) / 2,
         area.y + area.height.saturating_sub(h) / 2,
@@ -636,9 +795,10 @@ fn help_overlay(f: &mut Frame, area: Rect) {
     let lines = vec![
         Line::default(),
         section("Global"),
-        row("q / Ctrl+C", "quit"),
+        row("q / Ctrl+C", "quit (blocked while an op runs)"),
         row("? / F1", "this help · close"),
         row("Tab / S-Tab", "cycle panes"),
+        row("F5", "(re)connect programmer"),
         row("Esc", "back / quit"),
         Line::default(),
         section("Devices"),
@@ -647,11 +807,15 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("↑ ↓ PgUp PgDn", "move cursor"),
         row("Home · End", "first · last match"),
         row("Enter", "select device → options"),
+        row("f", "favorite (this session)"),
         Line::default(),
         section("Operations"),
         row("1-8", "pick operation"),
-        row("↑ ↓ ← →", "move option cursor"),
-        row("Space · Enter", "toggle option"),
+        row("Enter", "run (path prompt / confirm as needed)"),
+        row("Space", "toggle option · ←→ cycle selects"),
+        Line::default(),
+        section("Log (right pane)"),
+        row("j/k · PgUp/PgDn", "scroll · x clear"),
         Line::default(),
         Line::from(Span::styled(
             "  Esc / q / ? / Enter / F1 — close",
@@ -669,19 +833,101 @@ fn help_overlay(f: &mut Frame, area: Rect) {
     );
 }
 
-fn keybar(f: &mut Frame, area: Rect) {
+/// Centered modal for path prompts and destructive-op confirms.
+fn modal_overlay(f: &mut Frame, area: Rect, m: &Modal) {
+    let (title, body): (&str, Vec<Line>) = match m {
+        Modal::Path {
+            title,
+            input,
+            cursor,
+            ..
+        } => {
+            let mut spans = vec![
+                sp(&input[..*cursor], theme::text()),
+                sp("▌", theme::accent()),
+            ];
+            spans.push(sp(&input[*cursor..], theme::text()));
+            (
+                title,
+                vec![
+                    Line::default(),
+                    Line::from(spans),
+                    Line::default(),
+                    Line::from(vec![
+                        sp(" Enter", theme::accent()),
+                        sp(" run  ·  ", theme::dim()),
+                        sp("Esc", theme::accent()),
+                        sp(" cancel", theme::dim()),
+                    ]),
+                ],
+            )
+        }
+        Modal::Confirm { lines, .. } => {
+            let mut body: Vec<Line> = vec![Line::default()];
+            for (i, l) in lines.iter().enumerate() {
+                body.push(Line::from(sp(
+                    l.clone(),
+                    if i == 0 { theme::amber() } else { theme::dim() },
+                )));
+            }
+            body.push(Line::default());
+            body.push(Line::from(vec![
+                sp(" y", theme::accent()),
+                sp(" confirm  ·  ", theme::dim()),
+                sp("n/Esc", theme::accent()),
+                sp(" cancel", theme::dim()),
+            ]));
+            ("Confirm", body)
+        }
+    };
+    let w = 52u16.min(area.width.saturating_sub(4));
+    let h = (body.len() as u16 + 2).min(area.height.saturating_sub(2));
+    let r = Rect::new(
+        area.x + area.width.saturating_sub(w) / 2,
+        area.y + area.height.saturating_sub(h) / 2,
+        w,
+        h,
+    );
+    f.render_widget(Clear, r);
+    f.render_widget(
+        Paragraph::new(body).block(
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(theme::amber())
+                .title(Span::styled(format!(" {title} "), theme::accent_bold())),
+        ),
+        r,
+    );
+}
+
+fn keybar(f: &mut Frame, area: Rect, app: &App) {
     let key = |s: &'static str| Span::styled(s.to_string(), theme::accent_bold().bg(theme::KEY_BG));
     let sep = |s: &'static str| Span::styled(s.to_string(), theme::dim().bg(theme::KEY_BG));
+    // While an op runs, the bar explains why keys are dead — the GUI's
+    // modal-progress equivalent.
+    if app.op_running.is_some() {
+        let line = Line::from(vec![
+            key(" ◐"),
+            sep(" running — ops can't be aborted mid-transfer "),
+        ]);
+        f.render_widget(
+            Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
+            area,
+        );
+        return;
+    }
     let mut spans = vec![key(" ⇥"), sep(" panes  ·  "), key("1-8"), sep(" op  ·  ")];
     // Compact variant below 100 cols — the full set would clip mid-hint.
     if area.width >= 100 {
         spans.extend([
+            key("Enter"),
+            sep(" run  ·  "),
             key("Space"),
             sep(" toggle  ·  "),
             key("←→"),
             sep(" change  ·  "),
-            key("Enter"),
-            sep(" sel  ·  "),
+            key("F5"),
+            sep(" conn  ·  "),
         ]);
     }
     spans.extend([

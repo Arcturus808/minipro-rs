@@ -328,6 +328,10 @@ Read the relevant doc before working in that area:
   hotkeys, selection model, pending edits/dirty flag, diff), pin-contact
   test (incl. the T76 `0x3E` hardware caveat), logic IC test/identify,
   config/fuse panel, favorites store, terminal rendering rules.
+- `docs/TUI-INTERNALS.md` — `minipro-tui` crate map, two-thread event
+  model, worker op orchestration (pin/ID gates, erase/verify ordering,
+  `can_erase` gating), rendering invariants (resize hysteresis,
+  BufWriter frame atomicity), and the fake-programmer dev mode.
 - `docs/CLI-INTERNALS.md` — CLI flag semantics, `--logic-identify`,
   `-z`/`--pin-check` gate behavior.
 - `docs/KNOWN-BUGS.md` — historical bugs & fixes. Check before touching

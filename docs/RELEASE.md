@@ -132,6 +132,13 @@ release pipeline remains the authority on packaging.
    directly: `git push github vX.Y.Z`.
 9. Let CI build and release everything consistently.
 
+**Release artifact set** (both pipelines): `minipro` CLI + `minipro-tui`
+terminal UI — bundled together in the Unix `.tar.gz` and shipped as two
+standalone `.exe`s on Windows (see `.github/workflows/release.yml` and
+`.gitlab-ci.yml`). The TUI follows the workspace version (`version.workspace`)
+so there is no fifth version field to bump; it requires Rust 1.88 (ratatui
+0.30) and is excluded from the 1.85 MSRV job.
+
 ## Supply-chain audit (cargo-deny)
 
 Run `cargo deny check` during release prep to scan for known

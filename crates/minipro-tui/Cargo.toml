@@ -13,3 +13,5 @@ path = "src/main.rs"
 minipro-core = { path = "../minipro-core" }
 ratatui      = "0.30"
 crossterm    = "0.29"
+log = "0.4"
+jiff = "0.2"

@@ -96,7 +96,7 @@ test:linux:
   stage: build
   <<: *cargo_cache
   script:
-    - cargo build --release --locked --bin minipro
+    - cargo build --release --locked --bin minipro --bin minipro-tui
   artifacts:
     expire_in: 1 week
 
@@ -106,6 +106,7 @@ build:linux-x86_64:
     name: "minipro-cli-linux-x86_64-${CI_COMMIT_SHORT_SHA}"
     paths:
       - target/release/minipro
+      - target/release/minipro-tui
 
 build:windows-x86_64:
   <<: *build_common
@@ -113,11 +114,12 @@ build:windows-x86_64:
     - rustup target add x86_64-pc-windows-gnu
     - apt-get update -q && apt-get install -qy mingw-w64
   script:
-    - cargo build --release --locked --bin minipro --target x86_64-pc-windows-gnu
+    - cargo build --release --locked --bin minipro --bin minipro-tui --target x86_64-pc-windows-gnu
   artifacts:
     name: "minipro-cli-windows-x86_64-${CI_COMMIT_SHORT_SHA}"
     paths:
       - target/x86_64-pc-windows-gnu/release/minipro.exe
+      - target/x86_64-pc-windows-gnu/release/minipro-tui.exe
 
 # ── Package ───────────────────────────────────────────────────────────────────
 
