@@ -22,13 +22,13 @@ use std::io::Read;
 use std::path::Path;
 
 use base64::Engine;
-use crc::{Crc, CRC_32_ISO_HDLC};
 use flate2::read::GzDecoder;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::device::{Device, ProgrammerModel};
 use crate::error::MiniproError;
+use crate::util::crc_32;
 
 // ── Algorithm name prefix table (indexed by protocol_id - 1) ─────────────────
 //
@@ -141,8 +141,6 @@ const IC2_ALG_EMMC: u8 = 0x31;
 pub const V_1V8: u8 = 0;
 pub const V_3V3: u8 = 1;
 
-const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /// Look up and decode the FPGA algorithm bitstream for `device` on the given
@@ -168,17 +166,14 @@ pub fn get_algorithm(
     Ok(crate::device::Algorithm { name, bitstream })
 }
 
-/// Check whether a device needs an algorithm lookup (T56/T76 with a
-/// non-trivial protocol or logic chip type).
-pub fn needs_algorithm(device: &Device, model: ProgrammerModel) -> bool {
-    match model {
-        ProgrammerModel::T56 | ProgrammerModel::T76 => {}
-        _ => return false,
-    }
-    // Logic chips (protocol_id == 0) use utility algorithms.
-    // All other non-zero protocol IDs use named algorithms.
-    // Chips with protocol_id 0 and chip_type Logic (0x05) need util algorithms.
-    device.protocol_id != IC2_ALG_NONE || device.chip_type == crate::device::ChipType::Logic as u32
+/// Check whether a device needs an algorithm lookup.
+///
+/// Upstream C minipro calls `get_algorithm()` unconditionally for every
+/// T56/T76 device — the FPGA ships blank, so even chips with
+/// `protocol_id == 0` need a utility bitstream (`TTL1`/`Test_100M`) to drive
+/// the pins.  Other programmer models have fixed hardware logic.
+pub fn needs_algorithm(_device: &Device, model: ProgrammerModel) -> bool {
+    matches!(model, ProgrammerModel::T56 | ProgrammerModel::T76)
 }
 
 // ── Name computation ─────────────────────────────────────────────────────────
@@ -372,7 +367,13 @@ fn find_algorithm_in_xml(
 
 /// Decode the base64 + gzip bitstream, verify CRC, and (for T76) perform
 /// level-2 zero-run decompression.
-fn decode_bitstream(base64_data: &str, model: ProgrammerModel) -> Result<Vec<u8>, MiniproError> {
+///
+/// `pub(crate)` so `xgpro_fetch` can validate freshly generated
+/// `algorithm.xml` entries through the exact consumer decode path.
+pub(crate) fn decode_bitstream(
+    base64_data: &str,
+    model: ProgrammerModel,
+) -> Result<Vec<u8>, MiniproError> {
     // 1. Base64 decode.
     let gzip_data = base64::engine::general_purpose::STANDARD
         .decode(base64_data.trim())
@@ -414,7 +415,7 @@ fn decode_bitstream(base64_data: &str, model: ProgrammerModel) -> Result<Vec<u8>
         raw[ALGO_CRC_OFFSET + 2],
         raw[ALGO_CRC_OFFSET + 3],
     ]);
-    let data_crc = CRC32.checksum(&raw[ALGO_DATA_OFFSET..]);
+    let data_crc = crc_32(&raw[ALGO_DATA_OFFSET..], 0xFFFF_FFFF);
 
     if file_crc != data_crc {
         return Err(MiniproError::AlgorithmCrc);
@@ -454,14 +455,20 @@ fn level2_decompress(raw: &[u8]) -> Result<Vec<u8>, MiniproError> {
         raw[ALGO_SIZE_OFFSET + 3],
     ]) as usize;
 
-    let mut out = vec![0u8; algo_size];
+    // Words are written in pairs, so the buffer is rounded up to an even
+    // size — upstream allocates `algo_size` and lets the final word spill
+    // one byte past it.  Unwritten tail bytes stay zero, matching the
+    // upstream calloc'd slack (the encoded stream may legitimately end a
+    // few bytes early).
+    let cap = (algo_size + 1) & !1;
+    let mut out = vec![0u8; cap];
     let mut out_pos = 0usize;
 
     // Input data starts at ALGO_DATA_OFFSET, processed as u16 pairs.
     let input = &raw[ALGO_DATA_OFFSET..];
     let mut in_pos = 0usize;
 
-    while in_pos + 2 <= input.len() && out_pos + 2 <= algo_size {
+    while in_pos + 2 <= input.len() && out_pos + 2 <= cap {
         let val = u16::from_le_bytes([input[in_pos], input[in_pos + 1]]);
         in_pos += 2;
 
@@ -477,23 +484,17 @@ fn level2_decompress(raw: &[u8]) -> Result<Vec<u8>, MiniproError> {
             let count = u16::from_le_bytes([input[in_pos], input[in_pos + 1]]) as usize;
             in_pos += 2;
             let byte_count = count * 2;
-            if out_pos + byte_count > algo_size {
+            if out_pos + byte_count > cap {
                 return Err(MiniproError::AlgorithmDecompress(
                     "T76 level-2 decompression overflow".into(),
                 ));
             }
-            // Zeros are already in the buffer from vec![0u8; algo_size].
+            // Zeros are already in the buffer from vec![0u8; cap].
             out_pos += byte_count;
         }
     }
 
-    if out_pos != algo_size {
-        return Err(MiniproError::AlgorithmDecompress(format!(
-            "T76 level-2 decompression size mismatch: expected {}, got {}",
-            algo_size, out_pos
-        )));
-    }
-
+    out.truncate(algo_size);
     Ok(out)
 }
 

@@ -5,11 +5,24 @@
   import { invoke } from "@tauri-apps/api/core";
   import { pickDirectory } from "../file-dialog";
   import { getDbStatus, setCustomDbDir, reloadDatabase, type DbDirStatus } from "../stores/device";
+  import { progress } from "../stores/operations";
+
+  interface AlgoDownloadOutcome {
+    output_dir: string;
+    xml_path: string;
+    t56_algorithms: number;
+    t76_algorithms: number;
+    firmware: { model: string; version: string; path: string }[];
+    warnings: string[];
+  }
 
   let show = $state(false);
   let dbStatus = $state<DbDirStatus | null>(null);
   let dbError = $state<string | null>(null);
   let dbBusy = $state(false);
+  let dlBusy = $state(false);
+  let dlError = $state<string | null>(null);
+  let dlResult = $state<AlgoDownloadOutcome | null>(null);
 
   let isDark = $derived(
     $settings.theme === "dark" ||
@@ -65,12 +78,46 @@
     }
   }
 
+  async function downloadAlgos() {
+    dlBusy = true;
+    dlError = null;
+    dlResult = null;
+    try {
+      // Writes to the custom db dir when one is configured so the new
+      // algorithm.xml lives alongside the user's other database files;
+      // otherwise the per-user data dir (which the resolver searches).
+      dlResult = await invoke<AlgoDownloadOutcome>("download_algorithms", {
+        outputDir: $settings.customDbDir ?? null,
+      });
+    } catch (e: any) {
+      dlError = String(e);
+    } finally {
+      dlBusy = false;
+    }
+  }
+
+  async function cancelDownload() {
+    try {
+      await invoke("cancel_algo_download");
+    } catch {
+      // fire-and-forget — the flag may arrive after completion anyway
+    }
+  }
+
+  async function openSaveFolder() {
+    try {
+      await invoke("open_download_dir", { dir: $settings.customDbDir ?? null });
+    } catch (e: any) {
+      dlError = String(e);
+    }
+  }
+
   function handleBackdrop(event: MouseEvent) {
     if (event.target === event.currentTarget) close();
   }
 </script>
 
-<button class="btn preset-tonal p-2 flex items-center justify-center" onclick={toggle} title="Settings">
+<button class="btn preset-tonal p-2 flex items-center justify-center hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors" onclick={toggle} title="Settings">
   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
     <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -192,7 +239,8 @@
       <div class="space-y-3">
         <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Layout</h3>
         <button
-          class="btn preset-tonal text-sm w-full"
+          class="btn preset-tonal text-sm w-full hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+          title="Reset panel layout, hex font size and window size to defaults"
           onclick={async () => {
             // Reset panel percentages to defaults
             update("leftPanelPercent", 0.20);
@@ -247,7 +295,8 @@
           {/if}
           <div class="flex gap-2">
             <button
-              class="btn preset-tonal text-xs"
+              class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+              title="Choose a directory containing infoic.xml and logicic.xml"
               onclick={browseDbDir}
               disabled={dbBusy}
             >
@@ -255,7 +304,8 @@
             </button>
             {#if $settings.customDbDir}
               <button
-                class="btn preset-tonal text-xs"
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                title="Use the built-in database search paths"
                 onclick={resetDbDir}
                 disabled={dbBusy}
               >
@@ -266,6 +316,56 @@
           <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             Select a directory containing custom <span class="font-mono">infoic.xml</span> and <span class="font-mono">logicic.xml</span> files. The device list reloads immediately.
           </p>
+
+          <div class={`border-t pt-3 mt-1 space-y-2 ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
+            <div class="flex gap-2 items-center">
+              <button
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                title="Download the official XGPro archives and generate algorithm.xml + firmware images"
+                onclick={downloadAlgos}
+                disabled={dlBusy}
+              >
+                {dlBusy ? "Downloading…" : "Download algorithm.xml + firmware…"}
+              </button>
+              <button
+                class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                onclick={openSaveFolder}
+                disabled={dlBusy}
+                title="Open the folder the files are saved to"
+              >
+                Open folder
+              </button>
+              {#if dlBusy}
+                <button
+                  class="btn preset-tonal text-xs hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+                  title="Cancel the download"
+                  onclick={cancelDownload}
+                >
+                  Cancel
+                </button>
+              {/if}
+            </div>
+            {#if dlBusy && $progress}
+              <div class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {$progress.operation}: {$progress.done.toLocaleString()}{$progress.total ? ` / ${$progress.total.toLocaleString()}` : ""}
+              </div>
+            {/if}
+            {#if dlError}
+              <div class="text-xs text-red-500">{dlError}</div>
+            {/if}
+            {#if dlResult}
+              <div class={`text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                algorithm.xml: {dlResult.t56_algorithms} T56 + {dlResult.t76_algorithms} T76
+                algorithms, {dlResult.firmware.length} firmware image(s) → {dlResult.output_dir}.
+                Reconnect the programmer to use them.
+              </div>
+            {/if}
+            <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Required for T56/T76 chip operations — not bundled for licensing reasons.
+              Downloads the official XGPro archives, verifies checksums, and generates
+              <span class="font-mono">algorithm.xml</span> plus firmware images.
+            </p>
+          </div>
         </div>
       </div>
     </div>

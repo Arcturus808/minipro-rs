@@ -26,6 +26,7 @@ export interface OperationOptions {
   unprotect_before: boolean;
   protect_after_op: boolean;
   pin_check: boolean;
+  stability_check: boolean;
 }
 
 export const isRunning = writable(false);
@@ -98,6 +99,7 @@ function defaultOptions(): OperationOptions {
     format: "auto",
     size_mismatch: "error",
     pin_check: true,
+    stability_check: false,
   };
 }
 
@@ -268,7 +270,6 @@ export interface ChipIdResult {
   expected: string;
   is_match: boolean;
   is_variant: boolean;
-  base_name: string;
 }
 
 export async function doChipId(icspMode: string = "zif", pinCheck: boolean = true): Promise<ChipIdResult | undefined> {
@@ -340,6 +341,9 @@ export interface PinTestResult {
   supported: boolean;
   pass: boolean;
   bad_pins: number[];
+  /** Device pins the mask actually tested — distinguishes tested-good
+      from untested (e.g. GND) on the ZIF diagram. */
+  expected_pins: number[];
   message: string;
 }
 
@@ -420,7 +424,12 @@ export async function doPinTest(icspMode: string): Promise<void> {
     if (result.supported && result.pass) {
       logs.info("Pin test: all pins OK");
     } else if (result.supported && !result.pass) {
-      logs.warn(`Pin test: bad contact on ${result.bad_pins.length} pin(s): ${result.bad_pins.join(", ")}`);
+      // Every expected pin open almost always means no chip is seated.
+      if (result.expected_pins.length > 0 && result.bad_pins.length === result.expected_pins.length) {
+        logs.warn(`Pin test: all ${result.bad_pins.length} expected pins open — is a chip seated in the socket?`);
+      } else {
+        logs.warn(`Pin test: bad contact on ${result.bad_pins.length} pin(s): ${result.bad_pins.join(", ")}`);
+      }
     } else {
       logs.warn(`Pin test: ${result.message}`);
     }

@@ -161,6 +161,57 @@ This is a living list of features and improvements planned for minipro-rs.
     - None known.
   - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
 
+- [x] **Native XGPro downloader — replaces `dump-alg-minipro.bash`** — generate `algorithm.xml` + `firmware-*.dat` in pure Rust, no bash/bsdtar/coreutils/wget
+  - **Status (2026-11): COMPLETE.** `minipro-core::xgpro_fetch` + CLI `--download-algorithms`/`--output`/`--from-file`/`--xgpro-url` + Settings → Database "Download algorithm.xml + firmware…" button (progress, cancel, "Open folder" helper) all landed. Verified end-to-end: live download and `--from-file` both produce 354 T56 + 370 T76 CRC-verified algorithms and all 4 firmware images; MSRV 1.85 clean. The GUI firmware-update flow now auto-finds downloaded `firmware-<model>-*.dat` images (custom db dir + per-user dir) with installed-vs-file version notes; TL866A/CS get an explicit clone-brick warning. Per-user resolver dir landed earlier (`de56803`).
+  - **Problem:** T56/T76 chip operations need `algorithm.xml` (FPGA bitstreams) and `minipro -F` needs `update*.dat` firmware images. Today both come only from upstream's `dump-alg-minipro.bash`, which requires bash, bsdtar, sha256sum, strings, base64, and wget/curl — so it **cannot run on Windows at all**, needs sudo for system dirs, and has a latent bug (`[ -n $USE_ROOT ]` is always true → always `sudo cp`s when an install dir is given). This is the biggest remaining gap for Windows users wanting full T56/T76 support.
+  - **Verified approach (prototyped 2026-11):** the XGPro `.rar` downloads are a two-layer RAR5 matryoshka — outer RAR contains a single `*Setup.exe`, which is a WinRAR SFX (inner RAR5 begins at the `Rar!\x1a\x07\x01\x00` signature, e.g. offset 0x4e600). Only RAR5 decompression is needed, applied twice; no NSIS/zip. `rar-codec` 0.1.2 (pure Rust, zero deps, Apache-2.0, `#![forbid(unsafe_code)]`, oracle-tested vs real UnRAR) extracted **both** real archives end-to-end: V1304 → 33.7 MB exe → 584 entries incl. 354 `algorithm/*.alg` + `updateII.dat`/`UpdateT48.dat`/`updateT56.dat`; T76 V1319 → 69.3 MB exe → 624 entries incl. 370 `algoT76/*.alg` (all extracted, 0 failures) + `UpdateT76.Dat`. Naming confirmed: 356/370 T76 files use the `T7_` prefix (stripped → `SPI25F10`, matching lookup names); `T76_*` vga/uart utils and `Test*` pass through unstripped — strip **only** `T7_`, never `T76_`.
+  - **Implementation plan:**
+    1. **Core: `minipro-core::xgpro_fetch` module** — constants (URLs, SHA-256s, firmware name/type/version table, `.alg` layout offsets) + pipeline:
+       - `download(url) -> Vec<u8>` via `ureq` + rustls, with a `Fn(DownloadProgress)` callback; honor `Proxy::try_from_env()`.
+       - `unwrap_sfx_rar(bytes) -> rar members`: `Archive::open`, find `.exe` member, extract, scan for `Rar!\x1a\x07`, `Archive::open` again — all in memory (~65 MB peak; exe never hits disk, which also avoids antivirus scanning of a foreign PE).
+       - `build_xml(t56, t76) -> String`: for each `.alg`, name = stem (T76 additionally strips `T7_` prefix); desc = T56 bytes-to-first-NUL / T76 GNU-strings emulation (printable runs ≥4 over `data[16..4096]`, newline-joined); bitstream = gzip+base64 of `data[544..]` (T56, level 9) or `data[4..12] ++ data[4096..]` (T76, level 6); `String::from_utf8_lossy` + XML-escape on desc (upstream emits raw bytes → can produce invalid XML; deliberate improvement, bitstreams byte-identical after decode).
+       - `verify_xml()`: re-parse generated XML and run every bitstream through the existing `decode_bitstream` + CRC32 — a self-check the bash script lacks.
+       - `write_outputs(dir)`: `algorithm.xml` + `firmware-<type>-<ver>.dat` renames, atomic temp-file-then-rename, sorted deterministic output. Overwrites an existing `algorithm.xml` silently (it's regenerable) and always prints the absolute path written. Firmware name→type→version table + source-archive mapping is version-locked constants (script parity: 3 files from V1304, `UpdateT76.Dat` from V1319); a later iteration could derive the version from inside the `.dat` instead of hardcoding.
+    2. **Resolver: per-user data dir in `resolve_one()`** — insert between `MINIPRO_HOME` and the system dirs: `%LOCALAPPDATA%\minipro-rs` (Windows), `${XDG_DATA_HOME:-~/.local/share}/minipro-rs` (Linux/BSD), `~/Library/Application Support/minipro-rs` (macOS). Hand-rolled `#[cfg]` fn matching existing style (no `dirs` dep). User dir outranks system dirs (XDG convention); search order becomes: override → cwd → exe dir → macOS resources → repo `data/` → `MINIPRO_HOME` → **per-user dir** → system dirs → C-minipro fallback. Benefits `infoic.xml`/`logicic.xml` overrides too; zero regression risk (dir never existed before).
+    3. **CLI:** `--download-algorithms` flag + `--output DIR` override + `--from-file PATH` (process a local `.rar`, SFX `.exe`, or bare inner RAR — auto-detect by scanning for the `Rar!\x1a\x07` signature — offline use, CI, mirrors) + optional `--xgpro-url` (hidden, for mirror/version bumps). Explicit connect/read timeouts on ureq; progress dots like the script; prints resulting paths. Does NOT connect to a programmer.
+    4. **GUI:** Settings → Database "Download algorithm.xml…" button. Tauri command streams progress over the existing `Channel` pattern (download %, extract, verify stages); cancel = drop the channel; `spawn_blocking` for CPU-bound decompression; on success shows path + "reconnect programmer to apply" note (matches documented algorithm-path caching caveat). **Stretch:** also surface a "Download now" action inline where users actually hit the wall — when a T56/T76 connects with `algorithm.xml` missing, or when an op fails on algorithm lookup — rather than only in Settings.
+    5. **Tests:** `rar-codec`'s `ArchiveBuilder` writes store-method RARs → build a nested rar→exe→rar fixture in-test for a fully offline integration test of `unwrap_sfx_rar` + `build_xml`; unit tests for strings emulation, offsets, name munging, XML output vs upstream fixture; one `#[ignore]`d live-network test (95 MB download — CI compute conservation). **All fixtures synthetic** — never commit real `.alg`/bitstream/firmware bytes (same IP constraint that keeps `algorithm.xml` out of releases).
+    6. **Docs:** README T56/T76 section + custom-database section, `gui/README.md` feature table, `CHANGELOG.md` `[Unreleased]`, man page (`--generate-man` source), AGENTS.md feature-internals pointer if a `docs/ALGO-DOWNLOAD-INTERNALS.md` is warranted.
+  - **Cross-platform implications:**
+    - **Windows:** the headline win — script can't run there; native binary makes T56/T76 first-class. Per-user dir avoids UAC entirely (`%PROGRAMDATA%` needs admin). Never writing the foreign `.exe` to disk sidesteps SmartScreen/AV heuristics.
+    - **Linux:** `XDG_DATA_HOME` respected; no more sudo/`libarchive-tools`/`bsdtar` dependency for package users. **sudo footgun:** users habitually `sudo minipro` when udev rules aren't installed — `sudo --download-algorithms` would write to `/root/.local/share` and be invisible to normal runs. Mitigate: detect `SUDO_UID`/`SUDO_USER` and resolve to the invoking user's data dir, or at minimum warn + print the absolute output path.
+    - **macOS:** `~/Library/Application Support` convention; downloaded data files don't get `com.apple.quarantine` (only apps do); no sandbox (not App Store distributed) — and if ever sandboxed, `$HOME` already resolves to the container so the hand-rolled path still lands correctly.
+    - **HOME/XDG unset** (systemd units, cron, minimal envs): resolve the per-user dir via `getpwuid` fallback or skip gracefully — `std::env::home_dir()` is only un-deprecated in Rust 1.86 (> MSRV 1.85), so it can't be used; hand-roll env reading or take the `dirs` dep (handles passwd fallback for us).
+    - **TLS interception:** corporate MITM proxies need the proxy CA — prefer `rustls-native-certs` (reads OS store) or `rustls-platform-verifier` over bundled `webpki-roots` alone; plain `webpki-roots` breaks on intercepted networks.
+    - **TLS:** `ureq` + `rustls` = no OpenSSL anywhere → uniform behavior and easy musl/static builds; env-proxy support via `Proxy::try_from_env()` for corporate networks.
+    - **Network reachability:** GitHub raw can be slow/blocked in some regions (XGecu is Chinese; large user base there) — `--from-file` + `--xgpro-url` cover mirrors/offline.
+    - **Filenames:** inner-RAR members use `/` separators and mixed case (`UpdateT76.Dat` vs `updateT56.dat`) — match case-insensitively, normalize via `Path`; output names are ASCII-safe.
+    - **Encoding:** `.alg` descriptions may contain non-UTF-8 bytes — `from_utf8_lossy` produces *more* valid XML than upstream (documented divergence).
+    - **Line endings:** write `\n` only on all platforms for byte-stable output.
+    - **MSRV:** root workspace is 1.85 (CI `msrv` job); `rar-codec`/`ureq` must compile there — verify with `rustup run 1.85 cargo check` during implementation; fallback is MSRV bump per `docs/RELEASE.md` (heavier, avoid if possible).
+    - **License audit:** all new deps must pass `cargo deny` (deny.toml allow-list) — `rar-codec` Apache-2.0, `ureq` MIT/Apache-2.0, `sha2` MIT/Apache all clean. `unrar-rs` (non-standard license) rejected for this reason.
+    - **Lockfiles:** run `cargo generate-lockfile` and commit `Cargo.lock` + `gui/src-tauri/Cargo.lock` (CI uses `--locked`).
+  - **Design decisions:**
+    - **IP posture (same as upstream script):** `algorithm.xml` + `firmware-*.dat` are XGecu-proprietary — fetched at runtime from the official mirror, never shipped, never committed. `.gitignore` gains `algorithm.xml`, `firmware-*.dat`, `*.rar` (an `--output .` run inside the repo must not leak them into a commit). Test fixtures are fabricated bytes only.
+    - **Land as two commits/PRs:** the `resolve_one()` per-user-dir change is independently useful (custom db dirs, future features) — reviewable on its own before the downloader.
+    - **Connected-programmer awareness (informational only):** if a programmer is connected, after download report its model's *current* firmware vs the bundled `.dat` version and point at the existing `-F` / Diagnostics flow. **Never auto-nag, never auto-flash:** (a) version strings are `{hw}.{major}.{minor}` where T48/T56/T76 hardcode hw to `00` and filenames carry XGecu product-line labels — so prefix comparisons are misleading and the real cross-model guard is the `0xf0xx`/`0x5600` family magic checked before any USB write (see `docs/FIRMWARE-FORMATS.md`); (b) the bundled image can be *older* than installed firmware (XGecu also pushes firmware OTA); (c) firmware update is our one brick-risk operation — explicit opt-in every time, same-model only.
+    - In-memory pipeline: peak RAM ~65 MB (two RARs processed sequentially) — fine for a desktop tool; streaming extraction possible later if needed.
+    - `--from-file` exists from day one: needed for testing AND users who can't reach GitHub.
+    - Firmware `.dat` extraction kept (script parity) — files already in the archive; skipping means re-downloading 95 MB later for `minipro -F`.
+    - Downloaded RARs cached under `<per-user-dir>/cache/` so re-runs skip the network (mirrors the script's "already in workdir" path).
+    - Sort `.alg` entries by name — deterministic output (shell glob order is locale-dependent anyway).
+    - `rar-codec` caveat: published 2026-11-01 (brand new, pre-1.0). Verified against both real archives today (354 + 370 algs, 100% decode), but: (a) doesn't implement "RAR 7.x" compression v1 — current archives are v0; the SHA-256 gate fails loudly if XGecu repacks; (b) pin the version in Cargo.toml/lockfile against API churn; (c) escape hatch if it rots = `compress-tools` (libarchive binding — a C dep, works everywhere, mirrors bsdtar exactly).
+  - **Edge cases:**
+    - Outer RAR contains a `QO` archive-comment service record — ignore non-`.exe` members.
+    - `tail -c +N` is 1-indexed in the script: offsets are `data[544..]`, `data[16..4096]`, `data[4..12]`, `data[4096..]` — verify against upstream `algorithm.xml` golden.
+    - gzip bytes differ from GNU gzip (impl difference, same level) — irrelevant: consumers gunzip + CRC32.
+    - Partial/failed downloads: temp file + SHA-256 check before use; delete on mismatch.
+    - T76 `strings` step: GNU strings default is ≥4 printable chars; replicate exactly or desc text diverges (bitstreams unaffected either way).
+    - T56 `read -d ""` quirks: bash `read` without `-r` eats backslashes and strips leading/trailing IFS whitespace; no-NUL file → desc = entire file. Replicate or document divergence — probably never triggers in practice.
+    - `.alg` count is version-locked (354/370 today) — decode-all + ≥1 presence is the gate; count drift is a warning, never a hard fail (XGecu adds algorithms between releases).
+    - **TL866A/CS firmware — considered and rejected (2026-11):** the only official source is `minipro/6/minipro_setup685.rar` (last TL866A release, firmware 3.2.86); its inner installer is **RAR4**, which `rar-codec` cannot parse — a second archive engine isn't worth it for a discontinued product whose latest firmware is itself the clone-brick vector (MiniPro ≥6.82 firmware disables boot mode on detected clones). The file picker + clone warning covers it; users can extract `update.dat` from the official installer themselves. **If a pure-Rust RAR4 decoder ever lands:** offer *both* pinned versions as an explicit user choice — 3.2.82 from `minipro_setup671.rar` (last pre-6.80-detection firmware, safe on genuine *and* clone units) and 3.2.86 from `minipro_setup685.rar` (latest, genuine-only). Both SHAs are published in the mirror's `sha256_checksums.txt`. Default recommendation for unknown provenance is the safe version; one `update.dat` serves TL866A and TL866CS both (dual A/CS payloads inside).
+  - Status: planned. Prototype verified RAR5 extraction on both real archives — V1304 (T48/T56) and V1319 (T76) — 724/724 `.alg` files decoded (2026-11).
+
 ## Backlog
 
 - [ ] **Protocol parity with original minipro + Matt Brown's t76 branch**
@@ -205,7 +256,28 @@ This is a living list of features and improvements planned for minipro-rs.
   gap). Remaining items follow in decreasing impact.
 
   **Deferred (require hardware):**
-  - Hardware validation of all T56/T76 chip classes
+  - Hardware validation of all T56/T76 chip classes — **shopping list**
+    (2026-11, parts confirmed present in `infoic.xml`):
+    - **SPI NOR 16-pin** (autodetect `SPI25F21` path): Winbond
+      `W25Q128FVSIG`/`W25Q128JVSIQ` SOIC-16 (JEDEC ID `0xEF4018`,
+      `W25Q128JV@SOIC16` DB entries) + SOIC-16→DIP adapter. *On order.*
+    - **SPI NAND** (NAND-class path, cheapest validation): `W25N01GV(x4)
+      @SOP16` or `GD5F1GQ5RExxG(x4)@SOP16` — same SOIC-16→DIP adapter as
+      the W25Q128; 114 protocol-`0x21` devices exist in the DB.
+    - **Parallel NOR**: `S29GL064N*@TSOP48` (or any AM29DL640/M29W640
+      TSOP48 part) + standard TSOP48→DIP adapter.
+    - **Parallel NAND**: `K9F1G08U0M@TSOP48` or `HY27US08561@TSOP48` +
+      the same TSOP48→DIP adapter (different adapter-ID handling than
+      SPI parts — also exercises the adapter-ID query paths).
+    - **eMMC**: the DB's `AUTOEMMC(ISP)` entries enable in-circuit eMMC
+      reads over ISP wiring — a cheap first validation needing no BGA
+      socket (e.g. a spare eMMC-bearing board wired per the ISP table).
+      Full off-chip BGA work needs a BGA153/169 clamshell adapter
+      (~US$40–80) plus a salvage eMMC part; defer until the cheaper
+      classes validate first.
+    - **T56**: scarce on the market; T56 autodetect is being implemented
+      blind against upstream `t56_spi_autodetect` (read-only, fails
+      safe) and marked unverified pending hardware.
   - eMMC io_init hardcoded constants (need hardware to test fixes)
   - eMMC bring-up query response lengths (need hardware to validate)
 
@@ -275,8 +347,11 @@ This is a living list of features and improvements planned for minipro-rs.
 
     **What we have:**
     - CLI flag `-a` / `--spi-autodetect` (with `auto_detect` alias)
-    - Protocol implementations for TL866A/CS and TL866II+ (firmware
-      command 0x37, 3-byte big-endian JEDEC ID parse)
+    - Protocol implementations for TL866A/CS, TL866II+, and T48
+      (firmware command 0x37, 3-byte big-endian JEDEC ID parse). The
+      T48 shares the II+ implementation and reads the correct 32-byte
+      response as of `fix/t48-read-path` (f41ce87) — hardware
+      validation still pending.
     - Operations layer `spi_autodetect()` and
       `spi_autodetect_and_lookup()` in `operations.rs`
     - Database lookup by JEDEC ID: `find_devices_by_chip_id()` in
@@ -286,49 +361,47 @@ This is a living list of features and improvements planned for minipro-rs.
       entries. CLI output now matches upstream format:
       `Autodetecting device (ID:0xXXXX)` + device names + count.
 
-    **What we're missing (2 remaining gaps):**
+    **Also implemented:**
+    - **T76 autodetect** — DONE (`feat/t76-spi-autodetect`), matching
+      upstream `t76_spi_autodetect()`. `operations::spi_autodetect()`
+      builds a synthetic device (`protocol_id=0x03`, variant `0x1100`/
+      `0x2100`), resolves `SPI25F11`/`SPI25F21` via `get_algorithm()`,
+      uploads it through a new `Protocol::upload_bitstream()` method,
+      then `T76Protocol::spi_autodetect()` sends the T76-specific
+      **12-byte** `0x37` request (upstream commit 3e2f491 — not the
+      10-byte packet the other models use) and parses the 3-byte
+      big-endian JEDEC ID. `bitstream_uploaded` is reset afterward so
+      the next `begin_transaction` re-uploads the selected device's own
+      algorithm. GUI buttons ungated for T76; 8-pin path hardware-
+      validated (W25X20CL → `0xef3012`, LE25FS406M@SOP8 → `0x621613`).
+      16-pin path implemented but unvalidated pending a 16-pin SPI
+      chip (e.g. W25Q128 SOIC-16).
 
-    1. **T56 autodetect** — T56 has `CMD_AUTODETECT = 0x37` defined but
-       no `spi_autodetect` trait method override (falls through to
-       `UnsupportedOperation`). Upstream's `t56_spi_autodetect()` must
-       first upload an FPGA bitstream (SPI25F11 for 8-pin or SPI25F21
-       for 16-pin) via `t56_send_bitstream()`, then send the 0x37
-       command.
-       **Difficulty: Medium.** The bitstream upload infrastructure
-       already exists (`upload_bitstream()` in `t56.rs`, algorithm
-       lookup via `get_algorithm()` in `algorithm.rs`). The
-       `compute_algorithm_name()` function already maps
-       `protocol_id=0x03, variant=0x1100` → `"SPI25F11"` and
-       `variant=0x2100` → `"SPI25F21"` (verified by existing tests in
-       `algorithm.rs`). The implementation needs to: construct a
-       temporary `Device` with `protocol_id=0x03` and the appropriate
-       variant, call `get_algorithm()`, upload the bitstream, then send
-       the 0x37 command and parse the 3-byte response. ~50 lines of
-       protocol code + trait wiring. The tricky part is managing the
-       `bitstream_uploaded` flag — autodetect uses a different
-       bitstream than the subsequently-selected device, so the flag
-       must be reset after autodetect.
+    **What we're missing (1 remaining gap):**
 
-    2. **T76 autodetect** — same pattern as T56. Upstream's
-       `t76_spi_autodetect()` uploads SPI25F11/SPI25F21 bitstream via
-       `t76_send_bitstream()`, then sends 0x37. No trait override in
-       our `t76.rs`.
-       **Difficulty: Medium.** Same infrastructure as T56
-       (`upload_bitstream_t76()`, `get_algorithm()`). Same
-       `bitstream_uploaded` flag management concern. ~50 lines.
+    1. **T56 autodetect** — IMPLEMENTED (`feat/t56-spi-autodetect`),
+       **unverified on hardware**. Mirrors the T76 path: synthetic
+       device (`protocol_id=0x03`, variant `0x1100`/`0x2100`) →
+       `SPI25F11`/`SPI25F21` via `get_algorithm()` → trait
+       `upload_bitstream()` → 10-byte `0x37` request (`type` at
+       `msg[8]`, 16-byte response, 3-byte big-endian ID at
+       `resp[2..5]`) → `bitstream_uploaded` reset so the next
+       `begin_transaction` re-uploads the real algorithm.
+       **Decision (2026-11): implemented blind** — the command is
+       read-only (returns a JEDEC ID or a clean error; no corruption
+       risk) and T56 units are near-unobtainable, so "wait for
+       hardware" may mean never. The T56 GUI stays gated until
+       someone validates on real hardware; CLI `-a` reaches it on
+       any connected T56.
 
     **Also missing (minor):**
     - Pin-contact pre-check before autodetect (upstream optionally runs
       `minipro_pin_test` on TL866II+ before autodetect). We have pin
       test support; wiring it in is trivial but low-value.
 
-    **Overall difficulty: Medium.** The database lookup is now done.
-    T56/T76 protocol implementations are mechanical ports from C (~50
-    lines each) with existing bitstream infrastructure. The main
-    subtlety is bitstream-flag management across the autodetect →
-    device-selection transition. T56/T76 protocol implementations
-    ideally need hardware testing but the code path is identical to
-    upstream C.
+    **Overall difficulty: Medium.** The database lookup is done and
+    T76 is implemented. T56 is a near-mechanical copy of the T76
+    pattern with the 10-byte request packet.
 
   - [x] **T56 firmware update** — DONE (protocol-parity branch). Ported
     from C `t56_firmware_update()`. Implemented as `firmware_update_t56()`
@@ -349,6 +422,26 @@ This is a living list of features and improvements planned for minipro-rs.
     Matt Brown's parallel NOR write implementation from the upstream C code.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
+
+  - [ ] **`-o ovc_level` — OVC trip-level override** — upstream added
+    this in 2026 (commits `1473189`, `7eeddba`): it raises the Vcc
+    current-limit trip point, which matters for in-circuit work where
+    the target board loads the VCC rail and trips the default limit
+    ("Overcurrent protection!").
+    - **T48/T56/TL866II+:** raw calibrated trip code as LE16 at
+      `msg[0x34]` in the 0x03 BEGIN_TRANS command (identical encoding
+      on all three — upstream verified against the vendor build).
+      Levels 1–9 map to 130/150/180/200/220/250/300/335/400 nominal
+      mA; 0 = firmware default.
+    - **T76:** takes the 1..9 level as an enum; firmware picks the
+      actual mA value itself.
+    - **Scope:** new `ovc_level` key in the `-o` override parser,
+      plumbing into `begin_transaction` for tl866iiplus.rs (T48 and
+      TL866II+) and the t56.rs/t76.rs equivalents, plus a GUI
+      advanced-override row if surfaced there.
+    - **Difficulty: Low-Medium** — mechanical plumbing; upstream's
+      comments document the raw table verbatim. Real-world relevance:
+      ICSP/in-circuit targets are exactly the scenario this exists for.
 
   ### Low — niche or deferred
 
@@ -507,11 +600,50 @@ This is a living list of features and improvements planned for minipro-rs.
   - [ ] T76 parallel NOR — read/erase (program known broken)
   - [ ] T56 all chip classes — read/erase/program
   - [ ] T76 firmware update
-  - [ ] T76 logic IC test (two-pass with bitstream reload)
+  - [x] T76 logic IC test (two-pass with bitstream reload — 7408 verified)
 
   Matt Brown's MR #292 was validated on: ZB25VQ64A, MX25L12845E (SPI NOR),
   S29GL512N (parallel NOR), W29N02GZ and GD5F1GM7UEYIG (NAND), KLM8G1GEAC-B001
   (eMMC).
+
+- [x] **T48 pin contact detection (`0x3E`)** — implement XGPro's "Pin
+  Detect" for the T48. **Status: implemented, hardware-validated.**
+  `pin_test_t48` in `tl866iiplus.rs` ends the active transaction (the
+  bitmap reads driven-pin state, not contact, inside one), sends `0x3E`
+  + `device.variant` (u16 LE — field ignored by firmware), diffs the
+  returned bitmap (bit-set = contact, `resp[8..13]` = ZIF1-40
+  LSB-first) against `pin_map.mask`, then re-begins the transaction so
+  callers stay transparent. Seated DIP-8 verifies:
+  `0F 00 00 00 F0` = ZIF 1-4 + 37-40. CLI `-z` and the GUI button/
+  pre-op gate now allow T48. Upstream C minipro only implements pin
+  test for the TL866II+ (per-pin bit-banging via 0x2D–0x36), so our pin
+  test is gated to that model — but the T48 has its own, simpler
+  protocol.
+  - **Protocol** (documented with USB captures at
+    https://proghq.org/wiki/XGecu_Protocol):
+    `send 3E 00 <chip_id_lo> <chip_id_hi> 00 00 00 00` →
+    `recv 3E 00 <id_lo> <id_hi> 00 00 00 00 b0 b1 b2 b3 b4 b5 b6 00`
+    where b0–b4 are the ZIF1–ZIF40 contact bitmap (LSB-first) and
+    b5–b6 the ISP1–ISP16 bitmap. Single command — no bit-banging.
+  - **Evidence it works in XGPro:** the official T48/T76 user manual
+    documents Pin Detect, and XGecu forum tid=802 shows a real T48
+    "PIN 3 and 5 are not connected" error plus an admin noting
+    per-device pin sets ship in software updates — i.e. the
+    expected-pin data lives in the database, so comparing the bitmap
+    against our `pin_map` mask is the right model.
+  - **Implementation sketch:** T48 arm of `pin_test` in
+    `tl866iiplus.rs` — send chip ID, parse the 7-byte bitmap, flag as
+    bad any pin whose bit is clear but is expected by the device's
+    `pin_map` mask (bit semantics per proghq captures; sanity-check on
+    hardware). Reuse the existing `PinTestResult`/bad-pin/ZIF-
+    annotation plumbing, then un-gate the CLI `-z` and GUI surfaces.
+  - **Caution:** do NOT port this to T76 — the same opcode there is an
+    unrelated adapter-init command ("measured nothing and corrupted
+    every read" per xgecu-pro). T56 also lists `0x3E` on proghq but
+    which variant it is remains hardware-unverified.
+  - **Validation:** needs a T48 — seated chip reports all-good;
+    lifting a pin reports that pin.
+  - **Difficulty: Low** — one new protocol method plus gate changes.
 
 - [x] **Smart firmware diff** — compare firmware files or chip dumps with intelligent trailing-padding handling
   - **Problem:** Minipro read-back is always full chip size (e.g., 8192 bytes), but source files are often smaller (e.g., 1936 bytes). Simple byte-wise comparison fails even when executable code is identical. Naive "strip trailing 0xFF and compare" is insufficient because it silently ignores cases where the reference has real data beyond the dump length (truncated read, wrong chip selected) or where the dump has non-erased data beyond the reference (leftover from previous programming — forensically interesting).
@@ -799,10 +931,8 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Priority: medium** — prevents invalid voltage selections that would fail at the backend
   - **Status:** implemented
 
-- [ ] **Remove `check_device_id` parameter from core API** — the per-operation `check_device_id: bool` parameter in `read_chip`, `write_chip`, `verify_chip`, `erase_chip`, `write_chip_bytes`, `verify_chip_bytes`, and `BatchConfig` is now dead weight from the CLI's perspective (the CLI does a single top-level `check_chip_id` call and passes `false` to all per-operation checks). The GUI still uses the parameter for its own pre-operation checks, but also has the same redundancy (calls `check_chip_id` separately AND passes `check_device_id: true` to the operation). Removing the parameter would eliminate the redundancy and simplify the API, but requires updating all GUI command calls in `commands.rs`.
-  - **Files to modify:** `crates/minipro-core/src/operations.rs` (remove parameter from all functions), `crates/minipro-cli/src/main.rs` (remove `false` arguments), `gui/src-tauri/src/commands.rs` (remove `check_device_id` field from `OperationOptions` and the per-operation arguments; the GUI's separate `check_chip_id` calls already handle it)
-  - **Priority: low** — code cleanup, no user-facing impact
-  - **Status:** not started
+- [x] **Remove `check_device_id` parameter from core API** — the per-operation `check_device_id: bool` parameter in `read_chip`, `write_chip`, `verify_chip`, `erase_chip`, `write_chip_bytes`, `verify_chip_bytes`, and `BatchConfig` is now dead weight from the CLI's perspective (the CLI does a single top-level `check_chip_id` call and passes `false` to all per-operation checks). The GUI still uses the parameter for its own pre-operation checks, but also has the same redundancy (calls `check_chip_id` separately AND passes `check_device_id: true` to the operation). Removing the parameter would eliminate the redundancy and simplify the API, but requires updating all GUI command calls in `commands.rs`.
+  - **Status:** implemented — parameter removed from all core op functions, `read_chip_buffer`, and `BatchConfig`. Kept the `OperationOptions.check_device_id` field (contrary to the original note): it is load-bearing — it gates the GUI's explicit pre-operation `check_chip_id` calls, the user's skip-ID-check escape hatch (analogous to CLI `-x`). `read_chip_to_bytes` previously relied on the removed parameter for its ID check and now runs the same explicit pre-check as the other commands.
 
 - [x] **GUI custom database directory** — allow users to select a custom directory containing `infoic.xml` / `logicic.xml` from the GUI settings
   - **Problem:** The CLI supports custom database files via `--infoic` / `--logicic` flags and the `MINIPRO_HOME` env var, but the GUI had no in-app way to specify custom database files. Users who want custom device definitions (especially custom logic IC test vectors) had to set `MINIPRO_HOME` before launching the GUI or place files in the current directory — neither was discoverable.
@@ -941,7 +1071,27 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Status:** implemented
 
 
-- [ ] **Ratatui TUI frontend** — interactive terminal UI as a third frontend alongside CLI and GUI. **Full design: `docs/TUI-PLAN.md`.**
+- [x] **Chip read-stability health check** — repeated reads to detect marginal/degrading chips *(Phase 1 read-only shipped; extensions below remain open)*
+  - **Motivation (real case, 2026-11):** a PM25LV010 read cleanly on a TL866A in June but produced non-deterministic corruption on *both* a TL866A and a T76 months later — scattered `0→1` bit flips, different garbage every run, ~34% of bytes wrong. The chip's output driver had degraded (flash contents likely still intact — the stored bits aren't what's failing, the MISO drive is). Diagnosis took cross-comparing four dumps; a built-in check would have surfaced "chip is marginal" in seconds and prevented "is the programmer broken?" confusion.
+  - **What it detects:** *read-path* instability — weak/floating DO drivers, marginal contacts, intermittent HOLD#/WP# faults. Signature: bytes that differ between repeated reads. What it does NOT detect: stored-cell charge loss (a uniformly-rotten cell reads consistently — needs a known-good reference) or deterministic decode bugs (also consistent).
+  - **Design sketch:**
+    - Core: `health_check(handle, device, passes) -> HealthReport` in `minipro-core::operations` — reads the full chip N times (default 5; user-configurable), keeping all N buffers.
+    - Analysis: per-byte disagree-count across buffers; report total unstable bytes, per-region instability map (e.g. 4 KiB buckets like the diff-map above), and a verdict: `Stable` (all N identical) / `Marginal` (few unstable bytes) / `Unstable` (widespread disagreement).
+    - Also run `get_chip_id` M times (cheap, ~0.1 s each) — a drifting JEDEC ID (e.g. `0x9d7c` → `0xdf7e`/`0x9f7e`) is itself diagnostic.
+    - Output (CLI `--health-check [N]`): `5/5 reads consistent — chip stable` or per-region table of disagree counts + worst offsets. Exit code reflects verdict for scripting.
+    - Output (GUI): "Health Check" button in Diagnostics panel; result panel with verdict badge + mini instability map (reuses diff/density styling).
+    - **GUI surfaces decided (2026-11):** standalone diagnostic button in the Diagnostics panel is the primary surface. Read panel gets an opt-in "Stability check" checkbox (default off) wrapping Read in N passes + consistency report — mirrors the existing "Pin Contact Check"/"Chip ID check" pre-op checkbox pattern. **No Write-panel checkbox:** auto-verify-after-write already detects marginal reads, and a pre-write check adds 5 reads of latency for a rare case (the chip is being overwritten anyway).
+    - Bonus diagnostic value: a *consensus* buffer (per-byte majority vote across N reads) could be offered as a "best-effort recovery dump" — three reads + majority vote already reconstructs most marginal chips.
+    - Compare-with-reference mode: optionally diff each pass against a supplied file (extends `smart_diff` machinery) to also catch consistently-corrupt reads.
+  - **Edge cases:** N reads of large chips (16 MB NAND/eMMC) take time — cap default passes or read a sampled subset of regions; chips with volatile regions (status registers mirrored in the address space) need a mask mechanism; `--continue-on-error` behavior when a pass fails mid-read.
+  - **Difficulty: Low-Medium** — reuses existing `read_block`/`read_chip` plumbing; analysis is pure buffer math; no protocol work. GUI surface is the larger half.
+  - **Priority: medium** — genuinely unique diagnostic (neither XGPro nor upstream minipro has it); salvaging old/suspect chips is a common workflow for this tool's audience.
+  - **Status:** **Phase 1 shipped** (read-only) — `health.rs` analysis module + `operations::health_check(handle, passes, id_runs, cb)`; CLI `--health-check [N]` + `--consensus-out FILE` (verdict exit codes: 0 stable / 2 marginal-ID / 3 marginal-data / 4 incomplete / 1 transport error); GUI "Chip Health Check" button in Diagnostics with a result card (verdict, IDs seen, unstable-byte count, worst regions, flip direction, periodicity) and a Save-consensus-dump button when instability is found. Verdicts shipped as `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete` / `Transport-Error` (finer-grained than the sketch's three-way). Consensus majority-vote buffer implemented; transport errors are distinguished from diagnostic failures, and blank/uniform reads are *not* treated as a dead-chip verdict. **Hardware-verified (2026-11):** W25X20CL → STABLE on T48; PM25LV010 → MARGINAL-DATA on T76 (44,762 unstable positions, 34.15% — matching the earlier manual cross-dump finding) and MARGINAL-ID on T48 (all 20 ID reads returned stuck-bus `0x000000`/`0x00FFFF` while data stayed stable). A `-x` recovery read of the PM25LV010 on T48 came back byte-identical to the known-good June dump — stored cells intact, only the readout path is dying, confirming the diagnostic thesis end-to-end.
+  - **Also shipped:** compare-with-reference mode — `--reference FILE` / GUI "Compare reads against file" opt-in compares the effective image (consensus or consistent read) against a known-good file; catches deterministic corruption that stability analysis can't. New `Reference-Mismatch` verdict, CLI exit code 5.
+  - **Also shipped:** Read-panel "Stability check" checkbox — opt-in multi-pass read backed by `operations::read_chip_stable` (5 passes, same `health.rs` analysis). Applies to both read paths (file + hex viewer). Stable → saved/loaded normally; unstable → majority-vote consensus is used with a warning logged (unstable-byte count, pass errors, analysis notes).
+  - **Still open:** large-chip pass caps/sampling; destructive Phase-2 tests (pattern programming, erase verification, endurance/retention screening) — explicitly out of the XGecu transport's reach are opcode-level tests, SPI mode switching, clock sweeps, direct power cycling, and raw status-register access.
+
+- [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI. **Full design: `docs/TUI-PLAN.md`.**
   - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.
   - **Decisions:** separate `minipro-tui` binary in `crates/minipro-tui` (workspace member, `rust-version = "1.88"`); ratatui + crossterm; orchestration glue (pin-check gate, voltage overrides, ICSP auto-activation, `MINIPRO_FAKE_PROGRAMMER`, `fuse_defs`) extracted into `minipro-core` first so both frontends share upstream-parity behavior.
   - **Phasing:** P0 foundation → P1 core ops (read/write/verify/erase/blank/chip-id — MVP ship point) → P2 hex buffer pane + ZIF/ICSP diagrams → P3 fuses/logic-test/identify/diagnostics → P4 batch/serial/polish.

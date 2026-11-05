@@ -310,7 +310,9 @@ impl UsbDevice {
             return self.bulk_out_raw(T76_DATA_EP_OUT, data.to_vec());
         }
 
-        if data.len() <= limit {
+        // `limit == 0` means single-endpoint write (upstream `!limit` in
+        // write_payload2 — used by the T48, which never services EP3-OUT).
+        if limit == 0 || data.len() <= limit {
             return self.bulk_out_raw(DATA_EP2_OUT, data.to_vec());
         }
 

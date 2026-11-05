@@ -25,9 +25,9 @@ use minipro_core::{
     find_device, find_device_any, list_devices, list_devices_for_model,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
-        logic_auto_find, logic_ic_test, pin_contact_check, read_chip, read_chip_calibration,
-        read_fuses, spi_autodetect_and_lookup, verify_chip, write_chip, write_fuses, FuseValue,
-        SizeMismatch,
+        health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
+        read_chip_calibration, read_file, read_fuses, spi_autodetect_and_lookup, verify_chip,
+        write_chip, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -126,6 +126,191 @@ fn format_logic_test_output(result: &minipro_core::LogicTestResult) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Format a `HealthReport` as human-readable text: verdict banner, chip-ID
+/// summary, per-pass CRCs, disagreement map, and characterization notes.
+fn format_health_report(report: &minipro_core::HealthReport) -> String {
+    use minipro_core::HealthVerdict as HV;
+    let mut out = String::new();
+    out.push_str(&format!("Health check: {}\n", report.device_name));
+    out.push_str(&format!("Verdict: {}\n", report.verdict.label()));
+    out.push_str(&format!(
+        "Read passes: {}/{} completed ({} bytes each)\n",
+        report.read_passes_completed, report.read_passes_requested, report.size
+    ));
+    if !report.chip_ids.is_empty() {
+        let mut unique = report.chip_ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        let seen: Vec<String> = unique.iter().map(|id| format!("0x{:06x}", id)).collect();
+        out.push_str(&format!(
+            "Chip IDs ({} reads): {}{}\n",
+            report.chip_ids.len(),
+            seen.join(", "),
+            match report.chip_id_expected {
+                Some(e) => format!(" (expected 0x{:06x})", e),
+                None => String::new(),
+            }
+        ));
+    }
+    for (i, crc) in report.pass_crcs.iter().enumerate() {
+        out.push_str(&format!("  pass {}: CRC-32 {:08x}\n", i + 1, crc));
+    }
+    for e in &report.pass_errors {
+        out.push_str(&format!("  ERROR: {}\n", e));
+    }
+    for e in &report.chip_id_errors {
+        out.push_str(&format!("  ID ERROR: {}\n", e));
+    }
+    if let Some(n) = report.reference_mismatches {
+        out.push_str(&format!("Reference mismatches: {}\n", n));
+    }
+    if report.unstable_bytes > 0 {
+        out.push_str(&format!(
+            "Unstable bytes: {} of {}\n",
+            report.unstable_bytes, report.size
+        ));
+        // Show the worst regions (top 10).
+        let mut regions = report.regions.clone();
+        regions.sort_by_key(|r| std::cmp::Reverse(r.unstable));
+        for r in regions.iter().take(10) {
+            out.push_str(&format!(
+                "  0x{:06x}..0x{:06x}: {} unstable\n",
+                r.start,
+                r.start + r.len - 1,
+                r.unstable
+            ));
+        }
+        if regions.len() > 10 {
+            out.push_str(&format!("  ... and {} more regions\n", regions.len() - 10));
+        }
+        out.push_str(&format!(
+            "Bit flips: {} (0→1), {} (1→0)\n",
+            report.flips_up, report.flips_down
+        ));
+        if let Some(d) = report.periodicity {
+            out.push_str(&format!("Dominant spacing: every {} bytes\n", d));
+        }
+    }
+    for n in &report.notes {
+        out.push_str(&format!("  {}\n", n));
+    }
+    if report.verdict == HV::Stable {
+        out.push_str("Chip appears healthy — all read passes identical.\n");
+    }
+    out
+}
+
+/// `--download-algorithms`: fetch XGPro archives, generate algorithm.xml,
+/// extract firmware images. Runs entirely before any USB access.
+fn run_download_algorithms(cli: &Cli) -> Result<()> {
+    use minipro_core::xgpro_fetch::{fetch, FetchOptions, Progress};
+
+    // Progress: one indicatif bar for the download phase, plain stderr
+    // lines for stages and written files — stdout stays clean.
+    let mut bar: Option<ProgressBar> = None;
+    let mut progress = |ev: Progress| -> bool {
+        match ev {
+            Progress::DownloadStart { archive, total } => {
+                let b = match total {
+                    Some(t) => ProgressBar::new(t),
+                    None => ProgressBar::new_spinner(),
+                };
+                if total.is_some() {
+                    b.set_style(
+                        ProgressStyle::with_template("{msg} {bar:40} {bytes}/{total_bytes}")
+                            .expect("valid template")
+                            .progress_chars("=>-"),
+                    );
+                }
+                b.set_message(archive);
+                bar = Some(b);
+            }
+            Progress::DownloadBytes { received, .. } => {
+                if let Some(b) = &bar {
+                    b.set_position(received);
+                }
+            }
+            Progress::DownloadFinished { archive } => {
+                if let Some(b) = bar.take() {
+                    b.finish_and_clear();
+                }
+                eprintln!("{archive}: downloaded");
+            }
+            Progress::Stage { archive, stage } => {
+                if let Some(b) = bar.take() {
+                    b.finish_and_clear();
+                }
+                eprintln!("{archive}: {stage}");
+            }
+            Progress::Processed { done, total, .. } => {
+                eprint!("\r  algorithms: {done}/{total} ");
+                if done == total {
+                    eprintln!();
+                }
+            }
+            Progress::Written { path } => {
+                if let Some(b) = &bar {
+                    b.println(format!("  wrote {}", path.display()));
+                } else {
+                    eprintln!("  wrote {}", path.display());
+                }
+            }
+        }
+        true
+    };
+
+    let mut opts = FetchOptions {
+        output_dir: cli.output.clone(),
+        input_files: &cli.from_file,
+        url_base: cli.xgpro_url.as_deref(),
+        progress: Some(&mut progress),
+    };
+
+    let out = fetch(&mut opts)?;
+
+    for w in &out.warnings {
+        eprintln!("warning: {w}");
+    }
+    println!(
+        "algorithm.xml: {} T56 + {} T76 algorithms (verified) -> {}",
+        out.t56_algorithms,
+        out.t76_algorithms,
+        out.xml_path.display()
+    );
+    for fw in &out.firmware {
+        println!(
+            "firmware {} {} -> {}",
+            fw.model,
+            fw.version,
+            fw.path.display()
+        );
+    }
+
+    // Informational only: if a programmer is connected, say which bundled
+    // image corresponds to it. Never suggests or performs a firmware
+    // update — cross-revision flashing can brick the device.
+    if let Ok(handle) = MiniproHandle::open() {
+        let model = handle.info.model;
+        let fw_model = match model {
+            ProgrammerModel::Tl866iiPlus => Some("TL866II+"),
+            ProgrammerModel::T48 => Some("T48"),
+            ProgrammerModel::T56 => Some("T56"),
+            ProgrammerModel::T76 => Some("T76"),
+            _ => None,
+        };
+        eprintln!(
+            "connected programmer: {model} firmware {}",
+            handle.info.firmware_str
+        );
+        if let Some(m) = fw_model {
+            if let Some(fw) = out.firmware.iter().find(|f| f.model == m) {
+                eprintln!("  bundled image for this model: {}", fw.path.display());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run() -> Result<()> {
@@ -239,6 +424,11 @@ fn run() -> Result<()> {
             // Exit code 1 on mismatch (like diff(1))
             Err(anyhow::anyhow!("files differ"))
         };
+    }
+
+    // ── Download algorithm databases + firmware (no USB needed) ──────────────
+    if cli.download_algorithms {
+        return run_download_algorithms(&cli);
     }
 
     // ── Operations that need USB ──────────────────────────────────────────────
@@ -566,6 +756,9 @@ fn do_operations(
             eprintln!("Pin test is not supported in ICSP mode.");
             return Ok(());
         }
+        // TL866II+ (upstream bit-bang) and T48 (0x3E contact bitmap —
+        // ported from XGPro USB captures; upstream never implemented it).
+        // Other models return UnsupportedOperation.
         if !matches!(
             handle.info.model,
             ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
@@ -605,6 +798,11 @@ fn do_operations(
                     }
                     None => eprintln!("Bad contact on pin: {}", pin),
                 }
+            }
+            // Every expected pin open almost always means no chip is
+            // seated — say so rather than implying N bad contacts.
+            if result.all_expected_open() {
+                eprintln!("All expected pins are open — is a chip seated in the socket?");
             }
             return Err(anyhow::anyhow!(
                 "Pin contact test failed: {} bad pin(s)",
@@ -647,11 +845,58 @@ fn do_operations(
         return Ok(());
     }
 
+    // ── Health check (read-only stability test) ──────────────────────────────
+    if let Some(passes) = cli.health_check {
+        let passes = (passes as usize).clamp(2, 64);
+        const ID_RUNS: usize = 20;
+        let pb = ProgressBar::new((ID_RUNS + passes) as u64);
+        pb.set_style(
+            ProgressStyle::with_template("{msg} {pos}/{len}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
+        pb.set_message("Health check");
+        let mut cb = |done: usize, total: usize| {
+            pb.set_length(total as u64);
+            pb.set_position(done as u64);
+        };
+        let reference = match &cli.reference {
+            Some(path) => {
+                let dev = handle.device()?;
+                let size = handle.protocol.effective_code_size(dev) as usize;
+                Some(read_file(path, "auto", size, dev.blank_value as u8)?)
+            }
+            None => None,
+        };
+        let report = health_check(handle, passes, ID_RUNS, reference.as_deref(), Some(&mut cb))?;
+        pb.finish_and_clear();
+        print!("{}", format_health_report(&report));
+        if let Some(consensus) = &report.consensus {
+            if let Some(ref out) = cli.consensus_out {
+                std::fs::write(out, consensus)
+                    .with_context(|| format!("cannot write consensus dump '{}'", out.display()))?;
+                eprintln!("Consensus dump written to {}", out.display());
+            } else {
+                eprintln!(
+                    "Consensus (majority-vote) reconstruction available — re-run with \
+                     --consensus-out FILE to save it."
+                );
+            }
+        }
+        use minipro_core::HealthVerdict as HV;
+        std::process::exit(match report.verdict {
+            HV::Stable => 0,
+            HV::MarginalId => 2,
+            HV::MarginalData => 3,
+            HV::Incomplete => 4,
+            HV::ReferenceMismatch => 5,
+            HV::TransportError => 1,
+        });
+    }
+
     // ── Chip ID verification (single check before all ops) ───────────────────
     // Upstream minipro has one check_chip_id call in the main flow (main.c
     // line 3563), not per-operation checks.  We do the same here: one check
     // that handles -x (skip), -y (warn + continue), and the default (error).
-    // Per-operation check_device_id params are all false (see below).
     if !cli.skip_id
         && (cli.write.is_some() || cli.read.is_some() || cli.erase || cli.verify.is_some())
     {
@@ -677,7 +922,7 @@ fn do_operations(
                     .unwrap_or_else(|_| ProgressStyle::default_spinner()),
             );
             pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            erase_chip(handle, false)?;
+            erase_chip(handle)?;
             pb.finish_with_message("Erasing... done.");
         } else {
             eprintln!("This chip does not support electrical erase (use UV light for UV EPROMs).");
@@ -723,7 +968,6 @@ fn do_operations(
                 format: cli.format.clone(),
                 size_mismatch,
                 skip_blank: cli.skip_blank,
-                check_device_id: false,
                 erase: !cli.no_erase,
                 verify: !cli.no_verify,
                 count,
@@ -891,7 +1135,7 @@ fn do_operations(
                             .unwrap_or_else(|_| ProgressStyle::default_spinner()),
                     );
                     pb.enable_steady_tick(std::time::Duration::from_millis(80));
-                    erase_chip(handle, false)?;
+                    erase_chip(handle)?;
                     pb.finish_with_message("Erasing... done.");
                     // The firmware requires a transaction reset after erase before
                     // writing (same as the C reference: end_transaction then
@@ -926,7 +1170,6 @@ fn do_operations(
                 &cli.format,
                 size_mismatch,
                 cli.skip_blank,
-                false,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -969,7 +1212,6 @@ fn do_operations(
                     path,
                     proto_page,
                     &cli.format,
-                    false,
                     Some(&mut |done, total| {
                         pb.set_length(total as u64);
                         pb.set_position(done as u64);
@@ -1040,7 +1282,6 @@ fn do_operations(
                 path,
                 proto_page,
                 &cli.format,
-                false,
                 Some(&mut |done, total| {
                     pb.set_length(total as u64);
                     pb.set_position(done as u64);
@@ -1081,7 +1322,6 @@ fn do_operations(
             path,
             proto_page,
             &cli.format,
-            false,
             Some(&mut |done, total| {
                 pb.set_length(total as u64);
                 pb.set_position(done as u64);

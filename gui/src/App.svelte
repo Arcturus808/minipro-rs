@@ -70,6 +70,7 @@
   let skipBlank = $state(false);
   let checkDeviceId = $state(true);
   let pinCheck = $state(true);
+  let stabilityCheck = $state(false);
   let unprotectBefore = $state(true);
   let protectAfterOp = $state(false);
   let showAdvanced = $state(false);
@@ -487,6 +488,7 @@
       unprotect_before: unprotectBefore,
       protect_after_op: protectAfterOp,
       pin_check: pinCheck,
+      stability_check: stabilityCheck,
     };
   }
 
@@ -498,6 +500,7 @@
       case "read":
         page = "code";
         format = "auto";
+        stabilityCheck = false;
         break;
       case "write":
         page = "code";
@@ -550,10 +553,15 @@
     return data.every((b) => b === 0xff);
   }
 
-  function warnIfVariant() {
-    if ($selectedDevice?.name.includes("@")) {
-      const base = $selectedDevice.name.split("@")[0];
-      logs.warn(`Package variant selected (${$selectedDevice.name}). The data read may be incorrect or garbage. For reliable flash operations, select "${base}" instead.`);
+  async function warnIfVariant() {
+    const name = $selectedDevice?.name;
+    if (!name?.includes("@")) return;
+    const base = name.split("@")[0];
+    try {
+      await invoke("get_device_info", { name: base });
+      logs.warn(`Package variant selected (${name}). The data read may be incorrect or garbage. For reliable flash operations, select "${base}" instead.`);
+    } catch {
+      logs.info(`Package variant (${name}) — verify the package matches the physical chip; a mismatched variant produces garbage data.`);
     }
   }
 
@@ -565,7 +573,7 @@
 
   async function onWriteFromFile() {
     await warnIfLocked();
-    warnIfVariant();
+    await warnIfVariant();
     const path = await pickOpenFile("Select file to write to chip", get(settings).defaultDirectory);
     if (path) {
       await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
@@ -606,7 +614,7 @@
 
   async function onWriteFromHex() {
     await warnIfLocked();
-    warnIfVariant();
+    await warnIfVariant();
     if (hasPendingHexEdits) {
       applyHexEdits();
       logs.info("Applied pending hex edits before write");
@@ -622,7 +630,7 @@
     switch (op) {
       case "read":
         await warnIfLocked();
-        warnIfVariant();
+        await warnIfVariant();
         await doReadToBuffer(getOptions());
         logChipIdCheck();
         if (isAllBlank(getHexData())) {
@@ -636,7 +644,7 @@
         break;
       case "verify": {
         await warnIfLocked();
-        warnIfVariant();
+        await warnIfVariant();
         const path = await pickOpenFile("Select file to verify against", get(settings).defaultDirectory);
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
@@ -664,17 +672,15 @@
       case "chip_id": {
         const chipResult = await doChipId(icspMode, pinCheck);
         if (chipResult) {
-          if (chipResult.is_variant) {
-            logs.info(`Chip ID mismatch for ${$selectedDevice.name}: read ${chipResult.id}, expected ${chipResult.expected}. For chip ID verification, select "${chipResult.base_name}" instead.`);
+          const expectedVal = parseInt(chipResult.expected, 16);
+          if (expectedVal === 0) {
+            logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
+          } else if (chipResult.is_match) {
+            logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
+          } else if (chipResult.is_variant) {
+            logs.info(`Chip ID: ${chipResult.id} (differs from expected ${chipResult.expected} — ${$selectedDevice.name} is a package-variant entry; the base chip may report a different ID)`);
           } else {
-            const expectedVal = parseInt(chipResult.expected, 16);
-            if (expectedVal === 0) {
-              logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
-            } else if (chipResult.is_match) {
-              logs.info(`Chip ID: ${chipResult.id} (matches expected)`);
-            } else {
-              logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
-            }
+            logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
           }
         }
         break;
@@ -1080,6 +1086,12 @@
                     <input type="checkbox" class="checkbox" bind:checked={pinCheck} disabled={pinCheckDisabled} />
                     Pin Contact Check
                   </label>
+                  {#if $activeOperation === "read"}
+                    <label class="flex items-center gap-2" title="Read the chip 5 times and compare passes — saves the majority-vote image if reads disagree">
+                      <input type="checkbox" class="checkbox" bind:checked={stabilityCheck} />
+                      Stability check
+                    </label>
+                  {/if}
                 </div>
               {/if}
               <!-- Row 2: Checkboxes + Advanced toggle -->
@@ -1763,29 +1775,35 @@
         {#if icspMode !== "zif"}
           <IcspConnectorDiagram />
         {:else}
-          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
+          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} expectedPins={$pinTestResult?.expected_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
           {#if $pinTestResult}
-            <div class="border border-surface-200-800 p-2 mt-1">
-              {#if $pinTestResult.supported && $pinTestResult.pass}
-                <div class="flex items-center gap-2 text-sm text-success-500-400">
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>
-                  All pins OK
-                </div>
-                <p class="text-xs opacity-60 mt-1">All contacted pins passed.</p>
-              {:else if $pinTestResult.supported && !$pinTestResult.pass}
-                <div class="flex items-center gap-2 text-sm text-error-500-400">
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 1.667L18.333 16.667H1.667L10 1.667z M10 7.5v5 M10 14.167v0.833"/></svg>
-                  Bad contact on {$pinTestResult.bad_pins.length} pin(s)
-                </div>
-                <div class="text-xs font-mono text-error-500-400 mt-1">
-                  Bad pins: {$pinTestResult.bad_pins.join(", ")}
-                </div>
-                <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
-              {:else}
-                <div class="text-sm text-warning-500-400">{$pinTestResult.message}</div>
-              {/if}
+            <div class="border border-surface-200-800 p-2 mt-1 flex items-start justify-between gap-2">
+              <div>
+                {#if $pinTestResult.supported && $pinTestResult.pass}
+                  <div class="flex items-center gap-2 text-sm text-success-500-400">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>
+                    All pins OK
+                  </div>
+                  <p class="text-xs opacity-60 mt-1">All contacted pins passed.</p>
+                {:else if $pinTestResult.supported && !$pinTestResult.pass}
+                  <div class="flex items-center gap-2 text-sm text-error-500-400">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 1.667L18.333 16.667H1.667L10 1.667z M10 7.5v5 M10 14.167v0.833"/></svg>
+                    Bad contact on {$pinTestResult.bad_pins.length} pin(s)
+                  </div>
+                  <div class="text-xs font-mono text-error-500-400 mt-1">
+                    Bad pins: {$pinTestResult.bad_pins.join(", ")}
+                  </div>
+                  {#if $pinTestResult.expected_pins.length > 0 && $pinTestResult.bad_pins.length === $pinTestResult.expected_pins.length}
+                    <p class="text-xs opacity-60 mt-1">Every expected pin is open — is a chip seated in the socket?</p>
+                  {:else}
+                    <p class="text-xs opacity-60 mt-1">Check chip insertion and socket contacts for the highlighted pins.</p>
+                  {/if}
+                {:else}
+                  <div class="text-sm text-warning-500-400">{$pinTestResult.message}</div>
+                {/if}
+              </div>
               <button
-                class="mt-2 text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800 opacity-70 hover:opacity-100"
+                class="shrink-0 text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800 opacity-70 hover:opacity-100 transition-opacity"
                 onclick={() => clearPinTestResult()}
               >Clear</button>
             </div>

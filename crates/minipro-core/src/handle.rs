@@ -12,7 +12,7 @@ use crate::{
     device::{Device, ProgrammerInfo, ProgrammerModel, ProgrammerStatus},
     error::{MiniproError, Result},
     protocol::{
-        t48::T48Protocol,
+        t48::{T48Protocol, MIN_FIRMWARE_T48},
         t56::{T56Protocol, MIN_FIRMWARE_T56},
         t76::{T76Protocol, MIN_FIRMWARE_T76},
         tl866a::{self, Tl866aProtocol},
@@ -73,7 +73,8 @@ impl MiniproHandle {
         let min_fw = match info.model {
             ProgrammerModel::T56 => MIN_FIRMWARE_T56,
             ProgrammerModel::T76 => MIN_FIRMWARE_T76,
-            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 => MIN_FIRMWARE,
+            ProgrammerModel::Tl866iiPlus => MIN_FIRMWARE,
+            ProgrammerModel::T48 => MIN_FIRMWARE_T48,
             _ => 0,
         };
         if min_fw > 0 && info.firmware < min_fw {
@@ -90,7 +91,7 @@ impl MiniproHandle {
 
         let protocol: Box<dyn Protocol> = match info.model {
             ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Box::new(Tl866aProtocol::new()),
-            ProgrammerModel::T48 => Box::new(T48Protocol::new()),
+            ProgrammerModel::T48 => Box::new(T48Protocol::new_t48()),
             ProgrammerModel::T56 => Box::new(T56Protocol::new()),
             ProgrammerModel::T76 => Box::new(T76Protocol::new()),
             _ => Box::new(Tl866iiPlusProtocol::new()),
@@ -118,37 +119,33 @@ impl MiniproHandle {
         info!("Device: {}", device.name);
 
         // T56/T76: look up the FPGA algorithm bitstream if not already
-        // populated and algorithm.xml is available.  The protocol layer
-        // checks `device.algorithm` during begin_transaction to upload the
-        // bitstream.  Without this, FPGA-based operations fail silently.
+        // populated.  The FPGA ships blank — without the uploaded bitstream
+        // every operation returns garbage.  Upstream C minipro fails
+        // begin_transaction here; do the same instead of continuing with an
+        // unconfigured FPGA.
         let device = if device.algorithm.is_none()
             && crate::algorithm::needs_algorithm(&device, self.info.model)
         {
-            if let Some(ref paths) = self.db_paths {
-                if let Some(ref algo_path) = paths.algorithms {
-                    match crate::algorithm::get_algorithm(
-                        &device,
-                        self.info.model,
-                        self.icsp,
-                        crate::algorithm::V_3V3,
-                        algo_path,
-                    ) {
-                        Ok(algo) => {
-                            let mut d = (*device).clone();
-                            d.algorithm = Some(algo);
-                            Arc::new(d)
-                        }
-                        Err(e) => {
-                            log::warn!("Algorithm lookup failed for {}: {}", device.name, e);
-                            device
-                        }
-                    }
-                } else {
-                    device
-                }
-            } else {
-                device
-            }
+            let algo_path = self
+                .db_paths
+                .as_ref()
+                .and_then(|p| p.algorithms.as_ref())
+                .ok_or_else(|| {
+                    MiniproError::Protocol(format!(
+                        "algorithm.xml not found — required to upload the FPGA bitstream for {} on {:?}",
+                        device.name, self.info.model
+                    ))
+                })?;
+            let algo = crate::algorithm::get_algorithm(
+                &device,
+                self.info.model,
+                self.icsp,
+                crate::algorithm::V_3V3,
+                algo_path,
+            )?;
+            let mut d = (*device).clone();
+            d.algorithm = Some(algo);
+            Arc::new(d)
         } else {
             device
         };

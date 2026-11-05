@@ -279,9 +279,14 @@ return btoa(result);
 
 ### CI compute conservation
 
-GitLab CI runs on every `main` push, every tag, and manual triggers.
+GitLab CI workflow rules permit pipelines on `main` pushes, tags, and
+manual web triggers — but GitLab skips pipeline creation when the pushed
+commit message contains `[skip ci]`, and every commit/merge here carries
+it. Effect: `main` pushes are free (pipelines show as "skipped"), and
+pipelines actually run only on release tags (tag messages lack the
+marker) or manual triggers. Dropping `[skip ci]` from a commit is what
+costs a pipeline run — keep it.
 GitHub Actions runs on tags only. Branch pushes are free on both.
-Batch commits — one push = one pipeline run.
 
 Local CI-equivalent checks (run from repo root):
 

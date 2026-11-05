@@ -23,7 +23,7 @@ gui/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list (syncs from external selection via $effect)
-        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test (buttons collapsible)
+        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test, chip health check (buttons collapsible)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
         IcspConnectorDiagram.svelte — ICSP connector diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc"); renders pin numbering plus per-class signal wiring when a verified table exists
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
@@ -148,23 +148,50 @@ the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
 if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
-**Model support:** TL866II+ and T48 only. T48 inherits pin test
-from TL866II+ via protocol alias (`T48Protocol = Tl866iiPlusProtocol`).
-TL866A/CS, T56, and T76 are not supported — button is disabled with a
-tooltip. The C `minipro` source does not define the bit-banging commands
-(0x2D-0x36) for any of these models. The T76's `0x3E` command is an
-adapter-init pin-driver configuration step, not a standalone contact
-test — running it standalone returns meaningless data and can corrupt
-subsequent reads. This was discovered by Matt Brown's t76-improvements
-branch, whose t76_adapter_init() uses 0x3E to configure socket pin
-drivers before bitstream upload. The upstream C minipro's `t76_pin_test`
-receives the response but never parses it — `value` is initialized to 0
-and never updated from the response buffer, so every pin reports as bad.
-The xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
+**Model support:** TL866II+ and T48. The backend returns
+`UnsupportedOperation` on other models and the button is disabled with
+a tooltip.
+
+The T48 path (`pin_test_t48` in `tl866iiplus.rs`) uses XGPro's own
+single-command protocol — `0x3E` carrying the device `variant` as chip
+ID (u16 LE — the field is ignored by firmware; the response carries
+constant fields, not an echo), returning a contact bitmap (ZIF1-40 in
+`resp[8..13]` LSB-first + ISP1-16 in `resp[13..15]`), documented with
+USB captures at https://proghq.org/wiki/XGecu_Protocol. Upstream never
+implemented it; this is a reverse-engineered port — bit set = contact,
+compared against the device's `pin_map` mask. Hardware-validated on a
+fully seated DIP-8: bitmap `0F 00 00 00 F0` = ZIF 1-4 + 37-40.
+
+**The bitmap is only valid with the pin drivers idle** — inside a
+transaction, configured/driven pins read as open (the same seated DIP-8
+read `01 00 00 00 C0` in-transaction, reporting half its pins bad).
+XGPro runs pin detect before beginning the transaction, so
+`pin_test_t48` ends the transaction, measures, then re-begins — callers
+stay inside a transaction transparently. See KNOWN-BUGS.md.
+
+Do NOT run `0x3E` standalone on a T76: there it is an adapter-init
+pin-driver configuration step, not a contact test — running it
+standalone returns meaningless data and can corrupt subsequent reads.
+This was discovered by Matt Brown's t76-improvements branch, whose
+t76_adapter_init() uses 0x3E to configure socket pin drivers before
+bitstream upload. The upstream C minipro's `t76_pin_test` receives the
+response but never parses it — `value` is initialized to 0 and never
+updated from the response buffer, so every pin reports as bad. The
+xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
 on real hardware that it "measured nothing and corrupted every read."
-The T56 defines the same `0x3E` command but has no `t56_pin_test`
-function — it may share the T76's situation, but this has not been
-verified on T56 hardware.
+The T56 also defines `0x3E`, labelled pin detect on proghq like the
+T48's — but whether it is the pin-detect variant or the T76-style
+adapter-init is unverified on hardware.
+
+**Result semantics:** the backend's `PinTestResult` carries both
+`bad_pins` and `expected_pins` (every device pin the `pin_map` mask
+actually tested — the GND pin on SPI flashes is excluded and never
+measured). The ZIF diagram renders three states: tested-bad (red +
+label), tested-good (green), and untested/unoccupied (neutral gray) —
+so untested pins are never implied "good". When every expected pin is
+open (`bad == expected`), the surfaces treat it as an empty socket:
+the log/card say "is a chip seated?" instead of implying N bad
+contacts. The CLI `-z` prints the same hint.
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
@@ -234,6 +261,47 @@ the CLI's placement hints (`-d` output, `-z` bad-pin annotation).
 **Result panel:** Below the ZIF diagram, a compact panel shows
 "✓ All pins OK" (green) or "✗ Bad contact on N pin(s)" (red) with the
 pin list and a "Clear" button to dismiss results.
+
+## Chip health check (GUI)
+
+Diagnostics → "Chip Health Check" invokes `run_health_check` (enabled
+whenever a device is selected — it needs `-p`-equivalent context for the
+transaction). Params: `icspMode`, `pinCheck: true` (pre-op pin gate like
+other operations), `passes: 5`, and optional `referencePath` — enabled via the "Compare
+against file" checkbox under the button (opt-in modifier, matching the
+app's checkbox convention; reveals the file picker only when checked and
+disables the run button while a file is unchosen); the backend loads it through
+`operations::read_file` (auto format, padded to device size) and compares
+the effective image against it (`referenceMismatches` renders in the
+card — amber when >0). The backend runs `operations::health_check`
+(20 chip-ID reads + N full reads), emits progress on the standard
+`"progress"` channel under the "Health check" operation name, and logs a
+verdict line + notes via `app-log`.
+
+The returned `HealthCheckResultDto` renders as a result card inside the
+Diagnostics disclosure: colored verdict (`Stable` green, `Transport error`
+red, others amber), pass/ID-run counts, unique chip IDs seen, unstable-byte
+count with `0→1`/`1→0` flip split and dominant periodic spacing, top
+instability regions (4 KiB buckets), analysis notes, and — when
+`consensusB64` is present — a "Save consensus dump" button routing through
+`pickSaveFile` + `save_bytes_to_file` (absent when passes all agree —
+nothing to reconstruct). A "Clear" button in the card header dismisses
+the result. Read-only: the command never writes
+to the chip. See `docs/CLI-INTERNALS.md` "Health check" for the analysis
+semantics and transport limitations.
+
+**Read-panel "Stability check"** (`OperationOptions.stability_check`,
+serde default `false`): a checkbox in the read operation's options row
+applies the same analysis inline — `do_read` and `read_chip_to_bytes`
+route through `read_chip_stable_logged` → `operations::read_chip_stable`
+(5 passes, cumulative progress across all passes). Stable → the consistent
+buffer is saved/loaded as usual; unstable → the majority-vote consensus
+is used and a warn log reports unstable-byte count, pass errors, and
+notes. Core op functions no longer take a `check_device_id` parameter
+(the single top-level `check_chip_id` handles it); the GUI's
+`check_device_id` *option* remains, gating the explicit pre-operation
+ID check — `read_chip_to_bytes` previously relied on the parameter and
+now runs the same explicit pre-check as `do_read`.
 
 ## ICSP wiring diagrams (IcspConnectorDiagram.svelte)
 
@@ -510,6 +578,75 @@ depends on monospace fonts and preserved whitespace.
    WebKitGTK has a bug where content in scrolled containers doesn't repaint
    after DOM changes — the content is in the DOM but invisible until an
    unrelated event (hover, scroll, resize) triggers a repaint.
+
+## Algorithm Downloader (Settings → Database)
+
+The "Download algorithm.xml + firmware…" button in SettingsPanel invokes
+`download_algorithms`, which wraps `minipro_core::xgpro_fetch::fetch` in
+`spawn_blocking` behind the shared `try_acquire` gate — it cannot run
+concurrently with chip operations.
+
+- **Output dir:** the command takes an optional `outputDir`. The frontend
+  passes `$settings.customDbDir` so generated files land next to a custom
+  database when one is configured; `None` → the per-user data dir that
+  `resolve_one()` already searches (see CLI-INTERNALS.md).
+- **Progress:** core `Progress` events are mapped onto the standard
+  `"progress"` channel (`{done, total, operation}` — `operation` is
+  `"download"` or `"extract"`) and stage/file lines go through
+  `emit_log` → `"app-log"`, so ProgressPanel and the terminal show them
+  with no new plumbing.
+- **Cancel:** `AppState.download_cancel` is an `AtomicBool` flipped by the
+  `cancel_algo_download` command; the core progress callback returns
+  `false` when set, and `fetch` aborts with `MiniproError::Cancelled`
+  (displayed as `"Operation cancelled"` — the command matches on that
+  string, so keep them in sync). The flag is reset at the start of each
+  download; cancelling is fire-and-forget.
+- **Post-download refresh:** the cached `DatabasePaths.algorithms` is
+  re-resolved only when absent or stale — an existing still-present path
+  wins, so an explicit/custom `algorithm.xml` is never shadowed by the
+  downloaded one. `DatabasePaths::resolve` semantics mean this also picks
+  up the per-user dir automatically.
+- **Connected handle caveat:** an open `MiniproHandle` snapshots its db
+  paths at connect time; the refresh only updates `state.db_paths`. The
+  command logs "reconnect to use the new algorithm.xml" on success.
+- **Open folder:** the adjacent "Open folder" button calls
+  `open_download_dir(dir)` — resolves the same output dir (custom db dir
+  or per-user data dir), `create_dir_all`s it so it works before any
+  download, and opens it in the OS file manager. `open_folder` gained an
+  `is_dir()` branch via the shared `open_dir_in_manager` helper, so it
+  accepts directory paths too (previously it opened the *parent*).
+
+## Firmware update — downloaded-image resolution
+
+Diagnostics → Firmware Update first calls `find_downloaded_firmware`
+(`commands.rs`), which scans `customDir` then `user_data_dir()` for
+`firmware-<model>-*.dat`, parses `a.b.c` versions out of filenames,
+sorts newest-first and dedups by version. Match by exact
+`firmware-<model>-` prefix — model-safe by construction, which matters
+because flashing a wrong-model image is the brick path. Empty result
+(TL866A/CS — see below — or a fresh install) falls through to the
+existing file picker.
+
+The confirm dialog appends a version note comparing installed vs
+candidate. Comparison is on `{major}.{minor}` — the low u16 of the file
+version, which is what the device actually reports. The
+hardware-revision warning (first-component mismatch) only applies when
+the installed side reports a real hw byte — `installed[0] !== 0`, i.e.
+TL866A/II+; T48/T56/T76 hardcode hw to 0 so their `00` display prefix is
+a constant and file prefixes like `01.1.35` are product-line labels, not
+revisions (see `docs/FIRMWARE-FORMATS.md`). Warn only, never a hard
+block — upstream posture; strictly-lower = explicit DOWNGRADE note;
+equal = "reflash only to recover".
+
+**TL866A/CS clone warning:** `CLONE_RISK_MODELS` in DiagnosticsPanel
+adds an extra paragraph for those models on *every* path (auto-found or
+picked). MiniPro 6.82+ firmware (3.2.85/3.2.86, the final TL866A
+release) detects clones and disables boot mode — a brick recoverable
+only by forcing boot mode with a resistor on the PCB test points. We
+deliberately do **not** auto-download TL866A firmware: the only source
+(`minipro_setup685.rar`) embeds a RAR4 archive `rar-codec` can't read,
+and the image is itself the brick vector. Rejected approach — see
+ROADMAP's downloader entry.
 
 ### Rust format specifiers
 

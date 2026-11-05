@@ -13,10 +13,23 @@ use crate::{
 /// Result of a pin-contact test.
 ///
 /// `bad_pins` contains device pin numbers (1-based) that failed contact.
-/// Empty means all pins contacted successfully.
+/// Empty means all tested pins contacted successfully.
+/// `expected_pins` contains every device pin the `pin_map` mask actually
+/// tested (in-range mask entries only) — pins outside it (e.g. the GND
+/// pin on SPI flashes) are never measured, so a UI can distinguish
+/// tested-good from untested instead of implying both are "good".
 #[derive(Debug, Clone, Default)]
 pub struct PinTestResult {
     pub bad_pins: Vec<u16>,
+    pub expected_pins: Vec<u16>,
+}
+
+impl PinTestResult {
+    /// True when every pin the mask expected is open — almost always an
+    /// empty socket rather than that many simultaneous bad contacts.
+    pub fn all_expected_open(&self) -> bool {
+        !self.expected_pins.is_empty() && self.bad_pins.len() == self.expected_pins.len()
+    }
 }
 
 /// Structured result of a logic IC test.
@@ -107,6 +120,21 @@ pub trait Protocol: Send + Sync {
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 
+    /// Upload an FPGA bitstream outside of `begin_transaction`.
+    ///
+    /// T56/T76 SPI autodetect needs the SPI bitstream (SPI25F11/SPI25F21)
+    /// loaded before the 0x37 command can run — the FPGA ships blank.
+    fn upload_bitstream(&self, usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
+        let _ = (usb, bitstream);
+        Err(crate::error::MiniproError::UnsupportedOperation)
+    }
+
+    /// Invalidate any cached FPGA-bitstream state so the next
+    /// `begin_transaction` re-uploads the selected device's algorithm.
+    /// Needed after out-of-band uploads (autodetect, logic test) clobber
+    /// the device algorithm. Default no-op for models without caching.
+    fn invalidate_bitstream(&self) {}
+
     /// Read fuse / lock bytes.
     fn read_fuses(
         &self,
@@ -138,14 +166,17 @@ pub trait Protocol: Send + Sync {
     fn erase(&self, usb: &UsbDevice, device: &Device, num_fuses: u8, is_pld: bool) -> Result<()>;
 
     /// Read a JEDEC fuse-map row.
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
-        let _ = (usb, js);
+    ///
+    /// `device` supplies the protocol ID required by the command header on
+    /// TL866II+/T48-family programmers.
+    fn read_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &mut JedecSet) -> Result<()> {
+        let _ = (usb, device, js);
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 
     /// Write a JEDEC fuse-map row.
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
-        let _ = (usb, js);
+    fn write_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &JedecSet) -> Result<()> {
+        let _ = (usb, device, js);
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 

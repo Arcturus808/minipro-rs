@@ -725,6 +725,37 @@ pub struct ProgrammerInfo {
     pub hardware_version: u8,
 }
 
+impl ProgrammerInfo {
+    /// Synthetic programmer for `MINIPRO_FAKE_PROGRAMMER=<model>` — the
+    /// documented dev-mode escape hatch: frontends report a connected
+    /// programmer of that model without opening USB, so the UI can be
+    /// exercised without hardware. Chip operations still fail.
+    ///
+    /// `Ok(None)` when the env var is unset or empty; `Err` on an
+    /// unrecognized model name.
+    pub fn fake_from_env() -> crate::error::Result<Option<Self>> {
+        let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
+            return Ok(None);
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            return Ok(None);
+        }
+        let model = name
+            .parse::<ProgrammerModel>()
+            .map_err(crate::error::MiniproError::Protocol)?;
+        Ok(Some(Self {
+            model,
+            status: ProgrammerStatus::Normal,
+            firmware: 0,
+            firmware_str: "fake".to_string(),
+            device_code: "00".to_string(),
+            serial_number: "FAKE".to_string(),
+            hardware_version: 0,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

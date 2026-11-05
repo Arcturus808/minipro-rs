@@ -210,6 +210,37 @@ impl Protocol for T56Protocol {
         usb.msg_send(&msg)
     }
 
+    fn upload_bitstream(&self, usb: &UsbDevice, bitstream: &[u8]) -> Result<()> {
+        upload_bitstream(usb, bitstream)?;
+        self.bitstream_uploaded.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn spi_autodetect(&self, usb: &UsbDevice, id_type: u8) -> Result<u32> {
+        let mut msg = [0u8; 64];
+        msg[0] = CMD_AUTODETECT;
+        msg[8] = id_type;
+        // Upstream t56_spi_autodetect sends a 10-byte request and reads a
+        // 16-byte response — unlike the T76's 12-byte request.
+        let result = (|| {
+            usb.msg_send(&msg[..10])?;
+            let resp = usb.msg_recv(16)?;
+            if resp.len() < 5 {
+                return Err(MiniproError::ResponseTooShort {
+                    expected: 5,
+                    actual: resp.len(),
+                });
+            }
+            // Device ID is 3 bytes big-endian at resp[2..5]
+            Ok(((resp[2] as u32) << 16) | ((resp[3] as u32) << 8) | resp[4] as u32)
+        })();
+        // The loaded bitstream is the autodetect SPI one (SPI25F11/SPI25F21);
+        // force the next begin_transaction to re-upload the selected device's
+        // own algorithm in case it differs.
+        self.bitstream_uploaded.store(false, Ordering::Relaxed);
+        result
+    }
+
     fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
         let cmd = match ds.page_type {
             MP_CODE => CMD_READ_CODE,
@@ -368,7 +399,7 @@ impl Protocol for T56Protocol {
         Ok(())
     }
 
-    fn read_jedec_row(&self, usb: &UsbDevice, js: &mut JedecSet) -> Result<()> {
+    fn read_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &mut JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
         let mut msg = [0u8; 8];
         msg[0] = CMD_READ_JEDEC;
@@ -384,7 +415,7 @@ impl Protocol for T56Protocol {
         Ok(())
     }
 
-    fn write_jedec_row(&self, usb: &UsbDevice, js: &JedecSet) -> Result<()> {
+    fn write_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &JedecSet) -> Result<()> {
         let bits = (js.data.len() * 8) as u8;
         let byte_len = (bits as usize).div_ceil(8);
         let mut msg = [0u8; 64];
@@ -488,8 +519,7 @@ pub fn firmware_update_t56(
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
     use crate::device::ProgrammerStatus;
-    use crc::{Crc, CRC_32_ISO_HDLC};
-    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+    use crate::util::crc_32;
 
     // ── Parse header ─────────────────────────────────────────────────────────
     if dat.len() < 16 {
@@ -516,9 +546,7 @@ pub fn firmware_update_t56(
 
     // ── CRC check ────────────────────────────────────────────────────────────
     // CRC is over the data blocks region (dat[16..end]) with init 0xFFFFFFFF.
-    let mut digest = CRC32.digest_with_initial(0xFFFF_FFFF);
-    digest.update(&dat[16..]);
-    let computed = digest.finalize();
+    let computed = crc_32(&dat[16..], 0xFFFF_FFFF);
     if computed != file_crc {
         return Err(MiniproError::AlgorithmCrc);
     }

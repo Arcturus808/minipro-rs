@@ -5,6 +5,47 @@ requirements. Extracted from AGENTS.md — check here before touching related
 code; several fixes document upstream C minipro behavior that must be
 preserved.
 
+## XGecu CRC-32 is not zlib CRC-32 — no final complement (fixed)
+
+Upstream `crc_32()` (in `minipro.c`) is a reflected CRC-32 with a
+caller-supplied initial value and **no final XOR-out** — it returns the raw
+accumulator, whereas the standard `CRC_32_ISO_HDLC` profile complements the
+result with `0xFFFFFFFF`. The port "corrected" it to `CRC_32_ISO_HDLC` in
+three places, which made every embedded CRC check fail:
+
+- `algorithm.rs::decode_bitstream` — every `algorithm.xml` bitstream was
+  rejected with `AlgorithmCrc`, so T56/T76 chip operations silently ran
+  with an unconfigured FPGA and returned zeros.
+- `t76.rs::firmware_update_t76` / `t56.rs::firmware_update` — firmware
+  images always failed the CRC gate (the comments even said "NOT
+  inverted", but `finalize()` on the ISO_HDLC profile applies the
+  complement anyway).
+
+Call sites where upstream explicitly complements (`~crc_32(...)`, e.g.
+`tl866a` firmware check, `tl866iiplus` file CRC) were already correct
+under `CRC_32_ISO_HDLC`.
+
+**Fix:** `util::crc_32(data, init)` ports the upstream function verbatim
+(no xor-out); the three call sites use it. Do not replace it with
+`CRC_32_ISO_HDLC` — the checks will always mismatch.
+
+## T76 level-2 decompression must tolerate short output (fixed)
+
+The T76 `.alg` payload decompresses zero-run-encoded u16 words into a
+buffer whose declared size (`ALGO_SIZE_OFFSET`) can be **odd** — e.g.
+`SPI25F11` declares 701,145 bytes but the stream emits 701,144. Upstream C
+`calloc`s the declared size, writes words without any output-bound check,
+and lets trailing slack stay zero (it even overflows the odd byte by one
+word). The port required `out_pos == algo_size` *and* stopped at
+`out_pos + 2 <= algo_size`, so it both dropped the final word and then
+rejected the stream.
+
+**Fix:** `level2_decompress` rounds the buffer up to even, decodes the
+whole stream, then truncates to `algo_size`. Unwritten tail bytes stay
+zero exactly like the upstream `calloc` slack. Do not re-add an
+exact-length assertion — real `.alg` files legitimately end a few bytes
+short.
+
 ## Custom database directory startup fallback
 
 If the user sets a custom database directory in Settings and later moves or
@@ -39,6 +80,146 @@ collapsing the results list.
 effect skips the `searchQuery` rewrite. External selections still sync.
 Preserve the `lastSyncedDevice` guard — removing or reordering it
 reintroduces the bug.
+
+## T48 rejected at connect — firmware minimum used TL866II+ scale (fixed)
+
+`MiniproHandle::open` applied the TL866II+ minimum firmware (`0x255`,
+version 4.2.85) to the T48, but the T48 runs its own firmware line —
+latest `0x127` (01.1.39) — so every real T48 was refused with
+`FirmwareTooOld`. The original check shared one minimum across
+TL866II+/T48/T56/T76; T56 and T76 got their own constants later but T48
+was left grouped with TL866II+.
+
+**Fix:** `MIN_FIRMWARE_T48` in `protocol/t48.rs` is `0` (no hard floor),
+matching upstream C minipro, which compares firmware against a per-model
+*expected* version (`0x127` for T48) and only warns — it never refuses to
+connect. Do not reintroduce a nonzero T48 floor without verifying a real
+command-set dependency; firmware numbers are not comparable across models.
+TL866A/CS likewise has no enforced floor (`MIN_FIRMWARE_A` is unused).
+
+## `minipro -t` panic on T48 — hardware check used TL866II+ pin domain (fixed)
+
+`T48Protocol` was a plain re-export of `Tl866iiPlusProtocol`, so the
+hardware self-test ran with TL866II+ assumptions: byte-per-pin state reads
+(`read_buffer[7 + pin]` for pins 1..21) and TL866II+ pin tables. The T48
+returns ~16 bytes from READ_PINS with pin states **bit-packed** at
+`msg[8 + pin/8]`, so every VPP pin reported "Bad" and pin 9 panicked
+(`len is 16 but the index is 16`).
+
+**Fix:** `Tl866iiPlusProtocol` now carries an `is_t48` flag
+(`T48Protocol::new_t48()`); `hardware_check` branches to a port of
+upstream `t48_hardware_check` in `protocol/t48.rs` — T48 pin tables (17
+VPP / 34 VCC / 35 GND entries with byte offsets 8–16), `zif_pin_state`
+bit-unpacking, `zif_no_io` (unconnected ICSP pins 52/54/56), per-pin
+cross-short checks, logic drive tests at both levels, and the OVC tail.
+Note the pull-up/pull-down opcodes are **swapped** between models:
+T48 `0x31`=pull-ups/`0x32`=pull-downs vs TL866II+ `0x31`=pull-downs/
+`0x32`=pull-ups.
+
+**Divergence warning:** upstream still dispatches T48-specific pin-driver
+functions that we have not ported (`t48_set_zif_direction/state`,
+`t48_get_zif_state`, `t48_set_pin_drivers`, `t48_set_voltages`, the OVC
+trip level at `msg[0x34]`). The shared TL866II+ implementation remains in
+use for those paths — if ZIF pin state/direction or voltage overrides
+misbehave on real T48 hardware, port the corresponding `t48.c` functions
+rather than assuming TL866II+ layout. (`t48_begin_transaction` SPI-clock
+fields and the read/write payload path have since been ported — see the
+next entry.)
+
+## T48 reads/writes > 64 bytes stall — payload must use EP2 only (fixed)
+
+Symptom: `Protocol error: hardware fault or protocol violation` (or
+`transfer was cancelled`) on the first "Reading Code" block for any T48
+chip whose `read_buffer_size` exceeds 64 bytes (e.g. ATMEGA328P@DIP28 at
+`0x100`, BY25Q128@SOIC8 at `0x1000`), while a chip with `read_buffer_size`
+`0x40` (ATTINY85) read fine.
+
+**Root cause:** for payloads larger than 64 bytes the TL866II+ firmware
+interleaves the transfer across two bulk endpoints (EP2 + EP3), so the
+shared code submitted concurrent `bulk_in`/`bulk_out` transfers on both.
+The T48 firmware never services the EP3 endpoint during read/write block
+operations — upstream `t48_read_block` calls `read_payload2(..., 0)` and
+`t48_write_block` calls `write_payload2(..., write_buffer_size, 0)`, where
+`limit == 0` means "single endpoint, EP2 only". Pending EP3 transfers on
+T48 stall (`Fault`) or sit unsubmitted and get torn down (`Cancelled`).
+
+**Fix:** when `is_t48` is set, `read_block` reads every page type over
+EP2-IN only via `read_payload_limit(len, 0)` — including MP_USER, which
+the TL866II+ reads over the command endpoint instead — and `write_block`
+always sends an 8-byte header on EP1 followed by a `write_buffer_size`
+EP2-OUT payload (a short final block is padded; upstream transfers
+`write_buffer_size` bytes regardless of `ds->size`). `write_payload_limit`
+now treats `limit == 0` as single-EP2-OUT like upstream (`!limit`);
+`read_payload_limit` already handled it.
+
+Related fixes in the same area (shared TL866II+/T48 code had drifted
+from upstream packet layouts; upstream's `t48.c` and `tl866iiplus.c`
+versions of these are byte-identical):
+
+- `read_fuses`/`write_fuses`: `protocol_id` at `msg[1]`, `items_count` at
+  `msg[2]`, `code_memory_size` (`- 0x38` on write — upstream notes a
+  firmware quirk) at `msg[4..8]`, fuse data at `msg[8]`; the response's
+  first 8 bytes are a header, so fuse data is returned starting at
+  `resp[8]`. `write_fuses` does not read a response.
+- `erase`: `num_fuses` at `msg[2]`, PLD flag at `msg[4]`, 15-byte packet.
+- `protect_off`/`protect_on`: command only — the firmware sends no
+  response, and reading one could block for the full transfer timeout.
+- `get_ovc_status`: `error`=`msg[0]`, `c1`/`c2`=LE16 at `msg[2]`/`msg[4]`,
+  `address`=LE32 at `msg[8]`, OVC flag at `msg[12]` (was parsed at wrong
+  offsets).
+- `read_jedec_row`/`write_jedec_row`: commands are `0x1D`/`0x1E` with
+  `protocol_id` at `msg[1]`, row size in bits at `msg[2]`, row at
+  `msg[4]`, flags at `msg[5]`; row data at `msg[8]` on write and at
+  `resp[0]` on read.
+- `read_calibration`: byte count is LE16 at `msg[2..4]` in a 64-byte
+  command.
+- `unlock_tsop48`: a 48-byte packet — 8 random bytes at `msg[8..16]` with
+  a CRC16 packed into `msg[10]`/`msg[12]` and the original bytes echoed to
+  `msg[16]`/`msg[17]`; reads an 8-byte status.
+- `get_system_info`: the request is a 5-byte command and the response can
+  be 80 bytes; T48/T56/T76 use a shifted field layout (`device_code` at
+  `resp[24]`, `serial_number` at `resp[32]`, `hardware_version` reported
+  as 0) vs TL866II+ (`8`/`16`/`40`).
+- `begin_transaction` (T48): `msg[24] = 1` enables the SPI clock override
+  at `msg[28]` when `can_adjust_clock` is set — without it `--speed` was
+  silently ignored on T48.
+- `read_block`/`write_block` command byte for MP_USER is `0x0B`/`0x0A`
+  (`READ/WRITE_USER_DATA`), not the fuse `READ/WRITE_USER` (`0x06`/`0x07`).
+- `pin_test`, `unlock_tsop48`, and `read_calibration` have no upstream
+  T48 handler and now return `UnsupportedOperation` on T48 instead of
+  running TL866II+ commands against different hardware — the II+
+  pin-test bit-bang commands (0x2D-0x36) target the II+ pin-driver
+  domain, which the T48 does not share (the same reason `hardware_check`
+  needed its own port). Pin-test surfaces were aligned to TL866II+-only
+  accordingly: the `-z` model gate and help text, the GUI Diagnostics
+  button, the pre-operation "Pin Contact Check" (default-on — without
+  the fix every T48 operation would abort), and the autodetect
+  pre-check, which upstream's `auto_detect` also runs on TL866II+ only
+  (other models print "not supported" and continue).
+  Note this is "unimplemented upstream", not "impossible on T48":
+  XGPro's Pin Detect does run on T48 (vendor manual + XGecu forum
+  tid=802) via its own single-command protocol — `0x3E` carrying the
+  chip ID, returning a per-pin contact bitmap (ZIF1-40 + ISP1-16).
+  Documented with USB captures at https://proghq.org/wiki/XGecu_Protocol,
+  which is also the best existing reference for the rest of the T48
+  pin-control protocol (0x2D-0x36 command maps, 0x29 AUTO_FIND, 0x33
+  MEASURE_VOLTAGES, 0x24 adapter DRM). Do NOT conflate T48 `0x3E` with
+  T76 `0x3E` — the latter is an unrelated adapter-init command that
+  corrupts reads when run standalone (xgecu-pro finding).
+- `write_block` (TL866II+ path): upstream always transfers
+  `write_buffer_size` payload bytes even when the final block is short
+  (it reads ahead into padded file data). We now pad short blocks to
+  `write_buffer_size` with `blank_value` before the EP2/EP3 split so the
+  transfer length matches what the firmware drains — same fix as the
+  T48 path. A `ds->size < write_buffer_size` block ≥ 57 bytes would
+  previously have left the firmware waiting for the remainder.
+- `read_jedec_row`/`write_jedec_row` put the row size **in bits** at
+  `msg[2]`; we currently derive it as `data.len() * 8`, which overstates
+  by up to 7 bits when the JEDEC fuse count isn't byte-aligned (upstream
+  passes `js->size` verbatim). Harmless today — no caller constructs
+  `JedecSet` yet — but if JEDEC fuse-map write support is wired up
+  later, thread the exact fuse count through rather than inferring it
+  from the packed byte length.
 
 ## `do_write` called `erase_chip` before `begin_transaction`
 
@@ -225,10 +406,13 @@ and the default (error) in one place. This also fixes batch mode:
 previously the ID was re-checked for every chip in a batch; now it's
 checked once at the start.
 
-**Remaining cleanup:** The `check_device_id: bool` parameter is still in
-the core API signatures (`operations.rs`) and the GUI still passes `true`
-to per-operation calls (with its own separate `check_chip_id` calls before
-each op). Removing the parameter entirely is tracked in ROADMAP.md.
+**Cleanup (done):** The `check_device_id: bool` parameter has been removed
+from the core API (`read_chip`, `read_chip_buffer`, `write_chip`,
+`write_chip_bytes`, `verify_chip`, `verify_chip_bytes`, `erase_chip`) and
+from `BatchConfig` — callers had all passed `false` since the
+consolidation above. The GUI keeps its `check_device_id` *option*, which
+gates the explicit pre-operation `check_chip_id` calls (the user's
+"skip ID check" escape hatch, analogous to CLI `-x`).
 
 ## `erase_chip` didn't check `can_erase` flag (fixed)
 
@@ -313,3 +497,125 @@ Two more mid-drag blanking mechanisms are guarded in `run()`:
 `MINIPRO_TUI_DEBUG_PAINT` (any value) overlays draws-per-second and the
 painted size on the keybar — distinguishes starved repaints (0 d/s
 during a drag) from terminal-side compositing artifacts.
+
+## T48 firmware update silently shared the TL866II+ parser — wrong format, always rejected (fixed)
+
+`t48.rs` re-exports `Tl866iiPlusProtocol` as `T48Protocol`, so
+`Protocol::firmware_update` on a T48 ran `firmware_update_tl866` — the
+`UpdateII.dat` parser, which gates on family `0xf8cc`. Every genuine T48
+image (`0xf048` family, 276-byte blocks, no XOR table) failed the version
+check with "Unsupported firmware version". Safe-fail — the check precedes
+any USB write — but the feature was a stub: upstream has a dedicated
+`t48_firmware_update` that was never ported.
+
+**Fix:** `t48::firmware_update_t48(handle, dat, out, progress)` ports
+`t48.c::t48_firmware_update` verbatim (16-byte header, `0x114`-byte
+blocks, `0xCDEF89AB45670123` bootloader magic @8, `0x3F` reset +
+`handle.reconnect(bool)` following the T56 handle-based pattern), and
+`operations::firmware_update` dispatches `ProgrammerModel::T48` to it.
+The shared trait impl returns `UnsupportedOperation` when `is_t48`,
+mirroring T56. Full format + wire spec: `docs/FIRMWARE-FORMATS.md`.
+
+## "Hardware version" is always 0 on T48/T56/T76 — never compare it (fixed)
+
+Upstream `minipro.c` hardcodes `handle->hw = 0` for T48/T56/T76; only
+TL866A/CS/II+ read a real hardware byte (sysinfo `msg[40]`). The firmware
+display string is `{hw}.{major}.{minor:02}`, so `00.1.03` on a T48 means
+firmware **1.03** — the `00` is a constant, not a revision. Downloader
+filenames (`firmware-T48-01.1.35.dat`) carry XGecu's product-line label,
+so the file's first component is *always* `01` while the device's is
+*always* `00`.
+
+The GUI's update-confirm `firmwareVersionNote` treated first-component
+mismatch as a "hardware revision differs" warning — it would have fired
+on every T48 update, telling users their image was incompatible when
+`1.03 → 1.35` is a routine same-line upgrade.
+
+**Fix:** `firmwareVersionNote` compares `{major}.{minor}` (the low u16 of
+the file version, which is what the device reports) and only evaluates
+the hw-rev warning when the installed side reports a real hw byte
+(`installed[0] !== 0` — TL866A/II+).
+
+## T48 `0x3E` pin-detect only works with pin drivers idle (fixed)
+
+The T48 contact bitmap reads **driven-pin state**, not socket contact,
+when a transaction is active: a fully seated DIP-8 returns
+`0F 00 00 00 F0` (ZIF 1-4 + 37-40, all contacts good) after
+`end_transaction`, but `01 00 00 00 C0` inside one — every driven pin
+reads open, so good chips report random bad contacts and operations
+abort on the pre-op gate. XGPro runs pin detect *before* beginning the
+transaction for the same reason.
+
+**Fix:** `pin_test_t48` sends `end_transaction` (0x04), issues `0x3E`,
+then re-issues `begin_transaction` so the caller's transaction state is
+restored transparently. Do not hoist the `0x3E` send above the end, and
+do not run it "inline" to save the re-begin — in-transaction results are
+garbage by design. Also confirmed from the same capture: the request's
+`chip_id` field is ignored (all values return identical responses); the
+bitmap is `resp[8..13]` LSB-first, bit set = contact.
+
+## T76 all-zeros chip ID / reads on one physical chip can be silicon marginality (environmental)
+
+Observed on a pair of ATTINY85V DIP-8 parts: chip A reads
+`0x1e930b` and programs fine on T48, T76, and TL866A; chip B reads
+`0x0000` chip ID and all-`0x00` data **on the T76 only**, while the
+same chip works on T48 and TL866A. Upstream C minipro on the same T76
+reproduces the failure identically (`expected 0x1E930B, got 0x0000` —
+same `ATTINY_A2` algorithm, FPGA reset OK), so the port is faithful:
+the T76's FPGA-driven timing exposes a marginal die that the
+bit-banged paths tolerate.
+
+The observed part was genuine (new from an authorized distributor),
+so clone/remark is not required for this failure — parametric
+outliers ship in genuine lots. Eliminations performed on chip B:
+reseat + lead inspection, per-pin ESD-diode DMM test (all pins
+healthy ~0.5-0.6 V), `--pulse` stretch to 500 us, and the ICSP
+physical path — all failed identically on the T76. Note the
+diagnostic flags that *don't* reach this device: `--spi_clock` is
+silently ignored (`can_adjust_clock` only arms for SPI-flash
+protocols, not AVR `0x1e`), and `--vcc`/`--vdd`/`--vpp` are rejected
+(`chip_info=0x81` is not a voltage-adjustable class). `--pulse`
+(`msg[12]`) is the only timing knob that flows to the T76 algorithm
+for this entry.
+
+Mechanism: same `ATTINY_A2` bitstream, different execution
+substrate. The T48/TL866A drive pins from MCU firmware loops with
+microseconds of natural slop; the T76 runs the algorithm as an FPGA
+bitstream at hardware-clock precision, likely at minimum legal
+setup/hold. A die whose HVSP-entry or input-threshold window is
+narrower than nominal gets forgiven by the sloppy path and missed by
+the precise one — direction is not inherent, a different marginal
+unit could fail on T48 and pass on T76.
+
+**Diagnostic rule before suspecting a port bug:** if one unit fails
+but a sibling of the same device entry succeeds on the same
+programmer and algorithm, and upstream C minipro reproduces the
+failure, treat it as chip marginality — reseat, inspect/clean leads,
+DMM-compare ESD diode drops, try `--pulse` and the ICSP path, and
+swap the chip. A `0x0000` ID with a successful "FPGA Reset OK" means
+transport and bitstream are working; the die simply isn't answering
+within the programmer's window.
+
+## T76 logic test ran against the wrong FPGA bitstream (fixed)
+
+`T76Protocol::logic_ic_test` reused the TL866 two-pass path verbatim,
+which assumes the pull-up/pull-down direction is a runtime flag on one
+engine. On the T76 the pull direction is baked into the FPGA
+configuration: upstream `t76_logic_ic_test` uploads `TestLgcPull`
+before the pull-up pass and `TestLgcDown` before the pull-down pass
+(`protocol_id = IC2_ALG_NONE`, util-algorithm variants `0x0300`/`0x0200`
+from `algorithm.xml`).
+
+The visible symptom was diagnostic: a good 7408 (verified on T48 and
+TL866A) failed every vector expecting `H`. `begin_transaction` had
+loaded `Test_100M` (util index 0 — logic devices carry `variant = 0`),
+so the 0x28 vector command ran on the SRAM-test engine and outputs
+read low. Vectors expecting `L` passed trivially; only the all-high
+vector failed — the signature to look for.
+
+The fix orchestrates bitstream upload + vector pass per direction in
+`operations::logic_ic_test` (T76 branch), shares `do_ic_test_pass`
+with the TL866 path, and calls `protocol.invalidate_bitstream()`
+afterwards so a stale `TestLgcDown` isn't mistaken for the next
+device's algorithm. T56 needs no per-pass upload — its TTL1/TTL2
+bitstream honors the runtime pull flag, so the shared path stays.

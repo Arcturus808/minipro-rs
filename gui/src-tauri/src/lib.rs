@@ -167,6 +167,7 @@ pub fn run() {
             commands::do_logic_test,
             commands::do_logic_identify,
             commands::do_spi_autodetect,
+            commands::run_health_check,
             commands::do_firmware_update,
             commands::read_file_bytes,
             commands::do_smart_diff,
@@ -183,6 +184,10 @@ pub fn run() {
             commands::write_fuses,
             commands::check_lock_protection,
             commands::get_fuse_bit_defs,
+            commands::download_algorithms,
+            commands::cancel_algo_download,
+            commands::open_download_dir,
+            commands::find_downloaded_firmware,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

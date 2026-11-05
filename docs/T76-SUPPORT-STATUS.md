@@ -11,15 +11,28 @@ SPI-NAND, parallel NAND, eMMC, and parallel NOR. The protocol was
 reverse-engineered from XGPro_T76.exe V13.19 and ported from Matt
 Brown's `t76-improvements` branch of C minipro.
 
-**Nothing has been validated on real T76 hardware.** All code is
-correct as far as we can tell from reading the C source, but hardware
-testing is required to confirm.
+**Hardware validation (2026-11):** SPI NOR chip ID, read, erase, program
+and verify tested on a real T76 (firmware 00.1.18). W25X20CL passed the
+full pipeline — ID `0x00ef3012`, byte-identical read vs TL866A, and a
+256 KB write+verify with zero diffs. PM25LV010 ID/read also worked
+(`0x00009d7c`) — though that specific chip later showed marginal/degrading
+output-driver behavior on *both* programmers (non-deterministic reads;
+a silicon issue, not a code issue). LE25FS406M@SOP8 (SOP8→DIP adapter)
+reads deterministically and programs 2047/2048 pages; its last page
+erases but refuses to program — a chip-specific quirk (works fine on
+W25X20CL), not a write-path bug. SPI autodetect (`-a` / GUI "8-pin")
+validated on W25X20CL (`0xef3012`, 21 matches) and LE25FS406M@SOP8
+(`0x621613`, 5 matches) — both via SOP8→DIP adapters;
+the 16-pin path (SPI25F21) is implemented but unvalidated pending a
+16-pin SPI chip. All other chip classes remain
+unvalidated — the code is correct as far as we can tell from reading the
+C source, but hardware testing is required to confirm.
 
 ## Chip Class Status
 
 | Chip Class | Protocol ID | Read | Erase | Program | Validated? |
 |------------|-------------|------|-------|---------|------------|
-| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | No |
+| SPI NOR (8-pin) | 0x03 | ✅ | ✅ | ✅ | **Yes — ID, read, write+verify (fw 00.1.18)** |
 | SPI NOR (16-pin) | 0x0f | ✅ | ✅ | ✅ | No |
 | SPI-NAND | 0x2d | ✅ | ✅ | ✅ | No |
 | Parallel NAND | 0x2d | ✅ | ✅ | ✅ | No |
@@ -41,7 +54,10 @@ redundant uploads.
 **Known limitation**: If a different chip requiring a different
 algorithm is selected in the same session, the flag is not reset.
 This matches C minipro behavior. Not an issue for batch operations
-(same chip, same algorithm).
+(same chip, same algorithm). Exception: SPI autodetect *does* reset
+the flag — it uploads SPI25F11/SPI25F21 outside `begin_transaction`,
+so clearing the flag forces the next selected device's own algorithm
+to upload.
 
 ### OVC safety check
 `MiniproHandle::begin_transaction()` polls `get_ovc_status()` after
@@ -111,9 +127,13 @@ placeholder. Real capacity is detected at runtime (see above).
 
 ## Known Issues
 
-1. **No hardware validation** — all chip classes are untested
-2. **`algorithm.xml` not bundled** — users must provide it; without it,
-   T56/T76 can't upload bitstreams and most operations fail
+1. **Limited hardware validation** — only SPI NOR (8-pin) chip ID + read
+   verified on real hardware; all other chip classes untested
+2. **`algorithm.xml` required, not bundled** — the T56/T76 FPGA ships
+   blank, so every chip needs an uploaded bitstream. Without
+   `algorithm.xml`, `begin_transaction` now fails hard (matching
+   upstream); generate it from the XGPro installer with upstream
+   `dump-alg-minipro.bash`
 3. **Database is outdated** — V12.91 vs V13.19 (2,028 missing chips)
 4. **`eprintln!` logging** — protocol layer doesn't integrate with GUI
    log system (cross-cutting issue, not T76-specific)
@@ -122,8 +142,10 @@ placeholder. Real capacity is detected at runtime (see above).
 6. **Parallel NOR program** — non-functional (upstream limitation)
 7. **eMMC partition selection** — only USER partition accessible;
    BOOT1/BOOT2/RPMB need a `--partition` CLI flag
-8. **Logic IC test** — T76 needs bitstream reload between pull-up/pull-
-   down passes (known limitation, reuses TL866II+ two-pass logic)
+8. ~~**Logic IC test** — T76 needs bitstream reload between
+   pull-up/pull-down passes~~ FIXED: `operations::logic_ic_test` now
+   uploads `TestLgcPull`/`TestLgcDown` per pass and invalidates the
+   bitstream cache afterwards, matching upstream. Verified on a 7408.
 
 ## Comparison with Matt Brown's t76-improvements branch
 

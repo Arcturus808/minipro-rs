@@ -150,6 +150,23 @@ struct Cli {
     #[arg(long = "logicic-out", alias = "logicic_out", value_name = "FILE")]
     logicic_out: Option<PathBuf>,
 
+    /// Chip read-stability health check: repeat chip-ID and full-memory
+    /// reads N times, then report how the results disagree. Read-only —
+    /// detects marginal/degrading chips. [default: 5 passes]
+    #[arg(long = "health-check", alias = "health_check", num_args = 0..=1, default_missing_value = "5", value_name = "PASSES")]
+    health_check: Option<u32>,
+
+    /// Write the majority-vote consensus buffer to FILE when the health
+    /// check finds instability (best-effort recovery dump).
+    #[arg(long = "consensus-out", alias = "consensus_out", value_name = "FILE")]
+    consensus_out: Option<PathBuf>,
+
+    /// With --health-check: compare the read image against FILE (known-good
+    /// reference, e.g. the image that was written). Catches consistent
+    /// corruption that stability analysis can't.
+    #[arg(long = "reference", alias = "reference", value_name = "FILE")]
+    reference: Option<PathBuf>,
+
     /// Identify an unknown logic IC by testing all database entries
     /// with the given pin count. Requires --pin-count.
     #[arg(long = "logic-identify", action = ArgAction::SetTrue)]
@@ -187,7 +204,7 @@ struct Cli {
     #[arg(short = 't', long = "hardware-check", action = ArgAction::SetTrue)]
     hardware_check: bool,
 
-    /// Test pin contact of the chip in the ZIF socket (TL866II+/T48 only).
+    /// Test pin contact of the chip in the ZIF socket (TL866II+ only).
     /// With an operation, runs first and aborts it on bad pins; failures
     /// are annotated with the ZIF socket position
     #[arg(short = 'z', long = "pin-check", action = ArgAction::SetTrue)]
@@ -236,6 +253,28 @@ struct Cli {
     /// Set the I2C slave address (T76 only), e.g. 0xA0. Equivalent to -o address=<hex>.
     #[arg(long = "address", value_name = "HEX")]
     address: Option<String>,
+
+    /// Download T56/T76 FPGA algorithm definitions and firmware images from
+    /// the official XGPro release and generate algorithm.xml.
+    /// No programmer hardware required.
+    #[arg(long = "download-algorithms", action = ArgAction::SetTrue)]
+    download_algorithms: bool,
+
+    /// Output directory for --download-algorithms
+    /// (default: per-user data directory).
+    #[arg(long = "output", value_name = "DIR")]
+    output: Option<PathBuf>,
+
+    /// Use a local XGPro archive instead of downloading — accepts the outer
+    /// .rar, the setup .exe, or the inner RAR; role is auto-detected.
+    /// May be given twice (once per archive).
+    #[arg(long = "from-file", value_name = "FILE", action = ArgAction::Append)]
+    from_file: Vec<PathBuf>,
+
+    /// Override the XGPro download URL base for mirrors.
+    /// The pinned SHA-256 checksums are still enforced.
+    #[arg(long = "xgpro-url", value_name = "URL")]
+    xgpro_url: Option<String>,
 
     /// Compare two firmware files (byte-aligned diff with trailing-padding handling).
     /// Pass two file paths: --diff fileA.bin fileB.bin

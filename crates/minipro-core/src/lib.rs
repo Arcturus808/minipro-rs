@@ -20,7 +20,7 @@
 //! let device = std::sync::Arc::new(find_device(&db, "AT28C256", ProgrammerModel::Tl866iiPlus)?);
 //! let mut handle = MiniproHandle::open()?;
 //! handle.begin_transaction(device)?;
-//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0, "auto", true, None)?;
+//! read_chip(&mut handle, std::path::Path::new("dump.bin"), 0, "auto", None)?;
 //! handle.end_transaction()?;
 //! # Ok::<(), minipro_core::error::MiniproError>(())
 //! ```
@@ -38,10 +38,13 @@ pub mod diff;
 pub mod error;
 pub mod format;
 pub mod handle;
+pub mod health;
 pub mod icsp;
 pub mod operations;
 pub mod protocol;
 pub mod usb;
+pub(crate) mod util;
+pub mod xgpro_fetch;
 pub mod zif;
 
 // Re-export the most commonly used types so callers can write
@@ -52,7 +55,7 @@ pub use batch::{
 };
 pub use database::{
     find_device, find_device_any, find_devices_by_chip_id, list_devices, list_devices_for_model,
-    list_logic_ics_by_pin_count, DatabasePaths,
+    list_logic_ics_by_pin_count, user_data_dir, DatabasePaths,
 };
 pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,
@@ -64,10 +67,12 @@ pub use diff::{
 };
 pub use error::{MiniproError, Result};
 pub use handle::MiniproHandle;
+pub use health::{HealthReport, HealthVerdict, RegionStat};
 pub use icsp::{icsp_wiring, IcspWire, IcspWiring};
 pub use operations::{
-    firmware_update, hardware_check, logic_auto_find, logic_ic_test, pin_contact_check, read_fuses,
-    spi_autodetect, spi_autodetect_and_lookup, write_fuses, AutoFindEntry, FuseValue, OpStats,
-    SizeMismatch, SpiAutodetectResult,
+    firmware_update, hardware_check, health_check, logic_auto_find, logic_ic_test,
+    pin_check_gate_applies, pin_contact_check, read_fuses, spi_autodetect,
+    spi_autodetect_and_lookup, write_fuses, AutoFindEntry, FuseValue, OpStats, SizeMismatch,
+    SpiAutodetectResult,
 };
 pub use protocol::{LogicTestResult, PinTestResult};

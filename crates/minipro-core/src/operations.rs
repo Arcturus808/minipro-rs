@@ -15,7 +15,7 @@ use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::{t56, tl866a, DataSet},
+    protocol::{t48, t56, tl866a, DataSet},
 };
 
 /// When the file is smaller than the device, byte-programmable chips (UV
@@ -73,6 +73,18 @@ pub struct OpStats {
     pub bytes: usize,
     /// CRC-32 (ISO-HDLC / PKZIP) of the data buffer.
     pub crc32: u32,
+}
+
+impl OpStats {
+    /// Stats for an in-memory buffer (e.g. a stability-checked read that
+    /// bypasses `read_chip`).
+    pub fn from_buffer(buf: &[u8]) -> Self {
+        let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(buf);
+        Self {
+            bytes: buf.len(),
+            crc32,
+        }
+    }
 }
 
 /// Resolve the effective file format: use `fmt` unless it is `"auto"`, in
@@ -156,12 +168,94 @@ pub fn read_chip(
     path: &Path,
     page: u8,
     format: &str,
-    check_device_id: bool,
-    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+    progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
-    if check_device_id {
-        check_chip_id(handle)?;
+    let device_name = handle.device()?.name.clone();
+    let buf = read_chip_buffer(handle, page, progress)?;
+    write_file(path, format, &buf, Some(&device_name))?;
+    Ok(OpStats::from_buffer(&buf))
+}
+
+/// Read chip memory `passes` times, comparing passes for read-path
+/// stability (the Read-panel counterpart of [`health_check`]).
+///
+/// Returns the effective image plus a [`crate::health::HealthReport`]:
+/// the consistent buffer when all completed passes agree, or the
+/// majority-vote consensus (`report.consensus`) when they disagree.
+/// Errors only when no pass completes; a partial run returns the
+/// completed subset with `report.verdict == Incomplete`.
+///
+/// `progress` reports cumulative `(bytes_done, bytes_total)` across all
+/// passes.
+pub fn read_chip_stable(
+    handle: &mut MiniproHandle,
+    page: u8,
+    passes: usize,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<(Vec<u8>, crate::health::HealthReport)> {
+    let device = handle.device()?.clone();
+    let code_size = handle.protocol.effective_code_size(&device) as usize;
+    let pass_size = match page {
+        0x00 => code_size,
+        0x01 => device.data_memory_size as usize,
+        _ => code_size,
+    };
+    let total = pass_size.saturating_mul(passes);
+    let mut reads = Vec::with_capacity(passes);
+    let mut pass_errors = Vec::new();
+    let mut first_error = None;
+    for i in 0..passes {
+        let base = i * pass_size;
+        let result = match progress.as_mut() {
+            Some(f) => read_chip_buffer(handle, page, Some(&mut |done, _| f(base + done, total))),
+            None => read_chip_buffer(handle, page, None),
+        };
+        match result {
+            Ok(buf) => reads.push(buf),
+            Err(e) => {
+                pass_errors.push(format!("read pass {}: {}", i + 1, e));
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+                if let Some(f) = progress.as_mut() {
+                    f(base + pass_size, total);
+                }
+            }
+        }
     }
+    if reads.is_empty() {
+        return Err(first_error
+            .unwrap_or_else(|| MiniproError::Protocol("no read passes completed".to_string())));
+    }
+    let first = reads[0].clone();
+    let report = crate::health::build_report(
+        device.name.clone(),
+        pass_size,
+        passes,
+        Vec::new(),
+        if device.chip_id != 0 {
+            Some(device.chip_id)
+        } else {
+            None
+        },
+        Vec::new(),
+        reads,
+        pass_errors,
+        None,
+    );
+    let data = report.consensus.clone().unwrap_or(first);
+    Ok((data, report))
+}
+
+/// Read chip memory into a buffer (no file output).
+///
+/// Shared by `read_chip` and `health_check` — repeated reads need the raw
+/// data, not a file.
+pub fn read_chip_buffer(
+    handle: &mut MiniproHandle,
+    page: u8,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<Vec<u8>> {
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -211,9 +305,7 @@ pub fn read_chip(
         }
     }
 
-    write_file(path, format, &buf, Some(&device.name))?;
-    let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC).checksum(&buf);
-    Ok(OpStats { bytes: size, crc32 })
+    Ok(buf)
 }
 
 /// Write `path` to chip memory.
@@ -231,12 +323,8 @@ pub fn write_chip(
     format: &str,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -365,12 +453,8 @@ pub fn write_chip_bytes(
     page: u8,
     size_mismatch: SizeMismatch,
     skip_blank: bool,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -488,12 +572,8 @@ pub fn verify_chip(
     path: &Path,
     page: u8,
     format: &str,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -564,12 +644,8 @@ pub fn verify_chip_bytes(
     handle: &mut MiniproHandle,
     mut expected: Vec<u8>,
     page: u8,
-    check_device_id: bool,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
     let device = handle.device()?.clone();
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
@@ -748,10 +824,7 @@ fn write_osccal(handle: &mut MiniproHandle, data: &[u8]) -> Result<()> {
 /// Silently returns `Ok(())` if the device does not support electrical erase
 /// (`can_erase` is false, e.g. UV EPROMs). This matches upstream minipro's
 /// `erase_device()` which checks `device->flags.can_erase` before erasing.
-pub fn erase_chip(handle: &mut MiniproHandle, check_device_id: bool) -> Result<()> {
-    if check_device_id {
-        check_chip_id(handle)?;
-    }
+pub fn erase_chip(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
 
     // Not all chips can be erased (e.g. UV EPROMs require UV light, not
@@ -1207,6 +1280,21 @@ pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
     handle.protocol.hardware_check(&handle.usb)
 }
 
+/// Whether the pre-operation pin-contact gate should run for this
+/// model/mode/device.
+///
+/// The gate applies only on TL866II+/T48 (the two models with a real
+/// `0x3E` pin-detect command — T76's `0x3E` is an unrelated adapter-init
+/// that corrupts subsequent reads), only in ZIF mode, and only when the
+/// device carries contact-test data (`pin_map` low byte nonzero).
+/// Frontends call [`pin_contact_check`] when this returns true and abort
+/// the operation if `bad_pins` is non-empty.
+pub fn pin_check_gate_applies(model: ProgrammerModel, icsp_active: bool, pin_map: u32) -> bool {
+    matches!(model, ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48)
+        && !icsp_active
+        && pin_map & 0xFF != 0
+}
+
 /// Perform a pin-contact test on the device currently loaded in the ZIF socket.
 ///
 /// `infoic_path` must point to `infoic.xml` so that the programmer-independent
@@ -1234,7 +1322,76 @@ pub fn pin_contact_check(
 /// states, and error count.  Returns an error if the IC fails any vector.
 pub fn logic_ic_test(handle: &mut MiniproHandle) -> Result<crate::protocol::LogicTestResult> {
     let device = handle.device()?.clone();
+    if handle.info.model == ProgrammerModel::T76 {
+        return logic_ic_test_t76(handle, &device);
+    }
     handle.protocol.logic_ic_test(&handle.usb, &device)
+}
+
+/// T76 logic IC test. Unlike the TL866-family (and the T56, which uses a
+/// single TTL1/TTL2 bitstream with a runtime pull flag), the T76 bakes the
+/// pull direction into the FPGA config — upstream `t76_logic_ic_test`
+/// uploads `TestLgcPull` before the pull-up pass and `TestLgcDown` before
+/// the pull-down pass (`protocol_id = IC2_ALG_NONE`, utility-algorithm
+/// variants 0x0300/0x0200 in `algorithm.xml`).
+fn logic_ic_test_t76(
+    handle: &mut MiniproHandle,
+    device: &Device,
+) -> Result<crate::protocol::LogicTestResult> {
+    crate::protocol::tl866iiplus::logic_test_params(device)?;
+    let algo_path = handle
+        .db_paths
+        .as_ref()
+        .and_then(|p| p.algorithms.as_ref())
+        .ok_or_else(|| {
+            MiniproError::Protocol(
+                "algorithm.xml not found — required to upload the logic-test \
+                 bitstreams on T76"
+                    .into(),
+            )
+        })?
+        .clone();
+
+    let result: Result<(Vec<u8>, Vec<u8>)> = (|| {
+        let step1 = t76_ic_test_pass_with_bitstream(handle, device, &algo_path, false)?;
+        let step2 = t76_ic_test_pass_with_bitstream(handle, device, &algo_path, true)?;
+        Ok((step1, step2))
+    })();
+    // The last upload was TestLgcDown, not the selected device's algorithm —
+    // force the next begin_transaction to re-upload.
+    handle.protocol.invalidate_bitstream();
+    let (step1, step2) = result?;
+
+    Ok(crate::protocol::tl866iiplus::build_logic_test_result(
+        device, step1, step2,
+    ))
+}
+
+/// Upload the pull-specific T76 utility bitstream, then run one vector pass.
+fn t76_ic_test_pass_with_bitstream(
+    handle: &mut MiniproHandle,
+    device: &Device,
+    algo_path: &Path,
+    pull: bool,
+) -> Result<Vec<u8>> {
+    // IC2_ALG_NONE → T76_UTIL_TABLE[variant >> 8]: 0x03 = TestLgcPull,
+    // 0x02 = TestLgcDown (matches upstream do_ic_test in t76.c).
+    let probe = Device {
+        protocol_id: 0x00,
+        variant: if pull { 0x0200 } else { 0x0300 },
+        ..Default::default()
+    };
+    let algo = crate::algorithm::get_algorithm(
+        &probe,
+        handle.info.model,
+        handle.icsp,
+        crate::algorithm::V_3V3,
+        algo_path,
+    )?;
+    handle
+        .protocol
+        .upload_bitstream(&handle.usb, &algo.bitstream)?;
+    crate::protocol::tl866iiplus::do_ic_test_pass(&handle.usb, device, pull)
 }
 
 /// A single result from the logic IC auto-identify (auto-find) scan.
@@ -1366,7 +1523,9 @@ pub fn logic_auto_find(
 ///
 /// Supported formats:
 ///  - TL866A/CS: `update.dat`
-///  - TL866II+/T48: `UpdateII.dat`
+///  - TL866II+: `UpdateII.dat`
+///  - T48: `updateT48.dat`
+///  - T56: `updateT56.dat`
 ///  - T76: `updateT76.dat`
 pub fn firmware_update(
     handle: &mut MiniproHandle,
@@ -1378,6 +1537,7 @@ pub fn firmware_update(
         ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
             tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)
         }
+        ProgrammerModel::T48 => t48::firmware_update_t48(handle, firmware_data, out, progress),
         ProgrammerModel::T56 => t56::firmware_update_t56(handle, firmware_data, out, progress),
         _ => handle.protocol.firmware_update(&handle.usb, firmware_data),
     }
@@ -1387,7 +1547,44 @@ pub fn firmware_update(
 ///
 /// `id_type` selects the package: 0 = 8-pin SOP/DIP, 1 = 16-pin.
 /// Returns the 3-byte JEDEC manufacturer+device ID packed into a u32.
+///
+/// On T56/T76 the SPI FPGA bitstream must be uploaded first — mirrors
+/// upstream `t56_spi_autodetect`/`t76_spi_autodetect`: a synthetic device
+/// with `protocol_id=0x03` and variant `0x1100` (8-pin) or `0x2100` (16-pin)
+/// resolves `SPI25F11`/`SPI25F21` via the normal algorithm lookup, then the
+/// protocol impl sends 0x37.
 pub fn spi_autodetect(handle: &mut MiniproHandle, id_type: u8) -> Result<u32> {
+    if matches!(
+        handle.info.model,
+        ProgrammerModel::T56 | ProgrammerModel::T76
+    ) {
+        let algo_path = handle
+            .db_paths
+            .as_ref()
+            .and_then(|p| p.algorithms.as_ref())
+            .ok_or_else(|| {
+                MiniproError::Protocol(
+                    "algorithm.xml not found — required to upload the SPI \
+                     autodetect bitstream on T56/T76"
+                        .into(),
+                )
+            })?;
+        let device = Device {
+            protocol_id: 0x03,
+            variant: if id_type == 0 { 0x1100 } else { 0x2100 },
+            ..Default::default()
+        };
+        let algo = crate::algorithm::get_algorithm(
+            &device,
+            handle.info.model,
+            handle.icsp,
+            crate::algorithm::V_3V3,
+            algo_path,
+        )?;
+        handle
+            .protocol
+            .upload_bitstream(&handle.usb, &algo.bitstream)?;
+    }
     handle.protocol.spi_autodetect(&handle.usb, id_type)
 }
 
@@ -1423,4 +1620,78 @@ pub fn spi_autodetect_and_lookup(
     let matches =
         crate::database::find_devices_by_chip_id(paths, jedec_id, pin_count, handle.info.model)?;
     Ok(SpiAutodetectResult { jedec_id, matches })
+}
+
+/// Chip read-stability health check.
+///
+/// Reads the chip `read_passes` times plus `id_runs` chip-ID reads, then
+/// characterizes how the results disagree. Read-only — never modifies chip
+/// contents. The device must already be open (`begin_transaction`).
+///
+/// `reference` is an optional known-good image (e.g. the file that was
+/// written to the chip). When supplied, the effective read image is
+/// compared against it — catching deterministic corruption that pure
+/// stability analysis can't (all passes agreeing on the wrong data).
+///
+/// `progress` reports `(done, total)` in operation units (ID reads + full
+/// reads). Mid-read failures are recorded and the remaining passes still
+/// run — an intermittent chip may answer some passes and not others.
+pub fn health_check(
+    handle: &mut MiniproHandle,
+    read_passes: usize,
+    id_runs: usize,
+    reference: Option<&[u8]>,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<crate::health::HealthReport> {
+    let device = handle.device()?.clone();
+    let size = handle.protocol.effective_code_size(&device) as usize;
+    let total = id_runs + read_passes;
+    let mut done = 0usize;
+
+    // ── Chip-ID runs (cheap; a drifting ID is itself diagnostic) ────────
+    let mut chip_ids = Vec::new();
+    let mut chip_id_errors = Vec::new();
+    if device.flags.has_chip_id {
+        for _ in 0..id_runs {
+            match handle.protocol.get_chip_id(&handle.usb, &device) {
+                Ok((_id_type, id)) => chip_ids.push(id),
+                Err(e) => chip_id_errors.push(e.to_string()),
+            }
+            done += 1;
+            if let Some(ref mut f) = progress {
+                f(done, total);
+            }
+        }
+    }
+
+    // ── Full-read passes ────────────────────────────────────────────────
+    let mut reads = Vec::with_capacity(read_passes);
+    let mut pass_errors = Vec::new();
+    for i in 0..read_passes {
+        match read_chip_buffer(handle, 0x00, None) {
+            Ok(buf) => reads.push(buf),
+            Err(e) => pass_errors.push(format!("read pass {}: {}", i + 1, e)),
+        }
+        done += 1;
+        if let Some(ref mut f) = progress {
+            f(done, total);
+        }
+    }
+
+    let expected = if device.chip_id != 0 {
+        Some(device.chip_id)
+    } else {
+        None
+    };
+    Ok(crate::health::build_report(
+        device.name.clone(),
+        size,
+        read_passes,
+        chip_ids,
+        expected,
+        chip_id_errors,
+        reads,
+        pass_errors,
+        reference.map(|r| r.to_vec()),
+    ))
 }

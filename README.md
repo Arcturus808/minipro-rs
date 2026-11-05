@@ -160,12 +160,13 @@ The distributed binary is a **single self-contained `.exe`** — no Cygwin, no M
 1. Download `infoic.xml` and `logicic.xml` from the [release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) (included in the `.deb` / `.rpm` packages, or available in the repo's `data/` directory).
 2. Place both files in **any one** of these locations:
    - `%PROGRAMDATA%\minipro-rs\` — recommended for system-wide use
+   - `%LOCALAPPDATA%\minipro-rs\` — per-user, no admin rights needed
    - Same directory as `minipro.exe` — good for portable setups
    - Current working directory — quick but not persistent
    - A directory pointed to by the `MINIPRO_HOME` environment variable
    - `%PROGRAMDATA%\minipro\` — fallback if you already have the C `minipro` installed; note this uses the C version's database, which may be older or differ from the one shipped with this project
 
-   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `%PROGRAMDATA%\minipro-rs\` → `MINIPRO_HOME` → `%PROGRAMDATA%\minipro\`.
+   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `MINIPRO_HOME` → `%LOCALAPPDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro\`.
 
 > **GUI users don't need this step** — the `.msi` / `.exe` installer bundles the full chip database.
 
@@ -176,6 +177,8 @@ The distributed binary is a **single self-contained `.exe`** — no Cygwin, no M
 3. Choose **WinUSB** and click **Install Driver**.
 
 This is a one-time step per machine.  It is the same requirement the original C `minipro` has on Windows — this project does not add any new hurdle; it only removes the `libusb` runtime layer that sat on top.
+
+> **Programmer shows a garbled name in Device Manager?** XGecu programmers ship a buggy USB product string — Windows displays the raw bytes as random CJK characters. It's cosmetic and harmless (not a counterfeit sign, not a driver problem). See [docs/GARBLED-DEVICE-NAME.md](docs/GARBLED-DEVICE-NAME.md) for the explanation and how to give it a proper name.
 
 **GUI installer** — The `.msi` / `.exe` installer includes the full chip database and the Hack font. After installation, run `MINIPRO-RS` from the Start Menu. No manual file copying needed.
 
@@ -329,19 +332,44 @@ Run `minipro --help` for the full list of options.
 
 ## T56 / T76 FPGA algorithm support
 
-> **Note:** The T56 and T76 programmers require FPGA bitstream algorithms for certain chip families. These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
+> **Note:** The T56 and T76 programmers have a host-configurable FPGA — they require an uploaded bitstream algorithm for **every** chip (SPI NOR uses `SPI25F11`/`SPI25F21`; even `protocol_id 0` devices use a utility bitstream). These algorithms are stored in **`algorithm.xml`** (distinct from `infoic.xml` / `logicic.xml`).
 >
-> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, T56/T76 can still program many standard devices (SPI NOR, I2C EEPROM, etc.), but some advanced or newer chips will fail with a protocol error.
+> This file is **not included** in our releases for the same IP reasons as the original `minipro` project. Without it, **no chip operation works on T56/T76** — `begin_transaction` fails with an `algorithm.xml not found` error. Generate it with `minipro --download-algorithms` — a pure-Rust replacement for upstream's `dump-alg-minipro.bash` that needs no bash, bsdtar, or other external tools (so it works natively on Windows too).
 >
-> The algorithm parser is now implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC32 verification, and T76 level-2 zero-run decompression.
+> The algorithm parser is implemented — when `algorithm.xml` is present, T56/T76 FPGA bitstream algorithms are automatically loaded and uploaded during `begin_transaction`. The parser handles base64+gzip decoding, CRC verification, and T76 level-2 zero-run decompression.
 >
-> To enable full T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
-> 1. The directory containing the `minipro` executable
-> 2. The current working directory
-> 3. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)
-> 4. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
+> To enable T56/T76 support, place an `algorithm.xml` file in one of these locations (searched in order):
+> 1. The current working directory
+> 2. The directory containing the `minipro` executable
+> 3. The directory pointed to by the `MINIPRO_HOME` environment variable
+> 4. A per-user data directory — writable without admin/root (`%LOCALAPPDATA%\minipro-rs\` on Windows, `~/.local/share/minipro-rs/` on Linux, `~/Library/Application Support/minipro-rs/` on macOS)
+> 5. The `minipro-rs` system data directory (`/usr/share/minipro-rs/` on Linux, `%PROGRAMDATA%\minipro-rs\` on Windows)
+> 6. The C `minipro` system data directory as a fallback (`/usr/share/minipro/` on Linux, `%PROGRAMDATA%\minipro\` on Windows) — so users with the C version installed don't need to duplicate the file
 >
 > The CLI also accepts `--algorithms PATH` to specify the file directly.
+
+### Downloading algorithm.xml and firmware images
+
+`minipro --download-algorithms` downloads the official XGPro setup archives, verifies their pinned SHA-256 checksums, extracts the T56/T76 `.alg` files and programmer firmware images, generates a validated `algorithm.xml`, and writes everything atomically to the output directory. No programmer needs to be connected. Every generated bitstream is decoded and CRC-verified before the file is considered complete.
+
+```bash
+# Default: writes to the per-user data dir (search-path step 4 above)
+minipro --download-algorithms
+
+# Custom output directory
+minipro --download-algorithms --output /usr/local/share/minipro-rs
+
+# Fully offline: supply the archives yourself (outer .rar, the setup
+# .exe, or the bare inner RAR — auto-detected; repeat for both archives)
+minipro --download-algorithms \
+    --from-file xgproV1304_T48_T56_T866II_Setup.rar \
+    --from-file xgpro_T76_V1319.rar
+
+# Mirror / custom URL base (pinned checksums still enforced)
+minipro --download-algorithms --xgpro-url https://mirror.example/Xgpro/13
+```
+
+Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866II+, T48, T56, T76) — useful for `minipro -F`. If a programmer is connected when the command finishes, the output notes which bundled image corresponds to it; this is informational only — the tool never flashes firmware on its own, and the bundled image may be older than the one already installed.
 
 ---
 

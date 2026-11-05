@@ -12,9 +12,11 @@ use minipro_core::{
     database::{find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
-        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, logic_auto_find,
-        logic_ic_test, normalize_chip_id, pin_contact_check, read_chip, read_file,
-        spi_autodetect_and_lookup, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes,
+        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, health_check,
+        logic_auto_find, logic_ic_test, normalize_chip_id, pin_check_gate_applies,
+        pin_contact_check, read_chip,
+        read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes,
+        write_chip, write_chip_bytes,
         write_file, OpStats, SizeMismatch,
     },
     MiniproHandle,
@@ -70,6 +72,7 @@ fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
             "supported": dto.supported,
             "pass": dto.pass,
             "bad_pins": dto.bad_pins,
+            "expected_pins": dto.expected_pins,
             "message": dto.message,
         }),
     );
@@ -79,7 +82,9 @@ fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
 ///
 /// Silently returns `Ok(())` when:
 /// - `pin_check` is false (user unchecked the box)
-/// - Programmer model is not TL866II+/T48
+/// - Programmer model is not TL866II+ — the only model with an upstream
+///   pin-test implementation. The T48's own 0x3E pin-detect command is a
+///   documented but never-implemented protocol.
 /// - ICSP mode is active (pin test is ZIF-only)
 /// - Device has `pin_map == 0` (no contact-test data in database)
 ///
@@ -95,17 +100,8 @@ fn run_pin_check_if_enabled(
     if !enabled {
         return Ok(());
     }
-    if !matches!(
-        handle.info.model,
-        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-    ) {
-        return Ok(());
-    }
-    if icsp_mode != "zif" {
-        return Ok(());
-    }
     let device = handle.device().map_err(|e| e.to_string())?.clone();
-    if device.pin_map & 0xFF == 0 {
+    if !pin_check_gate_applies(handle.info.model, icsp_mode != "zif", device.pin_map) {
         return Ok(());
     }
 
@@ -113,10 +109,12 @@ fn run_pin_check_if_enabled(
     let result = pin_contact_check(handle, infoic_path).map_err(|e| e.to_string())?;
     let pass = result.bad_pins.is_empty();
     let count = result.bad_pins.len();
+    let all_open = result.all_expected_open();
     let dto = PinTestResultDto {
         supported: true,
         pass,
         bad_pins: result.bad_pins.clone(),
+        expected_pins: result.expected_pins.clone(),
         message: if pass {
             "All pins OK".into()
         } else {
@@ -133,13 +131,16 @@ fn run_pin_check_if_enabled(
             .map(|p| p.to_string())
             .collect::<Vec<_>>()
             .join(", ");
+        // Every expected pin open almost always means no chip is seated.
+        let detail = if all_open {
+            format!("all {count} expected pins open — is a chip seated in the socket?")
+        } else {
+            format!("bad contact on pin(s) {pin_list}")
+        };
         emit_log(
             window,
             "warn",
-            &format!(
-                "Pin contact check failed: bad contact on pin(s) {}. Operation aborted.",
-                pin_list
-            ),
+            &format!("Pin contact check failed: {detail}. Operation aborted."),
         );
         emit_pin_test_result(window, &dto);
         return Err(format!(
@@ -465,6 +466,9 @@ pub struct OperationOptions {
     /// Run pin contact check before the operation (matches XGPro "Pin Detect").
     #[serde(default = "default_true")]
     pub pin_check: bool,
+    /// Read the chip several times and compare passes (read path only).
+    #[serde(default)]
+    pub stability_check: bool,
 }
 
 fn default_icsp_mode() -> String {
@@ -699,29 +703,18 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 /// programmer of that model so the GUI can be exercised without hardware.
 /// No USB handle is opened — operations that need the device will fail.
 fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
-    let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
+    let Some(info) = minipro_core::device::ProgrammerInfo::fake_from_env()
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
-    let name = name.trim();
-    if name.is_empty() {
-        return Ok(None);
-    }
-    let model = name.parse::<ProgrammerModel>()?;
-    let info = minipro_core::device::ProgrammerInfo {
-        model,
-        status: minipro_core::device::ProgrammerStatus::Normal,
-        firmware: 0,
-        firmware_str: "fake".to_string(),
-        device_code: "00".to_string(),
-        serial_number: "FAKE".to_string(),
-        hardware_version: 0,
-    };
+    let model = info.model;
     {
         let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         *guard = Some(info);
     }
     let _ = state.reload_device_names_for_model(model);
-    log::warn!("MINIPRO_FAKE_PROGRAMMER={name}: no hardware connected, model faked");
+    log::warn!("MINIPRO_FAKE_PROGRAMMER={model}: no hardware connected, model faked");
     Ok(Some(ProgrammerInfoDto {
         model: model.to_string(),
         firmware: "fake".to_string(),
@@ -1150,6 +1143,71 @@ pub async fn deselect_device(state: State<'_, Arc<AppState>>) -> Result<(), Stri
 
 // ── Chip operations ───────────────────────────────────────────────────────
 
+/// Read passes for the stability-check read option.
+const READ_STABILITY_PASSES: usize = 5;
+
+/// Shared stability-checked read for `do_read` / `read_chip_to_bytes`:
+/// runs `read_chip_stable` with progress events and logs the outcome.
+/// Returns the effective image — the consistent buffer when all passes
+/// agree, or the majority-vote consensus when they disagree.
+fn read_chip_stable_logged(
+    handle: &mut MiniproHandle,
+    page: u8,
+    window: &Window,
+    op_name: &str,
+) -> Result<(Vec<u8>, OpStats), String> {
+    emit_log(
+        window,
+        "info",
+        &format!("Read stability check: {} passes", READ_STABILITY_PASSES),
+    );
+    let win = window.clone();
+    let op = op_name.to_string();
+    let (data, report) = read_chip_stable(
+        handle,
+        page,
+        READ_STABILITY_PASSES,
+        Some(&mut |done, total| {
+            let _ = win.emit(
+                "progress",
+                ProgressPayload {
+                    done,
+                    total,
+                    operation: op.clone(),
+                },
+            );
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+    for note in &report.notes {
+        emit_log(window, "info", note);
+    }
+    for err in &report.pass_errors {
+        emit_log(window, "warn", err);
+    }
+    if report.unstable_bytes > 0 {
+        emit_log(
+            window,
+            "warn",
+            &format!(
+                "Read instability: {} byte position(s) disagreed across {}/{} passes — using majority-vote consensus",
+                report.unstable_bytes, report.read_passes_completed, report.read_passes_requested
+            ),
+        );
+    } else {
+        emit_log(
+            window,
+            "info",
+            &format!(
+                "Read stable: {}/{} passes byte-identical",
+                report.read_passes_completed, report.read_passes_requested
+            ),
+        );
+    }
+    let stats = OpStats::from_buffer(&data);
+    Ok((data, stats))
+}
+
 /// Read chip memory to a file.
 #[tauri::command]
 pub async fn do_read(
@@ -1221,24 +1279,36 @@ pub async fn do_read(
                 }
             }
 
-            let stats = read_chip(
-                &mut handle,
-                Path::new(&path_clone),
-                page,
-                &options_clone.format,
-                false, // chip ID already checked above
-                Some(&mut |done, total| {
-                    let _ = window_clone.emit(
-                        "progress",
-                        ProgressPayload {
-                            done,
-                            total,
-                            operation: op_name.clone(),
-                        },
-                    );
-                }),
-            )
-            .map_err(|e| e.to_string())?;
+            let stats = if options_clone.stability_check {
+                let (data, stats) =
+                    read_chip_stable_logged(&mut handle, page, &window_clone, &op_name)?;
+                write_file(
+                    Path::new(&path_clone),
+                    &options_clone.format,
+                    &data,
+                    Some(&device.name),
+                )
+                .map_err(|e| e.to_string())?;
+                stats
+            } else {
+                read_chip(
+                    &mut handle,
+                    Path::new(&path_clone),
+                    page,
+                    &options_clone.format,
+                    Some(&mut |done, total| {
+                        let _ = window_clone.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: op_name.clone(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?
+            };
 
             Ok::<OpStats, String>(stats)
         })();
@@ -1322,33 +1392,56 @@ pub async fn read_chip_to_bytes(
                 &db_paths.infoic,
             )?;
 
-            let stats = read_chip(
-                &mut handle,
-                &temp_path,
-                page,
-                "bin", // always read raw binary for the hex viewer
-                options_clone.check_device_id,
-                Some(&mut |done, total| {
-                    let _ = window_clone.emit(
-                        "progress",
-                        ProgressPayload {
-                            done,
-                            total,
-                            operation: op_name.clone(),
-                        },
-                    );
-                }),
-            )
-            .map_err(|e| e.to_string())?;
+            if options_clone.check_device_id {
+                match check_chip_id(&mut handle) {
+                    Ok(()) => {
+                        emit_log(&window_clone, "info", "Chip ID check passed");
+                    }
+                    Err(e) => {
+                        emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        return Err(e.to_string());
+                    }
+                }
+            }
 
-            // Read the temp file bytes
-            let bytes = std::fs::read(&temp_path)
-                .map_err(|e| format!("Failed to read temp file: {}", e))?;
+            let (base64, stats) = if options_clone.stability_check {
+                let (data, stats) =
+                    read_chip_stable_logged(&mut handle, page, &window_clone, &op_name)?;
+                (
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data),
+                    stats,
+                )
+            } else {
+                let stats = read_chip(
+                    &mut handle,
+                    &temp_path,
+                    page,
+                    "bin", // always read raw binary for the hex viewer
+                    Some(&mut |done, total| {
+                        let _ = window_clone.emit(
+                            "progress",
+                            ProgressPayload {
+                                done,
+                                total,
+                                operation: op_name.clone(),
+                            },
+                        );
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
 
-            // Clean up temp file
-            let _ = std::fs::remove_file(&temp_path);
+                // Read the temp file bytes
+                let bytes = std::fs::read(&temp_path)
+                    .map_err(|e| format!("Failed to read temp file: {}", e))?;
 
-            let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+                // Clean up temp file
+                let _ = std::fs::remove_file(&temp_path);
+
+                (
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes),
+                    stats,
+                )
+            };
             Ok::<(String, OpStats), String>((base64, stats))
         })();
 
@@ -1415,35 +1508,58 @@ pub async fn save_buffer_to_file(
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
-/// Open the folder containing the given file path in the system file manager.
-#[tauri::command]
-pub fn open_folder(path: String) -> Result<(), String> {
-    let parent = std::path::Path::new(&path)
-        .parent()
-        .ok_or("Path has no parent directory")?;
-
+fn open_dir_in_manager(dir: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(parent)
+            .arg(dir)
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
     Ok(())
+}
+
+/// Open the folder containing the given file path in the system file
+/// manager. Directory paths are opened directly.
+#[tauri::command]
+pub fn open_folder(path: String) -> Result<(), String> {
+    let path = std::path::Path::new(&path);
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().ok_or("Path has no parent directory")?
+    };
+    open_dir_in_manager(dir)
+}
+
+/// Open the directory `download_algorithms` writes to: `dir` when given
+/// (the configured custom database directory), otherwise the per-user
+/// data directory. Creates it when missing so the button works before
+/// any download has run.
+#[tauri::command]
+pub fn open_download_dir(dir: Option<String>) -> Result<(), String> {
+    let dir = match dir {
+        Some(d) => std::path::PathBuf::from(d),
+        None => minipro_core::user_data_dir()
+            .ok_or("Could not determine the per-user data directory")?,
+    };
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
+    open_dir_in_manager(&dir)
 }
 
 /// Check whether a file exists at the given path.
@@ -1540,7 +1656,7 @@ pub async fn do_write(
             }
 
             if !options_clone.skip_erase {
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -1554,7 +1670,6 @@ pub async fn do_write(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -1575,7 +1690,6 @@ pub async fn do_write(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
-                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -1736,7 +1850,7 @@ pub async fn do_batch_write_chip(
                     "info",
                     &format!("Chip {}: erasing...", chipNumber),
                 );
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -1780,7 +1894,6 @@ pub async fn do_batch_write_chip(
                     page,
                     size_mismatch,
                     options_clone.skip_blank,
-                    false,
                     Some(&mut |done, total| {
                         let _ = write_window.emit(
                             "progress",
@@ -1800,7 +1913,6 @@ pub async fn do_batch_write_chip(
                         &mut handle,
                         buf,
                         page,
-                        false,
                         Some(&mut |done, total| {
                             let _ = verify_window.emit(
                                 "progress",
@@ -1845,7 +1957,6 @@ pub async fn do_batch_write_chip(
                 &options_clone.format,
                 size_mismatch,
                 options_clone.skip_blank,
-                false,
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -1866,7 +1977,6 @@ pub async fn do_batch_write_chip(
                     Path::new(&path_clone),
                     page,
                     &options_clone.format,
-                    false,
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -2009,7 +2119,7 @@ pub async fn do_write_bytes(
             }
 
             if !options_clone.skip_erase {
-                erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+                erase_chip(&mut handle).map_err(|e| e.to_string())?;
                 handle.end_transaction().map_err(|e| e.to_string())?;
                 handle
                     .begin_transaction(device.clone())
@@ -2023,7 +2133,6 @@ pub async fn do_write_bytes(
                 page,
                 size_mismatch,
                 options_clone.skip_blank,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -2043,7 +2152,6 @@ pub async fn do_write_bytes(
                     &mut handle,
                     verify_bytes,
                     page,
-                    false, // chip ID already checked above
                     Some(&mut |done, total| {
                         let _ = verify_window.emit(
                             "progress",
@@ -2149,7 +2257,6 @@ pub async fn do_verify(
                 Path::new(&path_clone),
                 page,
                 &options_clone.format,
-                false, // chip ID already checked above
                 Some(&mut |done, total| {
                     let _ = window_clone.emit(
                         "progress",
@@ -2236,7 +2343,7 @@ pub async fn do_erase(
                 }
             }
 
-            erase_chip(&mut handle, false).map_err(|e| e.to_string())?;
+            erase_chip(&mut handle).map_err(|e| e.to_string())?;
             Ok::<(), String>(())
         })();
 
@@ -2339,7 +2446,6 @@ pub struct ChipIdResultDto {
     expected: String,
     is_match: bool,
     is_variant: bool,
-    base_name: String,
 }
 
 /// Read the chip ID.
@@ -2383,13 +2489,8 @@ pub async fn do_chip_id(
                 .map_err(|e| e.to_string())?;
             // Package variants (e.g. @DIP8) often have copied chip_id values from the base
             // chip that don't match what the firmware returns for that variant's protocol.
-            // Treat them as "no expected value" to avoid false mismatch warnings.
+            // The frontend softens a real mismatch into an informational note for these.
             let is_variant = device.name.contains('@');
-            let base_name = if let Some(at) = device.name.find('@') {
-                device.name[..at].to_string()
-            } else {
-                device.name.clone()
-            };
             let expected = device.chip_id;
             let bytes = if is_variant {
                 4
@@ -2413,16 +2514,193 @@ pub async fn do_chip_id(
             // Use normalized comparison to handle byte-position differences across protocols
             let norm_id = normalize_chip_id(chip_id);
             let norm_expected = normalize_chip_id(expected);
-            // For variants, treat as a match so we don't show a generic mismatch error,
-            // but the frontend will show a contextual message instead.
-            let is_match = expected == 0 || norm_id == norm_expected || is_variant;
+            // Report the real comparison even for variants — the frontend decides how
+            // to present it (hard warning vs. informational variant note).
+            let is_match = expected == 0 || norm_id == norm_expected;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto {
                 id: id_str,
                 expected: expected_str,
                 is_match,
                 is_variant,
-                base_name,
             })
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(dto)) => Ok(dto),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+/// A single instability region (4 KiB bucket) from the health check.
+#[derive(Serialize)]
+pub struct HealthRegionDto {
+    pub start: usize,
+    pub len: usize,
+    pub unstable: usize,
+}
+
+/// Structured health-check result for the GUI.
+#[derive(Serialize)]
+pub struct HealthCheckResultDto {
+    pub verdict: String,
+    pub deviceName: String,
+    pub size: usize,
+    pub passesRequested: usize,
+    pub passesCompleted: usize,
+    pub idRunsCompleted: usize,
+    pub uniqueChipIds: Vec<String>,
+    pub unstableBytes: usize,
+    pub flipsUp: u64,
+    pub flipsDown: u64,
+    pub periodicity: Option<u32>,
+    pub regions: Vec<HealthRegionDto>,
+    pub passErrors: Vec<String>,
+    pub chipIdErrors: Vec<String>,
+    pub notes: Vec<String>,
+    /// Mismatched byte positions vs the reference image (None when no
+    /// reference file was supplied).
+    pub referenceMismatches: Option<usize>,
+    /// Majority-vote reconstruction (present only when instability was found).
+    pub consensusB64: Option<String>,
+}
+
+/// Read-only chip health check: repeat chip-ID and full-memory reads, then
+/// report how the results disagree. Intended to flag marginal/degrading
+/// chips (drifting IDs, bit flips) without touching flash contents.
+#[tauri::command]
+pub async fn run_health_check(
+    icspMode: String,
+    pinCheck: bool,
+    passes: u32,
+    referencePath: Option<String>,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<HealthCheckResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let window_inner = window_clone.clone();
+
+        let result = (|| {
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
+            let passes = (passes as usize).clamp(2, 64);
+            let mut cb = |done: usize, total: usize| {
+                let _ = window_inner.emit(
+                    "progress",
+                    ProgressPayload {
+                        done,
+                        total,
+                        operation: "Health check".to_string(),
+                    },
+                );
+            };
+            let reference = match &referencePath {
+                Some(p) => {
+                    let size = handle.protocol.effective_code_size(&device) as usize;
+                    Some(
+                        read_file(Path::new(p), "auto", size, device.blank_value as u8)
+                            .map_err(|e| format!("reference file: {}", e))?,
+                    )
+                }
+                None => None,
+            };
+            const ID_RUNS: usize = 20;
+            let report = health_check(
+                &mut handle,
+                passes,
+                ID_RUNS,
+                reference.as_deref(),
+                Some(&mut cb),
+            )
+            .map_err(|e| e.to_string())?;
+
+            use minipro_core::HealthVerdict as HV;
+            let mut unique: Vec<u32> = report.chip_ids.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            let mut regions = report.regions;
+            regions.sort_by_key(|r| std::cmp::Reverse(r.unstable));
+            regions.truncate(20);
+            let dto = HealthCheckResultDto {
+                verdict: report.verdict.label().to_string(),
+                deviceName: report.device_name,
+                size: report.size,
+                passesRequested: report.read_passes_requested,
+                passesCompleted: report.read_passes_completed,
+                idRunsCompleted: report.chip_ids.len(),
+                uniqueChipIds: unique.iter().map(|id| format!("0x{:06x}", id)).collect(),
+                unstableBytes: report.unstable_bytes,
+                flipsUp: report.flips_up,
+                flipsDown: report.flips_down,
+                periodicity: report.periodicity,
+                regions: regions
+                    .into_iter()
+                    .map(|r| HealthRegionDto {
+                        start: r.start,
+                        len: r.len,
+                        unstable: r.unstable,
+                    })
+                    .collect(),
+                passErrors: report.pass_errors.clone(),
+                chipIdErrors: report.chip_id_errors.clone(),
+                notes: report.notes.clone(),
+                referenceMismatches: report.reference_mismatches,
+                consensusB64: report.consensus.map(|c| {
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, c)
+                }),
+            };
+            let level = match report.verdict {
+                HV::Stable => "info",
+                HV::TransportError => "error",
+                _ => "warn",
+            };
+            emit_log(
+                &window_inner,
+                level,
+                &format!(
+                    "Health check — {}: {} pass(es) completed, {} unstable byte(s)",
+                    report.verdict.label(),
+                    report.read_passes_completed,
+                    report.unstable_bytes
+                ),
+            );
+            for n in &report.notes {
+                emit_log(&window_inner, "info", &format!("  {}", n));
+            }
+            Ok::<HealthCheckResultDto, String>(dto)
         })();
 
         let _ = handle.end_transaction();
@@ -2498,6 +2776,7 @@ pub async fn do_logic_test(
                         unprotect_before: false,
                         protect_after_op: false,
                         pin_check: false,
+                        stability_check: false,
                     };
                     apply_voltage_overrides(&mut dev, &options, Some(model))
                         .map_err(|e| e.to_string())?;
@@ -2671,10 +2950,11 @@ pub async fn do_spi_autodetect(
             // Automatic pin contact check before autodetect on supported models.
             // Constructs a temporary device with pin_map based on package type,
             // matching upstream minipro's auto_detect function (main.c line 482-503).
-            if matches!(
-                handle.info.model,
-                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
-            ) && handle.icsp == 0
+            // Upstream runs this check on the TL866II+ only. The T48's own
+            // 0x3E pin-detect is implemented, but the synthetic pin_map
+            // indices below (0x01/0x03) are II+ conventions — leave the
+            // autodetect pre-check II+-only.
+            if matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) && handle.icsp == 0
             {
                 let pin_count = if idType == 0 { 8 } else { 16 };
                 let temp_device = Arc::new(Device {
@@ -2695,12 +2975,18 @@ pub async fn do_spi_autodetect(
                     Ok(r) => {
                         let count = r.bad_pins.len();
                         let pin_list = r.bad_pins.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
-                        let msg = format!("Pin contact check failed: bad contact on pin(s) {}. Autodetect aborted.", pin_list);
+                        let detail = if r.all_expected_open() {
+                            format!("all {count} expected pins open — is a chip seated in the socket?")
+                        } else {
+                            format!("bad contact on pin(s) {pin_list}")
+                        };
+                        let msg = format!("Pin contact check failed: {detail}. Autodetect aborted.");
                         emit_log(&window_clone, "warn", &msg);
                         emit_pin_test_result(&window_clone, &PinTestResultDto {
                             supported: true,
                             pass: false,
                             bad_pins: r.bad_pins,
+                            expected_pins: r.expected_pins,
                             message: format!("Bad contact on {} pin(s)", count),
                         });
                         return Err(msg);
@@ -3313,6 +3599,9 @@ pub struct PinTestResultDto {
     pub pass: bool,
     /// Device pin numbers (1-based) that failed contact.
     pub bad_pins: Vec<u16>,
+    /// Device pin numbers (1-based) the mask actually tested — lets the
+    /// diagram distinguish tested-good from untested (e.g. GND) pins.
+    pub expected_pins: Vec<u16>,
     /// Human-readable status message.
     pub message: String,
 }
@@ -3320,8 +3609,8 @@ pub struct PinTestResultDto {
 /// Run a ZIF socket pin-contact test.
 ///
 /// Requires a selected device with pin-map data in the database.
-/// Only supported on TL866II+, T48, and T76 (models with bit-banging
-/// hardware). Returns structured bad-pin data for diagram highlighting.
+/// Supported on TL866II+ (upstream bit-bang) and T48 (`0x3E` contact
+/// bitmap). Returns structured bad-pin data for diagram highlighting.
 #[tauri::command]
 pub async fn do_pin_test(
     icspMode: String,
@@ -3348,6 +3637,7 @@ pub async fn do_pin_test(
                     supported: false,
                     pass: false,
                     bad_pins: vec![],
+                    expected_pins: vec![],
                     message: "Pin test not supported on this programmer model".into(),
                 });
             }
@@ -3359,6 +3649,7 @@ pub async fn do_pin_test(
                     supported: false,
                     pass: false,
                     bad_pins: vec![],
+                    expected_pins: vec![],
                     message: "Pin test is only available in ZIF mode".into(),
                 });
             }
@@ -3384,6 +3675,7 @@ pub async fn do_pin_test(
                 supported: true,
                 pass,
                 bad_pins: result.bad_pins,
+                expected_pins: result.expected_pins,
                 message: if pass {
                     "All pins OK".into()
                 } else {
@@ -3674,4 +3966,265 @@ fn package_type_name(pkg: &PackageDetails) -> String {
     } else {
         format!("DIP{}", pkg.pin_count)
     }
+}
+
+// ── XGPro algorithm/firmware downloader ─────────────────────────────────────
+
+/// One downloaded firmware image, for display in the Settings result.
+#[derive(Serialize)]
+pub struct DownloadedFirmwareDto {
+    pub model: String,
+    pub version: String,
+    pub path: String,
+}
+
+/// Result of `download_algorithms`.
+#[derive(Serialize)]
+pub struct AlgoDownloadOutcomeDto {
+    pub output_dir: String,
+    pub xml_path: String,
+    pub t56_algorithms: usize,
+    pub t76_algorithms: usize,
+    pub firmware: Vec<DownloadedFirmwareDto>,
+    pub warnings: Vec<String>,
+}
+
+/// Download the XGPro setup archives, extract the T56/T76 FPGA algorithms
+/// and programmer firmware images, and generate `algorithm.xml`.
+///
+/// `outputDir` — `None` writes to the per-user data directory, which the
+/// database resolver already searches; pass the custom db dir when the user
+/// keeps their database files elsewhere.
+///
+/// Runs on a blocking thread; progress rides the standard `progress`
+/// channel (`{done, total, operation}`) plus `app-log` stage lines.
+/// `cancel_algo_download` flips a flag the core progress callback observes.
+#[tauri::command]
+pub async fn download_algorithms(
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+    outputDir: Option<String>,
+) -> Result<AlgoDownloadOutcomeDto, String> {
+    if !state.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+    state
+        .download_cancel
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let win = window.clone();
+    let cancel = (*state).clone();
+    let output_dir = outputDir.map(std::path::PathBuf::from);
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut progress = |ev: minipro_core::xgpro_fetch::Progress| -> bool {
+            if cancel
+                .download_cancel
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
+                return false;
+            }
+            use minipro_core::xgpro_fetch::Progress as P;
+            match ev {
+                P::DownloadStart { archive, total } => {
+                    emit_log(&win, "info", &format!("Downloading {archive}..."));
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": 0,
+                            "total": total.unwrap_or(0),
+                            "operation": "download",
+                        }),
+                    );
+                }
+                P::DownloadBytes { received, .. } => {
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": received,
+                            "total": 0,
+                            "operation": "download",
+                        }),
+                    );
+                }
+                P::DownloadFinished { archive } => {
+                    emit_log(&win, "info", &format!("{archive}: download complete"));
+                }
+                P::Stage { archive, stage } => {
+                    emit_log(&win, "info", &format!("{archive}: {stage}"));
+                }
+                P::Processed { done, total, .. } => {
+                    let _ = win.emit(
+                        "progress",
+                        serde_json::json!({
+                            "done": done,
+                            "total": total,
+                            "operation": "extract",
+                        }),
+                    );
+                }
+                P::Written { path } => {
+                    emit_log(&win, "info", &format!("wrote {}", path.display()));
+                }
+            }
+            true
+        };
+        let mut opts = minipro_core::xgpro_fetch::FetchOptions {
+            output_dir,
+            progress: Some(&mut progress),
+            ..Default::default()
+        };
+        minipro_core::xgpro_fetch::fetch(&mut opts).map_err(|e| e.to_string())
+    })
+    .await;
+
+    state.release();
+
+    let out = match result {
+        Ok(Ok(o)) => o,
+        Ok(Err(e)) if e == "Operation cancelled" => {
+            emit_log(&window, "warn", "Download cancelled");
+            return Err("cancelled".into());
+        }
+        Ok(Err(e)) => {
+            emit_log(&window, "error", &format!("Download failed: {e}"));
+            return Err(e);
+        }
+        Err(e) => {
+            emit_log(&window, "error", &format!("Download task failed: {e}"));
+            return Err(format!("Task panicked: {e}"));
+        }
+    };
+
+    // Refresh the algorithms slot of the resolved db paths so the new file
+    // is picked up. An existing still-present file wins (explicit overrides
+    // are never clobbered by the download).
+    {
+        let mut guard = state.db_paths.lock().map_err(|e| e.to_string())?;
+        if let Some(ref mut paths) = *guard {
+            let stale = match &paths.algorithms {
+                Some(p) => !p.exists(),
+                None => true,
+            };
+            if stale {
+                if let Ok(fresh) = DatabasePaths::resolve(None, None, None) {
+                    paths.algorithms = fresh.algorithms;
+                }
+            }
+        }
+    }
+
+    for w in &out.warnings {
+        emit_log(&window, "warn", w);
+    }
+    emit_log(
+        &window,
+        "info",
+        &format!(
+            "algorithm.xml: {} T56 + {} T76 algorithms → {}",
+            out.t56_algorithms,
+            out.t76_algorithms,
+            out.xml_path.display()
+        ),
+    );
+    emit_log(
+        &window,
+        "info",
+        "If a programmer is connected, reconnect it to use the new algorithm.xml",
+    );
+
+    Ok(AlgoDownloadOutcomeDto {
+        output_dir: out.output_dir.display().to_string(),
+        xml_path: out.xml_path.display().to_string(),
+        t56_algorithms: out.t56_algorithms,
+        t76_algorithms: out.t76_algorithms,
+        firmware: out
+            .firmware
+            .iter()
+            .map(|f| DownloadedFirmwareDto {
+                model: f.model.to_string(),
+                version: f.version.to_string(),
+                path: f.path.display().to_string(),
+            })
+            .collect(),
+        warnings: out.warnings,
+    })
+}
+
+/// Cancel a running `download_algorithms` call. Fire-and-forget: the
+/// download thread notices at the next progress checkpoint.
+#[tauri::command]
+pub async fn cancel_algo_download(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state
+        .download_cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+/// A downloaded firmware image matching the connected programmer model.
+#[derive(Serialize)]
+pub struct FirmwareFileDto {
+    pub path: String,
+    pub model: String,
+    pub version: String,
+}
+
+fn parse_fw_version(v: &str) -> Option<[u32; 3]> {
+    let mut it = v.split('.');
+    let parsed = [
+        it.next()?.parse().ok()?,
+        it.next()?.parse().ok()?,
+        it.next()?.parse().ok()?,
+    ];
+    if it.next().is_some() {
+        return None;
+    }
+    Some(parsed)
+}
+
+/// Find firmware images previously written by `download_algorithms` that
+/// match `model` (e.g. "T76" → `firmware-T76-*.dat`). Scans `customDir`
+/// first (the configured custom database dir, which the GUI downloader
+/// writes to), then the per-user data dir (CLI default). Returns matches
+/// newest-version-first, deduplicated by version — empty vec when none
+/// exist (e.g. TL866A/CS, whose firmware isn't in the pinned archives).
+#[tauri::command]
+pub fn find_downloaded_firmware(
+    model: String,
+    customDir: Option<String>,
+) -> Result<Vec<FirmwareFileDto>, String> {
+    let mut dirs = Vec::new();
+    if let Some(d) = customDir {
+        dirs.push(std::path::PathBuf::from(d));
+    }
+    if let Some(d) = minipro_core::user_data_dir() {
+        dirs.push(d);
+    }
+
+    let prefix = format!("firmware-{model}-");
+    let mut found = Vec::new();
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(version) = name
+                .strip_prefix(&prefix)
+                .and_then(|s| s.strip_suffix(".dat"))
+                .filter(|v| parse_fw_version(v).is_some())
+            {
+                found.push(FirmwareFileDto {
+                    path: entry.path().display().to_string(),
+                    model: model.clone(),
+                    version: version.to_string(),
+                });
+            }
+        }
+    }
+    // Stable sort keeps the custom-dir entry ahead of the per-user one
+    // when both carry the same version.
+    found.sort_by_key(|f| std::cmp::Reverse(parse_fw_version(&f.version)));
+    found.dedup_by(|a, b| a.version == b.version);
+    Ok(found)
 }

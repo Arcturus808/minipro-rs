@@ -5,7 +5,7 @@
   import { doFirmwareUpdate } from "../stores/operations";
   import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
   import { settings } from "../stores/settings";
-  import { pickOpenFile, confirmDialog } from "../file-dialog";
+  import { pickOpenFile, pickSaveFile, confirmDialog } from "../file-dialog";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
     "TL866II+",
@@ -22,47 +22,110 @@
     "T76",
   ]);
 
-  // Pin test is supported on TL866II+ and T48 only.
-  // T48 inherits from TL866II+ protocol (alias). TL866A/CS and T56 are
-  // not supported — the C minipro does not implement pin testing for
-  // either and neither defines the bit-banging commands (0x2D-0x36).
-  // T76 is FPGA-based with no dedicated contact-test bitstream; Matt
-  // Brown's t76-improvements branch discovered that its 0x3E command is
-  // an adapter-init pin-driver configuration step, not a standalone test.
-  // The xgecu-pro project confirmed on real hardware that it "measured
+  // Pin test: TL866II+ uses upstream's per-pin bit-bang (0x2D-0x36);
+  // T48 has its own single-command pin detect (0x3E → 7-byte contact
+  // bitmap, documented at proghq.org/wiki/XGecu_Protocol and used by
+  // XGPro's "Pin Detect" — upstream never implemented it, ported from
+  // USB captures). TL866A/CS and T56 are likewise unimplemented. T76 is
+  // FPGA-based with no dedicated contact-test bitstream; its 0x3E
+  // command is an adapter-init pin-driver configuration step, not a
+  // standalone test — the xgecu-pro project confirmed it "measured
   // nothing and corrupted every read."
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
     "T48",
   ]);
 
-  $: hardwareCheckSupported = $programmer
-    ? HARDWARE_CHECK_SUPPORTED.has($programmer.model)
-    : false;
+  const hardwareCheckSupported = $derived(
+    $programmer ? HARDWARE_CHECK_SUPPORTED.has($programmer.model) : false,
+  );
 
-  $: firmwareUpdateSupported = $programmer
-    ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model)
-    : false;
+  const firmwareUpdateSupported = $derived(
+    $programmer ? FIRMWARE_UPDATE_SUPPORTED.has($programmer.model) : false,
+  );
 
-  $: pinTestSupported = $programmer
-    ? PIN_TEST_SUPPORTED.has($programmer.model)
-    : false;
+  const pinTestSupported = $derived(
+    $programmer ? PIN_TEST_SUPPORTED.has($programmer.model) : false,
+  );
 
   // Pin test requires a device with pin_map data and ZIF mode
-  $: pinTestEnabled = pinTestSupported
-    && $programmer !== null
-    && $selectedDevice !== null
-    && $selectedDevice.pin_map !== 0
-    && $settings.icspMode === "zif"
-    && !$pinTestRunning;
+  const pinTestEnabled = $derived(
+    pinTestSupported
+      && $programmer !== null
+      && $selectedDevice !== null
+      && $selectedDevice.pin_map !== 0
+      && $settings.icspMode === "zif"
+      && !$pinTestRunning,
+  );
+
+  // TL866A/CS clones are ubiquitous — firmware >=3.2.85 (MiniPro 6.82+)
+  // detects them and disables boot mode, bricking the unit until boot
+  // mode is forced in hardware. Warn on every firmware-update path.
+  const CLONE_RISK_MODELS = new Set(["TL866A", "TL866CS"]);
+
+  function parseFwVersion(v: string): number[] | null {
+    const m = String(v).match(/(\d+)\.(\d+)\.(\d+)/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  }
+
+  // Extra confirm-dialog note comparing installed vs candidate firmware.
+  // The first version component is the hardware revision — but only on
+  // models that report one: T48/T56/T76 hardcode it to 0, and their file
+  // prefixes are product-line labels (installed 00.1.03 vs file 01.1.35
+  // on a T48 is a routine upgrade, not a revision mismatch). Gate the
+  // warning on a real hw byte (TL866A/II+) and compare {major}.{minor}.
+  function firmwareVersionNote(installed: string, file: string): string {
+    const a = parseFwVersion(installed);
+    const b = parseFwVersion(file);
+    if (!a || !b) return "";
+    if (a[0] !== 0 && a[0] !== b[0]) {
+      return `\n\nWARNING: hardware revision differs — installed ${installed}, file ${file}. Flashing a different revision can brick the device.`;
+    }
+    const cmp = b[1] - a[1] || b[2] - a[2];
+    if (cmp < 0) {
+      return `\n\nNote: this is a DOWNGRADE (installed ${installed}, file ${file}).`;
+    }
+    if (cmp === 0) {
+      return `\n\nFile version matches installed (${installed}) — reflash only to recover from a fault.`;
+    }
+    return `\n\nFile version: ${file} (installed: ${installed}).`;
+  }
 
   async function updateFirmware() {
-    const path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
-    if (!path) return;
-    const fileName = path.split(/[\\/]/).pop() ?? path;
+    // Prefer a firmware image previously fetched by the algorithm
+    // downloader — the firmware-<model>-*.dat naming makes the match
+    // model-safe by construction. Fall back to manual file selection
+    // when none exists (e.g. TL866A/CS, not in the pinned archives).
+    let path = null;
+    let fileName = "";
+    let versionNote = "";
+    try {
+      const found = await invoke<{ path: string; model: string; version: string }[]>(
+        "find_downloaded_firmware",
+        {
+          model: $programmer.model,
+          customDir: $settings.customDbDir ?? null,
+        },
+      );
+      if (found.length > 0) {
+        path = found[0].path;
+        fileName = path.split(/[\\/]/).pop() ?? path;
+        versionNote = firmwareVersionNote($programmer.firmware, found[0].version);
+      }
+    } catch {
+      // resolution failure is non-fatal — fall through to the picker
+    }
+    if (!path) {
+      path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
+      if (!path) return;
+      fileName = path.split(/[\\/]/).pop() ?? path;
+    }
+    const cloneNote = CLONE_RISK_MODELS.has($programmer.model)
+      ? "\n\nCLONE WARNING: many TL866A/CS units in circulation are clones, often without the owner's knowledge. Firmware 3.2.85/3.2.86 (MiniPro 6.82+) contains clone detection that disables boot mode — flashing it on a clone bricks the device, recoverable only by forcing boot mode in hardware. Proceed only if you know your unit is genuine."
+      : "";
     const confirmed = await confirmDialog(
       "Firmware Update — EXPERIMENTAL",
-      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}\n\nProceed at your own risk?`,
+      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}${versionNote}${cloneNote}\n\nProceed at your own risk?`,
       "warning",
     );
     if (!confirmed) return;
@@ -96,6 +159,91 @@
 
   async function runPinTest() {
     await doPinTest($settings.icspMode);
+  }
+
+  // ── Chip health check (read-only stability diagnostic) ────────────────────
+
+  interface HealthRegion {
+    start: number;
+    len: number;
+    unstable: number;
+  }
+
+  interface HealthCheckResult {
+    verdict: string;
+    deviceName: string;
+    size: number;
+    passesRequested: number;
+    passesCompleted: number;
+    idRunsCompleted: number;
+    uniqueChipIds: string[];
+    unstableBytes: number;
+    flipsUp: number;
+    flipsDown: number;
+    periodicity: number | null;
+    regions: HealthRegion[];
+    passErrors: string[];
+    chipIdErrors: string[];
+    notes: string[];
+    referenceMismatches: number | null;
+    consensusB64: string | null;
+  }
+
+  let healthRunning = $state(false);
+  let healthResult = $state<HealthCheckResult | null>(null);
+  let healthRefCompare = $state(false);
+  let healthRefPath = $state<string | null>(null);
+
+  const healthCheckEnabled = $derived(
+    $programmer !== null
+      && $selectedDevice !== null
+      && !healthRunning
+      && !(healthRefCompare && !healthRefPath),
+  );
+
+  async function pickHealthReference() {
+    const p = await pickOpenFile("Select reference image (bin / ihex / srec)");
+    if (p) healthRefPath = p;
+  }
+
+  async function runHealthCheck() {
+    healthRunning = true;
+    healthResult = null;
+    try {
+      healthResult = await invoke<HealthCheckResult>("run_health_check", {
+        icspMode: $settings.icspMode,
+        pinCheck: true,
+        passes: 5,
+        referencePath: healthRefCompare ? healthRefPath : null,
+      });
+    } catch (e) {
+      logs.error(`Health check failed: ${e}`);
+      await refreshProgrammer();
+    } finally {
+      healthRunning = false;
+    }
+  }
+
+  async function saveConsensus() {
+    if (!healthResult?.consensusB64) return;
+    const path = await pickSaveFile(
+      "Save consensus dump",
+      `${healthResult.deviceName}-consensus.bin`,
+      [{ name: "Binary", extensions: ["bin"] }],
+    );
+    if (!path) return;
+    try {
+      await invoke("save_bytes_to_file", { path, base64Data: healthResult.consensusB64 });
+      logs.info(`Consensus dump saved to ${path}`);
+    } catch (e) {
+      logs.error(`Save failed: ${e}`);
+    }
+  }
+
+  function verdictClass(v: string): string {
+    if (v === "STABLE") return "text-green-500";
+    if (v === "TRANSPORT-ERROR") return "text-red-500";
+    return "text-amber-500";
   }
 </script>
 
@@ -139,6 +287,95 @@
         </button>
       {:else}
         <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Contact Test</button>
+      {/if}
+      <button
+        class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
+        onclick={runHealthCheck}
+        disabled={!healthCheckEnabled}
+        title={!$selectedDevice ? "Select a device first" : healthRefCompare && !healthRefPath ? "Choose a reference file or uncheck the option" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
+      >
+        {#if healthRunning}
+          Chip Health Check (running...)
+        {:else}
+          Chip Health Check
+        {/if}
+      </button>
+      <label class="flex items-center gap-1.5 px-1 text-xs cursor-pointer" title="After the read passes, compare the image against a known-good file — catches consistent corruption that repeated reads can't">
+        <input type="checkbox" bind:checked={healthRefCompare} disabled={healthRunning} />
+        Compare reads against file
+      </label>
+      {#if healthRefCompare}
+        <div class="flex items-center gap-1 px-1 pl-5 text-xs">
+          <button
+            class="opacity-80 hover:opacity-100 underline truncate flex-1 text-left disabled:opacity-40"
+            onclick={pickHealthReference}
+            disabled={healthRunning}
+            title="Known-good image (bin / ihex / srec) — e.g. the file that was written to this chip"
+          >
+            {healthRefPath ? healthRefPath.split(/[\\/]/).pop() : "choose file…"}
+          </button>
+          {#if healthRefPath}
+            <button class="opacity-60 hover:opacity-100 px-0.5" onclick={() => (healthRefPath = null)} title="Clear reference">×</button>
+          {/if}
+        </div>
+      {/if}
+      {#if healthResult}
+        <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
+          <div class="flex items-center justify-between gap-2">
+            <span>
+              Verdict:
+              <span class={"font-semibold " + verdictClass(healthResult.verdict)}>{healthResult.verdict}</span>
+              — {healthResult.deviceName}
+            </span>
+            <button class="opacity-60 hover:opacity-100 px-1" onclick={() => (healthResult = null)} title="Dismiss result">Clear</button>
+          </div>
+          <div class="opacity-80">
+            {healthResult.passesCompleted}/{healthResult.passesRequested} read passes,
+            {healthResult.idRunsCompleted} chip-ID reads
+            {#if healthResult.uniqueChipIds.length > 0}
+              ({healthResult.uniqueChipIds.join(", ")})
+            {/if}
+          </div>
+          {#if healthResult.unstableBytes > 0}
+            <div>
+              Unstable bytes: <span class="font-semibold">{healthResult.unstableBytes}</span>
+              — flips 0→1: {healthResult.flipsUp}, 1→0: {healthResult.flipsDown}
+              {#if healthResult.periodicity}
+                , dominant spacing every {healthResult.periodicity} bytes
+              {/if}
+            </div>
+            {#each healthResult.regions.slice(0, 6) as r}
+              <div class="opacity-80">
+                0x{r.start.toString(16).padStart(6, "0")}..0x{(r.start + r.len - 1).toString(16).padStart(6, "0")}: {r.unstable} unstable
+              </div>
+            {/each}
+            {#if healthResult.regions.length > 6}
+              <div class="opacity-60">… and {healthResult.regions.length - 6} more regions</div>
+            {/if}
+          {/if}
+          {#if healthResult.referenceMismatches !== null}
+            <div class={healthResult.referenceMismatches > 0 ? "text-amber-500" : "opacity-80"}>
+              Reference mismatches: {healthResult.referenceMismatches}
+            </div>
+          {/if}
+          {#each healthResult.passErrors as e}
+            <div class="text-red-500">{e}</div>
+          {/each}
+          {#each healthResult.chipIdErrors as e}
+            <div class="text-red-500">{e}</div>
+          {/each}
+          {#each healthResult.notes as n}
+            <div class="opacity-80">{n}</div>
+          {/each}
+          {#if healthResult.consensusB64}
+            <button
+              class="w-full text-left text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800"
+              onclick={saveConsensus}
+            >
+              Save consensus dump (majority-vote reconstruction)
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
   </details>

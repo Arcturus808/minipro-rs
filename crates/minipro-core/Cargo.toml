@@ -16,6 +16,9 @@ flate2      = "1"
 base64      = "0.22"
 futures     = "0.3"
 serde       = { workspace = true, features = ["derive"] }
+ureq = { version = "3", features = ["platform-verifier", "socks-proxy", "win-system-proxy"] }
+sha2 = "0.10"
+rar-codec = "0.1"
 
 [dev-dependencies]
 serde_json.workspace = true
