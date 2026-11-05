@@ -379,24 +379,20 @@ This is a living list of features and improvements planned for minipro-rs.
 
     **What we're missing (1 remaining gap):**
 
-    1. **T56 autodetect** — T56 has `CMD_AUTODETECT = 0x37` defined but
-       no `spi_autodetect` trait method override (falls through to
-       `UnsupportedOperation`). Upstream's `t56_spi_autodetect()` must
-       first upload an FPGA bitstream (SPI25F11 for 8-pin or SPI25F21
-       for 16-pin) via `t56_send_bitstream()`, then send the 0x37
-       command.
-       **Difficulty: Medium.** The bitstream upload infrastructure
-       already exists (`upload_bitstream()` in `t56.rs`, algorithm
-       lookup via `get_algorithm()` in `algorithm.rs`), and the T76
-       implementation above is the template — same synthetic-device +
-       `upload_bitstream` + flag-reset pattern, except the T56 sends
-       the 10-byte `0x37` packet. ~30 lines now. Same
-       `bitstream_uploaded` flag management applies. **Decision
-       (2026-11): implement blind** — the command is read-only
-       (returns a JEDEC ID or a clean error; no corruption risk) and
-       T56 units are near-unobtainable, so "wait for hardware" may
-       mean never. Ship it marked unverified; the T56 GUI stays
-       gated until someone validates on real hardware.
+    1. **T56 autodetect** — IMPLEMENTED (`feat/t56-spi-autodetect`),
+       **unverified on hardware**. Mirrors the T76 path: synthetic
+       device (`protocol_id=0x03`, variant `0x1100`/`0x2100`) →
+       `SPI25F11`/`SPI25F21` via `get_algorithm()` → trait
+       `upload_bitstream()` → 10-byte `0x37` request (`type` at
+       `msg[8]`, 16-byte response, 3-byte big-endian ID at
+       `resp[2..5]`) → `bitstream_uploaded` reset so the next
+       `begin_transaction` re-uploads the real algorithm.
+       **Decision (2026-11): implemented blind** — the command is
+       read-only (returns a JEDEC ID or a clean error; no corruption
+       risk) and T56 units are near-unobtainable, so "wait for
+       hardware" may mean never. The T56 GUI stays gated until
+       someone validates on real hardware; CLI `-a` reaches it on
+       any connected T56.
 
     **Also missing (minor):**
     - Pin-contact pre-check before autodetect (upstream optionally runs

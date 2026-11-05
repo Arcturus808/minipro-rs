@@ -862,7 +862,7 @@ fn do_operations(
         let reference = match &cli.reference {
             Some(path) => {
                 let dev = handle.device()?;
-                let size = handle.protocol.effective_code_size(&dev) as usize;
+                let size = handle.protocol.effective_code_size(dev) as usize;
                 Some(read_file(path, "auto", size, dev.blank_value as u8)?)
             }
             None => None,
