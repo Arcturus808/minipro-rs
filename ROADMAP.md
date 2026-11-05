@@ -256,7 +256,28 @@ This is a living list of features and improvements planned for minipro-rs.
   gap). Remaining items follow in decreasing impact.
 
   **Deferred (require hardware):**
-  - Hardware validation of all T56/T76 chip classes
+  - Hardware validation of all T56/T76 chip classes — **shopping list**
+    (2026-11, parts confirmed present in `infoic.xml`):
+    - **SPI NOR 16-pin** (autodetect `SPI25F21` path): Winbond
+      `W25Q128FVSIG`/`W25Q128JVSIQ` SOIC-16 (JEDEC ID `0xEF4018`,
+      `W25Q128JV@SOIC16` DB entries) + SOIC-16→DIP adapter. *On order.*
+    - **SPI NAND** (NAND-class path, cheapest validation): `W25N01GV(x4)
+      @SOP16` or `GD5F1GQ5RExxG(x4)@SOP16` — same SOIC-16→DIP adapter as
+      the W25Q128; 114 protocol-`0x21` devices exist in the DB.
+    - **Parallel NOR**: `S29GL064N*@TSOP48` (or any AM29DL640/M29W640
+      TSOP48 part) + standard TSOP48→DIP adapter.
+    - **Parallel NAND**: `K9F1G08U0M@TSOP48` or `HY27US08561@TSOP48` +
+      the same TSOP48→DIP adapter (different adapter-ID handling than
+      SPI parts — also exercises the adapter-ID query paths).
+    - **eMMC**: the DB's `AUTOEMMC(ISP)` entries enable in-circuit eMMC
+      reads over ISP wiring — a cheap first validation needing no BGA
+      socket (e.g. a spare eMMC-bearing board wired per the ISP table).
+      Full off-chip BGA work needs a BGA153/169 clamshell adapter
+      (~US$40–80) plus a salvage eMMC part; defer until the cheaper
+      classes validate first.
+    - **T56**: scarce on the market; T56 autodetect is being implemented
+      blind against upstream `t56_spi_autodetect` (read-only, fails
+      safe) and marked unverified pending hardware.
   - eMMC io_init hardcoded constants (need hardware to test fixes)
   - eMMC bring-up query response lengths (need hardware to validate)
 
@@ -370,8 +391,12 @@ This is a living list of features and improvements planned for minipro-rs.
        implementation above is the template — same synthetic-device +
        `upload_bitstream` + flag-reset pattern, except the T56 sends
        the 10-byte `0x37` packet. ~30 lines now. Same
-       `bitstream_uploaded` flag management applies. Needs T56
-       hardware to validate.
+       `bitstream_uploaded` flag management applies. **Decision
+       (2026-11): implement blind** — the command is read-only
+       (returns a JEDEC ID or a clean error; no corruption risk) and
+       T56 units are near-unobtainable, so "wait for hardware" may
+       mean never. Ship it marked unverified; the T56 GUI stays
+       gated until someone validates on real hardware.
 
     **Also missing (minor):**
     - Pin-contact pre-check before autodetect (upstream optionally runs
@@ -1068,7 +1093,8 @@ This is a living list of features and improvements planned for minipro-rs.
   - **Difficulty: Low-Medium** — reuses existing `read_block`/`read_chip` plumbing; analysis is pure buffer math; no protocol work. GUI surface is the larger half.
   - **Priority: medium** — genuinely unique diagnostic (neither XGPro nor upstream minipro has it); salvaging old/suspect chips is a common workflow for this tool's audience.
   - **Status:** **Phase 1 shipped** (read-only) — `health.rs` analysis module + `operations::health_check(handle, passes, id_runs, cb)`; CLI `--health-check [N]` + `--consensus-out FILE` (verdict exit codes: 0 stable / 2 marginal-ID / 3 marginal-data / 4 incomplete / 1 transport error); GUI "Chip Health Check" button in Diagnostics with a result card (verdict, IDs seen, unstable-byte count, worst regions, flip direction, periodicity) and a Save-consensus-dump button when instability is found. Verdicts shipped as `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete` / `Transport-Error` (finer-grained than the sketch's three-way). Consensus majority-vote buffer implemented; transport errors are distinguished from diagnostic failures, and blank/uniform reads are *not* treated as a dead-chip verdict. **Hardware-verified (2026-11):** W25X20CL → STABLE on T48; PM25LV010 → MARGINAL-DATA on T76 (44,762 unstable positions, 34.15% — matching the earlier manual cross-dump finding) and MARGINAL-ID on T48 (all 20 ID reads returned stuck-bus `0x000000`/`0x00FFFF` while data stayed stable). A `-x` recovery read of the PM25LV010 on T48 came back byte-identical to the known-good June dump — stored cells intact, only the readout path is dying, confirming the diagnostic thesis end-to-end.
-  - **Still open:** Read-panel opt-in "stability check" checkbox (designed, not wired); compare-with-reference mode; large-chip pass caps/sampling; destructive Phase-2 tests (pattern programming, erase verification, endurance/retention screening) — explicitly out of the XGecu transport's reach are opcode-level tests, SPI mode switching, clock sweeps, direct power cycling, and raw status-register access.
+  - **Also shipped:** compare-with-reference mode — `--reference FILE` / GUI "Reference:" picker compares the effective image (consensus or consistent read) against a known-good file; catches deterministic corruption that stability analysis can't. New `Reference-Mismatch` verdict, CLI exit code 5.
+  - **Still open:** Read-panel opt-in "stability check" checkbox (designed, not wired); large-chip pass caps/sampling; destructive Phase-2 tests (pattern programming, erase verification, endurance/retention screening) — explicitly out of the XGecu transport's reach are opcode-level tests, SPI mode switching, clock sweeps, direct power cycling, and raw status-register access.
 
 - [ ] **Ratatui TUI frontend** — interactive terminal UI (device browser, operation dashboard) as a third frontend alongside CLI and GUI
   - **Rationale:** headless/SSH/bench-Pi workflows where the WebView GUI is unavailable or heavy; device fuzzy-search across ~30k entries is the CLI's weakest UX point vs the GUI. Precedent exists in the ecosystem — `jfabienke/xgecu-pro` ships a TUI mode for the same hardware.

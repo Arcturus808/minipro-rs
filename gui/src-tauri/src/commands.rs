@@ -2493,6 +2493,9 @@ pub struct HealthCheckResultDto {
     pub passErrors: Vec<String>,
     pub chipIdErrors: Vec<String>,
     pub notes: Vec<String>,
+    /// Mismatched byte positions vs the reference image (None when no
+    /// reference file was supplied).
+    pub referenceMismatches: Option<usize>,
     /// Majority-vote reconstruction (present only when instability was found).
     pub consensusB64: Option<String>,
 }
@@ -2505,6 +2508,7 @@ pub async fn run_health_check(
     icspMode: String,
     pinCheck: bool,
     passes: u32,
+    referencePath: Option<String>,
     window: Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<HealthCheckResultDto, String> {
@@ -2547,9 +2551,25 @@ pub async fn run_health_check(
                     },
                 );
             };
+            let reference = match &referencePath {
+                Some(p) => {
+                    let size = handle.protocol.effective_code_size(&device) as usize;
+                    Some(
+                        read_file(Path::new(p), "auto", size, device.blank_value as u8)
+                            .map_err(|e| format!("reference file: {}", e))?,
+                    )
+                }
+                None => None,
+            };
             const ID_RUNS: usize = 20;
-            let report = health_check(&mut handle, passes, ID_RUNS, Some(&mut cb))
-                .map_err(|e| e.to_string())?;
+            let report = health_check(
+                &mut handle,
+                passes,
+                ID_RUNS,
+                reference.as_deref(),
+                Some(&mut cb),
+            )
+            .map_err(|e| e.to_string())?;
 
             use minipro_core::HealthVerdict as HV;
             let mut unique: Vec<u32> = report.chip_ids.clone();
@@ -2581,6 +2601,7 @@ pub async fn run_health_check(
                 passErrors: report.pass_errors.clone(),
                 chipIdErrors: report.chip_id_errors.clone(),
                 notes: report.notes.clone(),
+                referenceMismatches: report.reference_mismatches,
                 consensusB64: report.consensus.map(|c| {
                     base64::Engine::encode(&base64::engine::general_purpose::STANDARD, c)
                 }),
