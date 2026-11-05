@@ -12,9 +12,9 @@ use minipro_core::{
     database::{find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths},
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
-        blank_check, check_chip_id, erase_chip, firmware_update, hardware_check, health_check,
-        logic_auto_find, logic_ic_test, normalize_chip_id, pin_check_gate_applies,
-        pin_contact_check, read_chip,
+        blank_check, check_chip_id, chip_id_info, erase_chip, firmware_update, hardware_check,
+        health_check, logic_auto_find, logic_ic_test, pin_check_gate_applies, pin_contact_check,
+        read_chip,
         read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes,
         write_chip, write_chip_bytes,
         write_file, OpStats, SizeMismatch,
@@ -475,26 +475,15 @@ fn default_icsp_mode() -> String {
     "zif".into()
 }
 
-/// Set ICSP mode from the GUI's mode string.
-/// "icsp" → ICSP with VCC (0x81), "icsp_no_vcc" → ICSP without VCC (0x80),
-/// "zif" → ZIF socket mode (0x00).  Also auto-activates ICSP for ICSP-only chips.
+/// Set ICSP mode from the GUI's mode string — thin wrapper over
+/// `MiniproHandle::set_icsp_mode` (which owns the MP_ICSP_ONLY /
+/// MP_ZIF_ONLY auto-activation rules).
 fn set_icsp_from_mode(
     handle: &mut minipro_core::handle::MiniproHandle,
     mode: &str,
     device: &minipro_core::device::Device,
 ) {
-    use minipro_core::device::{MP_ICSP_ONLY, MP_ZIF_ONLY};
-    if device.flags.prog_support == MP_ICSP_ONLY {
-        handle.set_icsp(true);
-    } else if device.flags.prog_support == MP_ZIF_ONLY {
-        handle.icsp = 0;
-    } else {
-        match mode {
-            "icsp" => handle.set_icsp(true),
-            "icsp_no_vcc" => handle.set_icsp(false),
-            _ => handle.icsp = 0,
-        }
-    }
+    handle.set_icsp_mode(mode, device);
 }
 fn default_page() -> String {
     "code".into()
@@ -2483,45 +2472,17 @@ pub async fn do_chip_id(
                 &db_paths.infoic,
             )?;
 
-            let (_id_type, chip_id) = handle
-                .protocol
-                .get_chip_id(&handle.usb, &device)
-                .map_err(|e| e.to_string())?;
-            // Package variants (e.g. @DIP8) often have copied chip_id values from the base
-            // chip that don't match what the firmware returns for that variant's protocol.
-            // The frontend softens a real mismatch into an informational note for these.
-            let is_variant = device.name.contains('@');
-            let expected = device.chip_id;
-            let bytes = if is_variant {
-                4
-            } else {
-                device.chip_id_bytes_count.clamp(1, 4)
-            };
-            let mask = match bytes {
-                1 => 0xFFu32,
-                2 => 0xFFFF,
-                3 => 0xFFFFFF,
-                _ => 0xFFFFFFFF,
-            };
-            let masked_id = chip_id & mask;
-            let masked_expected = expected & mask;
-            let id_str = format!("0x{:0width$x}", masked_id, width = (bytes * 2) as usize);
-            let expected_str = format!(
-                "0x{:0width$x}",
-                masked_expected,
-                width = (bytes * 2) as usize
-            );
-            // Use normalized comparison to handle byte-position differences across protocols
-            let norm_id = normalize_chip_id(chip_id);
-            let norm_expected = normalize_chip_id(expected);
-            // Report the real comparison even for variants — the frontend decides how
-            // to present it (hard warning vs. informational variant note).
-            let is_match = expected == 0 || norm_id == norm_expected;
+            // chip_id_info owns the masking width, normalized comparison,
+            // and package-variant rules (the frontend decides how to
+            // present a variant mismatch — hard warning vs. info note).
+            let info = chip_id_info(&mut handle).map_err(|e| e.to_string())?;
+            let mask = info.mask();
+            let width = (info.bytes * 2) as usize;
             Ok::<ChipIdResultDto, String>(ChipIdResultDto {
-                id: id_str,
-                expected: expected_str,
-                is_match,
-                is_variant,
+                id: format!("0x{:0width$x}", info.id & mask, width = width),
+                expected: format!("0x{:0width$x}", info.expected & mask, width = width),
+                is_match: info.is_match,
+                is_variant: info.is_variant,
             })
         })();
 
