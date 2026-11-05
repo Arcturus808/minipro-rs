@@ -5,7 +5,7 @@
   import { doFirmwareUpdate } from "../stores/operations";
   import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
   import { settings } from "../stores/settings";
-  import { pickOpenFile, confirmDialog } from "../file-dialog";
+  import { pickOpenFile, pickSaveFile, confirmDialog } from "../file-dialog";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
     "TL866II+",
@@ -160,6 +160,79 @@
   async function runPinTest() {
     await doPinTest($settings.icspMode);
   }
+
+  // ── Chip health check (read-only stability diagnostic) ────────────────────
+
+  interface HealthRegion {
+    start: number;
+    len: number;
+    unstable: number;
+  }
+
+  interface HealthCheckResult {
+    verdict: string;
+    deviceName: string;
+    size: number;
+    passesRequested: number;
+    passesCompleted: number;
+    idRunsCompleted: number;
+    uniqueChipIds: string[];
+    unstableBytes: number;
+    flipsUp: number;
+    flipsDown: number;
+    periodicity: number | null;
+    regions: HealthRegion[];
+    passErrors: string[];
+    chipIdErrors: string[];
+    notes: string[];
+    consensusB64: string | null;
+  }
+
+  let healthRunning = $state(false);
+  let healthResult = $state<HealthCheckResult | null>(null);
+
+  const healthCheckEnabled = $derived(
+    $programmer !== null && $selectedDevice !== null && !healthRunning,
+  );
+
+  async function runHealthCheck() {
+    healthRunning = true;
+    healthResult = null;
+    try {
+      healthResult = await invoke<HealthCheckResult>("run_health_check", {
+        icspMode: $settings.icspMode,
+        pinCheck: true,
+        passes: 5,
+      });
+    } catch (e) {
+      logs.error(`Health check failed: ${e}`);
+      await refreshProgrammer();
+    } finally {
+      healthRunning = false;
+    }
+  }
+
+  async function saveConsensus() {
+    if (!healthResult?.consensusB64) return;
+    const path = await pickSaveFile(
+      "Save consensus dump",
+      `${healthResult.deviceName}-consensus.bin`,
+      [{ name: "Binary", extensions: ["bin"] }],
+    );
+    if (!path) return;
+    try {
+      await invoke("save_bytes_to_file", { path, base64Data: healthResult.consensusB64 });
+      logs.info(`Consensus dump saved to ${path}`);
+    } catch (e) {
+      logs.error(`Save failed: ${e}`);
+    }
+  }
+
+  function verdictClass(v: string): string {
+    if (v === "Stable") return "text-green-500";
+    if (v === "Transport error") return "text-red-500";
+    return "text-amber-500";
+  }
 </script>
 
 <div class="border border-surface-200-800 p-2">
@@ -202,6 +275,68 @@
         </button>
       {:else}
         <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Contact Test</button>
+      {/if}
+      <button
+        class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
+        onclick={runHealthCheck}
+        disabled={!healthCheckEnabled}
+        title={!$selectedDevice ? "Select a device first" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
+      >
+        {#if healthRunning}
+          Chip Health Check (running...)
+        {:else}
+          Chip Health Check
+        {/if}
+      </button>
+      {#if healthResult}
+        <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
+          <div>
+            Verdict:
+            <span class={"font-semibold " + verdictClass(healthResult.verdict)}>{healthResult.verdict}</span>
+            — {healthResult.deviceName}
+          </div>
+          <div class="opacity-80">
+            {healthResult.passesCompleted}/{healthResult.passesRequested} read passes,
+            {healthResult.idRunsCompleted} chip-ID reads
+            {#if healthResult.uniqueChipIds.length > 0}
+              ({healthResult.uniqueChipIds.join(", ")})
+            {/if}
+          </div>
+          {#if healthResult.unstableBytes > 0}
+            <div>
+              Unstable bytes: <span class="font-semibold">{healthResult.unstableBytes}</span>
+              — flips 0→1: {healthResult.flipsUp}, 1→0: {healthResult.flipsDown}
+              {#if healthResult.periodicity}
+                , dominant spacing every {healthResult.periodicity} bytes
+              {/if}
+            </div>
+            {#each healthResult.regions.slice(0, 6) as r}
+              <div class="opacity-80">
+                0x{r.start.toString(16).padStart(6, "0")}..0x{(r.start + r.len - 1).toString(16).padStart(6, "0")}: {r.unstable} unstable
+              </div>
+            {/each}
+            {#if healthResult.regions.length > 6}
+              <div class="opacity-60">… and {healthResult.regions.length - 6} more regions</div>
+            {/if}
+          {/if}
+          {#each healthResult.passErrors as e}
+            <div class="text-red-500">{e}</div>
+          {/each}
+          {#each healthResult.chipIdErrors as e}
+            <div class="text-red-500">{e}</div>
+          {/each}
+          {#each healthResult.notes as n}
+            <div class="opacity-80">{n}</div>
+          {/each}
+          {#if healthResult.consensusB64}
+            <button
+              class="w-full text-left text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800"
+              onclick={saveConsensus}
+            >
+              Save consensus dump (majority-vote reconstruction)
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
   </details>

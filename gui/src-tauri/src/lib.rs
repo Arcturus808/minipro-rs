@@ -167,6 +167,7 @@ pub fn run() {
             commands::do_logic_test,
             commands::do_logic_identify,
             commands::do_spi_autodetect,
+            commands::run_health_check,
             commands::do_firmware_update,
             commands::read_file_bytes,
             commands::do_smart_diff,

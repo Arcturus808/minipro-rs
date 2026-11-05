@@ -42,6 +42,36 @@ slots). The TL866II+ annotation path shares `device_to_zif` but its
 bit-banging measurement remains to be spot-checked when an II+ is
 available.
 
+## Health check (`--health-check [N]`)
+
+`--health-check [N]` runs a read-only stability diagnostic on the selected
+device (`-p` required): ~20 `get_chip_id` reads plus N full-memory reads
+(default 5, clamped 2–64), then analyzes how the results disagree. It is
+a standalone action — it exits after printing the report and never
+reaches the read/write/erase dispatch or the chip-ID pre-gate (a marginal
+chip's drifting ID must not block the check that would flag it).
+
+Analysis lives in `minipro_core::health` (pure buffer math, unit-tested);
+the orchestrator `operations::health_check` reuses `read_chip_buffer`
+(the read loop extracted from `read_chip`). Report contents: per-pass
+CRC-32s, unique chip IDs seen, per-byte disagreement → unstable-byte
+total, worst 4 KiB regions, `0→1`/`1→0` flip counts, dominant periodic
+spacing, plus a consensus (majority-vote) buffer when instability was
+found — save it with `--consensus-out FILE`.
+
+Verdicts: `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete`
+(some passes erred) / `Transport-Error` (no pass completed — programmer
+fault, not a chip verdict). Exit codes: 0 / 2 / 3 / 4 / 1 respectively —
+deliberately non-1 for chip-side findings so scripts can distinguish
+"bad chip" from "broken setup". Blank/uniform reads are *not* treated
+as failure — a blank chip and a dead chip are indistinguishable from
+reads alone, so the report only notes uniformity.
+
+Transport limitations (by design): the XGecu protocols don't expose
+opcode-level SPI control, SPI mode switching, clock sweeps, direct power
+cycling, or raw status-register reads — those belong to a dedicated
+bus-level tester and are out of scope.
+
 ## ICSP wiring diagram (`-d` / `--get-info` + `-q` / `--programmer`)
 
 `-d <DEVICE>` prints the database record including the upstream

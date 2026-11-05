@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Read-only chip health check** — flags marginal/degrading chips by reading the chip ID (~20×) and the full memory N times (default 5), then analyzing how the results disagree: per-byte instability counts, worst 4 KiB regions, `0→1`/`1→0` flip direction, periodic spacing detection, and a `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete` / `Transport-Error` verdict. A majority-vote consensus buffer is reconstructed when instability is found (best-effort recovery dump). CLI: `minipro -p DEVICE --health-check [N]` with `--consensus-out FILE` to save the reconstruction; exit codes encode the verdict for scripting. GUI: "Chip Health Check" button in the Diagnostics panel with a result card and consensus-dump save. Read-only by design — never touches flash contents; transport errors are reported distinctly from chip instability.
+
 ### Fixed
 
 - **T76 logic-IC test reported good chips as failed (all-high vectors only)** — the shared TL866 two-pass path ran both vector passes against whatever bitstream `begin_transaction` had loaded (for logic devices, `Test_100M` — the SRAM tester), so outputs read low and every vector expecting `H` errored. Matching upstream `t76_logic_ic_test`, the pull direction is now baked into the FPGA per pass: `TestLgcPull` is uploaded before the pull-up pass and `TestLgcDown` before the pull-down pass (utility algorithms 0x0300/0x0200 from `algorithm.xml`), and the bitstream cache is invalidated afterwards. 7408 and other logic ICs now test correctly on T76. T56 was unaffected (its TTL1/TTL2 bitstream honors the runtime pull flag). Hardware-verified with a 7408.
