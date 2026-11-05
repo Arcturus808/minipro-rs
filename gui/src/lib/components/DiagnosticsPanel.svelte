@@ -302,7 +302,7 @@
       </button>
       <label class="flex items-center gap-1.5 px-1 text-xs cursor-pointer" title="After the read passes, compare the image against a known-good file — catches consistent corruption that repeated reads can't">
         <input type="checkbox" bind:checked={healthRefCompare} disabled={healthRunning} />
-        Compare against file
+        Compare reads against file
       </label>
       {#if healthRefCompare}
         <div class="flex items-center gap-1 px-1 pl-5 text-xs">
