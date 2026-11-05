@@ -911,6 +911,65 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
     Ok(())
 }
 
+/// Structured result of a chip-ID read, for frontends that display the
+/// value rather than just checking it.
+#[derive(Debug, Clone)]
+pub struct ChipIdInfo {
+    /// Raw ID read from the chip.
+    pub id: u32,
+    /// Expected ID from the database.
+    pub expected: u32,
+    /// Significant byte count for display (4 for package variants, else
+    /// `chip_id_bytes_count` clamped to 1-4).
+    pub bytes: u8,
+    /// Normalized comparison result — also true when the database has no
+    /// expected ID (`expected == 0`).
+    pub is_match: bool,
+    /// Device name carries an `@`-package suffix — the stored ID belongs
+    /// to the base chip and a real mismatch is informational only.
+    pub is_variant: bool,
+}
+
+impl ChipIdInfo {
+    /// Mask retaining `bytes` significant low bytes.
+    pub fn mask(&self) -> u32 {
+        match self.bytes {
+            1 => 0xFF,
+            2 => 0xFFFF,
+            3 => 0xFF_FFFF,
+            _ => 0xFFFF_FFFF,
+        }
+    }
+}
+
+/// Read the chip ID and package it with the display/comparison metadata
+/// frontends need: masking width, normalized match, and variant flag.
+///
+/// Package variants (`@SOP8` etc.) share a database row with the base chip
+/// and are reported with `bytes = 4` — the firmware can return a wider ID
+/// than the variant's nominal `chip_id_bytes_count`.
+pub fn chip_id_info(handle: &mut MiniproHandle) -> Result<ChipIdInfo> {
+    let device = handle.device()?.clone();
+    let (_id_type, id) = handle.protocol.get_chip_id(&handle.usb, &device)?;
+    let is_variant = device.name.contains('@');
+    let bytes = if is_variant {
+        4
+    } else {
+        device.chip_id_bytes_count.clamp(1, 4)
+    };
+    let expected = device.chip_id;
+    // Normalized comparison handles byte-position differences across
+    // protocols; expected == 0 means the database can't verify.
+    let is_match = expected == 0 || normalize_chip_id(id) == normalize_chip_id(expected);
+    Ok(ChipIdInfo {
+        id,
+        expected,
+        bytes,
+        is_match,
+        is_variant,
+    })
+}
+
 /// Check over-current and return `true` if an OVC event occurred.
 pub fn check_ovc(handle: &mut MiniproHandle) -> Result<bool> {
     // OVC status is now supported for all chip types including NAND/eMMC
