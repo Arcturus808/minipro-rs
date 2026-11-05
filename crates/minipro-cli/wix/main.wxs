@@ -52,6 +52,12 @@
                 Permanent='no' Part='last' Action='set' System='yes'/>
             </Component>
 
+            <Component Id='TuiBinary' Guid='*'>
+              <File Id='minipro-tui.exe' Name='minipro-tui.exe'
+                Source='../../../target/x86_64-pc-windows-gnu/release/minipro-tui.exe'
+                KeyPath='yes'/>
+            </Component>
+
             <!-- Database XMLs live alongside the executable so the runtime
                  search (exe's parent directory) finds them. See
                  crates/minipro-core/src/database.rs::resolve_one, step 2. -->
@@ -71,6 +77,7 @@
     <Feature Id='DefaultFeature' Title='minipro' Level='1'>
       <ComponentRef Id='License'/>
       <ComponentRef Id='Binary'/>
+      <ComponentRef Id='TuiBinary'/>
       <ComponentRef Id='Database'/>
     </Feature>
 
