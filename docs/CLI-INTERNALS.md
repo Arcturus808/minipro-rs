@@ -63,13 +63,24 @@ every observed ID is a stuck-bus value (`0x0` or any-width all-ones —
 MISO held low / floating high), the report says the chip isn't
 answering the ID command rather than calling the ID unstable.
 
-Verdicts: `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete`
-(some passes erred) / `Transport-Error` (no pass completed — programmer
-fault, not a chip verdict). Exit codes: 0 / 2 / 3 / 4 / 1 respectively —
-deliberately non-1 for chip-side findings so scripts can distinguish
-"bad chip" from "broken setup". Blank/uniform reads are *not* treated
-as failure — a blank chip and a dead chip are indistinguishable from
-reads alone, so the report only notes uniformity.
+Verdicts: `Stable` / `Marginal-ID` / `Marginal-Data` /
+`Reference-Mismatch` / `Incomplete` (some passes erred) /
+`Transport-Error` (no pass completed — programmer fault, not a chip
+verdict). Exit codes: 0 / 2 / 3 / 5 / 4 / 1 respectively — deliberately
+non-1 for chip-side findings so scripts can distinguish "bad chip" from
+"broken setup". Blank/uniform reads are *not* treated as failure — a
+blank chip and a dead chip are indistinguishable from reads alone, so
+the report only notes uniformity.
+
+`--reference FILE` (with `--health-check`) compares the effective read
+image — consensus when unstable, else the single consistent image —
+against a known-good file (bin/ihex/srec auto-detected). This catches
+what repeated reads can't: deterministic corruption where every pass
+agrees on the *wrong* data, e.g. a decode fault or a chip that wasn't
+actually programmed with what you think. Mismatch count is reported
+(`reference_mismatches`); nonzero → `Reference-Mismatch` (exit 5),
+zero → confirming note. Size mismatches compare the common prefix with
+a note.
 
 Transport limitations (by design): the XGecu protocols don't expose
 opcode-level SPI control, SPI mode switching, clock sweeps, direct power

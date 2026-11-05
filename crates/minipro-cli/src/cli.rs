@@ -161,6 +161,12 @@ struct Cli {
     #[arg(long = "consensus-out", alias = "consensus_out", value_name = "FILE")]
     consensus_out: Option<PathBuf>,
 
+    /// With --health-check: compare the read image against FILE (known-good
+    /// reference, e.g. the image that was written). Catches consistent
+    /// corruption that stability analysis can't.
+    #[arg(long = "reference", alias = "reference", value_name = "FILE")]
+    reference: Option<PathBuf>,
+
     /// Identify an unknown logic IC by testing all database entries
     /// with the given pin count. Requires --pin-count.
     #[arg(long = "logic-identify", action = ArgAction::SetTrue)]

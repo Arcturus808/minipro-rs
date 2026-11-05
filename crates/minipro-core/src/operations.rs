@@ -1554,6 +1554,11 @@ pub fn spi_autodetect_and_lookup(
 /// characterizes how the results disagree. Read-only — never modifies chip
 /// contents. The device must already be open (`begin_transaction`).
 ///
+/// `reference` is an optional known-good image (e.g. the file that was
+/// written to the chip). When supplied, the effective read image is
+/// compared against it — catching deterministic corruption that pure
+/// stability analysis can't (all passes agreeing on the wrong data).
+///
 /// `progress` reports `(done, total)` in operation units (ID reads + full
 /// reads). Mid-read failures are recorded and the remaining passes still
 /// run — an intermittent chip may answer some passes and not others.
@@ -1561,6 +1566,7 @@ pub fn health_check(
     handle: &mut MiniproHandle,
     read_passes: usize,
     id_runs: usize,
+    reference: Option<&[u8]>,
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<crate::health::HealthReport> {
     let device = handle.device()?.clone();
@@ -1614,5 +1620,6 @@ pub fn health_check(
         chip_id_errors,
         reads,
         pass_errors,
+        reference.map(|r| r.to_vec()),
     ))
 }

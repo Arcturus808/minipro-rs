@@ -35,6 +35,10 @@ pub enum HealthVerdict {
     MarginalId,
     /// Memory contents differed between read passes.
     MarginalData,
+    /// Reads were mutually consistent but diverge from the supplied
+    /// reference image — either the chip holds different data or the
+    /// read path corrupts deterministically.
+    ReferenceMismatch,
     /// Every read pass failed — transport or chip never answered.
     TransportError,
     /// Some passes failed; results are from the completed subset only.
@@ -47,6 +51,7 @@ impl HealthVerdict {
             Self::Stable => "STABLE",
             Self::MarginalId => "MARGINAL-ID",
             Self::MarginalData => "MARGINAL-DATA",
+            Self::ReferenceMismatch => "REFERENCE-MISMATCH",
             Self::TransportError => "TRANSPORT-ERROR",
             Self::Incomplete => "INCOMPLETE",
         }
@@ -91,6 +96,11 @@ pub struct HealthReport {
     /// Per-byte majority-vote reconstruction (present only when
     /// `unstable_bytes > 0` — a best-effort recovery dump).
     pub consensus: Option<Vec<u8>>,
+    /// Byte positions where the effective read image (consensus when
+    /// unstable, otherwise the single consistent image) differs from a
+    /// caller-supplied reference. `None` when no reference was given —
+    /// distinguishes "not compared" from "compared, zero mismatches".
+    pub reference_mismatches: Option<usize>,
     /// Final verdict.
     pub verdict: HealthVerdict,
 }
@@ -202,6 +212,7 @@ pub(crate) fn build_report(
     chip_id_errors: Vec<String>,
     reads: Vec<Vec<u8>>,
     pass_errors: Vec<String>,
+    reference: Option<Vec<u8>>,
 ) -> HealthReport {
     let pass_crcs: Vec<u32> = reads
         .iter()
@@ -215,6 +226,7 @@ pub(crate) fn build_report(
     let mut flips_up = 0u64;
     let mut flips_down = 0u64;
     let mut periodicity = None;
+    let mut reference_mismatches = None;
 
     // ── Chip ID analysis ────────────────────────────────────────────────
     let mut unique_ids: Vec<u32> = chip_ids.clone();
@@ -355,12 +367,63 @@ pub(crate) fn build_report(
         }
     }
 
+    // ── Reference comparison ───────────────────────────────────────────
+    // Compare the *effective* image — the consensus reconstruction when
+    // reads disagreed, otherwise the single consistent image — against a
+    // caller-supplied reference. This catches deterministic corruption
+    // that stability analysis can't (all N passes agreeing on the wrong
+    // data), and answers "did I read what I meant to write?".
+    if let Some(reference) = reference {
+        let image: Option<&[u8]> = match (&consensus, reads.first()) {
+            (Some(c), _) => Some(c),
+            (None, Some(r)) => Some(r.as_slice()),
+            (None, None) => None,
+        };
+        if let Some(image) = image {
+            let cmp_len = image.len().min(reference.len());
+            if reference.len() != image.len() {
+                notes.push(format!(
+                    "reference is {} bytes vs image {} — compared first {} bytes",
+                    reference.len(),
+                    image.len(),
+                    cmp_len
+                ));
+            }
+            let mut mismatches = 0usize;
+            let mut first_mismatch = None;
+            for i in 0..cmp_len {
+                if image[i] != reference[i] {
+                    mismatches += 1;
+                    if first_mismatch.is_none() {
+                        first_mismatch = Some(i);
+                    }
+                }
+            }
+            reference_mismatches = Some(mismatches);
+            if mismatches == 0 {
+                notes.push("read image matches reference exactly".to_string());
+            } else {
+                notes.push(format!(
+                    "{} byte position{} differ{} from reference (first at 0x{:06x}) — \
+                     consistent divergence: chip contents differ, or the read path \
+                     corrupts deterministically",
+                    mismatches,
+                    if mismatches == 1 { "" } else { "s" },
+                    if mismatches == 1 { "s" } else { "" },
+                    first_mismatch.unwrap_or(0)
+                ));
+            }
+        }
+    }
+
     let verdict = if reads.is_empty() && !pass_errors.is_empty() {
         HealthVerdict::TransportError
     } else if unstable_bytes > 0 {
         HealthVerdict::MarginalData
     } else if unique_ids.len() > 1 {
         HealthVerdict::MarginalId
+    } else if reference_mismatches.unwrap_or(0) > 0 {
+        HealthVerdict::ReferenceMismatch
     } else if !pass_errors.is_empty() || reads.len() < read_passes_requested.min(2) {
         HealthVerdict::Incomplete
     } else {
@@ -384,6 +447,7 @@ pub(crate) fn build_report(
         periodicity,
         notes,
         consensus,
+        reference_mismatches,
         verdict,
     }
 }
@@ -402,6 +466,21 @@ mod tests {
             Vec::new(),
             a.to_vec(),
             Vec::new(),
+            None,
+        )
+    }
+
+    fn reads_ref(a: &[Vec<u8>], reference: &[u8]) -> HealthReport {
+        build_report(
+            "test".into(),
+            a[0].len(),
+            a.len(),
+            Vec::new(),
+            None,
+            Vec::new(),
+            a.to_vec(),
+            Vec::new(),
+            Some(reference.to_vec()),
         )
     }
 
@@ -457,6 +536,7 @@ mod tests {
             Vec::new(),
             vec![vec![0xAA; 4], vec![0xAA; 4]],
             Vec::new(),
+            None,
         );
         assert_eq!(r.verdict, HealthVerdict::MarginalId);
         assert!(r.notes.iter().any(|n| n.contains("chip ID unstable")));
@@ -475,6 +555,7 @@ mod tests {
             Vec::new(),
             vec![vec![0xAA; 4], vec![0xAA; 4]],
             Vec::new(),
+            None,
         );
         assert_eq!(r.verdict, HealthVerdict::MarginalId);
         assert!(r.notes.iter().any(|n| n.contains("stuck-bus")));
@@ -491,6 +572,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             vec!["usb error".into()],
+            None,
         );
         assert_eq!(r.verdict, HealthVerdict::TransportError);
     }
@@ -530,6 +612,7 @@ mod tests {
             Vec::new(),
             vec![vec![0xAA; 4], vec![0xAA; 4]],
             vec!["pass 3: usb timeout".into()],
+            None,
         );
         assert_eq!(r.verdict, HealthVerdict::Incomplete);
         assert_eq!(r.read_passes_completed, 2);
@@ -547,6 +630,7 @@ mod tests {
             Vec::new(),
             vec![vec![0xAA; 4]],
             vec!["pass 2: usb timeout".into(), "pass 3: usb timeout".into()],
+            None,
         );
         assert_eq!(r.verdict, HealthVerdict::Incomplete);
     }
@@ -569,5 +653,49 @@ mod tests {
         let r = reads_eq(&[a, b]);
         assert_eq!(r.flips_up, 8);
         assert_eq!(r.flips_down, 0);
+    }
+
+    #[test]
+    fn matching_reference_stays_stable() {
+        let img = vec![0x5Au8; 32];
+        let r = reads_ref(&[img.clone(), img.clone()], &img);
+        assert_eq!(r.verdict, HealthVerdict::Stable);
+        assert_eq!(r.reference_mismatches, Some(0));
+        assert!(r.notes.iter().any(|n| n.contains("matches reference")));
+    }
+
+    #[test]
+    fn stable_reads_diverging_from_reference() {
+        // Every pass agrees — but on the wrong data. Stability alone would
+        // call this Stable; the reference exposes consistent corruption.
+        let reads = vec![vec![0xAA; 32], vec![0xAA; 32], vec![0xAA; 32]];
+        let mut reference = vec![0xAA; 32];
+        reference[10] = 0xAB;
+        let r = reads_ref(&reads, &reference);
+        assert_eq!(r.verdict, HealthVerdict::ReferenceMismatch);
+        assert_eq!(r.reference_mismatches, Some(1));
+    }
+
+    #[test]
+    fn unstable_reads_compare_consensus_to_reference() {
+        // Consensus vote determines the effective image for the reference
+        // comparison; instability still wins the verdict (MarginalData).
+        let mut a = vec![0x00; 16];
+        let mut b = vec![0x00; 16];
+        a[4] = 0xFF;
+        let r = reads_ref(&[a, b, vec![0x00; 16]], &vec![0x00; 16]);
+        assert_eq!(r.verdict, HealthVerdict::MarginalData);
+        assert_eq!(r.reference_mismatches, Some(0));
+    }
+
+    #[test]
+    fn shorter_reference_compares_prefix() {
+        let reads = vec![vec![0x77; 64], vec![0x77; 64]];
+        let r = reads_ref(&reads, &vec![0x77; 32]);
+        assert_eq!(r.reference_mismatches, Some(0));
+        assert!(r
+            .notes
+            .iter()
+            .any(|n| n.contains("compared first 32 bytes")));
     }
 }

@@ -26,8 +26,8 @@ use minipro_core::{
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
-        read_chip_calibration, read_fuses, spi_autodetect_and_lookup, verify_chip, write_chip,
-        write_fuses, FuseValue, SizeMismatch,
+        read_chip_calibration, read_file, read_fuses, spi_autodetect_and_lookup, verify_chip,
+        write_chip, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -162,6 +162,9 @@ fn format_health_report(report: &minipro_core::HealthReport) -> String {
     }
     for e in &report.chip_id_errors {
         out.push_str(&format!("  ID ERROR: {}\n", e));
+    }
+    if let Some(n) = report.reference_mismatches {
+        out.push_str(&format!("Reference mismatches: {}\n", n));
     }
     if report.unstable_bytes > 0 {
         out.push_str(&format!(
@@ -856,7 +859,15 @@ fn do_operations(
             pb.set_length(total as u64);
             pb.set_position(done as u64);
         };
-        let report = health_check(handle, passes, ID_RUNS, Some(&mut cb))?;
+        let reference = match &cli.reference {
+            Some(path) => {
+                let dev = handle.device()?;
+                let size = handle.protocol.effective_code_size(&dev) as usize;
+                Some(read_file(path, "auto", size, dev.blank_value as u8)?)
+            }
+            None => None,
+        };
+        let report = health_check(handle, passes, ID_RUNS, reference.as_deref(), Some(&mut cb))?;
         pb.finish_and_clear();
         print!("{}", format_health_report(&report));
         if let Some(consensus) = &report.consensus {
@@ -877,6 +888,7 @@ fn do_operations(
             HV::MarginalId => 2,
             HV::MarginalData => 3,
             HV::Incomplete => 4,
+            HV::ReferenceMismatch => 5,
             HV::TransportError => 1,
         });
     }

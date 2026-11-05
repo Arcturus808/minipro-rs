@@ -185,15 +185,22 @@
     passErrors: string[];
     chipIdErrors: string[];
     notes: string[];
+    referenceMismatches: number | null;
     consensusB64: string | null;
   }
 
   let healthRunning = $state(false);
   let healthResult = $state<HealthCheckResult | null>(null);
+  let healthRefPath = $state<string | null>(null);
 
   const healthCheckEnabled = $derived(
     $programmer !== null && $selectedDevice !== null && !healthRunning,
   );
+
+  async function pickHealthReference() {
+    const p = await pickOpenFile("Select reference image (bin / ihex / srec)");
+    if (p) healthRefPath = p;
+  }
 
   async function runHealthCheck() {
     healthRunning = true;
@@ -203,6 +210,7 @@
         icspMode: $settings.icspMode,
         pinCheck: true,
         passes: 5,
+        referencePath: healthRefPath,
       });
     } catch (e) {
       logs.error(`Health check failed: ${e}`);
@@ -229,8 +237,8 @@
   }
 
   function verdictClass(v: string): string {
-    if (v === "Stable") return "text-green-500";
-    if (v === "Transport error") return "text-red-500";
+    if (v === "STABLE") return "text-green-500";
+    if (v === "TRANSPORT-ERROR") return "text-red-500";
     return "text-amber-500";
   }
 </script>
@@ -288,6 +296,20 @@
           Chip Health Check
         {/if}
       </button>
+      <div class="flex items-center gap-1 px-1 text-xs">
+        <span class="opacity-60">Reference:</span>
+        <button
+          class="opacity-80 hover:opacity-100 underline truncate flex-1 text-left disabled:opacity-40"
+          onclick={pickHealthReference}
+          disabled={healthRunning}
+          title="Optional known-good image to compare reads against"
+        >
+          {healthRefPath ? healthRefPath.split(/[\\/]/).pop() : "none (optional)"}
+        </button>
+        {#if healthRefPath}
+          <button class="opacity-60 hover:opacity-100 px-0.5" onclick={() => (healthRefPath = null)} title="Clear reference">×</button>
+        {/if}
+      </div>
       {#if healthResult}
         <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
           <div class="flex items-center justify-between gap-2">
@@ -321,6 +343,11 @@
             {#if healthResult.regions.length > 6}
               <div class="opacity-60">… and {healthResult.regions.length - 6} more regions</div>
             {/if}
+          {/if}
+          {#if healthResult.referenceMismatches !== null}
+            <div class={healthResult.referenceMismatches > 0 ? "text-amber-500" : "opacity-80"}>
+              Reference mismatches: {healthResult.referenceMismatches}
+            </div>
           {/if}
           {#each healthResult.passErrors as e}
             <div class="text-red-500">{e}</div>
