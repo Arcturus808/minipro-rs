@@ -1051,6 +1051,16 @@ impl App {
                     self.search_editing = false;
                     self.activate();
                 }
+                // Tab always means "leave this field" — exit the input
+                // AND cycle the pane; a dead Tab mid-search reads as a hang.
+                KeyCode::Tab => {
+                    self.search_editing = false;
+                    self.cycle_pane(1);
+                }
+                KeyCode::BackTab => {
+                    self.search_editing = false;
+                    self.cycle_pane(-1);
+                }
                 _ => {}
             }
             return false;
@@ -1249,6 +1259,20 @@ mod tests {
         // activate() ran: pane jumped to Options (find_device fails on
         // the fake paths, but the dispatch still happened).
         assert_eq!(a.pane, Pane::Options);
+    }
+
+    #[test]
+    fn tab_in_search_exits_and_cycles_pane() {
+        let mut a = app();
+        a.note_size(120, 40); // all three panes visible → Tab moves Options
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Tab));
+        assert!(!a.search_editing);
+        assert_eq!(a.pane, Pane::Options);
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::BackTab));
+        assert!(!a.search_editing);
+        assert_eq!(a.pane, Pane::Devices);
     }
 
     #[test]

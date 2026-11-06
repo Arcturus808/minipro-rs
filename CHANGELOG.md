@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **TUI: device list unreachable while searching** — with the search input focused, every non-editing key was swallowed, so ↑/↓/PgUp/PgDn couldn't navigate results until Esc/Enter was discovered. Arrows now move the results cursor while typing (fzf convention), and Enter selects the highlighted device directly instead of only leaving edit mode (Esc still cancels without selecting).
+- **TUI: device list unreachable while searching** — with the search input focused, every non-editing key was swallowed, so ↑/↓/PgUp/PgDn couldn't navigate results and Tab did nothing. Arrows now move the results cursor while typing (fzf convention), Tab/BackTab exit the field and cycle panes, and Enter selects the highlighted device directly instead of only leaving edit mode (Esc still cancels without selecting).
 
 - **GUI ZIF diagram: bad-pin label spacing** — "PIN n" callouts sat 4px from the socket while "ZIF PIN 1" sits 8px; all labels now share the same 8px column.
 
