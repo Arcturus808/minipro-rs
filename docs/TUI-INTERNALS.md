@@ -46,6 +46,11 @@ crossterm ──poll(100ms)──► main loop ──WorkerCmd──► worker t
   (leaked `&'static`, `set_logger`) that forwards records as
   `AppEvent::Log`. Core emits `info!` per block in `blank_check` — the
   logger filters `blank_check` progress spam before it reaches the pane.
+  Rows render GUI-style (`[LEVEL]` colored tag + message, no timestamp)
+  and word-wrap to the pane width via `app::wrap_log` — the pane has no
+  horizontal scroll, so wrapping is the only way long messages stay
+  readable. `log_scroll`/`log_scroll_max` are in *wrapped rows*, the
+  latter cached by the renderer each frame.
 
 ## Connection state
 

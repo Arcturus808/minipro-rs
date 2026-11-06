@@ -20,7 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use app::{App, ConnState, Modal, OptZone, Pane, OPS, OPT_COLS, SEL_DEFS};
+use app::{wrap_log, App, ConnState, Modal, OptZone, Pane, OPS, OPT_COLS, SEL_DEFS};
 #[cfg(debug_assertions)]
 use crossterm::event::{KeyCode, KeyModifiers};
 use crossterm::{
@@ -712,24 +712,46 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
     .split(area);
 
     // Log pane — newest at the bottom; log_scroll shifts the window up.
+    // GUI-style rows: colored [LEVEL] tag + message, word-wrapped to the
+    // pane width (no horizontal scroll exists, so wrap or lose text).
     let log_h = v[0].height.saturating_sub(1) as usize;
-    let total = app.log_lines.len();
+    let width = v[0].width as usize;
+    let mut rows: Vec<Line> = Vec::new();
+    for l in &app.log_lines {
+        let (tag, tag_style) = match l.level {
+            log::Level::Error => ("[ERROR]", theme::red()),
+            log::Level::Warn => ("[WARN]", theme::amber()),
+            _ => ("[INFO]", theme::green()),
+        };
+        let indent = 1 + tag.len() + 1;
+        let pad = " ".repeat(indent);
+        for (i, chunk) in wrap_log(&l.msg, width.saturating_sub(indent))
+            .iter()
+            .enumerate()
+        {
+            if i == 0 {
+                rows.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(tag, tag_style),
+                    Span::raw(" "),
+                    Span::styled(chunk.clone(), theme::text()),
+                ]));
+            } else {
+                rows.push(Line::from(vec![
+                    Span::raw(pad.clone()),
+                    Span::styled(chunk.clone(), theme::text()),
+                ]));
+            }
+        }
+    }
+    app.log_scroll_max = rows.len().saturating_sub(log_h);
+    app.log_scroll = app.log_scroll.min(app.log_scroll_max);
+    let total = rows.len();
     let end = total.saturating_sub(app.log_scroll);
     let start = end.saturating_sub(log_h);
     let mut log: Vec<Line> = vec![hdr("LOG", focused)];
-    for l in app.log_lines.iter().skip(start).take(end - start) {
-        let style = match l.level {
-            log::Level::Error => theme::red(),
-            log::Level::Warn => theme::amber(),
-            log::Level::Info => theme::text(),
-            _ => theme::faint(),
-        };
-        log.push(Line::from(vec![
-            sp(format!(" {} ", l.ts), theme::faint()),
-            Span::styled(l.msg.clone(), style),
-        ]));
-    }
-    if log.is_empty() {
+    log.extend(rows.into_iter().skip(start).take(end - start));
+    if total == 0 {
         log.push(Line::from(sp(" —", theme::faint())));
     }
     f.render_widget(Paragraph::new(log), v[0]);
