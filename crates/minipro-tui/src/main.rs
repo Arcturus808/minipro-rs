@@ -21,8 +21,10 @@ use std::{
 };
 
 use app::{App, ConnState, Modal, OptZone, Pane, OPS, OPT_COLS, SEL_DEFS};
+#[cfg(debug_assertions)]
+use crossterm::event::{KeyCode, KeyModifiers};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
