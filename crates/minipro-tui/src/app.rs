@@ -238,7 +238,9 @@ pub struct App {
     /// Latest pin-test result for ZIF highlighting.
     pub pin_test: Option<PinTestView>,
     /// Last file path handed to a file op — for the buffer line.
-    pub last_path: Option<String>,
+    /// Last file op's resolved path — shown full in the log, `file_name`
+    /// in the status strip.
+    pub last_path: Option<PathBuf>,
     /// Last read/write stats — the buffer line + CRC display.
     pub last_stats: Option<OpStats>,
     /// Last chip-ID result (the ID tab also shows it in the log).
@@ -576,7 +578,7 @@ impl App {
                 let target = self
                     .last_path
                     .clone()
-                    .map(|p| format!(" → {p}"))
+                    .map(|p| format!(" → {}", p.display()))
                     .unwrap_or_default();
                 self.push_log(
                     log::Level::Info,
@@ -778,12 +780,7 @@ impl App {
             return;
         };
         let device_name = dev.name.clone();
-        self.last_path = path.as_ref().map(|p| {
-            p.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
-        });
+        self.last_path = path.clone();
         self.op_running = Some(op);
         self.op_started = Some(Instant::now());
         self.progress = Some((0, 1));
@@ -813,6 +810,18 @@ impl App {
 
     // ── Modal handling ───────────────────────────────────────────────
 
+    /// Resolve a modal path input: absolute stays as-is, relative joins
+    /// onto the process CWD so the save location is explicit everywhere
+    /// it's displayed.
+    pub fn resolve_path(input: &str) -> PathBuf {
+        let p = PathBuf::from(input);
+        if p.is_absolute() {
+            p
+        } else {
+            std::env::current_dir().unwrap_or_default().join(p)
+        }
+    }
+
     fn handle_modal_key(&mut self, k: KeyEvent) {
         match self.modal.take() {
             Some(Modal::Path {
@@ -832,7 +841,7 @@ impl App {
                         });
                         return;
                     }
-                    let path = PathBuf::from(input.trim());
+                    let path = Self::resolve_path(input.trim());
                     if op.is_destructive() {
                         let name = self
                             .selected
@@ -1754,6 +1763,25 @@ mod tests {
         assert!(msg.contains("read aborted (pin contact check)"));
         // The gate's detailed reason is NOT repeated here.
         assert!(!msg.contains("failed"));
+    }
+
+    #[test]
+    fn relative_path_resolves_to_absolute() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.handle_key(key(KeyCode::Char('r'))); // opens the read path prompt
+        a.handle_key(key(KeyCode::Char('x'))); // append a char to the prefill
+        a.handle_key(key(KeyCode::Enter));
+        match rx.try_recv() {
+            Ok(WorkerCmd::Run {
+                path: Some(p), op, ..
+            }) => {
+                assert_eq!(op, OpKind::Read);
+                assert!(p.is_absolute(), "worker must get an absolute path");
+            }
+            _ => panic!("expected Run with path"),
+        }
     }
 
     #[test]
