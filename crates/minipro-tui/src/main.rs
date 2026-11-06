@@ -858,7 +858,7 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("Home · End", "first · last match"),
         row("Enter", "select (search: select + exit)"),
         row("Esc", "cancel search · quit"),
-        row("f", "favorite (persisted)"),
+        row("f · Ctrl-F", "favorite (Ctrl-F while typing too)"),
         Line::default(),
         section("Operations"),
         row("r/w/v/e/b/i", "run op (read → buffer; else prompts)"),
