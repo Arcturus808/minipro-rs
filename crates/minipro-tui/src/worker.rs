@@ -241,9 +241,11 @@ fn run_in_transaction(
             log(
                 tx,
                 log::Level::Warn,
-                format!("Pin contact check failed: {detail}. Operation aborted."),
+                format!("Pin contact check failed: {detail}"),
             );
-            return Err(format!("pin contact check failed — {detail}"));
+            return Ok(OpOutcome::Aborted {
+                gate: "pin contact check",
+            });
         }
         log(tx, log::Level::Info, "Pin contact check passed");
     }
@@ -254,7 +256,9 @@ fn run_in_transaction(
             Ok(()) => log(tx, log::Level::Info, "Chip ID check passed"),
             Err(e) => {
                 log(tx, log::Level::Error, format!("Chip ID check failed: {e}"));
-                return Err(e.to_string());
+                return Ok(OpOutcome::Aborted {
+                    gate: "chip ID check",
+                });
             }
         }
     }

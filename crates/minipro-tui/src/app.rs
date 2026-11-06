@@ -644,6 +644,12 @@ impl App {
                 }
                 self.chip_id = Some(*info);
             }
+            Ok(OpOutcome::Aborted { gate }) => {
+                self.push_log(
+                    log::Level::Warn,
+                    format!("✗ {} aborted ({gate})", op.name()),
+                );
+            }
             Err(e) => {
                 self.push_log(log::Level::Error, format!("✗ {} failed: {e}", op.name()));
             }
@@ -1731,6 +1737,23 @@ mod tests {
         a.handle_key(key(KeyCode::Char('n'))); // explicit cancel still works
         assert!(a.modal.is_none());
         assert!(a.op_running.is_none());
+    }
+
+    #[test]
+    fn aborted_op_logs_short_status() {
+        let mut a = app();
+        a.op_running = Some(OpKind::Read);
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Read,
+            result: Ok(OpOutcome::Aborted {
+                gate: "pin contact check",
+            }),
+        });
+        assert!(a.op_running.is_none());
+        let msg = &a.log_lines.back().unwrap().msg;
+        assert!(msg.contains("read aborted (pin contact check)"));
+        // The gate's detailed reason is NOT repeated here.
+        assert!(!msg.contains("failed"));
     }
 
     #[test]
