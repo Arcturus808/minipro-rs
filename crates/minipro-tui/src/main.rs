@@ -897,6 +897,8 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("Home · End · :", "row start/end · goto offset"),
         row("0-9a-f", "overtype byte (half-typed = x·)"),
         row("Tab · Esc", "hex/ASCII mode toggle (i/Ins also enter)"),
+        row("/ · n/N · F3", "find (x: prefix for hex) · repeat · repeat"),
+        row("Backspace", "undo previous edit keystroke"),
         row("o · s · w · v", "load · save · write chip · verify"),
         row("Esc / q / x / Tab", "back to panes"),
         Line::default(),
@@ -972,6 +974,27 @@ fn modal_overlay(f: &mut Frame, area: Rect, m: &Modal) {
                 ],
             )
         }
+        Modal::Find { input, cursor } => {
+            let mut spans = vec![
+                sp(&input[..*cursor], theme::text()),
+                sp("▌", theme::accent()),
+            ];
+            spans.push(sp(&input[*cursor..], theme::text()));
+            (
+                "Find (text · x:hex pairs)",
+                vec![
+                    Line::default(),
+                    Line::from(spans),
+                    Line::default(),
+                    Line::from(vec![
+                        sp(" Enter", theme::accent()),
+                        sp(" find next  ·  ", theme::dim()),
+                        sp("Esc", theme::accent()),
+                        sp(" cancel", theme::dim()),
+                    ]),
+                ],
+            )
+        }
         Modal::Confirm { lines, .. } => {
             let mut body: Vec<Line> = vec![Line::default()];
             for (i, l) in lines.iter().enumerate() {
@@ -1036,6 +1059,8 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
             sep(" top/end  ·  "),
             key(":"),
             sep(" goto  ·  "),
+            key("/"),
+            sep(" find  ·  "),
             key("0-9a-f"),
             sep(" edit  ·  "),
             key("Tab"),

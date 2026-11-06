@@ -149,7 +149,7 @@ panes · `F5` reconnect · `,` settings · `Esc` close modal/backs out.
 |---------|------|
 | Devices | `/` enters the search box (all chars insert while focused — bare `q` stays quit, so typing can't *start* a query; `Esc`/`Enter`/`Backspace`-on-empty leave it) · `↑/↓`/`PgUp`/`PgDn` navigate · `Enter` select & advance to options · `f` favorite · `a`/`A` SPI autodetect 8/16-pin |
 | Operations | mnemonic keys run ops — `r`ead `w`rite `v`erify `e`rase `b`lank `i`d (`l`ogic `c`onfig warn: not in MVP); `1`–`8` arm a tab, `Enter` runs · `Space` toggle · `←/→` cycle select |
-| Hex (P2) | `hjkl`/arrows · `g`/`G` first/last · `/` find, `n`/`N` next/prev · `v` select · hex digits or chars edit in place · `u`/`Ctrl-r` undo/redo · `+`/`-` bytes-per-row |
+| Hex (P2) | arrows/`g`/`G` nav · `:` goto · `/`/`Ctrl-F` find (`x:` = hex), `n`/`N`/`F3`/`Shift-F3` repeat · `Tab` hex/ASCII entry toggle (hexedit/Okteta convention) · hex digits or printable chars overtype · `Backspace` undo last edit · `o`/`s`/`w`/`v` load/save/write/verify buffer. Open: `v` select, redo, diff, `+`/`-` bytes-per-row |
 | Log | `PgUp/PgDn`/`j`/`k` scroll · `c` copy · `x` clear |
 | Batch (P4) | `Enter` next chip · `r` retry · `s` stop |
 
@@ -238,10 +238,17 @@ possible later enhancement — do not promise it.
   diff; ZIF + ICSP diagrams (pure render, high value).
   **Partially shipped:** the buffer view landed as a dedicated
   full-screen screen (`o` toggle; reads fill it, `s`/`o` save/load,
-  `w`/`v` write/verify to chip, `:` goto, overtype edits, per-row
+  `w`/`v` write/verify to chip, `:` goto, overtype edits, `/` find +
+  `F3`/`n`/`N` repeats, `Backspace` per-keystroke undo, per-row
   entropy gutter) — ZIF diagram + pin-test highlighting shipped with
-  P1 instead. Still open: find, undo/redo, selection, diff, ICSP
+  P1 instead. Still open: redo, selection, diff, ICSP
   diagram, bytes-per-row, mouse.
+  **Design rule for hex-editor decisions:** follow the de-facto TUI
+  hex-editor conventions for the *editing surface* (hexedit, Okteta,
+  bvi — Tab toggles which column receives input, overwrite-only,
+  dirty-byte marking, search with repeats, minimal undo); the
+  *workflow surface* (buffer↔chip ops, pin gates, verify) is ours and
+  optimizes for the patch-and-burn loop, not general file editing.
 - **P3 — specialist ops:** config/fuse editor (+ `fuse_defs` move), logic
   test + identify, SPI autodetect, pin-test diagram highlighting,
   diagnostics menu (OVC/calibration/hw-check/firmware update).

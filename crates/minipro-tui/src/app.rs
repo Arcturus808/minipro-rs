@@ -164,6 +164,9 @@ pub enum Modal {
     },
     /// Hex-view goto-offset prompt (`:` key) — input parsed as hex.
     Goto { input: String, cursor: usize },
+    /// Hex-view find prompt (`/`/Ctrl-F) — literal text, or an `x:`
+    /// prefix for hex pairs (e.g. `x:de ad be ef`).
+    Find { input: String, cursor: usize },
     /// y/N confirmation for destructive ops (write, erase).
     Confirm {
         op: OpKind,
@@ -195,7 +198,23 @@ pub struct HexBuf {
     pub view_rows: u16,
     /// CRC-32 shown in the header — from the read stats or computed on load.
     pub crc32: u32,
+    /// Buffer contents at load/save — cloned lazily on the first edit so
+    /// the dirty marks can be recomputed when undo restores a byte.
+    original: Option<Vec<u8>>,
+    /// Per-keystroke undo stack: (offset, pre-edit byte). Capped — the
+    /// oldest entries drop off (hexedit-style minimal undo).
+    undo: std::collections::VecDeque<(usize, u8)>,
+    /// Last `/` find pattern — F3/n/N repeats need it after the modal
+    /// closes.
+    pub last_find: Vec<u8>,
+    /// One-line status shown in the footer (find results) — cleared on
+    /// the next keypress.
+    pub note: Option<String>,
 }
+
+/// Max undo entries retained — 8K × 9 bytes is trivial and far past
+/// any realistic interactive edit session.
+const HEX_UNDO_CAP: usize = 8192;
 
 impl HexBuf {
     pub fn new(data: Vec<u8>, crc32: u32) -> Self {
@@ -208,11 +227,87 @@ impl HexBuf {
             ascii: false,
             view_rows: 1,
             crc32,
+            original: None,
+            undo: Default::default(),
+            last_find: Vec::new(),
+            note: None,
         }
     }
 
     fn last(&self) -> usize {
         self.data.len().saturating_sub(1)
+    }
+
+    /// Record the pre-edit byte for undo and snapshot the pristine
+    /// buffer (once) so dirty marks can be recomputed on undo.
+    fn begin_edit(&mut self) {
+        if self.original.is_none() {
+            self.original = Some(self.data.clone());
+        }
+        self.undo.push_back((self.cursor, self.data[self.cursor]));
+        if self.undo.len() > HEX_UNDO_CAP {
+            self.undo.pop_front();
+        }
+    }
+
+    /// Recompute the dirty mark at `pos` against the load-time buffer.
+    fn mark(&mut self, pos: usize) {
+        if self
+            .original
+            .as_ref()
+            .is_some_and(|o| o[pos] == self.data[pos])
+        {
+            self.edited.remove(&pos);
+        } else {
+            self.edited.insert(pos);
+        }
+    }
+
+    /// Backspace — undo the previous edit keystroke: restores the byte
+    /// and moves the cursor there (hexedit's undo-previous-character).
+    fn undo_last(&mut self) {
+        if let Some((pos, old)) = self.undo.pop_back() {
+            self.data[pos] = old;
+            self.mark(pos);
+            self.cursor = pos;
+            self.nibble = None;
+            self.ensure_visible();
+        }
+    }
+
+    /// First match of `pat` at-or-after `from`, wrapping to the start.
+    fn find_next(&self, pat: &[u8], from: usize) -> Option<usize> {
+        if pat.is_empty() || self.data.is_empty() {
+            return None;
+        }
+        let from = from.min(self.data.len());
+        self.data[from..]
+            .windows(pat.len())
+            .position(|w| w == pat)
+            .map(|i| i + from)
+            .or_else(|| self.data[..from].windows(pat.len()).position(|w| w == pat))
+    }
+
+    /// Match of `pat` starting strictly before `to`, nearest first,
+    /// wrapping to the tail. Starts < `to` count even when the match
+    /// itself overlaps the cursor.
+    fn find_prev(&self, pat: &[u8], to: usize) -> Option<usize> {
+        let len = pat.len();
+        if len == 0 || self.data.is_empty() {
+            return None;
+        }
+        let to = to.min(self.data.len());
+        // Window starts < to need a slice reaching to+len-1.
+        let head = (to + len - 1).min(self.data.len());
+        self.data[..head]
+            .windows(len)
+            .rposition(|w| w == pat)
+            .or_else(|| {
+                self.data[to..]
+                    .windows(len)
+                    .rposition(|w| w == pat)
+                    .map(|i| i + to)
+            })
     }
 
     /// Overtype one hex digit at the cursor: first digit sets the high
@@ -222,18 +317,19 @@ impl HexBuf {
         if self.data.is_empty() {
             return;
         }
+        self.begin_edit();
         match self.nibble {
             None => {
                 self.data[self.cursor] = d << 4;
                 self.nibble = Some(d);
                 // The byte already changed — a half-typed edit abandoned
                 // by moving away is still an edit.
-                self.edited.insert(self.cursor);
+                self.mark(self.cursor);
             }
             Some(hi) => {
                 self.data[self.cursor] = (hi << 4) | d;
                 self.nibble = None;
-                self.edited.insert(self.cursor);
+                self.mark(self.cursor);
                 self.cursor = (self.cursor + 1).min(self.last());
             }
         }
@@ -245,9 +341,10 @@ impl HexBuf {
         if self.data.is_empty() {
             return;
         }
+        self.begin_edit();
         self.data[self.cursor] = b;
         self.nibble = None;
-        self.edited.insert(self.cursor);
+        self.mark(self.cursor);
         self.cursor = (self.cursor + 1).min(self.last());
     }
 
@@ -1014,7 +1111,11 @@ impl App {
         match result {
             Ok(n) => {
                 if let Some(hex) = &mut self.hex {
+                    // Saved contents become the clean baseline — dirty
+                    // marks and the undo stack reset together.
                     hex.edited.clear();
+                    hex.original = None;
+                    hex.undo.clear();
                 }
                 self.last_path = Some(path.clone());
                 self.push_log(
@@ -1313,6 +1414,67 @@ impl App {
                     _ => keep(input, cursor),
                 }
             }
+            Some(Modal::Find {
+                mut input,
+                mut cursor,
+            }) => {
+                let mut keep = |input, cursor| {
+                    self.modal = Some(Modal::Find { input, cursor });
+                };
+                match k.code {
+                    KeyCode::Esc => {} // dropped — cancel
+                    KeyCode::Enter => match Self::parse_find(&input) {
+                        Some(pat) => {
+                            if let Some(hex) = &mut self.hex {
+                                let found = hex.find_next(&pat, hex.cursor);
+                                hex.last_find = pat;
+                                hex.note = Some(match found {
+                                    Some(i) => {
+                                        hex.move_cursor(i);
+                                        format!("found @ 0x{i:08X}")
+                                    }
+                                    None => "not found".to_string(),
+                                });
+                                hex.ensure_visible();
+                            }
+                        }
+                        // Unparseable pattern: clear the field, keep the
+                        // prompt — the log is hidden behind the hex view.
+                        None => keep(String::new(), 0),
+                    },
+                    // Any printable char is pattern text — an `x:`
+                    // prefix switches the whole input to hex pairs at
+                    // submit time, so the field itself stays free-form.
+                    KeyCode::Char(c) if c.is_ascii() && !c.is_control() => {
+                        input.insert(cursor, c);
+                        cursor += c.len_utf8();
+                        keep(input, cursor);
+                    }
+                    KeyCode::Backspace => {
+                        if cursor > 0 {
+                            input.remove(cursor - 1);
+                            cursor -= 1;
+                        }
+                        keep(input, cursor);
+                    }
+                    KeyCode::Left => {
+                        cursor = cursor.saturating_sub(1);
+                        keep(input, cursor);
+                    }
+                    KeyCode::Right => {
+                        if cursor < input.len() {
+                            cursor += 1;
+                        }
+                        keep(input, cursor);
+                    }
+                    KeyCode::Home => keep(input, 0),
+                    KeyCode::End => {
+                        let end = input.len();
+                        keep(input, end);
+                    }
+                    _ => keep(input, cursor),
+                }
+            }
             Some(Modal::Confirm {
                 op,
                 path,
@@ -1403,6 +1565,55 @@ impl App {
         }
     }
 
+    /// Parse a find-modal pattern: `x:de ad` → hex pairs (spaces
+    /// ignored); anything else → literal text bytes. `None` rejects
+    /// empty input and malformed hex.
+    // `% 2` stays: is_multiple_of() is unstable at our 1.85 MSRV.
+    #[allow(clippy::manual_is_multiple_of)]
+    fn parse_find(input: &str) -> Option<Vec<u8>> {
+        let s = input.trim();
+        let Some(h) = s.strip_prefix("x:").or_else(|| s.strip_prefix("X:")) else {
+            return if s.is_empty() {
+                None
+            } else {
+                Some(s.as_bytes().to_vec())
+            };
+        };
+        let digits: String = h.chars().filter(|c| !c.is_whitespace()).collect();
+        if digits.is_empty() || digits.len() % 2 != 0 {
+            return None;
+        }
+        (0..digits.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&digits[i..i + 2], 16).ok())
+            .collect()
+    }
+
+    /// Repeat the last `/` find — F3/Shift-F3 (works in ASCII mode too)
+    /// and n/N (hex mode only: n/N are data in ASCII mode).
+    fn find_repeat(&mut self, backward: bool) {
+        let Some(hex) = &mut self.hex else {
+            return;
+        };
+        if hex.last_find.is_empty() {
+            return;
+        }
+        let pat = hex.last_find.clone();
+        let found = if backward {
+            hex.find_prev(&pat, hex.cursor)
+        } else {
+            hex.find_next(&pat, hex.cursor.saturating_add(1))
+        };
+        hex.note = Some(match found {
+            Some(i) => {
+                hex.move_cursor(i);
+                format!("found @ 0x{i:08X}")
+            }
+            None => "not found".to_string(),
+        });
+        hex.ensure_visible();
+    }
+
     /// Keys while the hex-buffer view is open — its own input context:
     /// hex digits overtype bytes (so the b/e op mnemonics are data
     /// here), Esc/q/x/Tab return to the panes, and s/o/w/v/: run the
@@ -1411,6 +1622,9 @@ impl App {
         if self.hex.is_none() {
             self.hex_view = false; // defensive: view without a buffer
             return false;
+        }
+        if let Some(hex) = &mut self.hex {
+            hex.note = None; // one-shot status (find results)
         }
         // ASCII-entry mode: every printable char is data — even
         // q/x/Tab — so only Esc, Insert (the real toggle — 'i' can't
@@ -1422,6 +1636,23 @@ impl App {
                 KeyCode::Esc | KeyCode::Tab | KeyCode::Insert => {
                     if let Some(hex) = &mut self.hex {
                         hex.ascii = false;
+                    }
+                }
+                // Non-printable keys stay live in ASCII mode: find,
+                // find-repeat, undo.
+                KeyCode::Char('f') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.modal = Some(Modal::Find {
+                        input: String::new(),
+                        cursor: 0,
+                    });
+                }
+                KeyCode::F(3) => {
+                    let back = k.modifiers.contains(KeyModifiers::SHIFT);
+                    self.find_repeat(back);
+                }
+                KeyCode::Backspace => {
+                    if let Some(hex) = &mut self.hex {
+                        hex.undo_last();
                     }
                 }
                 KeyCode::Char(c) if !c.is_control() && c.is_ascii() => {
@@ -1494,6 +1725,34 @@ impl App {
             }
             KeyCode::Char('w') => self.hex_dispatch(OpKind::Write),
             KeyCode::Char('v') => self.hex_dispatch(OpKind::Verify),
+            // Find — '/' opens the prompt; Ctrl-F must come before the
+            // hexdigit arm ('f' is a hex digit). Repeats: n/N here,
+            // F3/Shift-F3 in both modes.
+            KeyCode::Char('/') => {
+                self.modal = Some(Modal::Find {
+                    input: String::new(),
+                    cursor: 0,
+                });
+            }
+            KeyCode::Char('f') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.modal = Some(Modal::Find {
+                    input: String::new(),
+                    cursor: 0,
+                });
+            }
+            KeyCode::F(3) => {
+                let back = k.modifiers.contains(KeyModifiers::SHIFT);
+                self.find_repeat(back);
+            }
+            KeyCode::Char('n') => self.find_repeat(false),
+            KeyCode::Char('N') => self.find_repeat(true),
+            // Backspace undoes the previous edit keystroke (hexedit's
+            // undo-previous-character).
+            KeyCode::Backspace => {
+                if let Some(hex) = &mut self.hex {
+                    hex.undo_last();
+                }
+            }
             KeyCode::Char(c) if c.is_ascii_hexdigit() => {
                 if let Some(d) = c.to_digit(16) {
                     if let Some(hex) = &mut self.hex {
@@ -2588,5 +2847,152 @@ mod tests {
         assert!(!a.hex_view);
         // A second Esc quits — the view consumed only the first.
         assert!(a.handle_key(key(KeyCode::Esc)));
+    }
+
+    #[test]
+    fn hex_undo_restores_byte_and_clears_dirty() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0x00; 16], 0));
+        a.hex_view = true;
+        // Overtype byte 0 with 0xAB — two keystrokes, two undo entries.
+        a.handle_key(key(KeyCode::Char('a')));
+        a.handle_key(key(KeyCode::Char('b')));
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(h.data[0], 0xAB);
+        assert!(h.edited.contains(&0));
+        assert_eq!(h.cursor, 1);
+        // First Backspace: back to the half-typed 0xA0 at cursor 0 —
+        // still dirty.
+        a.handle_key(key(KeyCode::Backspace));
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(h.data[0], 0xA0);
+        assert_eq!(h.cursor, 0);
+        assert!(h.edited.contains(&0));
+        // Second: original 0x00 restored and the dirty mark cleared —
+        // the byte equals the load-time buffer again.
+        a.handle_key(key(KeyCode::Backspace));
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(h.data[0], 0x00);
+        assert!(h.edited.is_empty());
+        // Undo of nothing is a no-op, not a panic.
+        a.handle_key(key(KeyCode::Backspace));
+        assert_eq!(a.hex.as_ref().unwrap().data[0], 0x00);
+    }
+
+    #[test]
+    fn hex_undo_in_ascii_mode() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0x00; 16], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Char('i')));
+        a.handle_key(key(KeyCode::Char('A')));
+        assert_eq!(a.hex.as_ref().unwrap().data[0], 0x41);
+        a.handle_key(key(KeyCode::Backspace));
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(h.data[0], 0x00);
+        assert_eq!(h.cursor, 0);
+        assert!(h.edited.is_empty());
+        assert!(h.ascii); // undo must not drop the entry mode
+    }
+
+    fn hex_find_typed(a: &mut App, pat: &str) {
+        a.handle_key(key(KeyCode::Char('/')));
+        for c in pat.chars() {
+            a.handle_key(key(KeyCode::Char(c)));
+        }
+        a.handle_key(key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn hex_find_text_and_hex() {
+        let mut a = app();
+        let mut buf = vec![0x00; 64];
+        buf[20] = 0xDE;
+        buf[21] = 0xAD;
+        buf[50] = b'h';
+        buf[51] = b'i';
+        a.hex = Some(HexBuf::new(buf, 0));
+        a.hex_view = true;
+        // Hex pattern via the x: prefix (spaces ignored).
+        hex_find_typed(&mut a, "x:de ad");
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(h.cursor, 20);
+        assert_eq!(h.last_find, vec![0xDE, 0xAD]);
+        assert_eq!(h.note.as_deref(), Some("found @ 0x00000014"));
+        // Literal text pattern.
+        hex_find_typed(&mut a, "hi");
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 50);
+        // Find is inclusive of the cursor on Enter — repeating moves on.
+        hex_find_typed(&mut a, "hi");
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 50);
+        a.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 50); // wraps to same single match
+    }
+
+    #[test]
+    fn hex_find_repeat_and_not_found() {
+        let mut a = app();
+        let mut buf = vec![0x00; 64];
+        buf[10] = 0x77;
+        buf[40] = 0x77;
+        a.hex = Some(HexBuf::new(buf, 0));
+        a.hex_view = true;
+        hex_find_typed(&mut a, "x:77");
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 10);
+        // n repeats forward (exclusive), wraps at the end.
+        a.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 40);
+        a.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 10);
+        // N repeats backward.
+        a.handle_key(key(KeyCode::Char('N')));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 40);
+        // F3/Shift-F3 repeat in both modes — n/N are data in ASCII mode.
+        a.handle_key(key(KeyCode::Char('i')));
+        a.handle_key(KeyEvent::new_with_kind(
+            KeyCode::F(3),
+            KeyModifiers::NONE,
+            KeyEventKind::Press,
+        ));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 10);
+        a.handle_key(KeyEvent::new_with_kind(
+            KeyCode::F(3),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Press,
+        ));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 40);
+        // Ctrl-F opens the find modal in ASCII mode too.
+        a.handle_key(KeyEvent::new_with_kind(
+            KeyCode::Char('f'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press,
+        ));
+        assert!(matches!(a.modal, Some(Modal::Find { .. })));
+        a.handle_key(key(KeyCode::Esc)); // close modal
+        a.handle_key(key(KeyCode::Esc)); // leave ASCII mode
+                                         // No match → the footer note reports it (log pane is hidden).
+        a.hex.as_mut().unwrap().last_find = vec![0x99, 0x99];
+        a.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(a.hex.as_ref().unwrap().note.as_deref(), Some("not found"));
+    }
+
+    #[test]
+    fn hex_find_bad_pattern_keeps_modal() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0x00; 16], 0));
+        a.hex_view = true;
+        // Odd-length hex → cleared field, prompt stays open.
+        hex_find_typed(&mut a, "x:abc");
+        assert!(matches!(a.modal, Some(Modal::Find { .. })));
+        a.handle_key(key(KeyCode::Esc));
+        // Non-hex digits after x: → same.
+        hex_find_typed(&mut a, "x:zz");
+        assert!(matches!(a.modal, Some(Modal::Find { .. })));
+        a.handle_key(key(KeyCode::Esc));
+        // Empty input → same.
+        a.handle_key(key(KeyCode::Char('/')));
+        a.handle_key(key(KeyCode::Enter));
+        assert!(matches!(a.modal, Some(Modal::Find { .. })));
+        a.handle_key(key(KeyCode::Esc));
     }
 }
