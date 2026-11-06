@@ -852,7 +852,7 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
 /// this pattern. Lists only keys that are actually bound.
 fn help_overlay(f: &mut Frame, area: Rect) {
     let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 33u16.min(area.height.saturating_sub(2));
+    let h = 34u16.min(area.height.saturating_sub(2));
     let r = Rect::new(
         area.x + area.width.saturating_sub(w) / 2,
         area.y + area.height.saturating_sub(h) / 2,
@@ -896,6 +896,7 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("←→↑↓ PgUp/PgDn", "move cursor · g/G first/last"),
         row("Home · End · :", "row start/end · goto offset"),
         row("0-9a-f", "overtype byte (half-typed = x·)"),
+        row("i · Esc", "ASCII-entry mode · back to hex mode"),
         row("o · s · w · v", "load · save · write chip · verify"),
         row("Esc / q / x / Tab", "back to panes"),
         Line::default(),
@@ -1037,6 +1038,8 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
             sep(" goto  ·  "),
             key("0-9a-f"),
             sep(" edit  ·  "),
+            key("i"),
+            sep(" ascii  ·  "),
         ];
         if area.width >= 100 {
             spans.extend([key("o s w v"), sep(" open/save/write/verify  ·  ")]);

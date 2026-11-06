@@ -187,6 +187,10 @@ pub struct HexBuf {
     pub scroll: u16,
     /// High nibble of an in-progress overtype at `cursor`, if any.
     pub nibble: Option<u8>,
+    /// ASCII-entry mode (`i` toggles): printable chars write their byte
+    /// value directly. A mode is required because a-f/0-9 are ambiguous
+    /// — hex nibble or literal character.
+    pub ascii: bool,
     /// Rows visible in the last draw — PgUp/PgDn need it (renderer sets).
     pub view_rows: u16,
     /// CRC-32 shown in the header — from the read stats or computed on load.
@@ -201,6 +205,7 @@ impl HexBuf {
             cursor: 0,
             scroll: 0,
             nibble: None,
+            ascii: false,
             view_rows: 1,
             crc32,
         }
@@ -232,6 +237,18 @@ impl HexBuf {
                 self.cursor = (self.cursor + 1).min(self.last());
             }
         }
+    }
+
+    /// Write one byte directly (ASCII-entry mode) and auto-advance.
+    /// Supersedes any half-typed hex nibble at the cursor.
+    fn type_byte(&mut self, b: u8) {
+        if self.data.is_empty() {
+            return;
+        }
+        self.data[self.cursor] = b;
+        self.nibble = None;
+        self.edited.insert(self.cursor);
+        self.cursor = (self.cursor + 1).min(self.last());
     }
 
     fn move_cursor(&mut self, to: usize) {
@@ -1395,6 +1412,29 @@ impl App {
             self.hex_view = false; // defensive: view without a buffer
             return false;
         }
+        // ASCII-entry mode (`i`): every printable char is data — even
+        // q/x/Tab — so only Esc and navigation keys stay live.
+        if self.hex.as_ref().is_some_and(|h| h.ascii) {
+            match k.code {
+                KeyCode::Esc => {
+                    if let Some(hex) = &mut self.hex {
+                        hex.ascii = false;
+                    }
+                }
+                KeyCode::Char(c) if !c.is_control() && c.is_ascii() => {
+                    if let Some(hex) = &mut self.hex {
+                        hex.type_byte(c as u8);
+                        hex.ensure_visible();
+                    }
+                }
+                _ => {
+                    if let Some(hex) = &mut self.hex {
+                        hex.nav(k.code);
+                    }
+                }
+            }
+            return false;
+        }
         match k.code {
             KeyCode::Esc
             | KeyCode::Char('q')
@@ -1434,6 +1474,12 @@ impl App {
                     input: String::new(),
                     cursor: 0,
                 });
+            }
+            KeyCode::Char('i') => {
+                if let Some(hex) = &mut self.hex {
+                    hex.ascii = true;
+                    hex.nibble = None;
+                }
             }
             KeyCode::Char('w') => self.hex_dispatch(OpKind::Write),
             KeyCode::Char('v') => self.hex_dispatch(OpKind::Verify),
@@ -2475,6 +2521,34 @@ mod tests {
         a.handle_key(key(KeyCode::Char('f')));
         assert_eq!(a.hex.as_ref().unwrap().data[16], 0x00);
         // Esc leaves the view rather than warning.
+        a.handle_key(key(KeyCode::Esc));
+        assert!(!a.hex_view);
+    }
+
+    #[test]
+    fn hex_ascii_mode_types_bytes() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0x00; 16], 0));
+        a.hex_view = true;
+        // 'i' enters ASCII-entry mode.
+        a.handle_key(key(KeyCode::Char('i')));
+        assert!(a.hex.as_ref().unwrap().ascii);
+        // 'A' writes 0x41 — not nibble 0xA. 'b'/'e' are literal chars too.
+        for c in "Abe".chars() {
+            a.handle_key(key(KeyCode::Char(c)));
+        }
+        let h = a.hex.as_ref().unwrap();
+        assert_eq!(&h.data[..3], &[0x41, 0x62, 0x65]);
+        assert_eq!(h.cursor, 3);
+        assert!(h.edited.contains(&1));
+        // 'q' in ASCII mode types 0x71 — it must not close the view.
+        a.handle_key(key(KeyCode::Char('q')));
+        assert!(a.hex_view);
+        assert_eq!(a.hex.as_ref().unwrap().data[3], 0x71);
+        // Esc exits the mode first, then the view.
+        a.handle_key(key(KeyCode::Esc));
+        assert!(a.hex_view);
+        assert!(!a.hex.as_ref().unwrap().ascii);
         a.handle_key(key(KeyCode::Esc));
         assert!(!a.hex_view);
     }
