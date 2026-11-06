@@ -435,25 +435,30 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         v[2],
     );
     let favs = Layout::vertical([Constraint::Length(1); 2]).split(v[3]);
-    if app.favorites.is_empty() {
+    // Only favorites resolvable in the connected model's device list
+    // render — a favorite saved under a different programmer may not
+    // exist here (same hiding rule as the GUI).
+    let avail: Vec<&minipro_core::prefs::Favorite> = app
+        .favorites
+        .iter()
+        .filter(|f| app.devices.iter().any(|d| d.name == f.name))
+        .collect();
+    if avail.is_empty() {
         f.render_widget(
             Paragraph::new(Line::from(sp(" (f — favorite)", theme::faint()))),
             favs[0],
         );
     } else {
-        for (i, name) in app.favorites.iter().take(2).enumerate() {
-            let mfr = app
-                .devices
-                .iter()
-                .find(|d| &d.name == name)
-                .map(|d| d.manufacturer.clone())
-                .unwrap_or_default();
-            f.render_widget(Paragraph::new(fav(name, &mfr)), favs[i]);
+        for (i, entry) in avail.iter().take(2).enumerate() {
+            f.render_widget(
+                Paragraph::new(fav(&entry.name, &entry.manufacturer)),
+                favs[i],
+            );
         }
-        if app.favorites.len() > 2 {
+        if avail.len() > 2 {
             f.render_widget(
                 Paragraph::new(Line::from(sp(
-                    format!(" ▸ {} more", app.favorites.len() - 2),
+                    format!(" ▸ {} more", avail.len() - 2),
                     theme::faint(),
                 ))),
                 favs[1],
@@ -487,7 +492,7 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .map(|&i| {
             let d = &app.devices[i];
-            let star = if app.favorites.iter().any(|f| f == &d.name) {
+            let star = if app.favorites.iter().any(|f| f.name == d.name) {
                 "★"
             } else {
                 " "
@@ -895,7 +900,7 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("Home · End", "first · last match"),
         row("Enter", "select (search: select + exit)"),
         row("Esc", "cancel search · quit"),
-        row("f", "favorite (this session)"),
+        row("f", "favorite (persisted)"),
         Line::default(),
         section("Operations"),
         row("r/w/v/e/b/i", "run op (read → buffer; else prompts)"),
