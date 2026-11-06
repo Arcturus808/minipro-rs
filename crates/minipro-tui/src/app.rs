@@ -84,11 +84,57 @@ pub enum ConnState {
     Failed(String),
 }
 
-/// One log-pane line.
+/// One log-pane line. Rendered GUI-style (`[LEVEL] message`); wrapping
+/// happens at draw time against the actual pane width.
 pub struct LogLine {
-    pub ts: String,
     pub level: log::Level,
     pub msg: String,
+}
+
+/// Word-wrap `msg` to `width` columns (char count). Words longer than
+/// the width are hard-broken so nothing is ever clipped.
+pub fn wrap_log(msg: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![msg.to_string()];
+    }
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut cur_w = 0usize;
+    for word in msg.split(' ') {
+        let w = word.chars().count();
+        if w > width {
+            // Hard-break an over-long word — flush the line, then chunk it.
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+                cur_w = 0;
+            }
+            let mut chunk = String::new();
+            for c in word.chars() {
+                if cur_w == width {
+                    out.push(std::mem::take(&mut chunk));
+                    cur_w = 0;
+                }
+                chunk.push(c);
+                cur_w += 1;
+            }
+            cur = chunk; // tail resumes the line — a following short word may join
+        } else if cur_w == 0 {
+            cur.push_str(word);
+            cur_w = w;
+        } else if cur_w + 1 + w <= width {
+            cur.push(' ');
+            cur.push_str(word);
+            cur_w += 1 + w;
+        } else {
+            out.push(std::mem::take(&mut cur));
+            cur.push_str(word);
+            cur_w = w;
+        }
+    }
+    if !cur.is_empty() || out.is_empty() {
+        out.push(cur);
+    }
+    out
 }
 
 /// Modal states — path prompt and destructive-op confirm swallow keys.
@@ -177,8 +223,11 @@ pub struct App {
     pub spin: u8,
     /// Log pane lines (ring buffer, newest at back).
     pub log_lines: VecDeque<LogLine>,
-    /// Scroll offset from the newest line; 0 = follow the tail.
+    /// Scroll offset from the newest *wrapped row*; 0 = follow the tail.
     pub log_scroll: usize,
+    /// Max legal `log_scroll` — wrapped-row count minus view height.
+    /// Recomputed every draw by the renderer; keys clamp against it.
+    pub log_scroll_max: usize,
     /// Active modal (path prompt / confirm), if any.
     pub modal: Option<Modal>,
     /// Latest pin-test result for ZIF highlighting.
@@ -262,6 +311,7 @@ impl App {
             spin: 0,
             log_lines: VecDeque::new(),
             log_scroll: 0,
+            log_scroll_max: 0,
             modal: None,
             pin_test: None,
             last_path: None,
@@ -409,11 +459,9 @@ impl App {
 
     // ── Logging ──────────────────────────────────────────────────────
 
-    /// Append a log line (HH:MM:SS local) and cap the ring at LOG_CAP.
+    /// Append a log line and cap the ring at LOG_CAP.
     pub fn push_log(&mut self, level: log::Level, msg: impl Into<String>) {
-        let ts = jiff::Zoned::now().strftime("%H:%M:%S").to_string();
         self.log_lines.push_back(LogLine {
-            ts,
             level,
             msg: msg.into(),
         });
@@ -422,7 +470,7 @@ impl App {
         }
         if self.log_scroll > 0 {
             // Keep the user's scroll position stable while lines arrive.
-            self.log_scroll = self.log_scroll.min(self.log_lines.len());
+            self.log_scroll = self.log_scroll.min(self.log_scroll_max);
         }
     }
 
@@ -1162,8 +1210,7 @@ impl App {
                 },
                 Pane::Right => match k.code {
                     KeyCode::PageUp | KeyCode::Char('k') => {
-                        let max = self.log_lines.len();
-                        self.log_scroll = (self.log_scroll + 5).min(max);
+                        self.log_scroll = (self.log_scroll + 5).min(self.log_scroll_max);
                     }
                     KeyCode::PageDown | KeyCode::Char('j') => {
                         self.log_scroll = self.log_scroll.saturating_sub(5);
@@ -1575,5 +1622,33 @@ mod tests {
         assert_eq!(a.favorites.len(), 1);
         a.handle_key(key(KeyCode::Char('f')));
         assert!(a.favorites.is_empty());
+    }
+
+    #[test]
+    fn wrap_log_fits_and_splits() {
+        // Short message → one row.
+        assert_eq!(wrap_log("hello world", 20), vec!["hello world"]);
+        // Greedy fill — second word bumped to the next row.
+        assert_eq!(wrap_log("aaa bbb ccc", 7), vec!["aaa bbb", "ccc"]);
+        // Exact fit stays on one row.
+        assert_eq!(wrap_log("aa bb", 5), vec!["aa bb"]);
+    }
+
+    #[test]
+    fn wrap_log_hard_breaks_long_words() {
+        assert_eq!(
+            wrap_log("x abcdefghij y", 5),
+            vec!["x", "abcde", "fghij", "y"]
+        );
+        // Tail of a hard break can't join a word that wouldn't fit whole.
+        assert_eq!(wrap_log("abcdefghij zz", 6), vec!["abcdef", "ghij", "zz"]);
+    }
+
+    #[test]
+    fn wrap_log_edges() {
+        assert_eq!(wrap_log("", 10), vec![""]);
+        assert_eq!(wrap_log("word", 0), vec!["word"]);
+        // A word that exactly fills the width doesn't split.
+        assert_eq!(wrap_log("abcde", 5), vec!["abcde"]);
     }
 }
