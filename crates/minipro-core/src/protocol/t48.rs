@@ -576,7 +576,7 @@ fn check_pins(
         set_input_and_pulldown(usb)?;
         1
     };
-    eprintln!("Testing {} {} pins", pins.len(), name);
+    crate::outln!("Testing {} {} pins", pins.len(), name);
     for p in pins {
         let mut msg = [0u8; 64];
         msg[0] = cmd;
@@ -590,7 +590,7 @@ fn check_pins(
         let idx = (p.pin - 1) as usize;
         if !zif_no_io(idx) {
             let ok = zif_pin_state(&resp, idx) == check_level;
-            eprintln!(
+            crate::outln!(
                 "{} pin {} state is {}",
                 name,
                 p.pin,
@@ -606,7 +606,7 @@ fn check_pins(
                 continue;
             }
             if zif_pin_state(&resp, j) == check_level {
-                eprintln!(
+                crate::outln!(
                     "Unexpected state of pin {} when testing {} pin {}: shorted?",
                     j + 1,
                     name,
@@ -627,7 +627,7 @@ fn check_logic(
     level: u8,
     errors: &mut u32,
 ) -> Result<()> {
-    eprintln!("Testing 53 Logic level {} pins", level);
+    crate::outln!("Testing 53 Logic level {} pins", level);
     for i in 0..T48_NPINS {
         // Unconnected ICSP pins can't be driven — skip them.
         if zif_no_io(i) {
@@ -649,7 +649,7 @@ fn check_logic(
             overcurrent_abort(proto, usb, &format!("logic {}", level), i as u8 + 1)?;
         }
         let ok = zif_pin_state(&resp, i) == level;
-        eprintln!(
+        crate::outln!(
             "Logic {} pin {} state is {}",
             level,
             i + 1,
@@ -663,7 +663,7 @@ fn check_logic(
                 continue;
             }
             if zif_pin_state(&resp, j) == level {
-                eprintln!(
+                crate::outln!(
                     "Unexpected state of pin {} when testing logic {} pin {}: shorted?",
                     j + 1,
                     level,
@@ -688,9 +688,10 @@ fn overcurrent_abort(
     rst[0] = CMD_RESET_PIN_DRIVERS;
     usb.msg_send(&rst)?;
     proto.end_transaction(usb)?;
-    eprintln!(
+    crate::outln!(
         "Overcurrent protection detected while testing {} pin driver {}!\u{07}",
-        name, pin
+        name,
+        pin
     );
     Err(MiniproError::Protocol(format!(
         "{} overcurrent on pin {}",
@@ -706,13 +707,13 @@ pub(super) fn hardware_check(proto: &Tl866iiPlusProtocol, usb: &UsbDevice) -> Re
     let mut errors: u32 = 0;
 
     check_pins(proto, usb, "VPP", CMD_SET_VPP_PIN, VPP_PINS, &mut errors)?;
-    eprintln!();
+    crate::outln!();
     check_pins(proto, usb, "VCC", CMD_SET_VCC_PIN, VCC_PINS, &mut errors)?;
-    eprintln!();
+    crate::outln!();
     check_pins(proto, usb, "GND", CMD_SET_GND_PIN, GND_PINS, &mut errors)?;
-    eprintln!();
+    crate::outln!();
     check_logic(proto, usb, 0, &mut errors)?;
-    eprintln!();
+    crate::outln!();
     check_logic(proto, usb, 1, &mut errors)?;
 
     // Overcurrent verification: cross-drive VPP1 against GND1 and expect
@@ -732,11 +733,11 @@ pub(super) fn hardware_check(proto: &Tl866iiPlusProtocol, usb: &UsbDevice) -> Re
     usb.msg_send(&pkt)?;
 
     let resp = read_pins(usb)?;
-    eprintln!();
+    crate::outln!();
     if resp[1] != 0 {
-        eprintln!("VPP overcurrent protection is OK.");
+        crate::outln!("VPP overcurrent protection is OK.");
     } else {
-        eprintln!("VPP overcurrent protection failed!\u{07}");
+        crate::outln!("VPP overcurrent protection failed!\u{07}");
         errors += 1;
     }
 
@@ -756,9 +757,9 @@ pub(super) fn hardware_check(proto: &Tl866iiPlusProtocol, usb: &UsbDevice) -> Re
 
     let resp = read_pins(usb)?;
     if resp[1] != 0 {
-        eprintln!("VCC overcurrent protection is OK.");
+        crate::outln!("VCC overcurrent protection is OK.");
     } else {
-        eprintln!("VCC overcurrent protection failed!\u{07}");
+        crate::outln!("VCC overcurrent protection failed!\u{07}");
         errors += 1;
     }
 
@@ -766,11 +767,11 @@ pub(super) fn hardware_check(proto: &Tl866iiPlusProtocol, usb: &UsbDevice) -> Re
     pkt[0] = CMD_RESET_PIN_DRIVERS;
     usb.msg_send(&pkt)?;
 
-    eprintln!();
+    crate::outln!();
     if errors > 0 {
-        eprintln!("Hardware test completed with {} error(s).\u{07}", errors);
+        crate::outln!("Hardware test completed with {} error(s).\u{07}", errors);
     } else {
-        eprintln!("Hardware test completed successfully!");
+        crate::outln!("Hardware test completed successfully!");
     }
     Ok(())
 }

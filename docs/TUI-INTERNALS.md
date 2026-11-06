@@ -51,6 +51,12 @@ crossterm ──poll(100ms)──► main loop ──WorkerCmd──► worker t
   horizontal scroll, so wrapping is the only way long messages stay
   readable. `log_scroll`/`log_scroll_max` are in *wrapped rows*, the
   latter cached by the renderer each frame.
+- **stderr ownership**: core prints some diagnostics with `eprintln!`
+  (algorithm names, pin-test progress, OVC results) — fine for the CLI,
+  but raw stderr writes corrupt the TUI's frame. Core's `outln!` macro
+  routes them to `log::info!` when `PRINT_TO_LOG` is set; `main` sets it
+  at startup so those lines reach the log pane. New library diagnostics
+  must use `outln!`, never `eprintln!`.
 
 ## Connection state
 

@@ -346,7 +346,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                     size
                 )));
             }
-            SizeMismatch::Warn => eprintln!(
+            SizeMismatch::Warn => crate::outln!(
                 "Warning: file size {} does not match device size {}; padding/truncating",
                 buf.len(),
                 size
@@ -474,7 +474,7 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                     size
                 )));
             }
-            SizeMismatch::Warn => eprintln!(
+            SizeMismatch::Warn => crate::outln!(
                 "Warning: buffer size {} does not match device size {}; padding/truncating",
                 buf.len(),
                 size
@@ -1369,7 +1369,7 @@ pub fn pin_contact_check(
     let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
         Some(pm) => pm,
         None => {
-            eprintln!("Pin contact check not available for this device.");
+            crate::outln!("Pin contact check not available for this device.");
             return Ok(crate::protocol::PinTestResult::default());
         }
     };

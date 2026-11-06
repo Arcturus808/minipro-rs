@@ -426,7 +426,7 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
         } else {
             4 * 1024 * 1024
         };
-        eprintln!("eMMC capacity: {} MiB (T76_EMMC_SIZE_MB)", cap >> 20);
+        crate::outln!("eMMC capacity: {} MiB (T76_EMMC_SIZE_MB)", cap >> 20);
         cap
     } else {
         // The device returns exactly 520 bytes (a 512-byte full packet
@@ -450,7 +450,7 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 if sec > 0 {
                     (sec as u64) * 512
                 } else {
-                    eprintln!("eMMC: SEC_COUNT is 0, falling back to 4 MiB");
+                    crate::outln!("eMMC: SEC_COUNT is 0, falling back to 4 MiB");
                     4 * 1024 * 1024
                 }
             }
@@ -458,13 +458,13 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 // EXT_CSD[226] = BOOT_SIZE_MULT → at buf[234]
                 // Boot partition size = 128KB × BOOT_SIZE_MULT
                 if ext.len() < 235 {
-                    eprintln!("eMMC: EXT_CSD too short for BOOT_SIZE_MULT, using 4 MiB");
+                    crate::outln!("eMMC: EXT_CSD too short for BOOT_SIZE_MULT, using 4 MiB");
                     4 * 1024 * 1024
                 } else {
                     let mult = ext[234] as u64;
                     let cap = mult * 128 * 1024;
                     if cap == 0 {
-                        eprintln!("eMMC: BOOT_SIZE_MULT is 0, using 4 MiB");
+                        crate::outln!("eMMC: BOOT_SIZE_MULT is 0, using 4 MiB");
                         4 * 1024 * 1024
                     } else {
                         cap
@@ -475,13 +475,13 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 // EXT_CSD[168] = RPMB_SIZE_MULT → at buf[176]
                 // RPMB partition size = 128KB × RPMB_SIZE_MULT
                 if ext.len() < 177 {
-                    eprintln!("eMMC: EXT_CSD too short for RPMB_SIZE_MULT, using 4 MiB");
+                    crate::outln!("eMMC: EXT_CSD too short for RPMB_SIZE_MULT, using 4 MiB");
                     4 * 1024 * 1024
                 } else {
                     let mult = ext[176] as u64;
                     let cap = mult * 128 * 1024;
                     if cap == 0 {
-                        eprintln!("eMMC: RPMB_SIZE_MULT is 0, using 4 MiB");
+                        crate::outln!("eMMC: RPMB_SIZE_MULT is 0, using 4 MiB");
                         4 * 1024 * 1024
                     } else {
                         cap
@@ -489,11 +489,11 @@ fn t76_emmc_bring_up(usb: &UsbDevice) -> Result<u64> {
                 }
             }
             _ => {
-                eprintln!("eMMC: unknown partition, using 4 MiB");
+                crate::outln!("eMMC: unknown partition, using 4 MiB");
                 4 * 1024 * 1024
             }
         };
-        eprintln!("eMMC capacity: {} MiB (EXT_CSD)", cap >> 20);
+        crate::outln!("eMMC capacity: {} MiB (EXT_CSD)", cap >> 20);
         cap
     };
 
@@ -531,7 +531,7 @@ impl Protocol for T76Protocol {
             // 2. Upload FPGA algorithm bitstream.
             if let Some(ref algo) = device.algorithm {
                 if !algo.bitstream.is_empty() {
-                    eprintln!("Using T76 {} algorithm..", algo.name);
+                    crate::outln!("Using T76 {} algorithm..", algo.name);
                     upload_bitstream_t76(usb, &algo.bitstream, is_nand)?;
                     self.bitstream_uploaded.store(true, Ordering::Relaxed);
                 }
@@ -1113,7 +1113,7 @@ impl Protocol for T76Protocol {
             }
 
             if bad > 0 {
-                eprintln!(
+                crate::outln!(
                     "({} bad block{} skipped)",
                     bad,
                     if bad == 1 { "" } else { "s" }
@@ -1361,7 +1361,7 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         return Err(MiniproError::AlgorithmCrc);
     }
 
-    eprintln!("T76 firmware image OK ({} blocks).", n_blocks);
+    crate::outln!("T76 firmware image OK ({} blocks).", n_blocks);
 
     // ── Switch to bootloader ─────────────────────────────────────────────────
     {
@@ -1445,6 +1445,6 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         }
     }
 
-    eprintln!("T76 firmware written successfully. Please reconnect the programmer.");
+    crate::outln!("T76 firmware written successfully. Please reconnect the programmer.");
     Ok(())
 }

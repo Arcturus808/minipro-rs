@@ -46,9 +46,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     install_panic_hook();
 
     // Worker thread + event channel. The logger forwards core's
-    // info!/warn! records as AppEvent::Log.
+    // info!/warn! records as AppEvent::Log; PRINT_TO_LOG routes core's
+    // outln! diagnostics there too instead of leaking to stderr.
     let (ev_tx, ev_rx) = mpsc::channel::<AppEvent>();
     events::install_logger(ev_tx.clone());
+    minipro_core::PRINT_TO_LOG.store(true, std::sync::atomic::Ordering::Relaxed);
     let cmd_tx = worker::spawn(app.paths().clone(), ev_tx);
     app.cmd_tx = Some(cmd_tx.clone());
 

@@ -1099,7 +1099,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[1] != 0 {
                 msg[0] = CMD_RESET_PIN_DRV;
                 usb.msg_send(&msg[..8])?;
-                eprintln!(
+                crate::outln!(
                     "Overcurrent protection detected while testing VPP pin driver {}!\u{07}",
                     p.pin
                 );
@@ -1111,7 +1111,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[7 + p.pin as usize] == 0 {
                 errors += 1;
             }
-            eprintln!(
+            crate::outln!(
                 "VPP driver pin {} is {}",
                 p.pin,
                 if read_buffer[7 + p.pin as usize] != 0 {
@@ -1121,7 +1121,7 @@ impl Protocol for Tl866iiPlusProtocol {
                 }
             );
         }
-        eprintln!();
+        crate::outln!();
 
         // Testing 32 VCC pin drivers (no pull-up resistors)
         init_zif(usb, 1)?;
@@ -1139,7 +1139,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[1] != 0 {
                 msg[0] = CMD_RESET_PIN_DRV;
                 usb.msg_send(&msg[..8])?;
-                eprintln!(
+                crate::outln!(
                     "Overcurrent protection detected while testing VCC pin driver {}!\u{07}",
                     p.pin
                 );
@@ -1151,7 +1151,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[7 + p.pin as usize] == 0 {
                 errors += 1;
             }
-            eprintln!(
+            crate::outln!(
                 "VCC driver pin {} is {}",
                 p.pin,
                 if read_buffer[7 + p.pin as usize] != 0 {
@@ -1161,7 +1161,7 @@ impl Protocol for Tl866iiPlusProtocol {
                 }
             );
         }
-        eprintln!();
+        crate::outln!();
 
         // Testing 34 GND pin drivers (active pull-up resistors)
         init_zif(usb, 0)?;
@@ -1179,7 +1179,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[1] != 0 {
                 msg[0] = CMD_RESET_PIN_DRV;
                 usb.msg_send(&msg[..8])?;
-                eprintln!(
+                crate::outln!(
                     "Overcurrent protection detected while testing GND pin driver {}!\u{07}",
                     p.pin
                 );
@@ -1191,7 +1191,7 @@ impl Protocol for Tl866iiPlusProtocol {
             if read_buffer[7 + p.pin as usize] != 0 {
                 errors += 1;
             }
-            eprintln!(
+            crate::outln!(
                 "GND driver pin {} is {}",
                 p.pin,
                 if read_buffer[7 + p.pin as usize] != 0 {
@@ -1201,8 +1201,8 @@ impl Protocol for Tl866iiPlusProtocol {
                 }
             );
         }
-        eprintln!();
-        eprintln!();
+        crate::outln!();
+        crate::outln!();
 
         // Testing VPP overcurrent protection
         init_zif(usb, 1)?;
@@ -1226,9 +1226,9 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&msg[..8])?;
         let read_buffer = usb.msg_recv(48)?;
         if read_buffer[1] != 0 {
-            eprintln!("VPP overcurrent protection is OK.");
+            crate::outln!("VPP overcurrent protection is OK.");
         } else {
-            eprintln!("VPP overcurrent protection failed!\u{07}");
+            crate::outln!("VPP overcurrent protection failed!\u{07}");
             errors += 1;
         }
 
@@ -1259,16 +1259,16 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&msg[..8])?;
         let read_buffer = usb.msg_recv(48)?;
         if read_buffer[1] != 0 {
-            eprintln!("VCC overcurrent protection is OK.");
+            crate::outln!("VCC overcurrent protection is OK.");
         } else {
-            eprintln!("VCC overcurrent protection failed!\u{07}");
+            crate::outln!("VCC overcurrent protection failed!\u{07}");
             errors += 1;
         }
 
         if errors != 0 {
-            eprintln!("\nHardware test completed with {} error(s).\u{07}", errors);
+            crate::outln!("\nHardware test completed with {} error(s).\u{07}", errors);
         } else {
-            eprintln!("\nHardware test completed successfully!");
+            crate::outln!("\nHardware test completed successfully!");
         }
 
         // Reset pin drivers
@@ -1842,7 +1842,7 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         return Err(MiniproError::AlgorithmCrc);
     }
 
-    eprintln!("Firmware image OK ({} blocks + last block).", n_blocks);
+    crate::outln!("Firmware image OK ({} blocks + last block).", n_blocks);
 
     // ── Switch to bootloader ─────────────────────────────────────────────────
     {
@@ -1942,6 +1942,6 @@ pub(super) fn firmware_update_tl866(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
         }
     }
 
-    eprintln!("Firmware written successfully. Please reconnect the programmer.");
+    crate::outln!("Firmware written successfully. Please reconnect the programmer.");
     Ok(())
 }

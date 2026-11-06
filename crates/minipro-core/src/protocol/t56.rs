@@ -187,7 +187,7 @@ impl Protocol for T56Protocol {
         if !self.bitstream_uploaded.load(Ordering::Relaxed) {
             if let Some(ref algo) = device.algorithm {
                 if !algo.bitstream.is_empty() {
-                    eprintln!("Using T56 {} algorithm..", algo.name);
+                    crate::outln!("Using T56 {} algorithm..", algo.name);
                     upload_bitstream(usb, &algo.bitstream)?;
                     self.bitstream_uploaded.store(true, Ordering::Relaxed);
                 }
