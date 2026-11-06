@@ -41,6 +41,11 @@ pub const OPS: [&str; 8] = [
     "Read", "Write", "Verify", "Erase", "Blank", "ID", "Logic", "Config",
 ];
 
+/// Mnemonic dispatch key per op tab (lazygit convention: press → run).
+/// Every mnemonic is the tab's first letter — the renderer underlines it.
+/// Digits `1-8` remain as positional aliases that arm the tab for Enter.
+pub const OP_KEYS: [char; 8] = ['r', 'w', 'v', 'e', 'b', 'i', 'l', 'c'];
+
 /// Option checkboxes per column (rendered two-up in the options pane).
 /// Index order is col-major: options[0..4] = col 0, options[4..7] = col 1.
 pub const OPT_COLS: [&[&str]; 2] = [
@@ -1120,6 +1125,14 @@ impl App {
             KeyCode::BackTab => self.cycle_pane(-1),
             KeyCode::Char(']') => self.toggle_right(),
             KeyCode::Char(c @ '1'..='8') => self.op = (c as usize) - ('1' as usize),
+            // Mnemonic dispatch: arm the tab AND run it in one key. Path
+            // and confirm modals still gate file/destructive ops. Only the
+            // eight mnemonic letters are captured — everything else falls
+            // through to the pane-scoped arms below.
+            KeyCode::Char(c) if OP_KEYS.contains(&c) => {
+                self.op = OP_KEYS.iter().position(|&k| k == c).unwrap();
+                self.start_op();
+            }
             KeyCode::F(5) => {
                 self.conn = ConnState::Connecting;
                 self.push_log(log::Level::Info, "connecting…");
@@ -1594,6 +1607,108 @@ mod tests {
         a.handle_key(key(KeyCode::Char('q')));
         assert!(a.op_running.is_some()); // quit blocked
         assert!(a.log_lines.back().unwrap().msg.contains("can't be aborted"));
+    }
+
+    /// Connected+selected fixture shared by the mnemonic-dispatch tests.
+    fn op_ready_app() -> App {
+        let mut a = app();
+        a.conn = ConnState::Connected {
+            info: ProgrammerInfo {
+                model: ProgrammerModel::Tl866iiPlus,
+                status: minipro_core::device::ProgrammerStatus::Normal,
+                firmware: 0,
+                firmware_str: "04.2.86".into(),
+                device_code: "00".into(),
+                serial_number: "TEST".into(),
+                hardware_version: 0,
+            },
+            fake: false,
+        };
+        a.selected = Some(Device::default());
+        a
+    }
+
+    #[test]
+    fn mnemonic_dispatches_immediate_op() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.handle_key(key(KeyCode::Char('i')));
+        assert_eq!(a.op, 5); // armed on the ID tab too
+        assert_eq!(a.op_running, Some(OpKind::ChipId));
+        assert!(matches!(rx.try_recv(), Ok(WorkerCmd::Run { .. })));
+    }
+
+    #[test]
+    fn mnemonic_opens_path_and_confirm_modals() {
+        let mut a = op_ready_app();
+        a.handle_key(key(KeyCode::Char('r')));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Path {
+                op: OpKind::Read,
+                ..
+            })
+        ));
+        a.handle_key(key(KeyCode::Esc));
+        a.handle_key(key(KeyCode::Char('e')));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Confirm {
+                op: OpKind::Erase,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn mnemonic_warns_for_gated_tabs() {
+        let mut a = op_ready_app();
+        a.handle_key(key(KeyCode::Char('l')));
+        assert_eq!(a.op, 6);
+        assert!(a.log_lines.back().unwrap().msg.contains("MVP"));
+    }
+
+    #[test]
+    fn mnemonic_blocked_in_search_and_modal() {
+        let mut a = op_ready_app();
+        // Search editing: 'r' inserts into the filter, not a dispatch.
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Char('r')));
+        assert_eq!(a.search, "r");
+        assert!(a.modal.is_none());
+        assert!(a.op_running.is_none());
+        // Path modal: letters go to the filename input. (Typing in the
+        // filter cleared `selected` — re-inject the fixture device.)
+        a.search_editing = false;
+        a.search.clear();
+        a.selected = Some(Device::default());
+        a.handle_key(key(KeyCode::Char('w')));
+        assert!(matches!(a.modal, Some(Modal::Path { .. })));
+        a.handle_key(key(KeyCode::Char('e')));
+        if let Some(Modal::Path { input, .. }) = &a.modal {
+            assert_eq!(input, "e");
+        } else {
+            panic!("path modal vanished");
+        }
+    }
+
+    #[test]
+    fn digits_still_arm_for_enter() {
+        let mut a = op_ready_app();
+        a.handle_key(key(KeyCode::Char('4')));
+        assert_eq!(a.op, 3); // armed, not dispatched
+        assert!(a.modal.is_none());
+        assert!(a.op_running.is_none());
+        a.pane = Pane::Options;
+        a.handle_key(key(KeyCode::Enter));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Confirm {
+                op: OpKind::Erase,
+                ..
+            })
+        ));
     }
 
     #[test]

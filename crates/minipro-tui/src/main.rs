@@ -567,8 +567,19 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
     if focused {
         hi = hi.add_modifier(Modifier::UNDERLINED);
     }
+    // Underline each tab's mnemonic letter — the key runs that op.
+    let items = OPS.iter().map(|label| {
+        let (mn, rest) = label.split_at(1);
+        Line::from(vec![
+            Span::styled(
+                mn.to_string(),
+                theme::accent().add_modifier(Modifier::UNDERLINED),
+            ),
+            Span::raw(rest.to_string()),
+        ])
+    });
     f.render_widget(
-        Tabs::new(OPS)
+        Tabs::new(items)
             .select(app.op)
             .style(theme::dim())
             .highlight_style(hi)
@@ -836,8 +847,9 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("f", "favorite (this session)"),
         Line::default(),
         section("Operations"),
-        row("1-8", "pick operation"),
-        row("Enter", "run (path prompt / confirm as needed)"),
+        row("r/w/v/e/b/i", "run op (path prompt / confirm as needed)"),
+        row("l · c", "logic / config — not in this MVP"),
+        row("1-8", "arm op, Enter runs"),
         row("Space", "toggle option · ←→ cycle selects"),
         Line::default(),
         section("Log (right pane)"),
@@ -942,7 +954,12 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
         );
         return;
     }
-    let mut spans = vec![key(" ⇥"), sep(" panes  ·  "), key("1-8"), sep(" op  ·  ")];
+    let mut spans = vec![
+        key(" ⇥"),
+        sep(" panes  ·  "),
+        key("r w v e b i"),
+        sep(" op  ·  "),
+    ];
     // Compact variant below 100 cols — the full set would clip mid-hint.
     if area.width >= 100 {
         spans.extend([
