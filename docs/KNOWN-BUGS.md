@@ -458,10 +458,12 @@ text-editing keys only, so while `/` was focused, ↑/↓/PgUp/PgDn did
 nothing and Enter merely left edit mode — the results list was
 reachable only by discovering Esc first. Fix: the search block maps
 arrows to `move_cursor` (results navigate while typing, the fzf
-convention) and Enter now exits + activates the highlighted device;
-Esc remains the pure cancel. When adding new editing/modal states,
-either route navigation keys deliberately or document why they're
-dead — "input focus eats arrows" reads as a hang to users.
+convention), Enter exits + activates the highlighted device, and
+Tab/BackTab exit the field + cycle panes; Esc remains the pure cancel.
+Three distinct exits — commit, move-on, abandon. When adding new
+editing/modal states, either route navigation keys deliberately or
+document why they're dead — "input focus eats arrows" reads as a hang
+to users.
 
 ## TUI resize repaint strategy — atomic frames, no throttling
 
