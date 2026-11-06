@@ -97,7 +97,7 @@
     wiring
       ? wiring.chip_labels.map((label, i) => {
           const pin = i + 1;
-          const ws = wiring.wires.filter((w) => w.chip_pin === pin);
+          const ws = wiring?.wires.filter((w) => w.chip_pin === pin) ?? [];
           return {
             chipPin: pin,
             label,

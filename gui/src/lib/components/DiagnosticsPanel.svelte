@@ -99,6 +99,7 @@
     let path = null;
     let fileName = "";
     let versionNote = "";
+    if (!$programmer) return;
     try {
       const found = await invoke<{ path: string; model: string; version: string }[]>(
         "find_downloaded_firmware",
