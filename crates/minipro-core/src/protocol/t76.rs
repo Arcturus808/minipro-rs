@@ -731,6 +731,13 @@ impl Protocol for T76Protocol {
     fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()> {
         let size = ds.data.len();
 
+        // A stream abandoned by an earlier op (blank_check early exit,
+        // failed verify) leaves one buffered EP82 chunk behind; drop it
+        // so it can't shift this read's block 0.
+        if ds.init {
+            usb.drain_read_pipe();
+        }
+
         if ds.page_type == MP_CODE {
             // NAND read: one erase-block (data + spare) per command.
             if device.protocol_id == 0x2d {
