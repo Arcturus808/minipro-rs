@@ -156,6 +156,14 @@ without it the frontend would re-log the whole gate reason as
 `<op> failed: …`, double-reporting and mislabeling a never-ran op as a
 failure. Keep new pre-op gates on the same marker convention.
 
+The abort path also skips `refreshProgrammer()`. That call exists to
+sync the badge when a programmer is yanked mid-op, but it unconditionally
+writes the `programmer` store — which trips the App.svelte
+device/programmer-change `$effect` that clears `pinTestResult`, wiping
+the bad-pin highlighting the gate just emitted. A gate abort means the
+session is provably alive (the gate command itself succeeded), so the
+refresh is both harmful and pointless there.
+
 **Model support:** TL866II+ and T48. The backend returns
 `UnsupportedOperation` on other models and the button is disabled with
 a tooltip.

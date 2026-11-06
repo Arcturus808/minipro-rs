@@ -146,7 +146,8 @@ async function runOp(
     // Pre-op gates (pin contact, chip ID) log their own detail and return
     // a terse "aborted (gate)" marker — the op never ran, so report an
     // abort rather than re-logging the reason as a failure.
-    if (errMsg.startsWith("aborted (")) {
+    const isAbort = errMsg.startsWith("aborted (");
+    if (isAbort) {
       deferLog("warn", `${name} ${errMsg}`);
     } else {
       deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${errMsg}`);
@@ -158,8 +159,13 @@ async function runOp(
     if (usbKeywords.some((kw) => errMsg.includes(kw))) {
       deferLog("warn", "  Try unplugging and replugging the programmer, then click the connection button to reconnect.");
     }
-    // If the programmer was unplugged mid-operation, sync the badge state
-    await refreshProgrammer();
+    // If the programmer was unplugged mid-operation, sync the badge state.
+    // Skipped on gate aborts: the session is provably alive (the gate just
+    // ran), and refreshProgrammer's store write would trip the change
+    // effect that clears the pin-test result the gate just emitted.
+    if (!isAbort) {
+      await refreshProgrammer();
+    }
   } finally {
     isRunning.set(false);
     currentOperation.set(null);
