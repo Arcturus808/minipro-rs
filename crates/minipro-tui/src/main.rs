@@ -35,7 +35,9 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Gauge, HighlightSpacing, List, ListItem, Paragraph, Tabs},
+    widgets::{
+        Block, BorderType, Clear, Gauge, HighlightSpacing, List, ListItem, Paragraph, Tabs, Wrap,
+    },
     Frame, Terminal,
 };
 use worker::WorkerCmd;
@@ -395,7 +397,7 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         Constraint::Length(1), // results header
         Constraint::Min(0),    // results list (favorites pinned on top)
         Constraint::Length(1), // sep
-        Constraint::Length(5), // selected
+        Constraint::Length(6), // selected (name wraps to 2 lines when long)
         Constraint::Length(1), // sep
         Constraint::Length(1), // diagnostics
     ])
@@ -494,7 +496,12 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_stateful_widget(list, list_area, &mut app.list);
 
     f.render_widget(Paragraph::new(sep_line(area.width)), v[5]);
-    f.render_widget(Paragraph::new(selected_lines(app)), v[6]);
+    // Wrap, not clip — this panel is the fallback that always shows the
+    // full name when a result row had to ellipsize it.
+    f.render_widget(
+        Paragraph::new(selected_lines(app)).wrap(Wrap { trim: false }),
+        v[6],
+    );
     f.render_widget(Paragraph::new(sep_line(area.width)), v[7]);
     f.render_widget(
         Paragraph::new(Line::from(sp(" Diagnostics ▸", theme::faint()))),
