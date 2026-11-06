@@ -18,6 +18,7 @@ it or let it creep back into `--workspace` MSRV checks.
 | `events.rs` | `AppEvent`/`WorkerCmd` protocol + `TuiLogger` (`log::Log` impl) |
 | `worker.rs` | worker thread: owns `MiniproHandle`, runs ops, reports events |
 | `zif.rs` | `ZifDiagram` widget — ZIF socket + chip overlay + pin states |
+| `hexview.rs` | full-screen hex-buffer view — rows, entropy gutter, cursor |
 | `theme.rs` | color/style palette used by every pane |
 
 ## Threading & event flow
@@ -115,15 +116,35 @@ variant/no-ID normalization matches the GUI.
   global key match *after* the modal and search-editing intercepts, so
   letters still type into inputs and can't fire inside modals — keep
   that ordering when adding global keys.
-- Modals: `Modal::Path` (file ops — Read pre-fills
-  `<sanitized-name>.bin`, Write/Verify start empty; the dialog shows a
-  live `→ resolved` preview and submits the absolutized path so every
-  later display names the real location) and
-  `Modal::Confirm` (Write after path entry, Erase). Only `y`/`Y`
-  confirm — `Enter` is deliberately excluded (a held Enter's repeat
-  events from the path prompt could otherwise carry in and fire the
-  op); `n`/`N`/`Esc` cancel; every other key is ignored so a stray
-  keypress can't silently abandon the confirm.
+- Modals: `Modal::Path` (its `PathAction` picks the submit action —
+  `Op(op)` for Write/Verify file ops, `SaveBuffer`/`LoadBuffer` for the
+  hex view; the dialog shows a live `→ resolved` preview and submits
+  the absolutized path so every later display names the real
+  location), `Modal::Goto` (hex-view `:` offset prompt — hex digits
+  only, `0x` prefix optional; invalid input clears the field rather
+  than closing, since the log is hidden behind the view), and
+  `Modal::Confirm` (Write after path entry, Write-from-buffer, Erase).
+  Only `y`/`Y` confirm — `Enter` is deliberately excluded (a held
+  Enter's repeat events from the path prompt could otherwise carry in
+  and fire the op); `n`/`N`/`Esc` cancel; every other key is ignored so
+  a stray keypress can't silently abandon the confirm.
+- **Hex-buffer view** (`hexview.rs`, `App::hex`/`hex_view`): reads land
+  in memory, not a file — `r` dispatches `read_chip_buffer` and the
+  `OpDone::Read` payload fills `App::hex` and opens the view. It's a
+  dedicated input context (like modals/search): while open every key
+  routes to `handle_hex_key`, so hex digits `0-9a-f` overtype bytes —
+  `b`/`e` are data here, not the blank/erase mnemonics — and
+  Esc/q/x/Tab return to the panes. `o` enters the view globally (or
+  opens a file→buffer prompt when empty); inside, `o` loads a file,
+  `s` saves (`read_file`/`write_file`, so the Format select applies),
+  `w`/`v` write/verify the buffer via `WorkerCmd::Run{OpInput::Buffer}`.
+  Navigation: arrows/PgUp/PgDn/Home/End/`g`/`G` + `:` goto; edits mark
+  `HexBuf::edited` (amber) until a save clears the set. Mid-op the view
+  stays browsable — `HexBuf::nav` runs read-only while `op_running`
+  blocks edits/actions. Rows carry a 1-cell `▌` entropy gutter using
+  the GUI's exact Shannon formula (`entropy / log2(len)`) and 4-tier
+  color mapping (green/lime/amber/red). The center-pane Buffer line
+  mirrors the buffer's name/size/CRC/edit count.
 - Right pane auto-collapses under ~100 cols with hysteresis; `]`
   pins/unpins. Full layout switches to a too-small message under
   80×24, also hysteretic. `MINIPRO_TUI_DEBUG_PAINT` overlays draws/s.
@@ -147,9 +168,13 @@ variant/no-ID normalization matches the GUI.
 pane hysteresis, option toggles, select cycling, run gating
 (no device / disconnected / logic-IC warning), path→confirm flow for
 Write, Erase confirm dispatch, key swallow during ops, `OpDone` state,
-favorites. `worker.rs` tests cover `looks_like_disconnect` and the
-`SizeDiff`→`SizeMismatch` map. The worker's op bodies need USB and are
-covered by hardware validation, not unit tests.
+favorites, and the hex-buffer view (read→buffer dispatch, `o` entry,
+nibble overtype, b/e-are-digits, nav clamps, goto parse, save/write
+flows, nav-only-during-op). `worker.rs` tests cover
+`looks_like_disconnect` and the `SizeDiff`→`SizeMismatch` map;
+`hexview.rs` tests cover the entropy edge cases. The worker's op
+bodies need USB and are covered by hardware validation, not unit
+tests.
 
 ## Dev mode
 
@@ -167,7 +192,9 @@ require real hardware.
 ## Deliberately out of MVP scope
 
 Logic-vector test, config/fuse read+write, identify, diagnostics/health
-check, batch ops, hex buffer pane (P2+), voltage overrides (needs the
+check, batch ops, voltage overrides (needs the
 deferred `OpOptions`/voltage-glue extraction), ICSP wiring diagrams.
 The tabs render but warn "not in this MVP" — extend `OpKind`, `OPS`,
-and the worker `match` arm together when adding phases.
+and the worker `match` arm together when adding phases. The hex view
+shipped with the P2 subset: find, undo/redo, selection, diff/compare,
+bytes-per-row, and mouse remain future work.

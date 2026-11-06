@@ -33,7 +33,7 @@ use minipro_core::operations::{ChipIdInfo, OpStats};
 use minipro_core::zif::{device_to_zif, occupied_zif_pins, zif_spec, ZifInsertion};
 use ratatui::widgets::ListState;
 
-use crate::events::{AppEvent, OpKind, OpOptions, OpOutcome, SizeDiff};
+use crate::events::{AppEvent, OpInput, OpKind, OpOptions, OpOutcome, SizeDiff};
 use crate::worker::WorkerCmd;
 use crate::zif::{Justify, Lever, ZifDiagram};
 
@@ -142,21 +142,134 @@ pub fn wrap_log(msg: &str, width: usize) -> Vec<String> {
     out
 }
 
-/// Modal states — path prompt and destructive-op confirm swallow keys.
+/// What a path prompt submits to — an op's file operand or the
+/// hex buffer's save/load actions.
+pub enum PathAction {
+    Op(OpKind),
+    /// Write the hex buffer to the entered path.
+    SaveBuffer,
+    /// Read a file into the hex buffer.
+    LoadBuffer,
+}
+
+/// Modal states — path/goto prompts and destructive-op confirms
+/// swallow keys.
 pub enum Modal {
-    /// File path entry for Read/Write/Verify.
+    /// File path entry for file ops (Write/Verify) or buffer save/load.
     Path {
-        op: OpKind,
+        action: PathAction,
         title: &'static str,
         input: String,
         cursor: usize,
     },
+    /// Hex-view goto-offset prompt (`:` key) — input parsed as hex.
+    Goto { input: String, cursor: usize },
     /// y/N confirmation for destructive ops (write, erase).
     Confirm {
         op: OpKind,
         path: Option<PathBuf>,
+        /// Write-from-buffer payload (hex-view `w`) — `path` is `None`.
+        buffer: Option<Vec<u8>>,
         lines: Vec<String>,
     },
+}
+
+/// The hex-buffer view's state: data plus cursor/scroll/edit marks.
+/// `r` reads land here instead of a file; `s` saves, `o` loads, `w`
+/// writes it back to the chip, `v` verifies the chip against it.
+pub struct HexBuf {
+    pub data: Vec<u8>,
+    /// Addresses edited since load/save — rendered amber, cleared on save.
+    pub edited: std::collections::BTreeSet<usize>,
+    /// Byte offset of the cursor.
+    pub cursor: usize,
+    /// First visible row (scroll position), in 16-byte rows.
+    pub scroll: u16,
+    /// High nibble of an in-progress overtype at `cursor`, if any.
+    pub nibble: Option<u8>,
+    /// Rows visible in the last draw — PgUp/PgDn need it (renderer sets).
+    pub view_rows: u16,
+    /// CRC-32 shown in the header — from the read stats or computed on load.
+    pub crc32: u32,
+}
+
+impl HexBuf {
+    pub fn new(data: Vec<u8>, crc32: u32) -> Self {
+        Self {
+            data,
+            edited: Default::default(),
+            cursor: 0,
+            scroll: 0,
+            nibble: None,
+            view_rows: 1,
+            crc32,
+        }
+    }
+
+    fn last(&self) -> usize {
+        self.data.len().saturating_sub(1)
+    }
+
+    /// Overtype one hex digit at the cursor: first digit sets the high
+    /// nibble (shown half-typed), the second commits the byte, marks it
+    /// edited, and auto-advances.
+    fn type_digit(&mut self, d: u8) {
+        if self.data.is_empty() {
+            return;
+        }
+        match self.nibble {
+            None => {
+                self.data[self.cursor] = d << 4;
+                self.nibble = Some(d);
+                // The byte already changed — a half-typed edit abandoned
+                // by moving away is still an edit.
+                self.edited.insert(self.cursor);
+            }
+            Some(hi) => {
+                self.data[self.cursor] = (hi << 4) | d;
+                self.nibble = None;
+                self.edited.insert(self.cursor);
+                self.cursor = (self.cursor + 1).min(self.last());
+            }
+        }
+    }
+
+    fn move_cursor(&mut self, to: usize) {
+        self.cursor = to.min(self.last());
+        self.nibble = None; // leaving the byte abandons a half-typed edit
+    }
+
+    /// Keep the cursor row inside [scroll, scroll+view_rows).
+    pub fn ensure_visible(&mut self) {
+        let row = (self.cursor / 16) as u16;
+        if row < self.scroll {
+            self.scroll = row;
+        } else if row >= self.scroll + self.view_rows.max(1) {
+            self.scroll = row + 1 - self.view_rows.max(1);
+        }
+    }
+
+    /// Pure-navigation keys — shared between the idle handler and the
+    /// op-running gate (browsing the buffer mid-op is safe; edits are
+    /// not). Returns true when the key was a navigation key.
+    fn nav(&mut self, code: KeyCode) -> bool {
+        let page = (self.view_rows.max(1) as usize) * 16;
+        match code {
+            KeyCode::Left => self.move_cursor(self.cursor.saturating_sub(1)),
+            KeyCode::Right => self.move_cursor(self.cursor + 1),
+            KeyCode::Up => self.move_cursor(self.cursor.saturating_sub(16)),
+            KeyCode::Down => self.move_cursor(self.cursor + 16),
+            KeyCode::PageUp => self.move_cursor(self.cursor.saturating_sub(page)),
+            KeyCode::PageDown => self.move_cursor(self.cursor + page),
+            KeyCode::Home => self.move_cursor(self.cursor & !15),
+            KeyCode::End => self.move_cursor((self.cursor | 15).min(self.last())),
+            KeyCode::Char('g') => self.move_cursor(0),
+            KeyCode::Char('G') => self.move_cursor(self.last()),
+            _ => return false,
+        }
+        self.ensure_visible();
+        true
+    }
 }
 
 /// Pin-test result mapped onto ZIF pin numbers for the diagram.
@@ -239,6 +352,12 @@ pub struct App {
     pub modal: Option<Modal>,
     /// Latest pin-test result for ZIF highlighting.
     pub pin_test: Option<PinTestView>,
+    /// In-memory data buffer — `r` reads land here (hex view), `o`
+    /// loads files into it, `s` saves it out, `w`/`v` write/verify it.
+    pub hex: Option<HexBuf>,
+    /// Full-screen hex view is open — replaces the three-pane layout
+    /// and routes all keys to `handle_hex_key`.
+    pub hex_view: bool,
     /// Last file path handed to a file op — for the buffer line.
     /// Last file op's resolved path — shown full in the log, `file_name`
     /// in the status strip.
@@ -323,6 +442,8 @@ impl App {
             log_scroll_max: 0,
             modal: None,
             pin_test: None,
+            hex: None,
+            hex_view: false,
             last_path: None,
             last_stats: None,
             chip_id: None,
@@ -336,6 +457,23 @@ impl App {
     /// Database paths — the worker needs a clone at spawn time.
     pub fn paths(&self) -> &DatabasePaths {
         &self.paths
+    }
+
+    /// Minimal app with a loaded hex buffer — render tests outside
+    /// `app`'s own test module (hexview.rs) build state through this.
+    #[cfg(test)]
+    pub(crate) fn test_fixture(buf: Vec<u8>) -> Self {
+        let mut a = Self::from_devices(
+            Vec::new(),
+            DatabasePaths {
+                infoic: "n".into(),
+                logicic: "n".into(),
+                algorithms: None,
+            },
+            ProgrammerModel::Tl866iiPlus,
+        );
+        a.hex = Some(HexBuf::new(buf, 0));
+        a
     }
 
     /// Right pane: auto-follows the dead-banded width regime; `]` sets
@@ -582,9 +720,20 @@ impl App {
         self.op_started = None;
         self.progress = None;
         match result {
+            Ok(OpOutcome::Read { stats, data }) => {
+                self.last_stats = Some(stats);
+                self.hex = Some(HexBuf::new(data, stats.crc32));
+                self.hex_view = true;
+                self.push_log(
+                    log::Level::Info,
+                    format!(
+                        "✓ read {} bytes → buffer · CRC-32 {:08X} — o/s/w/v/Esc in hex view",
+                        stats.bytes, stats.crc32
+                    ),
+                );
+            }
             Ok(OpOutcome::Stats { stats }) => {
                 self.last_stats = Some(stats);
-                let verb = if op == OpKind::Write { "wrote" } else { "read" };
                 let target = self
                     .last_path
                     .clone()
@@ -593,8 +742,8 @@ impl App {
                 self.push_log(
                     log::Level::Info,
                     format!(
-                        "✓ {} {} bytes{} · CRC-32 {:08X}",
-                        verb, stats.bytes, target, stats.crc32
+                        "✓ wrote {} bytes{} · CRC-32 {:08X}",
+                        stats.bytes, target, stats.crc32
                     ),
                 );
             }
@@ -741,18 +890,12 @@ impl App {
             return;
         }
         match op {
-            OpKind::Read => {
-                let input = format!("{}.bin", device_name.replace(['/', '@'], "_"));
-                self.modal = Some(Modal::Path {
-                    op,
-                    title: "Save read to",
-                    cursor: input.len(),
-                    input,
-                });
-            }
+            // Reads land in the hex-buffer view — no file prompt.
+            // `s` inside the view saves to a path.
+            OpKind::Read => self.send_run(op, None, None),
             OpKind::Write => {
                 self.modal = Some(Modal::Path {
-                    op,
+                    action: PathAction::Op(op),
                     title: "Write file",
                     input: String::new(),
                     cursor: 0,
@@ -760,7 +903,7 @@ impl App {
             }
             OpKind::Verify => {
                 self.modal = Some(Modal::Path {
-                    op,
+                    action: PathAction::Op(op),
                     title: "Verify against file",
                     input: String::new(),
                     cursor: 0,
@@ -770,18 +913,20 @@ impl App {
                 self.modal = Some(Modal::Confirm {
                     op,
                     path: None,
+                    buffer: None,
                     lines: vec![
                         format!("Erase {device_name}?"),
                         "this erases the whole chip".to_string(),
                     ],
                 });
             }
-            OpKind::Blank | OpKind::ChipId => self.send_run(op, None),
+            OpKind::Blank | OpKind::ChipId => self.send_run(op, None, None),
         }
     }
 
-    /// Dispatch the op to the worker. `path` is `Some` for file ops.
-    fn send_run(&mut self, op: OpKind, path: Option<PathBuf>) {
+    /// Dispatch the op to the worker. `path` is `Some` for file ops,
+    /// `buffer` `Some` for write/verify issued from the hex view.
+    fn send_run(&mut self, op: OpKind, path: Option<PathBuf>, buffer: Option<Vec<u8>>) {
         let Some(tx) = self.cmd_tx.clone() else {
             self.push_log(log::Level::Error, "worker not started");
             return;
@@ -796,10 +941,15 @@ impl App {
         self.progress = Some((0, 1));
         let options = Box::new(self.op_options());
         self.push_log(log::Level::Info, format!("{} {}…", op.name(), device_name));
+        let input = match (path, buffer) {
+            (Some(p), _) => OpInput::File(p),
+            (None, Some(buf)) => OpInput::Buffer(buf),
+            (None, None) => OpInput::None,
+        };
         let _ = tx.send(WorkerCmd::Run {
             op,
             device_name,
-            path,
+            input,
             options,
         });
         self.modal = None;
@@ -832,10 +982,127 @@ impl App {
         }
     }
 
+    /// Write the hex buffer to `path` (hex-view `s`) — honors the
+    /// Format select like a file read would.
+    fn save_buffer(&mut self, path: PathBuf) {
+        let dev_name = self.selected.as_ref().map(|d| d.name.clone());
+        let fmt = FORMATS[self.selects[2]];
+        let result = match &self.hex {
+            Some(hex) => {
+                minipro_core::operations::write_file(&path, fmt, &hex.data, dev_name.as_deref())
+                    .map(|_| hex.data.len())
+            }
+            None => return,
+        };
+        match result {
+            Ok(n) => {
+                if let Some(hex) = &mut self.hex {
+                    hex.edited.clear();
+                }
+                self.last_path = Some(path.clone());
+                self.push_log(
+                    log::Level::Info,
+                    format!("✓ buffer → {} ({} bytes)", path.display(), n),
+                );
+            }
+            Err(e) => self.push_log(log::Level::Error, format!("✗ save failed: {e}")),
+        }
+    }
+
+    /// Read a file into the hex buffer (hex-view `o`) — same
+    /// `read_file` the write op uses, so ihex/srec decode too.
+    fn load_buffer(&mut self, path: PathBuf) {
+        let fmt = FORMATS[self.selects[2]];
+        let (size, blank) = self
+            .selected
+            .as_ref()
+            .map(|d| (d.code_memory_bytes(), d.blank_value as u8))
+            .unwrap_or((0, 0xFF));
+        match minipro_core::operations::read_file(&path, fmt, size, blank) {
+            Ok(data) => {
+                let n = data.len();
+                let crc = OpStats::from_buffer(&data).crc32;
+                self.hex = Some(HexBuf::new(data, crc));
+                self.hex_view = true;
+                self.last_path = Some(path.clone());
+                self.push_log(
+                    log::Level::Info,
+                    format!(
+                        "✓ {} → buffer ({} bytes · CRC-32 {:08X})",
+                        path.display(),
+                        n,
+                        crc
+                    ),
+                );
+            }
+            Err(e) => self.push_log(log::Level::Error, format!("✗ load failed: {e}")),
+        }
+    }
+
+    /// Hex-view `w`/`v`: write or verify the buffer against the chip.
+    /// Same gates as `start_op` — device selected + real connection.
+    fn hex_dispatch(&mut self, op: OpKind) {
+        if self.op_running.is_some() {
+            return;
+        }
+        let Some(buf) = self.hex.as_ref().map(|h| h.data.clone()) else {
+            return;
+        };
+        let Some(dev) = &self.selected else {
+            self.push_log(
+                log::Level::Warn,
+                "select a device first — Enter in the devices pane",
+            );
+            return;
+        };
+        let device_name = dev.name.clone();
+        match &self.conn {
+            ConnState::Connected { fake: true, .. } => {
+                self.push_log(
+                    log::Level::Warn,
+                    "MINIPRO_FAKE_PROGRAMMER is set — operations need real hardware",
+                );
+                return;
+            }
+            ConnState::Connected { .. } => {}
+            ConnState::Connecting => {
+                self.push_log(log::Level::Warn, "still connecting…");
+                return;
+            }
+            _ => {
+                self.push_log(
+                    log::Level::Warn,
+                    "no programmer connected — press F5 to connect",
+                );
+                return;
+            }
+        }
+        match op {
+            OpKind::Write => {
+                self.modal = Some(Modal::Confirm {
+                    op,
+                    path: None,
+                    buffer: Some(buf),
+                    lines: vec![
+                        format!("Write buffer to {device_name}?"),
+                        if self.options[1] {
+                            "writes over current contents (skip-erase is set)"
+                        } else {
+                            "erases the chip first"
+                        }
+                        .to_string(),
+                    ],
+                });
+            }
+            OpKind::Verify => self.send_run(op, None, Some(buf)),
+            _ => {}
+        }
+    }
+
     fn handle_modal_key(&mut self, k: KeyEvent) {
         match self.modal.take() {
             Some(Modal::Path {
-                op,
+                action,
                 title,
                 mut input,
                 mut cursor,
@@ -844,7 +1111,7 @@ impl App {
                 KeyCode::Enter => {
                     if input.trim().is_empty() {
                         self.modal = Some(Modal::Path {
-                            op,
+                            action,
                             title,
                             input,
                             cursor,
@@ -852,34 +1119,38 @@ impl App {
                         return;
                     }
                     let path = Self::resolve_path(input.trim());
-                    if op.is_destructive() {
-                        let name = self
-                            .selected
-                            .as_ref()
-                            .map(|d| d.name.clone())
-                            .unwrap_or_default();
-                        self.modal = Some(Modal::Confirm {
-                            op,
-                            path: Some(path.clone()),
-                            lines: vec![
-                                format!("Write {} to {name}?", path.display()),
-                                if self.options[1] {
-                                    "writes over current contents (skip-erase is set)"
-                                } else {
-                                    "erases the chip first"
-                                }
-                                .to_string(),
-                            ],
-                        });
-                    } else {
-                        self.send_run(op, Some(path));
+                    match action {
+                        PathAction::Op(op) if op.is_destructive() => {
+                            let name = self
+                                .selected
+                                .as_ref()
+                                .map(|d| d.name.clone())
+                                .unwrap_or_default();
+                            self.modal = Some(Modal::Confirm {
+                                op,
+                                path: Some(path.clone()),
+                                buffer: None,
+                                lines: vec![
+                                    format!("Write {} to {name}?", path.display()),
+                                    if self.options[1] {
+                                        "writes over current contents (skip-erase is set)"
+                                    } else {
+                                        "erases the chip first"
+                                    }
+                                    .to_string(),
+                                ],
+                            });
+                        }
+                        PathAction::Op(op) => self.send_run(op, Some(path), None),
+                        PathAction::SaveBuffer => self.save_buffer(path),
+                        PathAction::LoadBuffer => self.load_buffer(path),
                     }
                 }
                 KeyCode::Char(c) => {
                     input.insert(cursor, c);
                     cursor += c.len_utf8();
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -896,7 +1167,7 @@ impl App {
                         cursor = prev;
                     }
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -907,7 +1178,7 @@ impl App {
                         input.remove(cursor);
                     }
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -922,7 +1193,7 @@ impl App {
                             .unwrap_or(0);
                     }
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -933,7 +1204,7 @@ impl App {
                         cursor += input[cursor..].chars().next().unwrap().len_utf8();
                     }
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -942,7 +1213,7 @@ impl App {
                 KeyCode::Home => {
                     cursor = 0;
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -951,7 +1222,7 @@ impl App {
                 KeyCode::End => {
                     cursor = input.len();
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
@@ -959,22 +1230,93 @@ impl App {
                 }
                 _ => {
                     self.modal = Some(Modal::Path {
-                        op,
+                        action,
                         title,
                         input,
                         cursor,
                     });
                 }
             },
-            Some(Modal::Confirm { op, path, lines }) => match k.code {
+            Some(Modal::Goto {
+                mut input,
+                mut cursor,
+            }) => {
+                let mut keep = |input, cursor| {
+                    self.modal = Some(Modal::Goto { input, cursor });
+                };
+                match k.code {
+                    KeyCode::Esc => {} // dropped — cancel
+                    KeyCode::Enter => {
+                        let s = input
+                            .trim()
+                            .trim_start_matches("0x")
+                            .trim_start_matches("0X");
+                        match usize::from_str_radix(s, 16) {
+                            Ok(off) => {
+                                if let Some(hex) = &mut self.hex {
+                                    hex.move_cursor(off);
+                                    hex.ensure_visible();
+                                }
+                            }
+                            // Bad input: clear the field, keep the prompt —
+                            // the log is hidden behind the hex view, so a
+                            // logged error wouldn't be seen.
+                            Err(_) => keep(String::new(), 0),
+                        }
+                    }
+                    // Hex digits + an optional 0x prefix; anything else is
+                    // ignored rather than closing the prompt.
+                    KeyCode::Char(c) if c.is_ascii_hexdigit() || c == 'x' || c == 'X' => {
+                        input.insert(cursor, c);
+                        cursor += c.len_utf8();
+                        keep(input, cursor);
+                    }
+                    KeyCode::Backspace => {
+                        if cursor > 0 {
+                            input.remove(cursor - 1);
+                            cursor -= 1;
+                        }
+                        keep(input, cursor);
+                    }
+                    KeyCode::Left => {
+                        cursor = cursor.saturating_sub(1);
+                        keep(input, cursor);
+                    }
+                    KeyCode::Right => {
+                        if cursor < input.len() {
+                            cursor += 1;
+                        }
+                        keep(input, cursor);
+                    }
+                    KeyCode::Home => keep(input, 0),
+                    KeyCode::End => {
+                        let end = input.len();
+                        keep(input, end);
+                    }
+                    _ => keep(input, cursor),
+                }
+            }
+            Some(Modal::Confirm {
+                op,
+                path,
+                buffer,
+                lines,
+            }) => match k.code {
                 // Only an explicit y confirms — Enter is deliberately
                 // excluded: key-repeat on the path prompt's submit could
                 // carry a held Enter into this dialog and fire the op.
-                KeyCode::Char('y') | KeyCode::Char('Y') => self.send_run(op, path),
+                KeyCode::Char('y') | KeyCode::Char('Y') => self.send_run(op, path, buffer),
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {} // cancel
                 // Stray keys are ignored — a bumped key must not silently
                 // abandon a destructive-op confirm.
-                _ => self.modal = Some(Modal::Confirm { op, path, lines }),
+                _ => {
+                    self.modal = Some(Modal::Confirm {
+                        op,
+                        path,
+                        buffer,
+                        lines,
+                    })
+                }
             },
             None => {}
         }
@@ -1044,6 +1386,74 @@ impl App {
         }
     }
 
+    /// Keys while the hex-buffer view is open — its own input context:
+    /// hex digits overtype bytes (so the b/e op mnemonics are data
+    /// here), Esc/q/x/Tab return to the panes, and s/o/w/v/: run the
+    /// buffer actions.
+    fn handle_hex_key(&mut self, k: KeyEvent) -> bool {
+        if self.hex.is_none() {
+            self.hex_view = false; // defensive: view without a buffer
+            return false;
+        }
+        match k.code {
+            KeyCode::Esc
+            | KeyCode::Char('q')
+            | KeyCode::Char('x')
+            | KeyCode::Tab
+            | KeyCode::BackTab => self.hex_view = false,
+            KeyCode::Char('?') => self.show_help = true,
+            KeyCode::Char(':') => {
+                self.modal = Some(Modal::Goto {
+                    input: String::new(),
+                    cursor: 0,
+                });
+            }
+            KeyCode::Char('s') => {
+                let input = self
+                    .last_path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .or_else(|| {
+                        self.selected
+                            .as_ref()
+                            .map(|d| format!("{}.bin", d.name.replace(['/', '@'], "_")))
+                    })
+                    .unwrap_or_else(|| "buffer.bin".to_string());
+                self.modal = Some(Modal::Path {
+                    action: PathAction::SaveBuffer,
+                    title: "Save buffer to",
+                    cursor: input.len(),
+                    input,
+                });
+            }
+            KeyCode::Char('o') => {
+                self.modal = Some(Modal::Path {
+                    action: PathAction::LoadBuffer,
+                    title: "Load file into buffer",
+                    input: String::new(),
+                    cursor: 0,
+                });
+            }
+            KeyCode::Char('w') => self.hex_dispatch(OpKind::Write),
+            KeyCode::Char('v') => self.hex_dispatch(OpKind::Verify),
+            KeyCode::Char(c) if c.is_ascii_hexdigit() => {
+                if let Some(d) = c.to_digit(16) {
+                    if let Some(hex) = &mut self.hex {
+                        hex.type_digit(d as u8);
+                        hex.ensure_visible();
+                    }
+                }
+            }
+            _ => {
+                if let Some(hex) = &mut self.hex {
+                    hex.nav(k.code);
+                }
+            }
+        }
+        false
+    }
+
     /// Returns true when the app should quit.
     pub fn handle_key(&mut self, k: KeyEvent) -> bool {
         // Windows emits Press + Release (+ Repeat for held keys); acting
@@ -1081,20 +1491,37 @@ impl App {
         }
         // While an op runs, navigation + help stay live but anything
         // that could start/toggle state is blocked — core ops can't be
-        // aborted mid-transfer (same as the GUI's blocking dialog).
+        // aborted mid-transfer (same as the GUI's blocking dialog). The
+        // hex view stays browsable (nav only — no edits/actions).
         if self.op_running.is_some() {
             match k.code {
                 KeyCode::Tab => self.cycle_pane(1),
                 KeyCode::BackTab => self.cycle_pane(-1),
                 KeyCode::Char(']') => self.toggle_right(),
                 KeyCode::Char('?') => self.show_help = true,
-                KeyCode::Char('q') | KeyCode::Esc => self.push_log(
-                    log::Level::Warn,
-                    "operation in progress — it can't be aborted; wait for it to finish",
-                ),
-                _ => {}
+                KeyCode::Char('q') | KeyCode::Char('x') | KeyCode::Esc => {
+                    if self.hex_view {
+                        self.hex_view = false;
+                    } else {
+                        self.push_log(
+                            log::Level::Warn,
+                            "operation in progress — it can't be aborted; wait for it to finish",
+                        );
+                    }
+                }
+                _ => {
+                    if self.hex_view {
+                        if let Some(hex) = &mut self.hex {
+                            hex.nav(k.code);
+                        }
+                    }
+                }
             }
             return false;
+        }
+        // The hex view owns all keys while open — its own input context.
+        if self.hex_view {
+            return self.handle_hex_key(k);
         }
         if self.search_editing {
             match k.code {
@@ -1164,6 +1591,20 @@ impl App {
             KeyCode::Tab => self.cycle_pane(1),
             KeyCode::BackTab => self.cycle_pane(-1),
             KeyCode::Char(']') => self.toggle_right(),
+            // `o` = buffer view: open it when one exists, else prompt for
+            // a file to load into it. No programmer needed for viewing.
+            KeyCode::Char('o') => {
+                if self.hex.is_some() {
+                    self.hex_view = true;
+                } else {
+                    self.modal = Some(Modal::Path {
+                        action: PathAction::LoadBuffer,
+                        title: "Load file into buffer",
+                        input: String::new(),
+                        cursor: 0,
+                    });
+                }
+            }
             KeyCode::Char(c @ '1'..='8') => self.op = (c as usize) - ('1' as usize),
             // Mnemonic dispatch: arm the tab AND run it in one key. Path
             // and confirm modals still gate file/destructive ops. Only the
@@ -1682,11 +2123,11 @@ mod tests {
     #[test]
     fn mnemonic_opens_path_and_confirm_modals() {
         let mut a = op_ready_app();
-        a.handle_key(key(KeyCode::Char('r')));
+        a.handle_key(key(KeyCode::Char('w')));
         assert!(matches!(
             a.modal,
             Some(Modal::Path {
-                op: OpKind::Read,
+                action: PathAction::Op(OpKind::Write),
                 ..
             })
         ));
@@ -1791,14 +2232,16 @@ mod tests {
         let mut a = op_ready_app();
         let (tx, rx) = std::sync::mpsc::channel();
         a.cmd_tx = Some(tx);
-        a.handle_key(key(KeyCode::Char('r'))); // opens the read path prompt
-        a.handle_key(key(KeyCode::Char('x'))); // append a char to the prefill
+        a.handle_key(key(KeyCode::Char('v'))); // verify opens a file path prompt
+        a.handle_key(key(KeyCode::Char('x')));
         a.handle_key(key(KeyCode::Enter));
         match rx.try_recv() {
             Ok(WorkerCmd::Run {
-                path: Some(p), op, ..
+                input: OpInput::File(p),
+                op,
+                ..
             }) => {
-                assert_eq!(op, OpKind::Read);
+                assert_eq!(op, OpKind::Verify);
                 assert!(p.is_absolute(), "worker must get an absolute path");
             }
             _ => panic!("expected Run with path"),
@@ -1859,5 +2302,191 @@ mod tests {
         assert_eq!(wrap_log("word", 0), vec!["word"]);
         // A word that exactly fills the width doesn't split.
         assert_eq!(wrap_log("abcde", 5), vec!["abcde"]);
+    }
+
+    // ── Hex-buffer view ─────────────────────────────────────────────
+
+    #[test]
+    fn read_dispatches_without_modal_and_read_fills_buffer() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.handle_key(key(KeyCode::Char('r')));
+        // No path prompt — the read goes straight to the worker.
+        assert!(a.modal.is_none());
+        assert_eq!(a.op_running, Some(OpKind::Read));
+        match rx.try_recv() {
+            Ok(WorkerCmd::Run {
+                op: OpKind::Read,
+                input: OpInput::None,
+                ..
+            }) => {}
+            _ => panic!("expected input-less Read"),
+        }
+        // OpDone::Read lands the bytes in the buffer and opens the view.
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Read,
+            result: Ok(OpOutcome::Read {
+                stats: OpStats {
+                    bytes: 32,
+                    crc32: 0x1234,
+                },
+                data: (0u8..32).collect(),
+            }),
+        });
+        assert!(a.hex_view);
+        assert_eq!(a.hex.as_ref().unwrap().data.len(), 32);
+        assert_eq!(a.hex.as_ref().unwrap().crc32, 0x1234);
+    }
+
+    #[test]
+    fn o_opens_view_or_load_prompt() {
+        let mut a = app();
+        // No buffer yet → load-file prompt.
+        a.handle_key(key(KeyCode::Char('o')));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Path {
+                action: PathAction::LoadBuffer,
+                ..
+            })
+        ));
+        a.handle_key(key(KeyCode::Esc));
+        // With a buffer → straight into the view.
+        a.hex = Some(HexBuf::new(vec![0xAA; 16], 0));
+        a.handle_key(key(KeyCode::Char('o')));
+        assert!(a.hex_view);
+        assert!(a.modal.is_none());
+    }
+
+    #[test]
+    fn hex_digits_overtype_and_advance() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0x00; 32], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Char('d')));
+        a.handle_key(key(KeyCode::Char('e')));
+        assert_eq!(a.hex.as_ref().unwrap().data[0], 0xDE);
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 1);
+        assert!(a.hex.as_ref().unwrap().edited.contains(&0));
+        a.handle_key(key(KeyCode::Char('a')));
+        a.handle_key(key(KeyCode::Char('d')));
+        assert_eq!(a.hex.as_ref().unwrap().data[1], 0xAD);
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 2);
+    }
+
+    #[test]
+    fn hex_b_and_e_are_digits_not_ops() {
+        // 'b' = blank check and 'e' = erase as mnemonics — inside the
+        // hex view they must overtype nibbles, not dispatch ops.
+        let mut a = op_ready_app();
+        a.hex = Some(HexBuf::new(vec![0x00; 16], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Char('b')));
+        a.handle_key(key(KeyCode::Char('e')));
+        assert_eq!(a.hex.as_ref().unwrap().data[0], 0xBE);
+        assert!(a.op_running.is_none());
+        assert!(a.modal.is_none());
+    }
+
+    #[test]
+    fn hex_nav_and_clamps() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0u8; 48], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Right));
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 17);
+        a.handle_key(key(KeyCode::End)); // row end
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 31);
+        a.handle_key(key(KeyCode::Char('G'))); // buffer end
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 47);
+        a.handle_key(key(KeyCode::Right)); // clamped
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 47);
+        a.handle_key(key(KeyCode::Char('g'))); // top
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 0);
+    }
+
+    #[test]
+    fn hex_goto_modal_jumps_and_rejects() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0u8; 512], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Char(':')));
+        assert!(matches!(a.modal, Some(Modal::Goto { .. })));
+        for c in "0x40".chars() {
+            a.handle_key(key(KeyCode::Char(c)));
+        }
+        a.handle_key(key(KeyCode::Enter));
+        assert!(a.modal.is_none());
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 0x40);
+        // Non-hex input can't be typed — 'z' is ignored.
+        a.handle_key(key(KeyCode::Char(':')));
+        a.handle_key(key(KeyCode::Char('z')));
+        if let Some(Modal::Goto { input, .. }) = &a.modal {
+            assert_eq!(input, "");
+        } else {
+            panic!("goto modal vanished");
+        }
+        a.handle_key(key(KeyCode::Esc));
+    }
+
+    #[test]
+    fn hex_save_and_write_flows() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.hex = Some(HexBuf::new(vec![0x55; 64], 0xC0DE));
+        a.hex_view = true;
+        // 's' → save path prompt.
+        a.handle_key(key(KeyCode::Char('s')));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Path {
+                action: PathAction::SaveBuffer,
+                ..
+            })
+        ));
+        a.handle_key(key(KeyCode::Esc));
+        // 'w' → destructive confirm carrying the buffer payload.
+        a.handle_key(key(KeyCode::Char('w')));
+        assert!(matches!(a.modal, Some(Modal::Confirm { .. })));
+        a.handle_key(key(KeyCode::Char('y')));
+        match rx.try_recv() {
+            Ok(WorkerCmd::Run {
+                op: OpKind::Write,
+                input: OpInput::Buffer(buf),
+                ..
+            }) => assert_eq!(buf.len(), 64),
+            _ => panic!("expected buffer Write"),
+        }
+    }
+
+    #[test]
+    fn hex_view_nav_only_during_op() {
+        let mut a = op_ready_app();
+        a.hex = Some(HexBuf::new(vec![0u8; 64], 0));
+        a.hex_view = true;
+        a.op_running = Some(OpKind::Write);
+        // Navigation still works — browsing during a write is safe.
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.hex.as_ref().unwrap().cursor, 16);
+        // Edits are blocked: 'f' is a hex digit but must not overtype.
+        a.handle_key(key(KeyCode::Char('f')));
+        assert_eq!(a.hex.as_ref().unwrap().data[16], 0x00);
+        // Esc leaves the view rather than warning.
+        a.handle_key(key(KeyCode::Esc));
+        assert!(!a.hex_view);
+    }
+
+    #[test]
+    fn hex_esc_returns_to_panes() {
+        let mut a = app();
+        a.hex = Some(HexBuf::new(vec![0u8; 16], 0));
+        a.hex_view = true;
+        a.handle_key(key(KeyCode::Esc));
+        assert!(!a.hex_view);
+        // A second Esc quits — the view consumed only the first.
+        assert!(a.handle_key(key(KeyCode::Esc)));
     }
 }

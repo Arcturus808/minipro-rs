@@ -12,6 +12,7 @@ pub const CHIP: Color = Color::Rgb(187, 154, 247);
 pub const GREEN: Color = Color::Rgb(90, 205, 145);
 pub const RED: Color = Color::Rgb(242, 96, 96);
 pub const AMBER: Color = Color::Rgb(232, 184, 90);
+pub const LIME: Color = Color::Rgb(132, 204, 22);
 pub const CYAN: Color = Color::Rgb(96, 200, 210);
 pub const WHITE: Color = Color::Rgb(235, 238, 248);
 pub const SEL_BG: Color = Color::Rgb(44, 55, 100);
@@ -45,6 +46,9 @@ pub fn red() -> Style {
 }
 pub fn amber() -> Style {
     Style::default().fg(AMBER)
+}
+pub fn lime() -> Style {
+    Style::default().fg(LIME)
 }
 pub fn cyan() -> Style {
     Style::default().fg(CYAN)

@@ -236,6 +236,12 @@ possible later enhancement — do not promise it.
   warnings. Core extraction step 2 (op-runner glue). **Ship here first.**
 - **P2 — buffer pane:** hex viewer view-only + save, then edit/find/goto/
   diff; ZIF + ICSP diagrams (pure render, high value).
+  **Partially shipped:** the buffer view landed as a dedicated
+  full-screen screen (`o` toggle; reads fill it, `s`/`o` save/load,
+  `w`/`v` write/verify to chip, `:` goto, overtype edits, per-row
+  entropy gutter) — ZIF diagram + pin-test highlighting shipped with
+  P1 instead. Still open: find, undo/redo, selection, diff, ICSP
+  diagram, bytes-per-row, mouse.
 - **P3 — specialist ops:** config/fuse editor (+ `fuse_defs` move), logic
   test + identify, SPI autodetect, pin-test diagram highlighting,
   diagnostics menu (OVC/calibration/hw-check/firmware update).
