@@ -639,9 +639,14 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
     // Buffer line — last op's file + stats, or the empty state.
     match (&app.last_path, app.last_stats) {
         (Some(path), Some(stats)) => {
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
             lines.push(Line::from(vec![
                 sp(" Buffer  ", theme::dim()),
-                sp(path.clone(), theme::text()),
+                sp(name, theme::text()),
                 sp(format!("  · {} B", stats.bytes), theme::dim()),
             ]));
             lines.push(Line::from(vec![
@@ -885,11 +890,14 @@ fn modal_overlay(f: &mut Frame, area: Rect, m: &Modal) {
                 sp("▌", theme::accent()),
             ];
             spans.push(sp(&input[*cursor..], theme::text()));
+            // Resolved-path preview — where the file actually lands.
+            let resolved = App::resolve_path(input.trim()).display().to_string();
             (
                 title,
                 vec![
                     Line::default(),
                     Line::from(spans),
+                    Line::from(vec![sp(" → ", theme::faint()), sp(resolved, theme::dim())]),
                     Line::default(),
                     Line::from(vec![
                         sp(" Enter", theme::accent()),

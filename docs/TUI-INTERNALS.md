@@ -116,7 +116,9 @@ variant/no-ID normalization matches the GUI.
   letters still type into inputs and can't fire inside modals — keep
   that ordering when adding global keys.
 - Modals: `Modal::Path` (file ops — Read pre-fills
-  `<sanitized-name>.bin`, Write/Verify start empty) and
+  `<sanitized-name>.bin`, Write/Verify start empty; the dialog shows a
+  live `→ resolved` preview and submits the absolutized path so every
+  later display names the real location) and
   `Modal::Confirm` (Write after path entry, Erase). Only `y`/`Y`
   confirm — `Enter` is deliberately excluded (a held Enter's repeat
   events from the path prompt could otherwise carry in and fire the
