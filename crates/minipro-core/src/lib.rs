@@ -47,6 +47,39 @@ pub(crate) mod util;
 pub mod xgpro_fetch;
 pub mod zif;
 
+/// Route `outln!` diagnostics to `log::info!` instead of stderr.
+///
+/// Several protocol paths print progress/diagnostic lines with
+/// `eprintln!` (algorithm names, pin-test progress, overcurrent
+/// results). A frontend that owns the terminal — the TUI — must not let
+/// library code write to stderr mid-frame, or the raw text corrupts the
+/// rendered screen. Setting this flag makes every `outln!` emit a
+/// `log::info!` record instead, which the frontend's logger can route
+/// into its own UI. The CLI and GUI leave it unset and keep the
+/// upstream-style stderr output.
+pub static PRINT_TO_LOG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Print a diagnostic line to stderr, or to `log::info!` when
+/// [`PRINT_TO_LOG`] is set. Use instead of `eprintln!` anywhere a
+/// frontend might own the terminal.
+#[macro_export]
+macro_rules! outln {
+    () => {
+        if $crate::PRINT_TO_LOG.load(::std::sync::atomic::Ordering::Relaxed) {
+            ::log::info!("");
+        } else {
+            ::std::eprintln!();
+        }
+    };
+    ($($arg:tt)*) => {
+        if $crate::PRINT_TO_LOG.load(::std::sync::atomic::Ordering::Relaxed) {
+            ::log::info!($($arg)*);
+        } else {
+            ::std::eprintln!($($arg)*);
+        }
+    };
+}
+
 // Re-export the most commonly used types so callers can write
 // `use minipro_core::MiniproHandle` etc.
 pub use batch::{
