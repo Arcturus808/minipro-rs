@@ -490,6 +490,9 @@ pub struct App {
     /// Leading rows of `matches` that are pinned favorites — the
     /// results header splits the count at this boundary.
     pub fav_rows: usize,
+    /// Visible rows in the results list — refreshed each render so
+    /// PgUp/PgDn move a real screenful, not a fixed stride.
+    pub result_rows: u16,
     paths: DatabasePaths,
     /// Model used for list filtering — follows the connected programmer.
     pub model: ProgrammerModel,
@@ -580,6 +583,9 @@ impl App {
             favorites: prefs::load_favorites(),
             favorites_path: prefs::favorites_path(),
             fav_rows: 0,
+            // 10 preserves the old fixed stride until the first render
+            // measures the list (tests never render).
+            result_rows: 10,
             paths,
             model,
             cmd_tx: None,
@@ -726,6 +732,12 @@ impl App {
         let to = to.min(self.matches.len() - 1);
         self.list.select(Some(to));
         self.clear_selection_if_moved();
+    }
+
+    /// PgUp/PgDn stride — one visible screenful of the results list
+    /// (fzf/file-manager convention), refreshed each render.
+    fn page_rows(&self) -> usize {
+        self.result_rows.max(1) as usize
     }
 
     fn insert(&mut self, c: char) {
@@ -1941,8 +1953,8 @@ impl App {
                 // dead-ends the list until Esc/Enter.
                 KeyCode::Up => self.move_cursor(self.cursor().saturating_sub(1)),
                 KeyCode::Down => self.move_cursor(self.cursor() + 1),
-                KeyCode::PageUp => self.move_cursor(self.cursor().saturating_sub(10)),
-                KeyCode::PageDown => self.move_cursor(self.cursor() + 10),
+                KeyCode::PageUp => self.move_cursor(self.cursor().saturating_sub(self.page_rows())),
+                KeyCode::PageDown => self.move_cursor(self.cursor() + self.page_rows()),
                 KeyCode::Esc => self.search_editing = false,
                 KeyCode::Enter => {
                     self.search_editing = false;
@@ -2002,8 +2014,10 @@ impl App {
                 Pane::Devices => match k.code {
                     KeyCode::Up => self.move_cursor(self.cursor().saturating_sub(1)),
                     KeyCode::Down => self.move_cursor(self.cursor() + 1),
-                    KeyCode::PageUp => self.move_cursor(self.cursor().saturating_sub(10)),
-                    KeyCode::PageDown => self.move_cursor(self.cursor() + 10),
+                    KeyCode::PageUp => {
+                        self.move_cursor(self.cursor().saturating_sub(self.page_rows()))
+                    }
+                    KeyCode::PageDown => self.move_cursor(self.cursor() + self.page_rows()),
                     KeyCode::Home => self.move_cursor(0),
                     KeyCode::End => self.move_cursor(usize::MAX),
                     KeyCode::Enter => self.activate(),

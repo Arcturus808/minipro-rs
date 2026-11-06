@@ -403,6 +403,9 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
     ])
     .split(area);
 
+    // Feed the measured list height back so PgUp/PgDn page by screenful.
+    app.result_rows = v[4].height.max(1);
+
     f.render_widget(Paragraph::new(hdr("DEVICES", focused)), v[0]);
 
     // Search box — accent border while editing; ▌ marks the text cursor.
