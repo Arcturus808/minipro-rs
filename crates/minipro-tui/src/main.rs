@@ -851,8 +851,8 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
 /// Centered help modal — the first overlay; path/confirm dialogs reuse
 /// this pattern. Lists only keys that are actually bound.
 fn help_overlay(f: &mut Frame, area: Rect) {
-    let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 34u16.min(area.height.saturating_sub(2));
+    let w = 68u16.min(area.width.saturating_sub(4));
+    let h = 42u16.min(area.height.saturating_sub(2));
     let r = Rect::new(
         area.x + area.width.saturating_sub(w) / 2,
         area.y + area.height.saturating_sub(h) / 2,
@@ -879,14 +879,14 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         Line::default(),
         section("Devices"),
         row("/", "edit search (chars insert)"),
-        row("↑ ↓ PgUp PgDn", "move cursor · results (in search too)"),
+        row("↑ ↓ PgUp PgDn", "move cursor (search results too)"),
         row("Home · End", "first · last match"),
-        row("Enter", "select device (search: select + exit)"),
+        row("Enter", "select (search: select + exit)"),
         row("Esc", "cancel search · quit"),
         row("f", "favorite (this session)"),
         Line::default(),
         section("Operations"),
-        row("r/w/v/e/b/i", "run op (read → buffer; others prompt)"),
+        row("r/w/v/e/b/i", "run op (read → buffer; else prompts)"),
         row("l · c", "logic / config — not in this MVP"),
         row("1-8", "arm op, Enter runs"),
         row("Space", "toggle option · ←→ cycle selects"),
@@ -896,11 +896,11 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("←→↑↓ PgUp/PgDn", "move cursor · g/G first/last"),
         row("Home · End · :", "row start/end · goto offset"),
         row("0-9a-f", "overtype byte (half-typed = x·)"),
-        row("Tab · Esc", "hex/ASCII mode toggle (i/Ins also enter)"),
-        row("/ · n/N · F3", "find (x: prefix for hex) · repeat · repeat"),
+        row("Tab · Esc", "hex/ASCII toggle (i/Ins enter too)"),
+        row("/ · n/N · F3", "find (x: = hex) · repeat"),
         row("Backspace", "undo previous edit keystroke"),
         row("o · s · w · v", "load · save · write chip · verify"),
-        row("Esc / q / x / Tab", "back to panes"),
+        row("Esc / q / x", "back to panes"),
         Line::default(),
         section("Log (right pane)"),
         row("j/k · PgUp/PgDn", "scroll · x clear"),
