@@ -38,6 +38,7 @@
     doIdentify,
     type FuseValue,
     type ConfigData,
+    type OperationOptions,
     fuseElementSize,
   } from "./lib/stores/operations";
   import TerminalLog from "./lib/components/TerminalLog.svelte";
@@ -186,6 +187,7 @@
     $selectedDevice;
     if (
       isLogicDevice &&
+      $activeOperation &&
       ["read", "write", "verify", "erase", "blank_check", "chip_id"].includes(
         $activeOperation,
       )
@@ -389,7 +391,7 @@
   });
 
   $effect(() => {
-    setSetting("icspMode", icspMode);
+    setSetting("icspMode", icspMode as "zif" | "icsp" | "icsp_no_vcc");
   });
 
   function setTheme(t: "system" | "dark" | "light") {
@@ -472,7 +474,7 @@
     ].some((k) => lower.includes(k));
   }
 
-  function getOptions() {
+  function getOptions(): OperationOptions {
     return {
       skip_erase: skipErase,
       skip_verify: skipVerify,
@@ -481,7 +483,7 @@
       vpp: overrideVpp || null,
       vcc: overrideVcc || null,
       vdd: overrideVdd || null,
-      icsp_mode: icspMode,
+      icsp_mode: icspMode as OperationOptions["icsp_mode"],
       page,
       format,
       size_mismatch: sizeMismatch,
@@ -592,10 +594,10 @@
             start: startVal,
             address: parseInt(serialAddr, serialAddr.startsWith("0x") ? 16 : 10),
             width: parseInt(serialWidth, 10),
-            format: serialFormat,
-            endian: serialEndian,
+            format: serialFormat as "bin" | "ascii" | "bcd",
+            endian: serialEndian as "little" | "big",
             step: parseInt(serialStep, 10),
-            checksum: serialChecksum,
+            checksum: serialChecksum as "none" | "xor" | "crc8",
           };
         }
         await startBatch(path, getOptions(), count, serialConfig);
@@ -668,7 +670,7 @@
           } else if (chipResult.is_match) {
             logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
           } else if (chipResult.is_variant) {
-            logs.info(`Chip ID: ${chipResult.id} (differs from expected ${chipResult.expected} — ${$selectedDevice.name} is a package-variant entry; the base chip may report a different ID)`);
+            logs.info(`Chip ID: ${chipResult.id} (differs from expected ${chipResult.expected} — ${$selectedDevice?.name ?? "the selected device"} is a package-variant entry; the base chip may report a different ID)`);
           } else {
             logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
           }

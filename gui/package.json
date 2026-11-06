@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check": "svelte-check --threshold error"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
@@ -22,8 +23,9 @@
     "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@tailwindcss/vite": "^4.0.0",
     "@tsconfig/svelte": "^5.0.8",
-    "tailwindcss": "^4.0.0",
     "svelte": "^5.56.2",
+    "svelte-check": "^4.7.8",
+    "tailwindcss": "^4.0.0",
     "typescript": "^6.0.3",
     "vite": "^6.4.3"
   }

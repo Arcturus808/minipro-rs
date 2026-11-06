@@ -2,6 +2,7 @@
   import { settings, setSetting } from "../stores/settings";
   import type { AppSettings } from "../stores/settings";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { LogicalSize } from "@tauri-apps/api/dpi";
   import { invoke } from "@tauri-apps/api/core";
   import { pickDirectory } from "../file-dialog";
   import { getDbStatus, setCustomDbDir, reloadDatabase, type DbDirStatus } from "../stores/device";
@@ -249,7 +250,7 @@
             // Clear saved window size and re-apply dynamic sizing
             const [winW, winH] = await invoke<[number, number]>("get_dynamic_window_size");
             const win = getCurrentWindow();
-            await win.setSize({ type: "Logical", width: winW, height: winH });
+            await win.setSize(new LogicalSize(winW, winH));
             await win.center();
             // Save the new dynamically-computed size
             await setSetting("windowWidth", winW);

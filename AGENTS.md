@@ -15,7 +15,8 @@ history live in `docs/` — see "Feature internals" at the bottom.
   Co-Authored-By, no watermarks. Messages read as human-authored.
 - **Frontend changed (`.svelte`/`.ts`/`.css`/`.html`)? Build with
   `cargo tauri build`** — `cargo build --release` keeps stale embedded
-  assets.
+  assets. Also run `cd gui && npm run check` (svelte-check) — the
+  frontend type gate; must report 0 errors.
 - **Code changed? Verify locally before committing:**
   `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
   `cargo test --all --locked`.
@@ -295,6 +296,7 @@ Local CI-equivalent checks (run from repo root):
 | fmt | `cargo fmt --all -- --check` |
 | clippy | `cargo clippy --all-targets -- -D warnings` |
 | tests | `cargo test --all --locked` |
+| frontend types | `cd gui && npm run check` |
 
 ### MSRV & cross-distro verification
 
