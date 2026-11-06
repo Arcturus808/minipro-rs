@@ -218,7 +218,19 @@ fn draw(f: &mut Frame, app: &mut App) {
             theme::text(),
         ))
         .title(conn_badge(app).alignment(Alignment::Center))
-        .title(Line::from(Span::styled(" [?] help ", theme::dim())).alignment(Alignment::Right));
+        // In the hex view's ASCII mode '?' types 0x3F, so the hint
+        // switches to the always-live F1 at the moment it matters.
+        .title(
+            Line::from(Span::styled(
+                if app.hex_view && app.hex.as_ref().is_some_and(|h| h.ascii) {
+                    " [F1] help "
+                } else {
+                    " [?] help "
+                },
+                theme::dim(),
+            ))
+            .alignment(Alignment::Right),
+        );
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
