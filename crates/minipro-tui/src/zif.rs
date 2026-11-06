@@ -51,7 +51,7 @@ pub struct ZifDiagram {
     /// Only used while `show_test` is set.
     pub tested: BTreeSet<u8>,
     /// ZIF pins untestable by design (the chip's GND pins — held low by
-    /// the die, so contact can't be distinguished). Renders cyan under
+    /// the die, so contact can't be distinguished). Renders white under
     /// an active test so "skipped" doesn't read as "empty" or "good".
     pub untestable: BTreeSet<u8>,
     /// A pin-test result is on screen — enables the tested/untested
@@ -105,7 +105,7 @@ impl ZifDiagram {
         rows
     }
 
-    /// Slot cell (and pin-tip) color: bad → red; GND → cyan under an
+    /// Slot cell (and pin-tip) color: bad → red; GND → white under an
     /// active test; empty → faint; occupied → green, except
     /// occupied-but-untested under an active pin-test result, which
     /// reads faint rather than implying "good".
@@ -113,7 +113,7 @@ impl ZifDiagram {
         if self.bad.contains(&pin) {
             theme::red()
         } else if self.show_test && self.untestable.contains(&pin) {
-            theme::cyan()
+            theme::white()
         } else if !self.occupied.contains(&pin) || (self.show_test && !self.tested.contains(&pin)) {
             theme::faint()
         } else {
@@ -249,7 +249,7 @@ impl Widget for &ZifDiagram {
             ];
             if !self.untestable.is_empty() {
                 let gnd = [
-                    Span::styled("  ▪", theme::cyan()),
+                    Span::styled("  ▪", theme::white()),
                     Span::styled(" GND·untestable", theme::faint()),
                 ];
                 // pad + "▪ ok  ▪ bad" (11) + "  ▪ GND·untestable" (17) — wrap
@@ -261,7 +261,7 @@ impl Widget for &ZifDiagram {
                     lines.push(Line::from(legend));
                     lines.push(Line::from(vec![
                         Span::raw(pad),
-                        Span::styled("▪", theme::cyan()),
+                        Span::styled("▪", theme::white()),
                         Span::styled(" GND·untestable", theme::faint()),
                     ]));
                 }
@@ -345,15 +345,15 @@ mod tests {
     }
 
     #[test]
-    fn gnd_pin_renders_cyan_with_legend() {
+    fn gnd_pin_renders_white_with_legend() {
         let mut zif = diagram();
         zif.show_test = true;
         zif.untestable = BTreeSet::from([40]); // e.g. DIP8 pin 8 → ZIF 40
         let (lines, buf) = rendered_lines(&zif, 40, 12);
-        // Right-column slot + pin tip for ZIF 40 (row 3) are cyan, not
+        // Right-column slot + pin tip for ZIF 40 (row 3) are white, not
         // faint — "untestable" must not read as "empty" or "good".
-        assert_eq!(buf[(24, 3)].fg, theme::CYAN); // right slot ▭
-        assert_eq!(buf[(23, 3)].fg, theme::CYAN); // right pin tip ▪
+        assert_eq!(buf[(24, 3)].fg, theme::WHITE); // right slot ▭
+        assert_eq!(buf[(23, 3)].fg, theme::WHITE); // right pin tip ▪
         assert!(lines[11].contains("GND·untestable"));
     }
 

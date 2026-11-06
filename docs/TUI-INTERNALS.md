@@ -133,7 +133,7 @@ variant/no-ID normalization matches the GUI.
 - `ZifDiagram` is fed by core `zif.rs`: `zif_spec(model)` → socket,
   `device_to_zif`/`occupied_zif_pins` → occupied/justification/lever.
   Pin states under a pin-test result: bad=red, tested=green,
-  GND=cyan (`untestable` — held low by the die so contact can't be
+  GND=white (`untestable` — held low by the die so contact can't be
   distinguished; legend row appears under the socket while `show_test`
   is set), occupied-but-untested=faint. Without a result, occupied
   pins are green and empties faint.

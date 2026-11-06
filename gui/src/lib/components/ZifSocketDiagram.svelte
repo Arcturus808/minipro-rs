@@ -147,7 +147,7 @@
   });
 
   // Device pins excluded by design (the chip's GND pins — held low by
-  // the die, so contact can't be distinguished). Rendered cyan so
+  // the die, so contact can't be distinguished). Rendered neutral gray so
   // "skipped by design" doesn't read as "empty" or "good".
   let gndZifPins = $derived.by(() => {
     if (!pinTestActive || !untestablePins || untestablePins.length === 0 || !layout)
@@ -232,9 +232,9 @@
           width={SLOT_W}
           height={SLOT_H}
           rx="1"
-          fill={isBad ? "#f38ba8" : isGnd ? "#22d3ee" : isGood ? "#4ade80" : "black"}
+          fill={isBad ? "#f38ba8" : isGnd ? "#94a3b8" : isGood ? "#4ade80" : "black"}
           fill-opacity={isBad ? "0.9" : isGnd || isGood ? "0.7" : "0.15"}
-          stroke={isBad ? "#f38ba8" : isGnd ? "#22d3ee" : isGood ? "#4ade80" : "currentColor"}
+          stroke={isBad ? "#f38ba8" : isGnd ? "#94a3b8" : isGood ? "#4ade80" : "currentColor"}
           stroke-width="1.5"
           opacity={isBad || isGnd || isGood ? "1" : "0.5"}
         />
@@ -334,7 +334,7 @@
         </span>
         {#if untestablePins.length > 0}
           <span class="flex items-center gap-1">
-            <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:#22d3ee;"></span>GND — not testable
+            <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:#94a3b8;"></span>GND — not testable
           </span>
         {/if}
       </div>
