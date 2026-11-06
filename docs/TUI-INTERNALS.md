@@ -117,9 +117,11 @@ variant/no-ID normalization matches the GUI.
   that ordering when adding global keys.
 - Modals: `Modal::Path` (file ops — Read pre-fills
   `<sanitized-name>.bin`, Write/Verify start empty) and
-  `Modal::Confirm` (Write after path entry, Erase). `y`/`Y`/`Enter`
-  confirm; `n`/`N`/`Esc` cancel; every other key is ignored so a stray
-  keypress can't silently abandon a destructive-op confirm.
+  `Modal::Confirm` (Write after path entry, Erase). Only `y`/`Y`
+  confirm — `Enter` is deliberately excluded (a held Enter's repeat
+  events from the path prompt could otherwise carry in and fire the
+  op); `n`/`N`/`Esc` cancel; every other key is ignored so a stray
+  keypress can't silently abandon the confirm.
 - Right pane auto-collapses under ~100 cols with hysteresis; `]`
   pins/unpins. Full layout switches to a too-small message under
   80×24, also hysteretic. `MINIPRO_TUI_DEBUG_PAINT` overlays draws/s.
