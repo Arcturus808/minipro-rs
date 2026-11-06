@@ -459,13 +459,15 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .map(|&i| {
             let d = &app.devices[i];
-            let star = if app.favorites.iter().any(|f| f.name == d.name) {
-                "★"
-            } else {
-                " "
-            };
+            let is_fav = app.favorites.iter().any(|f| f.name == d.name);
             ListItem::new(Line::from(vec![
-                sp(format!("{star}{:<11}", d.name), theme::text()),
+                sp(
+                    if is_fav { "★" } else { " " },
+                    // Gold star — GUI parity; amber is the TUI's
+                    // "important" color (dirty bytes, warnings).
+                    theme::amber(),
+                ),
+                sp(format!("{:<11}", d.name), theme::text()),
                 sp(d.manufacturer.clone(), theme::dim()),
             ]))
         })
