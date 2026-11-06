@@ -165,6 +165,8 @@ pub struct PinTestView {
     pub bad: std::collections::BTreeSet<u8>,
     /// ZIF pins that were tested (good or bad).
     pub tested: std::collections::BTreeSet<u8>,
+    /// ZIF pins untestable by design (GND — held low by the die).
+    pub untestable: std::collections::BTreeSet<u8>,
     /// Device pins that failed (for the strip text).
     pub bad_device_pins: Vec<u16>,
     /// True when every expected pin was open — probably an empty socket.
@@ -520,8 +522,9 @@ impl App {
             AppEvent::PinTest {
                 bad,
                 expected,
+                untestable,
                 all_open,
-            } => self.set_pin_test(bad, expected, all_open),
+            } => self.set_pin_test(bad, expected, untestable, all_open),
             AppEvent::OpDone { op, result } => self.on_op_done(op, result),
         }
     }
@@ -545,7 +548,13 @@ impl App {
 
     /// Map a pin-test result (device pin numbers) onto ZIF pins for the
     /// diagram, using the selected device's package and the model's spec.
-    fn set_pin_test(&mut self, bad: Vec<u16>, expected: Vec<u16>, all_open: bool) {
+    fn set_pin_test(
+        &mut self,
+        bad: Vec<u16>,
+        expected: Vec<u16>,
+        untestable: Vec<u16>,
+        all_open: bool,
+    ) {
         let spec = zif_spec(self.model);
         let pin_count = self
             .selected
@@ -561,6 +570,7 @@ impl App {
         self.pin_test = Some(PinTestView {
             bad: map(&bad),
             tested: map(&expected),
+            untestable: map(&untestable),
             bad_device_pins: bad,
             all_open,
         });
@@ -992,9 +1002,19 @@ impl App {
             (Some(&t), Some(&b)) => (t, b),
             _ => (0, 0),
         };
-        let (bad, tested, show_test) = match &self.pin_test {
-            Some(pt) => (pt.bad.clone(), pt.tested.clone(), true),
-            None => (Default::default(), Default::default(), false),
+        let (bad, tested, untestable, show_test) = match &self.pin_test {
+            Some(pt) => (
+                pt.bad.clone(),
+                pt.tested.clone(),
+                pt.untestable.clone(),
+                true,
+            ),
+            None => (
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                false,
+            ),
         };
         ZifDiagram {
             socket: if spec.pins == 48 { "ZIF-48" } else { "ZIF-40" },
@@ -1016,6 +1036,7 @@ impl App {
             occupied,
             bad,
             tested,
+            untestable,
             show_test,
             chip_top,
             chip_bot,

@@ -344,6 +344,8 @@ export interface PinTestResult {
   /** Device pins the mask actually tested — distinguishes tested-good
       from untested (e.g. GND) on the ZIF diagram. */
   expected_pins: number[];
+  /** Device pins excluded by design (GND — untestable electrically). */
+  untestable_pins?: number[];
   message: string;
 }
 

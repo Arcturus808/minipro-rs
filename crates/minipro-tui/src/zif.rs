@@ -46,10 +46,14 @@ pub struct ZifDiagram {
     pub occupied: BTreeSet<u8>,
     /// ZIF pins that failed the pin-contact check.
     pub bad: BTreeSet<u8>,
-    /// ZIF pins the pin-contact check measured (pass or fail) — the
-    /// 3-state distinction: occupied-but-untested renders faint instead
-    /// of implying "good". Only used while `show_test` is set.
+    /// ZIF pins the pin-contact check measured (pass or fail) —
+    /// occupied-but-untested renders faint instead of implying "good".
+    /// Only used while `show_test` is set.
     pub tested: BTreeSet<u8>,
+    /// ZIF pins untestable by design (the chip's GND pins — held low by
+    /// the die, so contact can't be distinguished). Renders cyan under
+    /// an active test so "skipped" doesn't read as "empty" or "good".
+    pub untestable: BTreeSet<u8>,
     /// A pin-test result is on screen — enables the tested/untested
     /// split. False paints every occupied slot green (no result yet).
     pub show_test: bool,
@@ -101,12 +105,15 @@ impl ZifDiagram {
         rows
     }
 
-    /// Slot cell (and pin-tip) color: bad → red; empty → faint;
-    /// occupied → green, except occupied-but-untested under an active
-    /// pin-test result, which reads faint rather than implying "good".
+    /// Slot cell (and pin-tip) color: bad → red; GND → cyan under an
+    /// active test; empty → faint; occupied → green, except
+    /// occupied-but-untested under an active pin-test result, which
+    /// reads faint rather than implying "good".
     fn slot_style(&self, pin: u8) -> ratatui::style::Style {
         if self.bad.contains(&pin) {
             theme::red()
+        } else if self.show_test && self.untestable.contains(&pin) {
+            theme::cyan()
         } else if !self.occupied.contains(&pin) || (self.show_test && !self.tested.contains(&pin)) {
             theme::faint()
         } else {
@@ -232,6 +239,17 @@ impl Widget for &ZifDiagram {
                 Span::styled("lever", theme::dim()),
             ]));
         }
+        if self.show_test {
+            lines.push(Line::from(vec![
+                Span::raw(pad),
+                Span::styled("▪", theme::green()),
+                Span::styled(" ok  ", theme::faint()),
+                Span::styled("▪", theme::red()),
+                Span::styled(" bad  ", theme::faint()),
+                Span::styled("▪", theme::cyan()),
+                Span::styled(" GND — not testable", theme::faint()),
+            ]));
+        }
         Paragraph::new(lines).render(area, buf);
     }
 }
@@ -251,6 +269,7 @@ mod tests {
             occupied: BTreeSet::from([1, 2, 3, 4, 37, 38, 39, 40]),
             bad: BTreeSet::from([3]),
             tested: BTreeSet::from([1, 2, 4, 37, 38, 39, 40]),
+            untestable: BTreeSet::new(),
             show_test: false,
             chip_top: 1,
             chip_bot: 4,
@@ -304,6 +323,19 @@ mod tests {
         assert_eq!(buf[(11, 5)].fg, theme::RED); // left pin tip ▪
         assert_eq!(buf[(7, 4)].fg, theme::DIM); // "2" (pin 2 stays dim/green)
         assert_eq!(buf[(10, 4)].fg, theme::GREEN); // pin 2 slot ▭
+    }
+
+    #[test]
+    fn gnd_pin_renders_cyan_with_legend() {
+        let mut zif = diagram();
+        zif.show_test = true;
+        zif.untestable = BTreeSet::from([40]); // e.g. DIP8 pin 8 → ZIF 40
+        let (lines, buf) = rendered_lines(&zif, 40, 12);
+        // Right-column slot + pin tip for ZIF 40 (row 3) are cyan, not
+        // faint — "untestable" must not read as "empty" or "good".
+        assert_eq!(buf[(24, 3)].fg, theme::CYAN); // right slot ▭
+        assert_eq!(buf[(23, 3)].fg, theme::CYAN); // right pin tip ▪
+        assert!(lines[11].contains("GND — not"));
     }
 
     #[test]
