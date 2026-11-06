@@ -155,8 +155,8 @@ a tooltip.
 `PinTestResult.untestable_pins` carries the `<gnd>` table (device-pin
 numbering): ground pins are held low by the die so contact can't be
 distinguished — they're excluded by design, not "passed". The diagram
-renders them cyan with a `GND — not testable` legend entry; the same
-set drives the TUI's cyan cells. Note coverage is still implicit —
+renders them neutral gray with a `GND — not testable` legend entry;
+the same set drives the TUI's white cells. Note coverage is still implicit —
 upstream's T48 pin-test MR (!315) makes the same point: a floating GND
 fails every other pin anyway.
 
