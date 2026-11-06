@@ -518,7 +518,10 @@ Device favorites were extracted from `DeviceSelector.svelte` to a shared
 The store auto-persists to `localStorage` via a `subscribe()` call.
 Templates use a reactive `$derived` Set (`favNames`) for O(1) lookups
 instead of calling `isFavorite()` directly (which uses `get()` and isn't
-reactive).
+reactive). The TUI keeps a separate `favorites.txt` file store —
+unifying the two is deferred pending demand; see ROADMAP ("Unify
+GUI/TUI favorites") for the shared-file cost analysis and the
+import/export interim candidate.
 
 ### Favorites vs. programmer-model device lists
 
