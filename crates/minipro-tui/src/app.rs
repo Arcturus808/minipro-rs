@@ -1039,7 +1039,18 @@ impl App {
                 }
                 KeyCode::Home => self.search_cursor = 0,
                 KeyCode::End => self.search_cursor = self.search.len(),
-                KeyCode::Esc | KeyCode::Enter => self.search_editing = false,
+                // While the filter input is focused, arrows navigate the
+                // results (fzf convention) — otherwise typing a query
+                // dead-ends the list until Esc/Enter.
+                KeyCode::Up => self.move_cursor(self.cursor().saturating_sub(1)),
+                KeyCode::Down => self.move_cursor(self.cursor() + 1),
+                KeyCode::PageUp => self.move_cursor(self.cursor().saturating_sub(10)),
+                KeyCode::PageDown => self.move_cursor(self.cursor() + 10),
+                KeyCode::Esc => self.search_editing = false,
+                KeyCode::Enter => {
+                    self.search_editing = false;
+                    self.activate();
+                }
                 _ => {}
             }
             return false;
@@ -1210,6 +1221,34 @@ mod tests {
         a.handle_key(key(KeyCode::Char('A')));
         a.handle_key(key(KeyCode::Char('T')));
         assert_eq!(a.cursor(), 0);
+    }
+
+    #[test]
+    fn arrows_navigate_results_while_searching() {
+        let mut a = app();
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.cursor(), 1);
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.cursor(), 2);
+        a.handle_key(key(KeyCode::Up));
+        assert_eq!(a.cursor(), 1);
+        a.handle_key(key(KeyCode::PageDown));
+        assert_eq!(a.cursor(), 3); // clamped to last
+        a.handle_key(key(KeyCode::PageUp));
+        assert_eq!(a.cursor(), 0);
+        assert!(a.search_editing); // still editing — only Esc/Enter leave
+    }
+
+    #[test]
+    fn enter_in_search_exits_and_activates() {
+        let mut a = app();
+        a.search_editing = true;
+        a.handle_key(key(KeyCode::Enter));
+        assert!(!a.search_editing);
+        // activate() ran: pane jumped to Options (find_device fails on
+        // the fake paths, but the dispatch still happened).
+        assert_eq!(a.pane, Pane::Options);
     }
 
     #[test]

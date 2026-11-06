@@ -450,6 +450,19 @@ approach that auto-selected a same-base-name variant on click was reverted —
 substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
 potentially different package variant and was too surprising.
 
+## TUI editing-state key swallow — search focus dead-ends navigation
+
+Modal/editing blocks in `app.rs::handle_key` return early and swallow
+every key without an explicit arm. The search-editing block handled
+text-editing keys only, so while `/` was focused, ↑/↓/PgUp/PgDn did
+nothing and Enter merely left edit mode — the results list was
+reachable only by discovering Esc first. Fix: the search block maps
+arrows to `move_cursor` (results navigate while typing, the fzf
+convention) and Enter now exits + activates the highlighted device;
+Esc remains the pure cancel. When adding new editing/modal states,
+either route navigation keys deliberately or document why they're
+dead — "input focus eats arrows" reads as a hang to users.
+
 ## TUI resize repaint strategy — atomic frames, no throttling
 
 `run()` in `crates/minipro-tui/src/main.rs` repaints on every resize
