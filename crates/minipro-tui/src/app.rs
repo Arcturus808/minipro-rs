@@ -1417,7 +1417,9 @@ impl App {
         // exit, it would type 0x69), and navigation keys stay live.
         if self.hex.as_ref().is_some_and(|h| h.ascii) {
             match k.code {
-                KeyCode::Esc | KeyCode::Insert => {
+                // Tab/Insert toggle back to hex mode — Tab is the
+                // hex-editor convention (hexedit, Okteta, bvi).
+                KeyCode::Esc | KeyCode::Tab | KeyCode::Insert => {
                     if let Some(hex) = &mut self.hex {
                         hex.ascii = false;
                     }
@@ -1437,11 +1439,17 @@ impl App {
             return false;
         }
         match k.code {
-            KeyCode::Esc
-            | KeyCode::Char('q')
-            | KeyCode::Char('x')
-            | KeyCode::Tab
-            | KeyCode::BackTab => self.hex_view = false,
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('x') | KeyCode::BackTab => {
+                self.hex_view = false
+            }
+            // Tab switches which column receives input — the standard
+            // hex-editor binding (hexedit/Okteta); i/Ins are aliases.
+            KeyCode::Tab => {
+                if let Some(hex) = &mut self.hex {
+                    hex.ascii = true;
+                    hex.nibble = None;
+                }
+            }
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Char(':') => {
                 self.modal = Some(Modal::Goto {
@@ -1476,9 +1484,8 @@ impl App {
                     cursor: 0,
                 });
             }
-            // 'i' enters ASCII mode (vim-ish discoverability); Insert
-            // toggles it both ways — it's non-printable, so it can
-            // never be mistaken for byte data.
+            // 'i'/Insert enter ASCII mode as aliases — 'i' can't exit
+            // (it would type 0x69), so Tab/Insert are the way back.
             KeyCode::Char('i') | KeyCode::Insert => {
                 if let Some(hex) = &mut self.hex {
                     hex.ascii = true;
@@ -2549,13 +2556,20 @@ mod tests {
         a.handle_key(key(KeyCode::Char('q')));
         assert!(a.hex_view);
         assert_eq!(a.hex.as_ref().unwrap().data[3], 0x71);
-        // Insert toggles back out — 'i' can't (it would type 0x69).
+        // 'i' in ASCII mode types 0x69 — it can never exit the mode.
         a.handle_key(key(KeyCode::Char('i')));
         assert_eq!(a.hex.as_ref().unwrap().data[4], 0x69);
-        a.handle_key(key(KeyCode::Insert));
+        // Tab toggles back to hex mode (the hexedit/Okteta convention)
+        // — and it must NOT close the view.
+        a.handle_key(key(KeyCode::Tab));
         assert!(a.hex_view);
         assert!(!a.hex.as_ref().unwrap().ascii);
-        // Insert toggles back in; Esc exits the mode, then the view.
+        // Tab toggles back in; Insert exits too; Esc exits mode, then
+        // view.
+        a.handle_key(key(KeyCode::Tab));
+        assert!(a.hex.as_ref().unwrap().ascii);
+        a.handle_key(key(KeyCode::Insert));
+        assert!(!a.hex.as_ref().unwrap().ascii);
         a.handle_key(key(KeyCode::Insert));
         assert!(a.hex.as_ref().unwrap().ascii);
         a.handle_key(key(KeyCode::Esc));

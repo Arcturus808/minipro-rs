@@ -134,11 +134,12 @@ variant/no-ID normalization matches the GUI.
   dedicated input context (like modals/search): while open every key
   routes to `handle_hex_key`, so hex digits `0-9a-f` overtype bytes —
   `b`/`e` are data here, not the blank/erase mnemonics — and
-  Esc/q/x/Tab return to the panes. `i`/Insert toggles ASCII-entry mode
-  where every printable char writes its byte value (a mode is required
-  since a-f/0-9 are ambiguous) — `i` enters but can't exit (it would
-  type 0x69), so Insert is the real two-way toggle; Esc exits the
-  mode first, then the view.
+  Esc/q/x return to the panes. `Tab` toggles between hex-entry and
+  ASCII-entry mode — the standard hex-editor binding (hexedit, Okteta,
+  bvi); `i`/Insert are aliases to enter ASCII mode. A mode is required
+  since a-f/0-9 are ambiguous, and `i` can never exit (it would type
+  0x69) — non-printable keys only. Esc exits the mode first, then the
+  view.
   `o` enters the view globally (or
   opens a file→buffer prompt when empty); inside, `o` loads a file,
   `s` saves (`read_file`/`write_file`, so the Format select applies),
