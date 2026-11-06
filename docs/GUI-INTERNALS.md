@@ -141,8 +141,10 @@ matches XGPro's "Pin Detect" feature.
 panel runs the pin test automatically before read, write, verify, erase,
 blank check, chip ID, and config (fuse read/write) operations. When
 checked (default, matching XGPro), the test runs after `begin_transaction`
-and before the operation-specific command. If bad pins are found, the
-operation is aborted and the bad pins are highlighted on the ZIF diagram.
+and before the operation-specific command. The result is emitted to the
+ZIF diagram on both pass and fail (`emit_pin_test_result` is
+unconditional — a pass proves the check ran and shows which pins were
+measured). If bad pins are found, the operation is aborted.
 The checkbox is disabled on unsupported models, in ICSP mode, or when
 the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
