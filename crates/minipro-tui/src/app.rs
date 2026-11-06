@@ -941,11 +941,14 @@ impl App {
                     });
                 }
             },
-            Some(Modal::Confirm { op, path, .. }) => match k.code {
+            Some(Modal::Confirm { op, path, lines }) => match k.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                     self.send_run(op, path);
                 }
-                _ => {} // any other key cancels — Esc, n, arrows
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {} // cancel
+                // Stray keys are ignored — a bumped key must not silently
+                // abandon a destructive-op confirm.
+                _ => self.modal = Some(Modal::Confirm { op, path, lines }),
             },
             None => {}
         }
@@ -1709,6 +1712,21 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn confirm_ignores_stray_keys() {
+        let mut a = op_ready_app();
+        a.handle_key(key(KeyCode::Char('e'))); // opens the erase confirm
+        assert!(matches!(a.modal, Some(Modal::Confirm { .. })));
+        // Stray keys must not dismiss a destructive-op confirm.
+        a.handle_key(key(KeyCode::Char('e')));
+        a.handle_key(key(KeyCode::Char('5')));
+        a.handle_key(key(KeyCode::Tab));
+        assert!(matches!(a.modal, Some(Modal::Confirm { .. })));
+        a.handle_key(key(KeyCode::Char('n'))); // explicit cancel still works
+        assert!(a.modal.is_none());
+        assert!(a.op_running.is_none());
     }
 
     #[test]
