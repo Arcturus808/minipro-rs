@@ -148,7 +148,7 @@ panes · `F5` reconnect · `,` settings · `Esc` close modal/backs out.
 | Context | Keys |
 |---------|------|
 | Devices | `/` enters the search box (all chars insert while focused — bare `q` stays quit, so typing can't *start* a query; `Esc`/`Enter`/`Backspace`-on-empty leave it) · `↑/↓`/`PgUp`/`PgDn` navigate · `Enter` select & advance to options · `f` favorite · `a`/`A` SPI autodetect 8/16-pin |
-| Operations | `1`–`8` pick op (Read Write Verify Erase Blank Chip-ID Logic Config) · `Enter` start · `Space` toggle · `←/→` cycle select · `o` open file · `s` save buffer |
+| Operations | mnemonic keys run ops — `r`ead `w`rite `v`erify `e`rase `b`lank `i`d (`l`ogic `c`onfig warn: not in MVP); `1`–`8` arm a tab, `Enter` runs · `Space` toggle · `←/→` cycle select |
 | Hex (P2) | `hjkl`/arrows · `g`/`G` first/last · `/` find, `n`/`N` next/prev · `v` select · hex digits or chars edit in place · `u`/`Ctrl-r` undo/redo · `+`/`-` bytes-per-row |
 | Log | `PgUp/PgDn`/`j`/`k` scroll · `c` copy · `x` clear |
 | Batch (P4) | `Enter` next chip · `r` retry · `s` stop |
@@ -158,6 +158,42 @@ the keybar ("no programmer connected", "not supported on T56"). Op names and
 gating rules mirror the GUI (logic ICs disable all ops except Logic Test,
 etc.).
 
+### Operation-selection design (decided)
+
+Numeric-only operation keys are **positionally coupled**: `6` = ID is muscle
+memory bound to layout, so inserting or reordering an op silently rebinds
+everyone's learned sequence, and the scheme hard-caps around nine ops — P3
+(logic test, config/fuses, diagnostics, health) already outgrows it.
+
+Selected design — a hybrid:
+
+- **Mnemonic single-key dispatch** for the current six-op set: `r w v e b i`
+  (`l`/`c` warn for the gated placeholders). Every mnemonic is the tab's
+  first letter, which the renderer underlines for discoverability. Press →
+  arm + run in one key, lazygit-style.
+- **Digits `1`–`8` retained as positional aliases** that arm a tab for
+  `Enter` — preserves the learned two-step preview path.
+- **Existing modals remain the safety layer** — mnemonic keys never bypass
+  path prompts or destructive `y` confirms; `start_op`'s gates apply
+  identically however the op was triggered.
+- Keys live in the global dispatch but **modal and search-editing contexts
+  intercept first** — typing 'r' into the search filter inserts text; a
+  path/confirm modal swallows letters into its own input/confirm handling.
+
+Rejected / deferred:
+
+- **`:` command palette** — the right scaling valve once ops exceed ~7
+  top-level actions, but for six hot ops it *adds* keystrokes (`:wr⏎` vs
+  `w⏎`). Deferred to P3/P4 when the command set outgrows the tab row.
+- **Alt+letter menu bar** — Alt transmits as ESC-prefixed sequences over
+  SSH/tmux/screen, which is exactly where this TUI matters most; avoid
+  modifier-heavy primary paths.
+
+Universal conventions this preserves: `Esc` cancels one level, `Enter`
+confirms/drills in, primary actions are unmodified keys, focus is never
+trapped (modals return focus), the top-level set stays small, and the full
+reference lives behind `?`.
+
 ## Feature map — GUI → TUI, including idiom translations
 
 | GUI element | TUI treatment | Idiom changes |
@@ -165,7 +201,7 @@ etc.).
 | Native file dialogs | Path prompt input; P2 mini file-browser popup | **Do not shell out to `rfd`** — jarring over SSH |
 | Drag-resize splitters | Fixed ratios; optional `[`/`]` resize focused pane | Usually unnecessary |
 | Hover tooltips | Keybar hints + `?` overlay + inline dimmed reasons | |
-| Op buttons | `Tabs` widget, `1`–`8` accelerators | Same enable/disable logic |
+| Op buttons | `Tabs` widget, mnemonic dispatch (`r w v e b i`), `1`–`8` arm aliases | Same enable/disable logic |
 | Options panel | Form rows: `Space` toggles, `←/→` cycles selects | Avoids nested dropdown popups |
 | Hex viewer/editor | Custom widget (hard part, P2) | Overtype model (see ROADMAP — insert mode is won't-fix). `v`+arrows replaces drag-select; `+`/`-` bytes-per-row replaces font zoom |
 | Entropy bar | Colored `▌` gutter char per row | Same 4-tier mapping |

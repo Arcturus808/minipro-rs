@@ -109,6 +109,12 @@ variant/no-ID normalization matches the GUI.
   `Press | Repeat` act — tests cover this.
 - `op_running.is_some()` swallows navigation keys; worker commands are
   also rejected at dispatch (double gate).
+- Op dispatch: mnemonic keys `r w v e b i` (`l`/`c` warn) call
+  `start_op()` directly — arm + run in one key. `OP_KEYS` maps letter →
+  tab index; digits `1`–`8` only arm. The mnemonic arm lives in the
+  global key match *after* the modal and search-editing intercepts, so
+  letters still type into inputs and can't fire inside modals — keep
+  that ordering when adding global keys.
 - Modals: `Modal::Path` (file ops — Read pre-fills
   `<sanitized-name>.bin`, Write/Verify start empty) and
   `Modal::Confirm` (Write after path entry, Erase). `Esc` cancels;
