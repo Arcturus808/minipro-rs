@@ -942,9 +942,10 @@ impl App {
                 }
             },
             Some(Modal::Confirm { op, path, lines }) => match k.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                    self.send_run(op, path);
-                }
+                // Only an explicit y confirms — Enter is deliberately
+                // excluded: key-repeat on the path prompt's submit could
+                // carry a held Enter into this dialog and fire the op.
+                KeyCode::Char('y') | KeyCode::Char('Y') => self.send_run(op, path),
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {} // cancel
                 // Stray keys are ignored — a bumped key must not silently
                 // abandon a destructive-op confirm.
@@ -1719,10 +1720,13 @@ mod tests {
         let mut a = op_ready_app();
         a.handle_key(key(KeyCode::Char('e'))); // opens the erase confirm
         assert!(matches!(a.modal, Some(Modal::Confirm { .. })));
-        // Stray keys must not dismiss a destructive-op confirm.
+        // Stray keys must not dismiss a destructive-op confirm — and
+        // Enter must not confirm it (repeat events can carry a held
+        // Enter in from the path prompt).
         a.handle_key(key(KeyCode::Char('e')));
         a.handle_key(key(KeyCode::Char('5')));
         a.handle_key(key(KeyCode::Tab));
+        a.handle_key(key(KeyCode::Enter));
         assert!(matches!(a.modal, Some(Modal::Confirm { .. })));
         a.handle_key(key(KeyCode::Char('n'))); // explicit cancel still works
         assert!(a.modal.is_none());
