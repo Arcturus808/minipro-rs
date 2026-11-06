@@ -244,17 +244,22 @@ fn draw(f: &mut Frame, app: &mut App) {
     // 80–100 cols: the right pane collapses behind `]` (app decides via
     // right_visible). Options expands to fill when it's hidden.
     let right_visible = app.right_visible();
+    // DEVICES grows with the window: 26-col floor for narrow terminals,
+    // quarter-width capped at 44 — the longest name in the database is 39
+    // chars (Micron MT35X parts), so most rows render unellipsized on
+    // wide terminals instead of leaving the spare columns to the center.
+    let dev_w = (v[1].width / 4).clamp(26, 44);
     let h = Layout::horizontal(if right_visible {
         vec![
-            Constraint::Length(26), // DEVICES
-            Constraint::Length(1),  // sep
-            Constraint::Min(0),     // options/buffer/progress
-            Constraint::Length(1),  // sep
-            Constraint::Length(34), // LOG + ZIF
+            Constraint::Length(dev_w), // DEVICES
+            Constraint::Length(1),     // sep
+            Constraint::Min(0),        // options/buffer/progress
+            Constraint::Length(1),     // sep
+            Constraint::Length(34),    // LOG + ZIF
         ]
     } else {
         vec![
-            Constraint::Length(26),
+            Constraint::Length(dev_w),
             Constraint::Length(1),
             Constraint::Min(0),
         ]
@@ -568,8 +573,11 @@ fn ellipsize(s: &str, max: usize) -> String {
         return "…".into();
     }
     let keep = max - 1;
-    let head = keep.div_ceil(2);
-    let tail = keep - head;
+    // Tail-weighted: device names front-load family (AUTOEMMC, W25Q) and
+    // back-load the discriminator (@TSSOP8, (OTP), (recommend)), so the
+    // tail gets ~2/3 of the budget.
+    let tail = (keep * 2).div_ceil(3);
+    let head = keep - tail;
     let head: String = s.chars().take(head).collect();
     let tail: String = s
         .chars()
@@ -1135,12 +1143,17 @@ mod tests {
         // Fits → unchanged.
         assert_eq!(ellipsize("W25Q32JV", 20), "W25Q32JV");
         assert_eq!(ellipsize("W25Q32JV", 8), "W25Q32JV");
-        // Overflows → middle cut; the @package tail survives, which is
-        // where device names carry their discriminator.
-        assert_eq!(ellipsize("ACE25C512C(OTP)@TSSOP8", 16), "ACE25C51…@TSSOP8");
-        assert_eq!(ellipsize("ATMEGA328P@TQFP32", 11), "ATMEG…QFP32");
-        // Odd budget: head takes the extra char.
-        assert_eq!(ellipsize("ABCDEFGHIJ", 7), "ABC…HIJ");
+        // Overflows → middle cut, tail-weighted (~2/3 tail): the
+        // @package/(qualifier) suffix is where device names carry their
+        // discriminator.
+        assert_eq!(ellipsize("ACE25C512C(OTP)@TSSOP8", 16), "ACE25…TP)@TSSOP8");
+        assert_eq!(ellipsize("ATMEGA328P@TQFP32", 11), "ATM…@TQFP32");
+        // Whole trailing tokens survive when they fit the tail budget.
+        assert_eq!(
+            ellipsize("AUTOEMMC(ISP)_1B_1.8V(recommend)", 23),
+            "AUTOEMM…1.8V(recommend)"
+        );
+        assert_eq!(ellipsize("ABCDEFGHIJ", 7), "AB…GHIJ");
         // Degenerate widths.
         assert_eq!(ellipsize("ABCDEF", 1), "…");
     }
