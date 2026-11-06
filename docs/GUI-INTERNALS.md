@@ -164,6 +164,19 @@ the bad-pin highlighting the gate just emitted. A gate abort means the
 session is provably alive (the gate command itself succeeded), so the
 refresh is both harmful and pointless there.
 
+**`runOp` contract:** returns the op's result (a truthy sentinel for
+void invokes) or `null` on error — errors are logged inside `runOp`,
+not rethrown. Any post-op log/UI that asserts success MUST gate on the
+return value (`if (await doErase(...))`), never on the await resolving
+— an aborted op resolves `null`, so unconditional post-await messages
+lie. Do not log success lines the backend can't verify (the former
+`logChipIdCheck` printed "Chip ID check passed" purely from the option
+checkbox + `has_chip_id` flag — including after gate aborts; the backend
+`emit_log` at the real gate is the only honest source). Also note the
+ordering quirk: `runOp`'s own lines are `deferLog` (rAF-deferred) while
+backend `app-log` events and direct `logs.*` calls write immediately —
+an immediate line can land between an op's start and end bracket.
+
 **Model support:** TL866II+ and T48. The backend returns
 `UnsupportedOperation` on other models and the button is disabled with
 a tooltip.

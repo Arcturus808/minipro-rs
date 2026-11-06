@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **GUI: gate aborts no longer double-logged as failures** — a pin-contact or chip-ID pre-op gate used to emit its reason and then appear again as `Read failed: Pin contact check failed: …` from the operation wrapper. Gates now return a terse abort marker and the log shows a single `Read aborted (pin contact check)`-style line, matching the TUI.
+- **GUI: phantom "Chip ID check passed" / "erased successfully" after aborted ops** — a cosmetic frontend log printed `Chip ID check passed` whenever the chip-ID option was on and the device had an ID flag — with no hardware check — and it ran unconditionally after the operation promise resolved, even when a pre-op gate had aborted it. Also removed the same lie-pattern on erase: `Chip erased successfully` now only prints when the erase actually completes.
 
 ### Added
 

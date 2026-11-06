@@ -565,12 +565,6 @@
     }
   }
 
-  function logChipIdCheck() {
-    if (checkDeviceId && $selectedDevice?.has_chip_id) {
-      logs.info("Chip ID check passed");
-    }
-  }
-
   async function onWriteFromFile() {
     await warnIfLocked();
     await warnIfVariant();
@@ -607,7 +601,6 @@
         await startBatch(path, getOptions(), count, serialConfig);
       } else {
         await doWrite(path, getOptions());
-        logChipIdCheck();
       }
     }
   }
@@ -620,7 +613,6 @@
       logs.info("Applied pending hex edits before write");
     }
     await doWriteBytes(getOptions());
-    logChipIdCheck();
   }
 
   async function onStart() {
@@ -632,7 +624,6 @@
         await warnIfLocked();
         await warnIfVariant();
         await doReadToBuffer(getOptions());
-        logChipIdCheck();
         if (isAllBlank(getHexData())) {
           logs.warn("Read returned all 0xFF bytes. The chip may be read-protected (lock bits active) or blank.");
         }
@@ -649,14 +640,13 @@
         if (path) {
           await setSetting("defaultDirectory", path.substring(0, path.lastIndexOf("\\") || path.lastIndexOf("/")));
           await doVerify(path, getOptions());
-          logChipIdCheck();
         }
         break;
       }
       case "erase":
-        await doErase(getOptions());
-        logChipIdCheck();
-        logs.info("Chip erased successfully");
+        if (await doErase(getOptions())) {
+          logs.info("Chip erased successfully");
+        }
         break;
       case "blank_check": {
         const bcResult = await doBlankCheck(icspMode, pinCheck);

@@ -117,13 +117,13 @@ function formatDuration(ms: number): string {
   return `${m}m ${s.toFixed(1)}s`;
 }
 
-async function runOp(
+async function runOp<T>(
   name: string,
-  fn: () => Promise<unknown>,
-) {
+  fn: () => Promise<T>,
+): Promise<T | null> {
   if (!selectedDevice) {
     deferLog("error", "No device selected");
-    return;
+    return null;
   }
   isRunning.set(true);
   currentOperation.set(name);
@@ -136,10 +136,12 @@ async function runOp(
     const elapsed = Date.now() - start;
     deferLog("info", `${name} completed in ${formatDuration(elapsed)}`);
     if (result && typeof result === "object" && "bytes" in result) {
-      const stats = result as { bytes: number; crc32: number };
+      const stats = result as unknown as { bytes: number; crc32: number };
       deferLog("info", `  ${stats.bytes} bytes, CRC-32: ${stats.crc32.toString(16).padStart(8, "0")}`);
     }
-    return result;
+    // Void invokes resolve undefined — normalize to a truthy sentinel so
+    // callers can gate post-op messages on the return. Errors return null.
+    return (result ?? true) as T;
   } catch (e) {
     const elapsed = Date.now() - start;
     const errMsg = String(e);
@@ -166,6 +168,7 @@ async function runOp(
     if (!isAbort) {
       await refreshProgrammer();
     }
+    return null;
   } finally {
     isRunning.set(false);
     currentOperation.set(null);
@@ -264,7 +267,7 @@ export async function doVerify(path: string, options: OperationOptions = default
 }
 
 export async function doErase(options: OperationOptions = defaultOptions()) {
-  await runOp("Erase", () => invoke("do_erase", { icspMode: options.icsp_mode, checkDeviceId: options.check_device_id, pinCheck: options.pin_check }));
+  return await runOp("Erase", () => invoke("do_erase", { icspMode: options.icsp_mode, checkDeviceId: options.check_device_id, pinCheck: options.pin_check }));
 }
 
 export interface BlankCheckResult {
@@ -285,7 +288,7 @@ export interface ChipIdResult {
   is_variant: boolean;
 }
 
-export async function doChipId(icspMode: string = "zif", pinCheck: boolean = true): Promise<ChipIdResult | undefined> {
+export async function doChipId(icspMode: string = "zif", pinCheck: boolean = true): Promise<ChipIdResult | null> {
   return await runOp("Chip ID", async () => {
     const result = await invoke<ChipIdResult>("do_chip_id", { icspMode, pinCheck });
     return result;
