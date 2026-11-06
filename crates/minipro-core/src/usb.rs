@@ -334,6 +334,35 @@ impl UsbDevice {
         Ok(())
     }
 
+    /// Discard any stale data queued on the T76 read endpoint.
+    ///
+    /// T76 streamed reads are firmware-pushed: `CMD_READ_CODE` starts a
+    /// continuous `total_blocks`-chunk stream that the host pulls one
+    /// block at a time. An op that stops mid-stream (blank_check hitting
+    /// a non-blank byte, a failed verify, an aborted read) leaves one
+    /// buffered chunk behind, and the next streamed read would consume
+    /// it as block 0 — silently returning the whole image shifted by one
+    /// block. Draining before a stream starts keeps block 0 aligned.
+    /// Cheap no-op on other models or an already-empty pipe.
+    pub fn drain_read_pipe(&self) {
+        if self.pid != T76_PID {
+            return;
+        }
+        let Ok(iface) = self.iface() else { return };
+        for _ in 0..8 {
+            let Ok(c) = block_on_with_timeout(
+                iface.bulk_in(DATA_EP2_IN, RequestBuffer::new(64 * 1024)),
+                Duration::from_millis(100),
+            ) else {
+                break; // timed out — pipe is empty
+            };
+            if c.status.is_err() || c.data.is_empty() {
+                break;
+            }
+            trace!("drain_read_pipe: discarded {} stale bytes", c.data.len());
+        }
+    }
+
     /// Read a payload from the chip.
     pub fn read_payload(&self, length: usize) -> Result<Vec<u8>> {
         self.read_payload_limit(length, 64)

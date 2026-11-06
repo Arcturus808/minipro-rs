@@ -450,6 +450,44 @@ approach that auto-selected a same-base-name variant on click was reverted —
 substituting `ATMEGA328P` for `ATMEGA328P@DIP28` silently picked a
 potentially different package variant and was too surprising.
 
+## T76 streamed reads misalign after an abandoned stream — silent one-block image shift (fixed)
+
+T76 bulk reads are **firmware-pushed streams**, not per-block
+request/response: the first `read_block` call sends one `CMD_READ_CODE`
+(`size`, `address`, `total_blocks`) and the firmware then streams all
+`total_blocks × size` bytes continuously on EP82; subsequent calls only
+`bulk_in` another `size` bytes. Any op that stops consuming mid-stream —
+`blank_check` returning `NotBlank` on the first non-blank byte (the most
+common trigger: it exits after block 0 on any programmed chip), a
+`verify_chip` mismatch, an aborted read — leaves roughly one buffered
+chunk undelivered in the EP82 FIFO. The next streamed read consumes that
+stale chunk as "block 0", then the fresh stream follows: the returned
+image is the true data **shifted up one block** with the real last block
+lost. Because every block is still genuine chip data (just displaced),
+the corruption is invisible to a casual check — observed in the field as
+`[C1, C0, C1, C2, …]` where block 0 was stale, or an all-zeros block 0
+on a fresh connect after a previous session's abandoned stream.
+
+Confirmed by block-level comparison against a TL866A dump of the same
+chip (ground truth CRC `c56d40d3`): the "corrupted" T76 read was
+byte-identical data offset by exactly one 4 KiB block.
+
+**Fix:** `UsbDevice::drain_read_pipe()` (T76-only, ~100 ms no-op on a
+clean pipe) discards queued EP82 data, called at the top of
+`t76::read_block` when `ds.init` — i.e. before every new stream kickoff.
+Do NOT "optimize" by removing it, and be aware that adding a new
+early-exit to any streamed-read consumer reintroduces the poisoning; the
+drain is what makes early exits safe. Symptom to recognize: a dump whose
+blocks are all real-looking data but whose CRC matches a one-block
+rotation of the reference, or a first block of all-0x00 on a chip that
+isn't blank there.
+
+Related: `minipro.exe` has been observed not exiting after T76 ops
+(needs `taskkill` — suspected handle-release issue) and one
+`--health-check` run hit a mid-stream `USB transfer timed out` — both
+possibly the same wedged-pipe state. If either recurs, investigate
+whether `end_transaction`/disconnect should also drain or reset EP82.
+
 ## TUI editing-state key swallow — search focus dead-ends navigation
 
 Modal/editing blocks in `app.rs::handle_key` return early and swallow

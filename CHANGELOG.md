@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **T76: reads silently shifted the whole image by one block after an abandoned stream** — T76 bulk reads are firmware-pushed streams on EP82; an op that stops early (`blank_check` hitting a non-blank byte, a failed verify, an aborted read) left one buffered chunk behind, which the next read consumed as block 0 — returning real chip data displaced by one 4 KiB block and losing the last block. Every frontend was affected (observed via TUI blank-check → read producing a rotated dump of a W25X20CL; confirmed byte-exact against a TL866A read). Streamed reads now drain the endpoint before starting. See `docs/KNOWN-BUGS.md`.
+
 - **TUI: device list unreachable while searching** — with the search input focused, every non-editing key was swallowed, so ↑/↓/PgUp/PgDn couldn't navigate results and Tab did nothing. Arrows now move the results cursor while typing (fzf convention), Tab/BackTab exit the field and cycle panes, and Enter selects the highlighted device directly instead of only leaving edit mode (Esc still cancels without selecting).
 
 - **TUI: log pane truncated long messages with no way to see them** — the fixed-width pane clipped entries at the right edge. Entries now word-wrap to the pane width (continuation rows indent under the message) and scroll (`k`/`PgUp`) works in wrapped rows. Line format also matches the GUI log — colored `[INFO]`/`[WARN]`/`[ERROR]` tag + message — instead of timestamps.
