@@ -247,7 +247,7 @@ impl Widget for &ZifDiagram {
                 Span::styled("▪", theme::red()),
                 Span::styled(" bad  ", theme::faint()),
                 Span::styled("▪", theme::cyan()),
-                Span::styled(" GND — not testable", theme::faint()),
+                Span::styled(" GND·untestable", theme::faint()),
             ]));
         }
         Paragraph::new(lines).render(area, buf);
@@ -335,7 +335,7 @@ mod tests {
         // faint — "untestable" must not read as "empty" or "good".
         assert_eq!(buf[(24, 3)].fg, theme::CYAN); // right slot ▭
         assert_eq!(buf[(23, 3)].fg, theme::CYAN); // right pin tip ▪
-        assert!(lines[11].contains("GND — not"));
+        assert!(lines[11].contains("GND·untestable"));
     }
 
     #[test]
