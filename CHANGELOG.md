@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **GUI: gate aborts no longer double-logged as failures** — a pin-contact or chip-ID pre-op gate used to emit its reason and then appear again as `Read failed: Pin contact check failed: …` from the operation wrapper. Gates now return a terse abort marker and the log shows a single `Read aborted (pin contact check)`-style line, matching the TUI.
+
 ### Added
 
 - **GND pins shown as untestable, not untested** — `PinTestResult` now carries `untestable_pins` (the pin map's `<gnd>` table, in device-pin numbering). Ground pins can't be contact-tested — a pin held low by the die reads grounded whether contact is good or not — so both UIs now show them distinctly instead of conflating "skipped by design" with "empty" or "good": neutral slots (white in the TUI, gray in the GUI — a hue with no ok/bad severity) + a GND legend entry on the ZIF diagrams, and the TUI strip says "all testable pins OK" when GND pins were skipped. (A floating GND still fails every other pin — coverage is implicit.)

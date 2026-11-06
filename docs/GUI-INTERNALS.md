@@ -148,6 +148,14 @@ the device has no pin-map data. SPI autodetect runs the pin check
 automatically on supported models (no checkbox) — autodetect is aborted
 if bad pins are found, since poor contact produces garbage JEDEC IDs.
 
+**Abort reporting:** gate failures (pin check, chip-ID check) emit their
+detail once at warn/error level, then return a terse
+`"aborted (<gate>)"` marker string. `runOp` in `operations.ts` detects
+the `aborted (` prefix and logs `<op> aborted (<gate>)` at warn level —
+without it the frontend would re-log the whole gate reason as
+`<op> failed: …`, double-reporting and mislabeling a never-ran op as a
+failure. Keep new pre-op gates on the same marker convention.
+
 **Model support:** TL866II+ and T48. The backend returns
 `UnsupportedOperation` on other models and the button is disabled with
 a tooltip.
