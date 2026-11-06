@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **TUI: log pane truncated long messages with no way to see them** — the fixed-width pane clipped entries at the right edge. Entries now word-wrap to the pane width (continuation rows indent under the message) and scroll (`k`/`PgUp`) works in wrapped rows. Line format also matches the GUI log — colored `[INFO]`/`[WARN]`/`[ERROR]` tag + message — instead of timestamps.
 
+- **TUI: pre-op gate aborts logged the same failure twice** — a failed pin-contact or chip-ID gate printed its reason, then the generic op-completion line repeated it as "✗ read failed: …" (also wrong: the op never ran). Gates now return a dedicated `OpOutcome::Aborted` — the log shows the gate's reason once plus one short status line, e.g. `✗ read aborted (pin contact check)`.
 - **TUI: library `eprintln!` output leaked onto the frame** — core protocol paths print progress/diagnostic lines to stderr (`Using T76 … algorithm`, pin-test progress, OVC results); in the TUI that text painted over the keybar mid-op. Core now routes them through a new `outln!` macro — `eprintln!` by default (CLI/GUI output unchanged), `log::info!` when a frontend sets `PRINT_TO_LOG`. The TUI opts in, so those lines land in its log pane instead.
 
 - **GUI ZIF diagram: bad-pin label spacing** — "PIN n" callouts sat 4px from the socket while "ZIF PIN 1" sits 8px; all labels now share the same 8px column.

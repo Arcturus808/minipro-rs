@@ -95,6 +95,12 @@ pub enum OpOutcome {
         address: u32,
     },
     ChipId(Box<ChipIdInfo>),
+    /// The op never ran — a pre-op gate stopped it. The gate already
+    /// logged the specific reason; `on_op_done` prints only the short
+    /// status line. (Not an `Err`: the op didn't fail, it didn't run.)
+    Aborted {
+        gate: &'static str,
+    },
 }
 
 /// Everything the worker thread can tell the app.
