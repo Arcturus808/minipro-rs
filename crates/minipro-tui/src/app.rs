@@ -487,6 +487,9 @@ pub struct App {
     /// Where favorites persist — `None` disables write-through (tests
     /// and data-dir-less environments stay session-scoped).
     pub favorites_path: Option<PathBuf>,
+    /// Leading rows of `matches` that are pinned favorites — the
+    /// results header splits the count at this boundary.
+    pub fav_rows: usize,
     paths: DatabasePaths,
     /// Model used for list filtering — follows the connected programmer.
     pub model: ProgrammerModel,
@@ -513,6 +516,16 @@ fn filtered(devices: &[DeviceListItem], query: &str) -> Vec<usize> {
         .collect()
 }
 
+/// Favorites resolvable in the connected model's device list — pinned
+/// to the top of `matches` in stored order, regardless of the query
+/// (GUI parity: "always visible regardless of the search query").
+fn pinned(devices: &[DeviceListItem], favorites: &[Favorite]) -> Vec<usize> {
+    favorites
+        .iter()
+        .filter_map(|f| devices.iter().position(|d| d.name == f.name))
+        .collect()
+}
+
 impl App {
     pub fn new() -> Result<Self, MiniproError> {
         let paths = DatabasePaths::resolve(None, None, None)?;
@@ -526,17 +539,16 @@ impl App {
         paths: DatabasePaths,
         model: ProgrammerModel,
     ) -> Self {
-        let matches = filtered(&devices, "");
         let mut list = ListState::default();
-        list.select(if matches.is_empty() { None } else { Some(0) });
-        Self {
+        list.select(Some(0));
+        let mut app = Self {
             pane: Pane::Devices,
             op: 1, // Write — matches the mockup
             search_editing: false,
             search: String::new(),
             search_cursor: 0,
             devices,
-            matches,
+            matches: Vec::new(),
             list,
             options: [true, false, false, false, true, true, false],
             selects: [0; N_SELS],
@@ -567,10 +579,13 @@ impl App {
             chip_id: None,
             favorites: prefs::load_favorites(),
             favorites_path: prefs::favorites_path(),
+            fav_rows: 0,
             paths,
             model,
             cmd_tx: None,
-        }
+        };
+        app.refilter(); // fills matches + fav_rows + clamps the cursor
+        app
     }
 
     /// Database paths — the worker needs a clone at spawn time.
@@ -646,7 +661,17 @@ impl App {
     }
 
     fn refilter(&mut self) {
-        self.matches = filtered(&self.devices, &self.search);
+        // Favorites pin to the top in stored order regardless of the
+        // query; the rest is the name-filtered remainder minus them.
+        let mut m = pinned(&self.devices, &self.favorites);
+        self.fav_rows = m.len();
+        let favs = &self.favorites;
+        m.extend(
+            filtered(&self.devices, &self.search)
+                .into_iter()
+                .filter(|&i| !favs.iter().any(|f| f.name == self.devices[i].name)),
+        );
+        self.matches = m;
         let n = self.matches.len();
         let cur = self.list.selected().unwrap_or(0).min(n.saturating_sub(1));
         self.list.select(if n == 0 { None } else { Some(cur) });
@@ -1093,6 +1118,12 @@ impl App {
             if let Err(e) = prefs::save_favorites_to(path, &self.favorites) {
                 self.push_log(log::Level::Warn, format!("favorites not saved: {e}"));
             }
+        }
+        // Re-pin: the toggled device moves between the pinned block
+        // and the filtered results — keep the cursor on it.
+        self.refilter();
+        if let Some(pos) = self.matches.iter().position(|&i| i == idx) {
+            self.list.select(Some(pos));
         }
     }
 
@@ -2627,6 +2658,50 @@ mod tests {
         a.handle_key(key(KeyCode::Char('f')));
         assert!(prefs::load_favorites_from(&path).is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn favorites_pin_top_and_ignore_query() {
+        let mut a = app();
+        a.favorites.clear();
+        a.favorites_path = None;
+        // Favorite a mid-list device → it pins to matches[0] and is
+        // removed from the filtered body (no duplicate row).
+        a.favorites.push(Favorite {
+            name: "AT28C256".into(),
+            manufacturer: "X".into(),
+        });
+        a.refilter();
+        let at = a.devices.iter().position(|d| d.name == "AT28C256").unwrap();
+        assert_eq!(a.matches[0], at);
+        assert_eq!(a.fav_rows, 1);
+        assert!(!a.matches[1..].contains(&at));
+        // A query that doesn't match the favorite keeps it pinned —
+        // "always visible regardless of the search query" (GUI parity).
+        a.search = "w25q64".into();
+        a.refilter();
+        assert_eq!(a.matches[0], at);
+        assert_eq!(a.fav_rows, 1);
+        // 'f' on the pinned row unfavorites → it rejoins the filtered
+        // list rather than vanishing, and the cursor stays on it.
+        a.search.clear();
+        a.refilter();
+        a.list.select(Some(0));
+        a.pane = Pane::Devices;
+        a.handle_key(key(KeyCode::Char('f')));
+        assert!(a.favorites.is_empty());
+        assert_eq!(a.fav_rows, 0);
+        assert!(a.matches.contains(&at));
+        assert_eq!(a.matches[a.cursor()], at);
+        // A favorite that isn't in this model's list doesn't pin —
+        // availability rule mirrors the GUI.
+        a.favorites.push(Favorite {
+            name: "NOT-A-DEVICE".into(),
+            manufacturer: "X".into(),
+        });
+        a.refilter();
+        assert_eq!(a.fav_rows, 0);
+        assert_eq!(a.matches.len(), 4);
     }
 
     #[test]

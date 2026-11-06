@@ -164,10 +164,15 @@ variant/no-ID normalization matches the GUI.
   per-user data dir via `minipro_core::prefs` — `name<TAB>mfr` lines,
   tolerant parser, atomic tmp+rename writes, write-through on every
   toggle (`App::favorites_path`; `None` disables persistence — tests).
-  Render filters against `app.devices`: favorites not in the
-  connected model's list are hidden, mirroring the GUI's
-  model-availability rule. Stored manufacturer rides along so the row
-  doesn't depend on the current device list.
+  They **pin to the top of `matches`** in stored order regardless of
+  the query — same list, same cursor, `Enter` selects directly (GUI
+  parity: "always visible regardless of the search query");
+  `App::fav_rows` marks the boundary for the header count. `refilter`
+  excludes favorited names from the filtered body so no row
+  duplicates; `toggle_favorite` re-filters and keeps the cursor on
+  the toggled device. Only favorites resolvable in `app.devices` pin
+  — a favorite saved under another model is hidden, mirroring the
+  GUI's availability rule.
 - Right pane auto-collapses under ~100 cols with hysteresis; `]`
   pins/unpins. Full layout switches to a too-small message under
   80×24, also hysteretic. `MINIPRO_TUI_DEBUG_PAINT` overlays draws/s.

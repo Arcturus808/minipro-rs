@@ -386,11 +386,9 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
     let v = Layout::vertical([
         Constraint::Length(1), // header
         Constraint::Length(3), // search box
-        Constraint::Length(1), // favorites header
-        Constraint::Length(2), // favorites
         Constraint::Length(1), // sep
         Constraint::Length(1), // results header
-        Constraint::Min(0),    // results list
+        Constraint::Min(0),    // results list (favorites pinned on top)
         Constraint::Length(1), // sep
         Constraint::Length(5), // selected
         Constraint::Length(1), // sep
@@ -427,65 +425,34 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         v[1],
     );
 
-    f.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::raw(" "),
-            sp("★ FAVORITES", theme::faint()),
-        ])),
-        v[2],
-    );
-    let favs = Layout::vertical([Constraint::Length(1); 2]).split(v[3]);
-    // Only favorites resolvable in the connected model's device list
-    // render — a favorite saved under a different programmer may not
-    // exist here (same hiding rule as the GUI).
-    let avail: Vec<&minipro_core::prefs::Favorite> = app
-        .favorites
-        .iter()
-        .filter(|f| app.devices.iter().any(|d| d.name == f.name))
-        .collect();
-    if avail.is_empty() {
-        f.render_widget(
-            Paragraph::new(Line::from(sp(" (f — favorite)", theme::faint()))),
-            favs[0],
-        );
-    } else {
-        for (i, entry) in avail.iter().take(2).enumerate() {
-            f.render_widget(
-                Paragraph::new(fav(&entry.name, &entry.manufacturer)),
-                favs[i],
-            );
-        }
-        if avail.len() > 2 {
-            f.render_widget(
-                Paragraph::new(Line::from(sp(
-                    format!(" ▸ {} more", avail.len() - 2),
-                    theme::faint(),
-                ))),
-                favs[1],
-            );
-        }
-    }
-    f.render_widget(Paragraph::new(sep_line(area.width)), v[4]);
+    f.render_widget(Paragraph::new(sep_line(area.width)), v[2]);
 
-    // Results header — count plus a scroll hint driven by ListState.
+    // Results header — filtered count plus the pinned-favorites count
+    // and a scroll hint driven by ListState.
     let off = app.list.offset();
-    let more_below = off + v[6].height as usize + 1 < app.matches.len();
+    let more_below = off + v[4].height as usize + 1 < app.matches.len();
     let hint = match (off > 0, more_below) {
         (true, true) => "↑↓",
         (true, false) => "↑",
         (false, true) => "↓",
         (false, false) => "",
     };
-    let mut rh = vec![sp(format!(" {} results", app.matches.len()), theme::dim())];
+    let mut rh = vec![sp(
+        format!(" {} results", app.matches.len() - app.fav_rows),
+        theme::dim(),
+    )];
+    if app.fav_rows > 0 {
+        rh.push(sp(format!(" · ★{} pinned", app.fav_rows), theme::amber()));
+    }
     if !hint.is_empty() {
         rh.push(sp(format!("{:>10}", hint), theme::faint()));
     }
-    f.render_widget(Paragraph::new(Line::from(rh)), v[5]);
+    f.render_widget(Paragraph::new(Line::from(rh)), v[3]);
 
     let list_area = Rect {
-        x: v[6].x + 2,
-        width: v[6].width.saturating_sub(2),
-        ..v[6]
+        x: v[4].x + 2,
+        width: v[4].width.saturating_sub(2),
+        ..v[4]
     };
     let items: Vec<ListItem> = app
         .matches
@@ -509,12 +476,12 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         .highlight_spacing(HighlightSpacing::Always);
     f.render_stateful_widget(list, list_area, &mut app.list);
 
+    f.render_widget(Paragraph::new(sep_line(area.width)), v[5]);
+    f.render_widget(Paragraph::new(selected_lines(app)), v[6]);
     f.render_widget(Paragraph::new(sep_line(area.width)), v[7]);
-    f.render_widget(Paragraph::new(selected_lines(app)), v[8]);
-    f.render_widget(Paragraph::new(sep_line(area.width)), v[9]);
     f.render_widget(
         Paragraph::new(Line::from(sp(" Diagnostics ▸", theme::faint()))),
-        v[10],
+        v[8],
     );
 }
 
@@ -575,15 +542,6 @@ fn human_size(b: usize) -> String {
     } else {
         format!("{b} B")
     }
-}
-
-fn fav(name: &str, mfr: &str) -> Line<'static> {
-    Line::from(vec![
-        sp(" ★ ", theme::accent()),
-        sp(name.to_string(), theme::text()),
-        Span::raw(" ".repeat(11usize.saturating_sub(name.len()))),
-        sp(mfr.to_string(), theme::dim()),
-    ])
 }
 
 fn sep_line(w: u16) -> Line<'static> {
