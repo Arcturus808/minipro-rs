@@ -24,6 +24,8 @@ A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) �
 
 A native desktop GUI is included in the `gui/` directory. It is built with **Tauri v2** + **Svelte 5** + **Tailwind CSS** and ships as a single `.msi` / `.exe` installer on Windows. The installer includes the full 13,000+ device database (`infoic.xml` / `logicic.xml`) — no separate download needed.
 
+A terminal UI (`minipro-tui`) is included as an **MVP** — a ratatui-based three-pane interface (device search, operation options, live log + ZIF socket diagram) covering the six core operations: read / write / verify / erase / blank check / chip ID. It ships alongside the `minipro` CLI in release binaries — useful over SSH or on headless setups where a webview GUI isn't practical. See `docs/TUI-PLAN.md` for the design and `docs/TUI-INTERNALS.md` for how it works.
+
 ### Screenshots
 
 **Light theme:**
@@ -44,6 +46,7 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 ![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
+- **Multi-pass stability check** (GUI): opt-in "Stability check" checkbox reads the chip 5 times and compares passes using the health-check analysis; stable reads proceed normally, unstable reads save the majority-vote consensus image with an unstable-byte warning in the log
 - **Chip ID verification**: automatic chip ID read and comparison before read/write/erase/verify; fails with clear mismatch message if inserted chip doesn't match selected device; `-x` / `--skip-id` CLI flag to skip in read mode (rejected for write/erase, matching upstream); `-y` / `--continue-id` to warn but continue on mismatch; GUI checkbox to bypass
 - **"Size diff" handling**: Error / Warn / Ignore modes when file size doesn't match device memory size
 - **ICSP programming**: in-circuit programming via the programmer's ICSP header instead of the ZIF socket — CLI `-i` (ICSP with VCC) or `-I` (without VCC); GUI: mode dropdown in the operations panel (ZIF socket / ICSP / ICSP no VCC). Devices marked ICSP-only in the database auto-enable it
@@ -75,6 +78,9 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 - **Package variant warnings**: warns when `@DIP8`/etc. variants are selected, as they often have incorrect protocol configs
 - **No-chip-ID warning**: yellow banner when the selected device lacks chip ID support, reminding user to verify correct chip insertion
 - **Pin contact check** — tests ZIF socket contact before operations (read, write, verify, erase, blank check, chip ID, config/fuse read/write). Bad pins are highlighted on the ZIF socket diagram and the operation is aborted. CLI: `-z` / `--pin-check` runs before the requested operation (e.g., `minipro -p ATmega328P -w firmware.hex -z`); failures are annotated with the ZIF position (e.g., `Bad contact on pin: 4 (ZIF pin 24)`). GUI: "Pin Contact Check" checkbox in the operations panel (default on, matching XGPro's "Pin Detect"). Supported on TL866II+ and T48 only; disabled on TL866A/CS, T56, and T76, and in ICSP mode. SPI autodetect runs the check automatically on supported models — autodetect is aborted if bad pins are found, since poor contact produces garbage JEDEC IDs
+![MINIPRO-RS GUI — Pin Contact Check](docs/screenshots/pin_contact_test.png)
+
+- **Chip health check** — flags marginal or degrading chips without writing anything: reads the chip ID (~20×) and the full memory N times (default 5), then analyzes how passes disagree (unstable-byte counts, worst 4 KiB regions, flip direction, periodic spacing) to produce a `Stable` / `Marginal-ID` / `Marginal-Data` / `Incomplete` / `Transport-Error` verdict. `--reference FILE` compares the effective image against a known-good file, catching deterministic corruption that repeated reads can't (`Reference-Mismatch` verdict, exit code 5). A majority-vote consensus image reconstructs the best-effort correct data and can be saved for recovery. CLI: `minipro -p DEVICE --health-check [N] [--consensus-out FILE]`. GUI: "Chip Health Check" button in Diagnostics with a result card and opt-in "Compare reads against file" picker
 - **USB reconnect hints** — connection button tooltip and error messages advise replugging on USB-related failures (Windows Selective Suspend, Linux autosuspend, macOS sleep power management)
 
 **UI & usability:**
@@ -107,7 +113,7 @@ Pre-built GUI installers are available on the [GitHub Releases](https://github.c
 
 > **Linux WebKitGTK note:** The GUI uses WebKitGTK for its webview. The `.AppImage` (~79MB) is self-contained and bundles WebKitGTK — no system dependencies required. The `.deb` (~6MB) is much smaller because it relies on the system-installed `libwebkit2gtk-4.1`, which `apt install` pulls in automatically. On minimal installs, you may need to install it manually: `sudo apt install libwebkit2gtk-4.1`
 
-> **Note:** The GUI releases are built from a [GitHub mirror](https://github.com/Arcturus808/minipro-rs) of this repository. The CLI releases remain on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/releases).
+> **Note:** The GUI releases are built from a [GitHub mirror](https://github.com/Arcturus808/minipro-rs) of this repository. The CLI releases remain on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/releases). CLI archives (tarballs, `.deb`, `.rpm`, `.msi`, standalone `.exe`s) bundle the `minipro-tui` terminal UI alongside `minipro`.
 
 ### Quick start
 
