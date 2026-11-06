@@ -170,9 +170,12 @@ variant/no-ID normalization matches the GUI.
   `App::fav_rows` marks the boundary for the header count. `refilter`
   excludes favorited names from the filtered body so no row
   duplicates; `toggle_favorite` re-filters and keeps the cursor on
-  the toggled device. Only favorites resolvable in `app.devices` pin
-  — a favorite saved under another model is hidden, mirroring the
-  GUI's availability rule.
+  the toggled device. `Ctrl-F` toggles a favorite while the search
+  input is editing — plain `f` is text there, so a non-printable key
+  carries the action; the search `Char` arm also now guards on
+  Ctrl/Alt so modified keys can't leak in as text. Only favorites
+  resolvable in `app.devices` pin — a favorite saved under another
+  model is hidden, mirroring the GUI's availability rule.
 - Right pane auto-collapses under ~100 cols with hysteresis; `]`
   pins/unpins. Full layout switches to a too-small message under
   80×24, also hysteretic. `MINIPRO_TUI_DEBUG_PAINT` overlays draws/s.
