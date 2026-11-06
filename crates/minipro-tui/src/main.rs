@@ -896,7 +896,7 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("←→↑↓ PgUp/PgDn", "move cursor · g/G first/last"),
         row("Home · End · :", "row start/end · goto offset"),
         row("0-9a-f", "overtype byte (half-typed = x·)"),
-        row("i · Esc", "ASCII-entry mode · back to hex mode"),
+        row("i / Ins · Esc", "ASCII-entry mode · Ins toggles · Esc back"),
         row("o · s · w · v", "load · save · write chip · verify"),
         row("Esc / q / x / Tab", "back to panes"),
         Line::default(),
@@ -1038,7 +1038,7 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
             sep(" goto  ·  "),
             key("0-9a-f"),
             sep(" edit  ·  "),
-            key("i"),
+            key("i/Ins"),
             sep(" ascii  ·  "),
         ];
         if area.width >= 100 {

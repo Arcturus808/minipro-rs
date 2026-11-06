@@ -1412,11 +1412,12 @@ impl App {
             self.hex_view = false; // defensive: view without a buffer
             return false;
         }
-        // ASCII-entry mode (`i`): every printable char is data — even
-        // q/x/Tab — so only Esc and navigation keys stay live.
+        // ASCII-entry mode: every printable char is data — even
+        // q/x/Tab — so only Esc, Insert (the real toggle — 'i' can't
+        // exit, it would type 0x69), and navigation keys stay live.
         if self.hex.as_ref().is_some_and(|h| h.ascii) {
             match k.code {
-                KeyCode::Esc => {
+                KeyCode::Esc | KeyCode::Insert => {
                     if let Some(hex) = &mut self.hex {
                         hex.ascii = false;
                     }
@@ -1475,7 +1476,10 @@ impl App {
                     cursor: 0,
                 });
             }
-            KeyCode::Char('i') => {
+            // 'i' enters ASCII mode (vim-ish discoverability); Insert
+            // toggles it both ways — it's non-printable, so it can
+            // never be mistaken for byte data.
+            KeyCode::Char('i') | KeyCode::Insert => {
                 if let Some(hex) = &mut self.hex {
                     hex.ascii = true;
                     hex.nibble = None;
@@ -2545,7 +2549,15 @@ mod tests {
         a.handle_key(key(KeyCode::Char('q')));
         assert!(a.hex_view);
         assert_eq!(a.hex.as_ref().unwrap().data[3], 0x71);
-        // Esc exits the mode first, then the view.
+        // Insert toggles back out — 'i' can't (it would type 0x69).
+        a.handle_key(key(KeyCode::Char('i')));
+        assert_eq!(a.hex.as_ref().unwrap().data[4], 0x69);
+        a.handle_key(key(KeyCode::Insert));
+        assert!(a.hex_view);
+        assert!(!a.hex.as_ref().unwrap().ascii);
+        // Insert toggles back in; Esc exits the mode, then the view.
+        a.handle_key(key(KeyCode::Insert));
+        assert!(a.hex.as_ref().unwrap().ascii);
         a.handle_key(key(KeyCode::Esc));
         assert!(a.hex_view);
         assert!(!a.hex.as_ref().unwrap().ascii);
