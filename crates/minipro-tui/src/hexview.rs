@@ -96,15 +96,17 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_widget(Paragraph::new(hdr), v[0]);
 
     // Column header — the 16 byte offsets, grouped in 8s like the hex
-    // area below (extra space in the middle keeps the two halves legible).
-    let mut cols = String::from("           "); // offset + gutter pad
+    // area below (extra space in the middle keeps the two halves
+    // legible). Pad must match the row prefix exactly: " " + 8-char
+    // offset + "  " + "▌" = 12 cells before byte 0.
+    let mut cols = String::from("            "); // offset + gutter pad
     for i in 0..16 {
         if i == 8 {
             cols.push(' ');
         }
         cols.push_str(&format!("{i:02X} "));
     }
-    cols.push_str("  ASCII");
+    cols.push_str(" ASCII");
     f.render_widget(Paragraph::new(sp(cols, theme::faint())), v[1]);
 
     // Rows — the renderer reports the real viewport height back into
@@ -243,5 +245,42 @@ mod tests {
         let text: String = buf.content().iter().map(|c| c.symbol()).collect();
         assert!(text.contains("BUFFER"), "header missing: {text:?}");
         assert!(text.contains("00000000"), "offset column missing");
+    }
+
+    #[test]
+    fn column_header_aligns_with_data_bytes() {
+        // Regression: the header pad was one cell short of the row
+        // prefix (" " + 8-char offset + "  " + "▌"), so the 00 column
+        // sat left of byte 0. Assert the header's "00" starts exactly
+        // above the first data byte.
+        let mut app = crate::app::App::test_fixture(vec![0xAB; 64]);
+        app.hex_view = true;
+        let backend = TestBackend::new(100, 30);
+        let mut term = Terminal::new(backend).unwrap();
+        term.draw(|f| draw(f, f.area(), &mut app)).unwrap();
+        let buf = term.backend().buffer().clone();
+        // Collect per-cell chars — NOT a String: find() would return
+        // byte offsets and '▌' is 3 bytes UTF-8, skewing the compare.
+        let row_text = |y: u16| -> Vec<char> {
+            (0..buf.area.width)
+                .flat_map(|x| buf[(x, y)].symbol().chars())
+                .collect()
+        };
+        // Header row is line 1 (below the BUFFER title); first data row
+        // is line 2.
+        let hdr = row_text(1);
+        let data = row_text(2);
+        let hdr_x = hdr.windows(2).position(|w| w == ['0', '0']).expect("no 00");
+        let data_x = data
+            .windows(2)
+            .position(|w| w == ['A', 'B'])
+            .expect("no byte");
+        let h: String = hdr.iter().collect();
+        let d: String = data.iter().collect();
+        assert_eq!(hdr_x, data_x, "header/data columns misaligned:\n{h}\n{d}");
+        // ASCII label sits above the ASCII pane start too.
+        let h_asc = hdr.windows(5).position(|w| w == ['A', 'S', 'C', 'I', 'I']);
+        let d_asc = data.iter().position(|&c| c == '·');
+        assert_eq!(h_asc, d_asc);
     }
 }
