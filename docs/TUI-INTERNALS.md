@@ -160,6 +160,14 @@ variant/no-ID normalization matches the GUI.
   the GUI's exact Shannon formula (`entropy / log2(len)`) and 4-tier
   color mapping (green/lime/amber/red). The center-pane Buffer line
   mirrors the buffer's name/size/CRC/edit count.
+- Favorites (`f` in DEVICES) persist to `favorites.txt` in the
+  per-user data dir via `minipro_core::prefs` — `name<TAB>mfr` lines,
+  tolerant parser, atomic tmp+rename writes, write-through on every
+  toggle (`App::favorites_path`; `None` disables persistence — tests).
+  Render filters against `app.devices`: favorites not in the
+  connected model's list are hidden, mirroring the GUI's
+  model-availability rule. Stored manufacturer rides along so the row
+  doesn't depend on the current device list.
 - Right pane auto-collapses under ~100 cols with hysteresis; `]`
   pins/unpins. Full layout switches to a too-small message under
   80×24, also hysteretic. `MINIPRO_TUI_DEBUG_PAINT` overlays draws/s.

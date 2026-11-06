@@ -41,6 +41,7 @@ pub mod handle;
 pub mod health;
 pub mod icsp;
 pub mod operations;
+pub mod prefs;
 pub mod protocol;
 pub mod usb;
 pub(crate) mod util;

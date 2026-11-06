@@ -30,6 +30,7 @@ use minipro_core::database::{find_device, list_devices_for_model, DatabasePaths,
 use minipro_core::device::{ChipType, Device, ProgrammerInfo, ProgrammerModel};
 use minipro_core::error::MiniproError;
 use minipro_core::operations::{ChipIdInfo, OpStats};
+use minipro_core::prefs::{self, Favorite};
 use minipro_core::zif::{device_to_zif, occupied_zif_pins, zif_spec, ZifInsertion};
 use ratatui::widgets::ListState;
 
@@ -480,9 +481,12 @@ pub struct App {
     pub last_stats: Option<OpStats>,
     /// Last chip-ID result (the ID tab also shows it in the log).
     pub chip_id: Option<ChipIdInfo>,
-    /// Session favorites (device names) — `f` toggles in DEVICES.
-    /// Persistence is P4 (`tui.toml`); favorites survive only per run.
-    pub favorites: Vec<String>,
+    /// Device favorites — `f` toggles in DEVICES. Persisted to
+    /// `favorites.txt` in the per-user data dir on every toggle.
+    pub favorites: Vec<Favorite>,
+    /// Where favorites persist — `None` disables write-through (tests
+    /// and data-dir-less environments stay session-scoped).
+    pub favorites_path: Option<PathBuf>,
     paths: DatabasePaths,
     /// Model used for list filtering — follows the connected programmer.
     pub model: ProgrammerModel,
@@ -561,7 +565,8 @@ impl App {
             last_path: None,
             last_stats: None,
             chip_id: None,
-            favorites: Vec::new(),
+            favorites: prefs::load_favorites(),
+            favorites_path: prefs::favorites_path(),
             paths,
             model,
             cmd_tx: None,
@@ -1069,16 +1074,25 @@ impl App {
         self.modal = None;
     }
 
-    /// `f` in the devices pane — toggle the cursor device as a favorite.
+    /// `f` in the devices pane — toggle the cursor device as a
+    /// favorite, then write-through to disk.
     fn toggle_favorite(&mut self) {
         let Some(&idx) = self.matches.get(self.cursor()) else {
             return;
         };
         let name = self.devices[idx].name.clone();
-        if let Some(pos) = self.favorites.iter().position(|f| f == &name) {
+        if let Some(pos) = self.favorites.iter().position(|f| f.name == name) {
             self.favorites.remove(pos);
         } else {
-            self.favorites.push(name);
+            self.favorites.push(Favorite {
+                name,
+                manufacturer: self.devices[idx].manufacturer.clone(),
+            });
+        }
+        if let Some(path) = &self.favorites_path {
+            if let Err(e) = prefs::save_favorites_to(path, &self.favorites) {
+                self.push_log(log::Level::Warn, format!("favorites not saved: {e}"));
+            }
         }
     }
 
@@ -2585,11 +2599,34 @@ mod tests {
     #[test]
     fn favorites_toggle() {
         let mut a = app();
+        // Hermetic: no write-through to the real user data dir.
+        a.favorites.clear();
+        a.favorites_path = None;
         a.pane = Pane::Devices;
         a.handle_key(key(KeyCode::Char('f')));
         assert_eq!(a.favorites.len(), 1);
         a.handle_key(key(KeyCode::Char('f')));
         assert!(a.favorites.is_empty());
+    }
+
+    #[test]
+    fn favorites_persist_write_through() {
+        let mut a = app();
+        a.favorites.clear();
+        // Point persistence at a temp file, toggle, and confirm the
+        // file round-trips the entry (name + manufacturer).
+        let dir = std::env::temp_dir().join(format!("minipro-fav-test-{}", std::process::id()));
+        let path = dir.join("favorites.txt");
+        a.favorites_path = Some(path.clone());
+        a.pane = Pane::Devices;
+        a.handle_key(key(KeyCode::Char('f')));
+        let loaded = prefs::load_favorites_from(&path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, a.favorites[0].name);
+        // Toggle off → file rewritten with zero favorites.
+        a.handle_key(key(KeyCode::Char('f')));
+        assert!(prefs::load_favorites_from(&path).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
