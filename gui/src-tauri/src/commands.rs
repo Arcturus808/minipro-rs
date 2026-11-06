@@ -124,6 +124,10 @@ fn run_pin_check_if_enabled(
         },
     };
 
+    // Emit the result on pass AND fail — the diagram colors confirm the
+    // check ran and which pins were measured (TUI + standalone button
+    // already behave this way).
+    emit_pin_test_result(window, &dto);
     if pass {
         emit_log(window, "info", "Pin contact check passed");
     } else {
@@ -144,7 +148,6 @@ fn run_pin_check_if_enabled(
             "warn",
             &format!("Pin contact check failed: {detail}. Operation aborted."),
         );
-        emit_pin_test_result(window, &dto);
         // Detail was already logged above; return the abort marker so
         // runOp reports "X aborted (pin contact check)" instead of
         // re-logging the full reason as an op failure.
