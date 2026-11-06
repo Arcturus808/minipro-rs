@@ -497,9 +497,10 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
 
     f.render_widget(Paragraph::new(sep_line(area.width)), v[5]);
     // Wrap, not clip — this panel is the fallback that always shows the
-    // full name when a result row had to ellipsize it.
+    // full name when a result row had to ellipsize it. split_name_lines
+    // prefers a token-boundary break; the wrap covers the rest.
     f.render_widget(
-        Paragraph::new(selected_lines(app)).wrap(Wrap { trim: false }),
+        Paragraph::new(selected_lines(app, v[6].width as usize)).wrap(Wrap { trim: false }),
         v[6],
     );
     f.render_widget(Paragraph::new(sep_line(area.width)), v[7]);
@@ -509,9 +510,37 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
     );
 }
 
+/// Split a device name into ≤2 lines for the Selected panel, preferring
+/// a break just before a `(`/ `@`/space boundary so qualifiers like
+/// `(ADP:Pin9to1)` land intact on the continuation instead of orphaning
+/// mid-word (…Pin9to1 / `)`). One line when it fits or no boundary is
+/// available — the widget's own wrap still covers those.
+fn split_name_lines(name: &str, width: usize) -> Vec<String> {
+    let usable = width.saturating_sub(1); // leading space column
+    if name.chars().count() <= usable || usable == 0 {
+        return vec![name.to_string()];
+    }
+    let split = name
+        .char_indices()
+        .filter(|&(i, c)| i > 0 && i <= usable && matches!(c, '@' | '(' | ' '))
+        .map(|(i, _)| i)
+        .next_back();
+    match split {
+        Some(i) => {
+            let (a, b) = name.split_at(i);
+            [a.trim_end(), b.trim_start()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        }
+        None => vec![name.to_string()],
+    }
+}
+
 /// Selected panel: cursor item's name/mfr always; Enter resolves the
 /// full record and adds size, pin count, and chip-ID support.
-fn selected_lines(app: &App) -> Vec<Line<'static>> {
+fn selected_lines(app: &App, width: usize) -> Vec<Line<'static>> {
     let mut lines = vec![Line::from(vec![
         Span::raw(" "),
         sp("Selected", theme::accent()),
@@ -521,7 +550,9 @@ fn selected_lines(app: &App) -> Vec<Line<'static>> {
         return lines;
     };
     let item = &app.devices[idx];
-    lines.push(Line::from(sp(format!(" {}", item.name), theme::text())));
+    for l in split_name_lines(&item.name, width) {
+        lines.push(Line::from(sp(format!(" {l}"), theme::text())));
+    }
     lines.push(Line::from(sp(
         format!(" {}", item.manufacturer),
         theme::dim(),
@@ -1143,7 +1174,7 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
 
 #[cfg(test)]
 mod tests {
-    use super::ellipsize;
+    use super::{ellipsize, split_name_lines};
 
     #[test]
     fn ellipsize_middle() {
@@ -1163,5 +1194,31 @@ mod tests {
         assert_eq!(ellipsize("ABCDEFGHIJ", 7), "AB…GHIJ");
         // Degenerate widths.
         assert_eq!(ellipsize("ABCDEF", 1), "…");
+    }
+
+    #[test]
+    fn split_name_prefers_token_boundary() {
+        // Fits → single line.
+        assert_eq!(split_name_lines("W25Q32JV", 26), vec!["W25Q32JV"]);
+        // Breaks before '(' so the qualifier lands intact — no ')' orphan.
+        assert_eq!(
+            split_name_lines("AC39LV010@TSOP32(ADP:Pin9to1)", 26),
+            vec!["AC39LV010@TSOP32", "(ADP:Pin9to1)"]
+        );
+        // '@' boundary when no '(' is in range.
+        assert_eq!(
+            split_name_lines("ATMEGA328P@TQFP32_LONGSUF", 16),
+            vec!["ATMEGA328P", "@TQFP32_LONGSUF"]
+        );
+        // Space boundary: continuation drops its leading space.
+        assert_eq!(
+            split_name_lines("MT35XL01GBBA4G12 -0SIT(RW284-OPI)@BGA24", 26),
+            vec!["MT35XL01GBBA4G12 -0SIT", "(RW284-OPI)@BGA24"]
+        );
+        // No boundary → one long line (the widget wrap still covers it).
+        assert_eq!(
+            split_name_lines("ATMEGA328PXLOOOOONG", 8),
+            vec!["ATMEGA328PXLOOOOONG"]
+        );
     }
 }
