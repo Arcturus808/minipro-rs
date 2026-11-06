@@ -240,15 +240,34 @@ impl Widget for &ZifDiagram {
             ]));
         }
         if self.show_test {
-            lines.push(Line::from(vec![
-                Span::raw(pad),
+            let mut legend = vec![
+                Span::raw(pad.clone()),
                 Span::styled("▪", theme::green()),
-                Span::styled(" ok  ", theme::faint()),
-                Span::styled("▪", theme::red()),
-                Span::styled(" bad  ", theme::faint()),
-                Span::styled("▪", theme::cyan()),
-                Span::styled(" GND·untestable", theme::faint()),
-            ]));
+                Span::styled(" ok", theme::faint()),
+                Span::styled("  ▪", theme::red()),
+                Span::styled(" bad", theme::faint()),
+            ];
+            if !self.untestable.is_empty() {
+                let gnd = [
+                    Span::styled("  ▪", theme::cyan()),
+                    Span::styled(" GND·untestable", theme::faint()),
+                ];
+                // pad + "▪ ok  ▪ bad" (11) + "  ▪ GND·untestable" (17) — wrap
+                // GND to its own line when the combined legend won't fit
+                if pad.len() + 28 <= area.width as usize {
+                    legend.extend(gnd);
+                    lines.push(Line::from(legend));
+                } else {
+                    lines.push(Line::from(legend));
+                    lines.push(Line::from(vec![
+                        Span::raw(pad),
+                        Span::styled("▪", theme::cyan()),
+                        Span::styled(" GND·untestable", theme::faint()),
+                    ]));
+                }
+            } else {
+                lines.push(Line::from(legend));
+            }
         }
         Paragraph::new(lines).render(area, buf);
     }
@@ -336,6 +355,26 @@ mod tests {
         assert_eq!(buf[(24, 3)].fg, theme::CYAN); // right slot ▭
         assert_eq!(buf[(23, 3)].fg, theme::CYAN); // right pin tip ▪
         assert!(lines[11].contains("GND·untestable"));
+    }
+
+    #[test]
+    fn gnd_legend_wraps_when_narrow() {
+        let mut zif = diagram();
+        zif.show_test = true;
+        zif.untestable = BTreeSet::from([40]);
+        // Width 30: pad is 6, so the one-line legend (6+28=34) doesn't
+        // fit — GND must wrap to its own line rather than clip.
+        let (lines, _buf) = rendered_lines(&zif, 30, 13);
+        assert!(lines[11].contains("ok") && lines[11].contains("bad"));
+        assert!(!lines[11].contains("GND"));
+        assert!(lines[12].contains("GND·untestable"));
+        // And the wide form still packs all three on one line.
+        let (lines, _buf) = rendered_lines(&zif, 40, 12);
+        assert!(
+            lines[11].contains("ok")
+                && lines[11].contains("bad")
+                && lines[11].contains("GND·untestable")
+        );
     }
 
     #[test]
