@@ -1724,7 +1724,22 @@ pub(super) fn pin_test_tl866(
     Ok(crate::protocol::PinTestResult {
         bad_pins,
         expected_pins,
+        untestable_pins: gnd_device_pins(&pin_map.gnd_table, x_pin, pno),
     })
+}
+
+/// Translate ZIF-pin `<gnd>` entries to device-pin numbers with the same
+/// mapping the mask loop uses — pins > `x_pin` sit `pno` lower on the
+/// right side of the socket.
+fn gnd_device_pins(gnd_table: &[u16], x_pin: usize, pno: usize) -> Vec<u16> {
+    gnd_table
+        .iter()
+        .filter(|&&p| (1..=40).contains(&(p as usize)))
+        .map(|&p| {
+            let p = p as usize;
+            (if p > x_pin { p - pno } else { p }) as u16
+        })
+        .collect()
 }
 
 /// T48 pin-contact check (`0x3E`) — a single command returning a per-pin
@@ -1792,6 +1807,7 @@ fn pin_test_t48(
     Ok(crate::protocol::PinTestResult {
         bad_pins,
         expected_pins,
+        untestable_pins: gnd_device_pins(&pin_map.gnd_table, x_pin, pno),
     })
 }
 

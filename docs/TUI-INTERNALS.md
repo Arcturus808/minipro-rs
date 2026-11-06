@@ -132,9 +132,11 @@ variant/no-ID normalization matches the GUI.
   `docs/KNOWN-BUGS.md`; don't reintroduce per-cell flushes.
 - `ZifDiagram` is fed by core `zif.rs`: `zif_spec(model)` → socket,
   `device_to_zif`/`occupied_zif_pins` → occupied/justification/lever.
-  Three pin states under a pin-test result: bad=red, tested=green,
-  untested=faint (`show_test` + `tested` set); without a result,
-  occupied pins are green and empties faint.
+  Pin states under a pin-test result: bad=red, tested=green,
+  GND=cyan (`untestable` — held low by the die so contact can't be
+  distinguished; legend row appears under the socket while `show_test`
+  is set), occupied-but-untested=faint. Without a result, occupied
+  pins are green and empties faint.
 - Panic hook restores the terminal (raw mode off, leave alt screen)
   before the default panic message — Ctrl+P panics on debug builds to
   exercise it.

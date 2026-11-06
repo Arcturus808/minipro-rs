@@ -152,6 +152,14 @@ if bad pins are found, since poor contact produces garbage JEDEC IDs.
 `UnsupportedOperation` on other models and the button is disabled with
 a tooltip.
 
+`PinTestResult.untestable_pins` carries the `<gnd>` table (device-pin
+numbering): ground pins are held low by the die so contact can't be
+distinguished — they're excluded by design, not "passed". The diagram
+renders them cyan with a `GND — not testable` legend entry; the same
+set drives the TUI's cyan cells. Note coverage is still implicit —
+upstream's T48 pin-test MR (!315) makes the same point: a floating GND
+fails every other pin anyway.
+
 The T48 path (`pin_test_t48` in `tl866iiplus.rs`) uses XGPro's own
 single-command protocol — `0x3E` carrying the device `variant` as chip
 ID (u16 LE — the field is ignored by firmware; the response carries

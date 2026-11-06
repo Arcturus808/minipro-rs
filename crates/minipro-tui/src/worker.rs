@@ -220,6 +220,7 @@ fn run_in_transaction(
         let _ = tx.send(AppEvent::PinTest {
             bad: res.bad_pins.clone(),
             expected: res.expected_pins.clone(),
+            untestable: res.untestable_pins.clone(),
             all_open: res.all_expected_open(),
         });
         if !res.bad_pins.is_empty() {

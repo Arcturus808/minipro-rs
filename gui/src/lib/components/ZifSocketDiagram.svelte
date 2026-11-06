@@ -7,7 +7,7 @@
   // pinTestActive: true only when a pin test has been run and returned
   //   results. When false, slots render in their default color regardless
   //   of badPins content.
-  let { badPins = [], expectedPins = [], pinTestActive = false, previewPinCount = null, identifyMode = false }: { badPins?: number[]; expectedPins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null; identifyMode?: boolean } = $props();
+  let { badPins = [], expectedPins = [], untestablePins = [], pinTestActive = false, previewPinCount = null, identifyMode = false }: { badPins?: number[]; expectedPins?: number[]; untestablePins?: number[]; pinTestActive?: boolean; previewPinCount?: number | null; identifyMode?: boolean } = $props();
 
   // ── Socket geometry ──────────────────────────────────────────────────────
   // SVG coordinate system: width=200, height scales with pin count.
@@ -145,6 +145,17 @@
         .filter((p) => p > 0 && !bad.has(p))
     );
   });
+
+  // Device pins excluded by design (the chip's GND pins — held low by
+  // the die, so contact can't be distinguished). Rendered cyan so
+  // "skipped by design" doesn't read as "empty" or "good".
+  let gndZifPins = $derived.by(() => {
+    if (!pinTestActive || !untestablePins || untestablePins.length === 0 || !layout)
+      return new Set<number>();
+    return new Set(
+      untestablePins.map((d) => layout!.zif_pins[d - 1]).filter((p) => p > 0)
+    );
+  });
 </script>
 
 <div class="border border-surface-200-800 p-2 flex flex-col items-center">
@@ -213,18 +224,19 @@
       {#each allPins as pin}
         {@const coord = pinToCoord(pin, socketSize)}
         {@const isBad = badZifPins.has(pin)}
-        {@const isGood = !isBad && goodZifPins.has(pin)}
+        {@const isGnd = !isBad && gndZifPins.has(pin)}
+        {@const isGood = !isBad && !isGnd && goodZifPins.has(pin)}
         <rect
           x={coord.x}
           y={coord.y}
           width={SLOT_W}
           height={SLOT_H}
           rx="1"
-          fill={isBad ? "#f38ba8" : isGood ? "#4ade80" : "black"}
-          fill-opacity={isBad ? "0.9" : isGood ? "0.7" : "0.15"}
-          stroke={isBad ? "#f38ba8" : isGood ? "#4ade80" : "currentColor"}
+          fill={isBad ? "#f38ba8" : isGnd ? "#22d3ee" : isGood ? "#4ade80" : "black"}
+          fill-opacity={isBad ? "0.9" : isGnd || isGood ? "0.7" : "0.15"}
+          stroke={isBad ? "#f38ba8" : isGnd ? "#22d3ee" : isGood ? "#4ade80" : "currentColor"}
           stroke-width="1.5"
-          opacity={isBad || isGood ? "1" : "0.5"}
+          opacity={isBad || isGnd || isGood ? "1" : "0.5"}
         />
         {#if isBad}
           {@const isLeft = pin <= socketSize / 2}
@@ -320,6 +332,11 @@
         <span class="flex items-center gap-1">
           <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:currentColor;opacity:0.25;border:1px solid currentColor;"></span>not tested
         </span>
+        {#if untestablePins.length > 0}
+          <span class="flex items-center gap-1">
+            <span style="display:inline-block;width:14px;height:6px;border-radius:1px;background:#22d3ee;"></span>GND — not testable
+          </span>
+        {/if}
       </div>
     {/if}
   {/if}

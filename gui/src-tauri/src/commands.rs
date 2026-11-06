@@ -73,6 +73,7 @@ fn emit_pin_test_result(window: &Window, dto: &PinTestResultDto) {
             "pass": dto.pass,
             "bad_pins": dto.bad_pins,
             "expected_pins": dto.expected_pins,
+            "untestable_pins": dto.untestable_pins,
             "message": dto.message,
         }),
     );
@@ -115,6 +116,7 @@ fn run_pin_check_if_enabled(
         pass,
         bad_pins: result.bad_pins.clone(),
         expected_pins: result.expected_pins.clone(),
+        untestable_pins: result.untestable_pins.clone(),
         message: if pass {
             "All pins OK".into()
         } else {
@@ -2948,6 +2950,7 @@ pub async fn do_spi_autodetect(
                             pass: false,
                             bad_pins: r.bad_pins,
                             expected_pins: r.expected_pins,
+                            untestable_pins: r.untestable_pins,
                             message: format!("Bad contact on {} pin(s)", count),
                         });
                         return Err(msg);
@@ -3563,6 +3566,9 @@ pub struct PinTestResultDto {
     /// Device pin numbers (1-based) the mask actually tested — lets the
     /// diagram distinguish tested-good from untested (e.g. GND) pins.
     pub expected_pins: Vec<u16>,
+    /// Device pins excluded by design (GND — held low by the die, so
+    /// contact can't be distinguished electrically).
+    pub untestable_pins: Vec<u16>,
     /// Human-readable status message.
     pub message: String,
 }
@@ -3599,6 +3605,7 @@ pub async fn do_pin_test(
                     pass: false,
                     bad_pins: vec![],
                     expected_pins: vec![],
+                    untestable_pins: vec![],
                     message: "Pin test not supported on this programmer model".into(),
                 });
             }
@@ -3611,6 +3618,7 @@ pub async fn do_pin_test(
                     pass: false,
                     bad_pins: vec![],
                     expected_pins: vec![],
+                    untestable_pins: vec![],
                     message: "Pin test is only available in ZIF mode".into(),
                 });
             }
@@ -3637,6 +3645,7 @@ pub async fn do_pin_test(
                 pass,
                 bad_pins: result.bad_pins,
                 expected_pins: result.expected_pins,
+                untestable_pins: result.untestable_pins,
                 message: if pass {
                     "All pins OK".into()
                 } else {

@@ -804,10 +804,17 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
                 ])
             }
         }
-        Some(_) => Line::from(vec![
+        Some(pt) => Line::from(vec![
             Span::raw(" "),
             sp("✓", theme::green()),
-            sp(" Pin test: all pins OK", theme::green()),
+            sp(
+                if pt.untestable.is_empty() {
+                    " Pin test: all pins OK"
+                } else {
+                    " Pin test: all testable pins OK"
+                },
+                theme::green(),
+            ),
         ]),
         None => Line::from(vec![Span::raw(" "), sp("Pin test: —", theme::faint())]),
     };

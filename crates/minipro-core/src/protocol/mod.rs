@@ -22,6 +22,11 @@ use crate::{
 pub struct PinTestResult {
     pub bad_pins: Vec<u16>,
     pub expected_pins: Vec<u16>,
+    /// Device pins excluded from testing by design — the `<gnd>` table.
+    /// A ground pin is held low by the die, so contact to it can't be
+    /// distinguished electrically (upstream's T48 MR notes a floating
+    /// GND fails every other pin anyway — coverage is implicit).
+    pub untestable_pins: Vec<u16>,
 }
 
 impl PinTestResult {

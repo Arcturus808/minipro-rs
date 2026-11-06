@@ -1775,7 +1775,7 @@
         {#if icspMode !== "zif"}
           <IcspConnectorDiagram />
         {:else}
-          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} expectedPins={$pinTestResult?.expected_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
+          <ZifSocketDiagram badPins={$pinTestResult?.bad_pins ?? []} expectedPins={$pinTestResult?.expected_pins ?? []} untestablePins={$pinTestResult?.untestable_pins ?? []} pinTestActive={$pinTestResult?.supported && $pinTestResult?.pass !== undefined} previewPinCount={!$selectedDevice && $activeOperation === "logic_test" ? identifyPinCount : null} identifyMode={!$selectedDevice && $activeOperation === "logic_test"} />
           {#if $pinTestResult}
             <div class="border border-surface-200-800 p-2 mt-1 flex items-start justify-between gap-2">
               <div>

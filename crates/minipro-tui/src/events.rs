@@ -120,6 +120,8 @@ pub enum AppEvent {
     PinTest {
         bad: Vec<u16>,
         expected: Vec<u16>,
+        /// Device pins excluded by design (GND — untestable electrically).
+        untestable: Vec<u16>,
         all_open: bool,
     },
     /// The programmer disappeared mid-op (USB error signature).
