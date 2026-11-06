@@ -134,7 +134,10 @@ variant/no-ID normalization matches the GUI.
   dedicated input context (like modals/search): while open every key
   routes to `handle_hex_key`, so hex digits `0-9a-f` overtype bytes —
   `b`/`e` are data here, not the blank/erase mnemonics — and
-  Esc/q/x/Tab return to the panes. `o` enters the view globally (or
+  Esc/q/x/Tab return to the panes. `i` toggles ASCII-entry mode where
+  every printable char writes its byte value (a mode is required since
+  a-f/0-9 are ambiguous); Esc exits the mode first, then the view.
+  `o` enters the view globally (or
   opens a file→buffer prompt when empty); inside, `o` loads a file,
   `s` saves (`read_file`/`write_file`, so the Format select applies),
   `w`/`v` write/verify the buffer via `WorkerCmd::Run{OpInput::Buffer}`.

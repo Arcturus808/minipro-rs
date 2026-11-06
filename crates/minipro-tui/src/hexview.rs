@@ -138,6 +138,11 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
         ]),
         None => Line::from(vec![
             Span::raw(" "),
+            if hex.ascii {
+                sp("ASCII ", theme::accent_bold())
+            } else {
+                sp("HEX   ", theme::faint())
+            },
             sp(format!("0x{pos:08X}",), theme::accent()),
             sp(
                 format!("  0x{val:02X}  {}/{}", pos + 1, hex.data.len()),
