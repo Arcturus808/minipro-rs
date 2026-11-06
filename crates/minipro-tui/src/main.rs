@@ -454,22 +454,32 @@ fn devices_pane(f: &mut Frame, area: Rect, app: &mut App) {
         width: v[4].width.saturating_sub(2),
         ..v[4]
     };
+    let row_w = list_area.width.saturating_sub(1) as usize; // star col
     let items: Vec<ListItem> = app
         .matches
         .iter()
         .map(|&i| {
             let d = &app.devices[i];
             let is_fav = app.favorites.iter().any(|f| f.name == d.name);
-            ListItem::new(Line::from(vec![
+            let nl = d.name.chars().count();
+            let mw = d.manufacturer.chars().count();
+            // star + name + right-aligned mfr. Priority: the full name
+            // over the mfr — the Selected panel always shows both.
+            // A name that still overflows gets a middle ellipsis: the
+            // tail carries the discriminator (@DIP28, (OTP), @TSSOP8).
+            let show_mfr = nl + mw < row_w;
+            let name_w = if show_mfr { row_w - mw - 1 } else { row_w };
+            let mut spans = vec![
+                sp(if is_fav { "★" } else { " " }, theme::amber()),
                 sp(
-                    if is_fav { "★" } else { " " },
-                    // Gold star — GUI parity; amber is the TUI's
-                    // "important" color (dirty bytes, warnings).
-                    theme::amber(),
+                    format!("{:<w$}", ellipsize(&d.name, name_w), w = name_w),
+                    theme::text(),
                 ),
-                sp(format!("{:<11}", d.name), theme::text()),
-                sp(d.manufacturer.clone(), theme::dim()),
-            ]))
+            ];
+            if show_mfr {
+                spans.push(sp(d.manufacturer.clone(), theme::dim()));
+            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
     let list = List::new(items)
@@ -544,6 +554,32 @@ fn human_size(b: usize) -> String {
     } else {
         format!("{b} B")
     }
+}
+
+/// Middle-ellipsize to `max` display chars — keeps the tail, where
+/// device names carry their discriminator (`@DIP28`, `(OTP)`,
+/// `@TSSOP8`). Char-safe; head gets the extra char on odd budgets.
+fn ellipsize(s: &str, max: usize) -> String {
+    let n = s.chars().count();
+    if n <= max {
+        return s.to_string();
+    }
+    if max <= 1 {
+        return "…".into();
+    }
+    let keep = max - 1;
+    let head = keep.div_ceil(2);
+    let tail = keep - head;
+    let head: String = s.chars().take(head).collect();
+    let tail: String = s
+        .chars()
+        .rev()
+        .take(tail)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("{head}…{tail}")
 }
 
 fn sep_line(w: u16) -> Line<'static> {
@@ -1088,4 +1124,24 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ellipsize;
+
+    #[test]
+    fn ellipsize_middle() {
+        // Fits → unchanged.
+        assert_eq!(ellipsize("W25Q32JV", 20), "W25Q32JV");
+        assert_eq!(ellipsize("W25Q32JV", 8), "W25Q32JV");
+        // Overflows → middle cut; the @package tail survives, which is
+        // where device names carry their discriminator.
+        assert_eq!(ellipsize("ACE25C512C(OTP)@TSSOP8", 16), "ACE25C51…@TSSOP8");
+        assert_eq!(ellipsize("ATMEGA328P@TQFP32", 11), "ATMEG…QFP32");
+        // Odd budget: head takes the extra char.
+        assert_eq!(ellipsize("ABCDEFGHIJ", 7), "ABC…HIJ");
+        // Degenerate widths.
+        assert_eq!(ellipsize("ABCDEF", 1), "…");
+    }
 }
