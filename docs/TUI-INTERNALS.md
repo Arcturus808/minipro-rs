@@ -145,7 +145,16 @@ variant/no-ID normalization matches the GUI.
   `s` saves (`read_file`/`write_file`, so the Format select applies),
   `w`/`v` write/verify the buffer via `WorkerCmd::Run{OpInput::Buffer}`.
   Navigation: arrows/PgUp/PgDn/Home/End/`g`/`G` + `:` goto; edits mark
-  `HexBuf::edited` (amber) until a save clears the set. Mid-op the view
+  `HexBuf::edited` (amber) until a save clears the set. `/`/`Ctrl-F`
+  opens `Modal::Find` — literal text, or `x:`-prefixed hex pairs —
+  searched from the cursor with wraparound (`n`/`N`, `F3`/`Shift-F3`
+  repeat; F3 works in ASCII mode where n/N are data). Results land on
+  `HexBuf::note`, a one-shot footer status, because the log pane is
+  hidden in this view. `Backspace` undoes the previous edit keystroke
+  (hexedit's undo-previous-character): `HexBuf::undo` is a capped
+  per-keystroke stack of (offset, pre-edit byte), and the lazily
+  cloned `HexBuf::original` lets `mark()` recompute dirty marks when
+  an undo returns a byte to its load-time value. Mid-op the view
   stays browsable — `HexBuf::nav` runs read-only while `op_running`
   blocks edits/actions. Rows carry a 1-cell `▌` entropy gutter using
   the GUI's exact Shannon formula (`entropy / log2(len)`) and 4-tier

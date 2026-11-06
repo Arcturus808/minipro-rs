@@ -136,19 +136,27 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
             sp(format!("◐ {} running…", op.name()), theme::amber()),
             sp("  (result logs when you Esc back)", theme::faint()),
         ]),
-        None => Line::from(vec![
-            Span::raw(" "),
-            if hex.ascii {
-                sp("ASCII ", theme::accent_bold())
-            } else {
-                sp("HEX   ", theme::faint())
-            },
-            sp(format!("0x{pos:08X}",), theme::accent()),
-            sp(
-                format!("  0x{val:02X}  {}/{}", pos + 1, hex.data.len()),
-                theme::dim(),
-            ),
-        ]),
+        None => {
+            let mut spans = vec![
+                Span::raw(" "),
+                if hex.ascii {
+                    sp("ASCII ", theme::accent_bold())
+                } else {
+                    sp("HEX   ", theme::faint())
+                },
+                sp(format!("0x{pos:08X}",), theme::accent()),
+                sp(
+                    format!("  0x{val:02X}  {}/{}", pos + 1, hex.data.len()),
+                    theme::dim(),
+                ),
+            ];
+            // One-shot status (find results) — the log pane is hidden
+            // in this view, so "not found" needs somewhere visible.
+            if let Some(note) = &hex.note {
+                spans.push(sp(format!("   {note}"), theme::amber()));
+            }
+            Line::from(spans)
+        }
     };
     f.render_widget(
         Paragraph::new(Line::from(sp(
