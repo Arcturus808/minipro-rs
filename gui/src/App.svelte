@@ -987,8 +987,8 @@
                 <p class="text-xs opacity-50 mb-3">To automatically identify a logic IC, insert it into the ZIF socket (pin 1 at the top{leverAtTop ? ", aligned with the lever" : ", opposite the lever"}), then select its pin count and VCC below and click Identify. Matching results will appear in the table below — click "Select" on a result to choose that device.</p>
                 <div class="flex flex-wrap items-end gap-4">
                   <div>
-                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">Pin Count</label>
-                    <div class="flex flex-wrap gap-1.5">
+                    <span id="identify-pin-count-label" class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">Pin Count</span>
+                    <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="identify-pin-count-label">
                       {#each IDENTIFY_PIN_OPTIONS as p}
                         <button
                           class="px-2.5 py-1 text-xs rounded border transition-all {identifyPinCount === p ? 'bg-primary-500 border-primary-500 text-white font-semibold' : 'border-surface-300-600 hover:border-primary-400 hover:bg-primary-500/10'}"
@@ -999,8 +999,8 @@
                     </div>
                   </div>
                   <div>
-                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">VCC</label>
-                    <select class="select text-xs w-24" bind:value={identifyVcc} disabled={$isRunning || $identifyRunning}>
+                    <label for="identify-vcc" class="text-xs font-semibold uppercase tracking-wider opacity-60 block mb-1.5">VCC</label>
+                    <select id="identify-vcc" class="select text-xs w-24" bind:value={identifyVcc} disabled={$isRunning || $identifyRunning}>
                       <option value="5">5V</option>
                       <option value="3.3">3.3V</option>
                       <option value="2.5">2.5V</option>
