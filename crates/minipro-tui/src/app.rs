@@ -1886,7 +1886,23 @@ impl App {
         }
         if self.search_editing {
             match k.code {
-                KeyCode::Char(c) => self.insert(c),
+                // Ctrl-F favorites the cursor result without leaving
+                // typing mode — plain 'f' is text here, so a
+                // non-printable key carries the action (same rule as
+                // the hex view's F3 find-repeat).
+                KeyCode::Char('f') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.toggle_favorite()
+                }
+                // Plain/shifted chars only — Ctrl/Alt combos are
+                // commands, not text (previously Ctrl+<letter>
+                // inserted the letter into the query).
+                KeyCode::Char(c)
+                    if !k
+                        .modifiers
+                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+                {
+                    self.insert(c)
+                }
                 KeyCode::Backspace => {
                     if self.search.is_empty() {
                         self.search_editing = false;
@@ -2658,6 +2674,36 @@ mod tests {
         a.handle_key(key(KeyCode::Char('f')));
         assert!(prefs::load_favorites_from(&path).is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_ctrl_f_favorites_without_leaving_typing() {
+        let mut a = app();
+        a.favorites.clear();
+        a.favorites_path = None;
+        a.search_editing = true;
+        a.search = "w25".into();
+        a.refilter();
+        // Ctrl-F favorites the cursor result while typing stays live.
+        a.handle_key(KeyEvent::new_with_kind(
+            KeyCode::Char('f'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press,
+        ));
+        assert_eq!(a.favorites.len(), 1);
+        assert!(a.search_editing);
+        assert_eq!(a.search, "w25"); // 'f' was not inserted
+                                     // Ctrl/Alt-modified chars are commands, not query text —
+                                     // previously they inserted the letter.
+        a.handle_key(KeyEvent::new_with_kind(
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press,
+        ));
+        assert_eq!(a.search, "w25");
+        // Plain and shifted chars still type (cursor was at 0).
+        a.handle_key(key(KeyCode::Char('q')));
+        assert_eq!(a.search, "qw25");
     }
 
     #[test]
