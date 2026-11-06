@@ -22,9 +22,11 @@ A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) �
 
 ## GUI — MINIPRO-RS (Tauri + Svelte)
 
-A native desktop GUI is included in the `gui/` directory. It is built with **Tauri v2** + **Svelte 5** + **Tailwind CSS** and ships as a single `.msi` / `.exe` installer on Windows. The installer includes the full 13,000+ device database (`infoic.xml` / `logicic.xml`) — no separate download needed.
+A native desktop GUI is included in the `gui/` directory. It is built with **Tauri v2** + **Svelte 5** + **Tailwind CSS** and ships as a single `.msi` / `.exe` installer on Windows. The installer includes the full 30,000+ device database (`infoic.xml` / `logicic.xml`) — no separate download needed.
 
-A terminal UI (`minipro-tui`) is included as an **MVP** — a ratatui-based three-pane interface (device search, operation options, live log + ZIF socket diagram) covering the six core operations: read / write / verify / erase / blank check / chip ID. It ships alongside the `minipro` CLI in release binaries — useful over SSH or on headless setups where a webview GUI isn't practical. See `docs/TUI-PLAN.md` for the design and `docs/TUI-INTERNALS.md` for how it works.
+A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interface covering the six core operations: read / write / verify / erase / blank check / chip ID. Device search supports persistent favorites (pinned, model-filtered) and manufacturer display; reads land in a full-screen **hex buffer editor** — entropy gutter, overtype editing with undo, find with hex/ASCII patterns, and write/verify straight from the buffer, so a read→patch→write-back loop never leaves the terminal. It ships alongside the `minipro` CLI in release binaries — useful over SSH or on headless setups where a webview GUI isn't practical. Logic-test/config/fuse ops and voltage overrides are not in the TUI yet — use the CLI or GUI for those. See `docs/TUI-PLAN.md` for the design and `docs/TUI-INTERNALS.md` for how it works.
+
+![MINIPRO-RS TUI — pin contact test on the ZIF diagram](docs/screenshots/pin_contact_test_tui.png)
 
 ### Screenshots
 
@@ -95,6 +97,8 @@ A terminal UI (`minipro-tui`) is included as an **MVP** — a ratatui-based thre
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
 - Diagnostics panel (programmer info, overcurrent check, hardware check)
+
+![MINIPRO-RS GUI — Diagnostics Panel](docs/screenshots/diagnostics_panel.png)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
 - **Draggable panel splitters**: resize Device Selector, Hex Viewer, and Terminal to your preference — widths persist across sessions
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
@@ -413,9 +417,9 @@ The selected directory persists across restarts. If the directory is later moved
 |------------|------|-------|-------|--------|---------|-------|-------|------------|-----------|-----------------|---------------|
 | **TL866A / TL866CS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌² | ✅¹ | ❌⁵ |
 | **TL866II+** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
-| **T48** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
+| **T48** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅ | ✅¹ | ✅¹ |
 | **T56** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌⁵ | ❌³ | ✅¹ | ✅¹ |
-| **T76** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌³ | ✅¹ | ✅¹ |
+| **T76** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ | ✅ | ✅ | ❌³ | ✅¹ | ✅¹ |
 
 **Legend:**
 - ✅ **Tested & working** — verified with real hardware.
@@ -424,7 +428,7 @@ The selected directory persists across restarts. If the directory is later moved
 - ❌³ **Not applicable** — the T56/T76 use FPGA-based bitstream algorithms that handle pin control internally; the C minipro also does not implement ZIF pin control or voltage setting for these models. Matt Brown's t76-improvements branch discovered that the T76's `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test — the [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
 - ❌⁵ **Unknown** — support status unclear; not yet verified against official XGecu software.
 
-> **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. SPI-NAND read/erase/write/verify has been validated on real hardware (GD5F1GQ5UExxG, T76 firmware 00.1.18). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
+> **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. Validated on real hardware: SPI NOR 8-pin read/erase/write/verify byte-exact against a TL866A ground-truth dump (W25X20CL — 16-pin path still unvalidated), SPI-NAND read/erase/write/verify (GD5F1GQ5UExxG, T76 firmware 00.1.18), SPI JEDEC autodetect (W25X20CL, LE25FS406M), and logic IC test (7408). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
 > **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism.
 
@@ -495,7 +499,7 @@ minipro-rs/
 │   │   └── Cargo.toml
 │   └── (gui/ omitted — see gui/README.md)
 ├── data/
-│   ├── infoic.xml        # 13 000+ device definitions (vendored from upstream)
+│   ├── infoic.xml        # 30 000+ device definitions (vendored from upstream)
 │   └── logicic.xml       # Logic IC test vectors
 └── tests/
     └── integration/
