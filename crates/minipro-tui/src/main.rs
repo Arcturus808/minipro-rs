@@ -9,6 +9,7 @@
 
 mod app;
 mod events;
+mod hexview;
 mod theme;
 mod worker;
 mod zif;
@@ -249,13 +250,33 @@ fn draw(f: &mut Frame, app: &mut App) {
     .split(v[1]);
     let right_area = if right_visible { Some(h[4]) } else { None };
 
+    // Pane-top separator — part of the frame look in every view.
+    {
+        let buf = f.buffer_mut();
+        let y = v[0].y;
+        for x in area.x..area.x + area.width {
+            buf.set_string(x, y, "─", theme::border());
+        }
+        buf.set_string(area.x, y, "├", theme::border());
+        buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
+    }
+
+    // The hex-buffer view owns the pane region when open — frame,
+    // separator, keybar, and overlays still draw around it.
+    if app.hex_view {
+        hexview::draw(f, v[1], app);
+        keybar(f, v[2], app);
+        if app.show_help {
+            help_overlay(f, area);
+        }
+        if let Some(m) = &app.modal {
+            modal_overlay(f, area, m);
+        }
+        return;
+    }
+
     let buf = f.buffer_mut();
     let y = v[0].y;
-    for x in area.x..area.x + area.width {
-        buf.set_string(x, y, "─", theme::border());
-    }
-    buf.set_string(area.x, y, "├", theme::border());
-    buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
     let mut seps = vec![h[1]];
     if right_visible {
         seps.push(h[3]);
@@ -636,22 +657,28 @@ fn center_pane(f: &mut Frame, area: Rect, app: &App) {
         sp("  (VPP / VCC / VDD overrides — later)", theme::faint()),
     ]));
     lines.push(sep_line(w));
-    // Buffer line — last op's file + stats, or the empty state.
-    match (&app.last_path, app.last_stats) {
-        (Some(path), Some(stats)) => {
+    // Buffer line — the hex buffer's name/size/CRC, or the empty state.
+    match (&app.hex, &app.last_path) {
+        (Some(hex), path) => {
             let name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "(buffer)".to_string());
             lines.push(Line::from(vec![
                 sp(" Buffer  ", theme::dim()),
                 sp(name, theme::text()),
-                sp(format!("  · {} B", stats.bytes), theme::dim()),
+                sp(format!("  · {} B", hex.data.len()), theme::dim()),
+                if hex.edited.is_empty() {
+                    Span::raw("")
+                } else {
+                    sp(format!("  · {} edit(s)", hex.edited.len()), theme::amber())
+                },
             ]));
             lines.push(Line::from(vec![
                 Span::raw("          "),
-                sp(format!("CRC-32 {:08X}", stats.crc32), theme::cyan()),
+                sp(format!("CRC-32 {:08X}", hex.crc32), theme::cyan()),
+                sp("  ·  o view", theme::faint()),
             ]));
         }
         _ => {
@@ -825,7 +852,7 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
 /// this pattern. Lists only keys that are actually bound.
 fn help_overlay(f: &mut Frame, area: Rect) {
     let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 24u16.min(area.height.saturating_sub(2));
+    let h = 33u16.min(area.height.saturating_sub(2));
     let r = Rect::new(
         area.x + area.width.saturating_sub(w) / 2,
         area.y + area.height.saturating_sub(h) / 2,
@@ -859,10 +886,18 @@ fn help_overlay(f: &mut Frame, area: Rect) {
         row("f", "favorite (this session)"),
         Line::default(),
         section("Operations"),
-        row("r/w/v/e/b/i", "run op (path prompt / confirm as needed)"),
+        row("r/w/v/e/b/i", "run op (read → buffer; others prompt)"),
         row("l · c", "logic / config — not in this MVP"),
         row("1-8", "arm op, Enter runs"),
         row("Space", "toggle option · ←→ cycle selects"),
+        row("o", "hex buffer view / load file"),
+        Line::default(),
+        section("Hex buffer view"),
+        row("←→↑↓ PgUp/PgDn", "move cursor · g/G first/last"),
+        row("Home · End · :", "row start/end · goto offset"),
+        row("0-9a-f", "overtype byte (half-typed = x·)"),
+        row("o · s · w · v", "load · save · write chip · verify"),
+        row("Esc / q / x / Tab", "back to panes"),
         Line::default(),
         section("Log (right pane)"),
         row("j/k · PgUp/PgDn", "scroll · x clear"),
@@ -915,6 +950,27 @@ fn modal_overlay(f: &mut Frame, area: Rect, m: &Modal) {
                 ],
             )
         }
+        Modal::Goto { input, cursor } => {
+            let mut spans = vec![
+                sp(&input[..*cursor], theme::text()),
+                sp("▌", theme::accent()),
+            ];
+            spans.push(sp(&input[*cursor..], theme::text()));
+            (
+                "Go to offset (hex)",
+                vec![
+                    Line::default(),
+                    Line::from(spans),
+                    Line::default(),
+                    Line::from(vec![
+                        sp(" Enter", theme::accent()),
+                        sp(" jump  ·  ", theme::dim()),
+                        sp("Esc", theme::accent()),
+                        sp(" cancel", theme::dim()),
+                    ]),
+                ],
+            )
+        }
         Modal::Confirm { lines, .. } => {
             let mut body: Vec<Line> = vec![Line::default()];
             for (i, l) in lines.iter().enumerate() {
@@ -957,12 +1013,38 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
     let key = |s: &'static str| Span::styled(s.to_string(), theme::accent_bold().bg(theme::KEY_BG));
     let sep = |s: &'static str| Span::styled(s.to_string(), theme::dim().bg(theme::KEY_BG));
     // While an op runs, the bar explains why keys are dead — the GUI's
-    // modal-progress equivalent.
+    // modal-progress equivalent. (First: it also wins inside the hex
+    // view, where edits/actions are blocked but nav stays live.)
     if app.op_running.is_some() {
         let line = Line::from(vec![
             key(" ◐"),
             sep(" running — ops can't be aborted mid-transfer "),
         ]);
+        f.render_widget(
+            Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
+            area,
+        );
+        return;
+    }
+    // Hex-buffer view context — its own key set (hex digits are data).
+    if app.hex_view {
+        let mut spans = vec![
+            key(" ←→↑↓"),
+            sep(" move  ·  "),
+            key("g/G"),
+            sep(" top/end  ·  "),
+            key(":"),
+            sep(" goto  ·  "),
+            key("0-9a-f"),
+            sep(" edit  ·  "),
+        ];
+        if area.width >= 100 {
+            spans.extend([key("o s w v"), sep(" open/save/write/verify  ·  ")]);
+        } else {
+            spans.extend([key("o s w v"), sep(" buf  ·  ")]);
+        }
+        spans.extend([key("Esc"), sep(" back ")]);
+        let line = Line::from(spans);
         f.render_widget(
             Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
             area,

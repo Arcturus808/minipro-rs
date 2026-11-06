@@ -5,6 +5,7 @@
 //! `info!`/`warn!` inside minipro-core (chip-ID OK, skipped-blank counts,
 //! per-op device lines) lands in the log pane like the GUI's app-log.
 
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
 use minipro_core::device::ProgrammerInfo;
@@ -61,6 +62,17 @@ pub enum SizeDiff {
     Ignore,
 }
 
+/// File/buffer operand for an op — mutually exclusive by construction.
+#[derive(Clone)]
+pub enum OpInput {
+    /// No operand (read-to-buffer, erase, blank, chip-id).
+    None,
+    /// A filesystem path (write/verify file ops, …).
+    File(PathBuf),
+    /// An in-memory image from the hex-buffer view (write/verify).
+    Buffer(Vec<u8>),
+}
+
 /// Options pane snapshot taken when an op starts.
 #[derive(Clone)]
 pub struct OpOptions {
@@ -80,9 +92,15 @@ pub struct OpOptions {
 
 /// Successful outcome of a completed operation.
 pub enum OpOutcome {
-    /// Read or write finished — byte count + CRC for the buffer line.
+    /// Write finished — byte count + CRC for the buffer line.
     Stats {
         stats: OpStats,
+    },
+    /// Read finished — byte count + CRC plus the bytes themselves,
+    /// which land in the hex-buffer view.
+    Read {
+        stats: OpStats,
+        data: Vec<u8>,
     },
     Verified,
     /// `supported = false` means the device has no electrical erase and

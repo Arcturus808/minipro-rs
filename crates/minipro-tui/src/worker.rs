@@ -7,7 +7,6 @@
 //! body → end_transaction (always). Diverging here is how upstream-
 //! parity bugs are born — when the GUI's sequence changes, change this.
 
-use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -19,10 +18,11 @@ use minipro_core::error::MiniproError;
 use minipro_core::handle::MiniproHandle;
 use minipro_core::operations::{
     blank_check, check_chip_id, chip_id_info, erase_chip, pin_check_gate_applies,
-    pin_contact_check, read_chip, verify_chip, write_chip, SizeMismatch,
+    pin_contact_check, read_chip_buffer, verify_chip, verify_chip_bytes, write_chip,
+    write_chip_bytes, SizeMismatch,
 };
 
-use crate::events::{AppEvent, OpKind, OpOptions, OpOutcome, SizeDiff};
+use crate::events::{AppEvent, OpInput, OpKind, OpOptions, OpOutcome, SizeDiff};
 
 /// UI → worker commands.
 pub enum WorkerCmd {
@@ -32,7 +32,8 @@ pub enum WorkerCmd {
     Run {
         op: OpKind,
         device_name: String,
-        path: Option<PathBuf>,
+        /// File or hex-buffer operand — `None` for read/erase/blank/id.
+        input: OpInput,
         options: Box<OpOptions>,
     },
 }
@@ -73,14 +74,14 @@ fn worker(paths: DatabasePaths, rx: Receiver<WorkerCmd>, tx: Sender<AppEvent>) {
             WorkerCmd::Run {
                 op,
                 device_name,
-                path,
+                input,
                 options,
             } => {
                 let result = if fake {
                     Err("MINIPRO_FAKE_PROGRAMMER is set — operations need real hardware".into())
                 } else {
                     match handle.as_mut() {
-                        Some(h) => run_op(h, &paths, &tx, op, &device_name, path, &options),
+                        Some(h) => run_op(h, &paths, &tx, op, &device_name, input, &options),
                         None => Err("no programmer connected — press F5".into()),
                     }
                 };
@@ -172,7 +173,7 @@ fn run_op(
     tx: &Sender<AppEvent>,
     op: OpKind,
     device_name: &str,
-    path: Option<PathBuf>,
+    input: OpInput,
     o: &OpOptions,
 ) -> Result<OpOutcome, String> {
     let model = h.info.model;
@@ -196,7 +197,7 @@ fn run_op(
     }
     h.begin_transaction(device).map_err(|e| e.to_string())?;
 
-    let r = run_in_transaction(h, paths, tx, op, path, o, model);
+    let r = run_in_transaction(h, paths, tx, op, input, o, model);
     let _ = h.end_transaction();
     r
 }
@@ -207,7 +208,7 @@ fn run_in_transaction(
     paths: &DatabasePaths,
     tx: &Sender<AppEvent>,
     op: OpKind,
-    path: Option<PathBuf>,
+    input: OpInput,
     o: &OpOptions,
     model: ProgrammerModel,
 ) -> Result<OpOutcome, String> {
@@ -270,14 +271,19 @@ fn run_in_transaction(
 
     match op {
         OpKind::Read => {
-            let p = path.ok_or("read needs a destination path")?;
-            let stats = read_chip(h, &p, o.page, o.format, Some(&mut progress))
-                .map_err(|e| e.to_string())?;
-            Ok(OpOutcome::Stats { stats })
+            let data =
+                read_chip_buffer(h, o.page, Some(&mut progress)).map_err(|e| e.to_string())?;
+            let stats = minipro_core::operations::OpStats::from_buffer(&data);
+            Ok(OpOutcome::Read { stats, data })
         }
         OpKind::Verify => {
-            let p = path.ok_or("verify needs a file path")?;
-            verify_chip(h, &p, o.page, o.format, Some(&mut progress)).map_err(|e| e.to_string())?;
+            match input {
+                OpInput::Buffer(buf) => verify_chip_bytes(h, buf, o.page, Some(&mut progress))
+                    .map_err(|e| e.to_string())?,
+                OpInput::File(p) => verify_chip(h, &p, o.page, o.format, Some(&mut progress))
+                    .map_err(|e| e.to_string())?,
+                OpInput::None => return Err("verify needs a file path or a buffer".into()),
+            }
             Ok(OpOutcome::Verified)
         }
         OpKind::Erase => {
@@ -297,7 +303,9 @@ fn run_in_transaction(
             Ok(OpOutcome::ChipId(Box::new(info)))
         }
         OpKind::Write => {
-            let p = path.ok_or("write needs a file path")?;
+            if matches!(input, OpInput::None) {
+                return Err("write needs a file path or a buffer".into());
+            }
             // Protect-off before erase/write — T76 always honors
             // off_protect_before; other models need the user's checkbox.
             // Mirrors the GUI's do_write.
@@ -321,19 +329,36 @@ fn run_in_transaction(
                 h.begin_transaction(Arc::new(device.clone()))
                     .map_err(|e| e.to_string())?;
             }
-            let stats = write_chip(
-                h,
-                &p,
-                o.page,
-                o.format,
-                size_diff(o.size_diff),
-                o.skip_blank,
-                Some(&mut progress),
-            )
-            .map_err(|e| e.to_string())?;
+            let stats = match &input {
+                OpInput::Buffer(buf) => write_chip_bytes(
+                    h,
+                    buf.clone(),
+                    o.page,
+                    size_diff(o.size_diff),
+                    o.skip_blank,
+                    Some(&mut progress),
+                )
+                .map_err(|e| e.to_string())?,
+                OpInput::File(p) => write_chip(
+                    h,
+                    p,
+                    o.page,
+                    o.format,
+                    size_diff(o.size_diff),
+                    o.skip_blank,
+                    Some(&mut progress),
+                )
+                .map_err(|e| e.to_string())?,
+                OpInput::None => unreachable!("checked above"),
+            };
             if !o.skip_verify {
-                verify_chip(h, &p, o.page, o.format, Some(&mut progress))
-                    .map_err(|e| e.to_string())?;
+                match input {
+                    OpInput::Buffer(buf) => verify_chip_bytes(h, buf, o.page, Some(&mut progress))
+                        .map_err(|e| e.to_string())?,
+                    OpInput::File(p) => verify_chip(h, &p, o.page, o.format, Some(&mut progress))
+                        .map_err(|e| e.to_string())?,
+                    OpInput::None => unreachable!("checked above"),
+                }
             }
             if o.protect_after && device.flags.protect_after {
                 log(tx, log::Level::Info, "Protect on...");
