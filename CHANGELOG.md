@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **TUI: device list unreachable while searching** — with the search input focused, every non-editing key was swallowed, so ↑/↓/PgUp/PgDn couldn't navigate results until Esc/Enter was discovered. Arrows now move the results cursor while typing (fzf convention), and Enter selects the highlighted device directly instead of only leaving edit mode (Esc still cancels without selecting).
+
 - **GUI ZIF diagram: bad-pin label spacing** — "PIN n" callouts sat 4px from the socket while "ZIF PIN 1" sits 8px; all labels now share the same 8px column.
 
 - **T76 logic-IC test reported good chips as failed (all-high vectors only)** — the shared TL866 two-pass path ran both vector passes against whatever bitstream `begin_transaction` had loaded (for logic devices, `Test_100M` — the SRAM tester), so outputs read low and every vector expecting `H` errored. Matching upstream `t76_logic_ic_test`, the pull direction is now baked into the FPGA per pass: `TestLgcPull` is uploaded before the pull-up pass and `TestLgcDown` before the pull-down pass (utility algorithms 0x0300/0x0200 from `algorithm.xml`), and the bitstream cache is invalidated afterwards. 7408 and other logic ICs now test correctly on T76. T56 was unaffected (its TTL1/TTL2 bitstream honors the runtime pull flag). Hardware-verified with a 7408.
