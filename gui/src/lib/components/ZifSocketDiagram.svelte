@@ -228,7 +228,7 @@
         />
         {#if isBad}
           {@const isLeft = pin <= socketSize / 2}
-          {@const labelX = isLeft ? coord.x - 4 : coord.x + SLOT_W + 4}
+          {@const labelX = isLeft ? coord.x - 8 : coord.x + SLOT_W + 8}
           {@const labelAnchor = isLeft ? "end" : "start"}
           {@const dPin = (layout?.zif_pins.indexOf(pin) ?? -1) + 1}
           <text
