@@ -143,7 +143,14 @@ async function runOp(
   } catch (e) {
     const elapsed = Date.now() - start;
     const errMsg = String(e);
-    deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${errMsg}`);
+    // Pre-op gates (pin contact, chip ID) log their own detail and return
+    // a terse "aborted (gate)" marker — the op never ran, so report an
+    // abort rather than re-logging the reason as a failure.
+    if (errMsg.startsWith("aborted (")) {
+      deferLog("warn", `${name} ${errMsg}`);
+    } else {
+      deferLog("error", `${name} failed after ${formatDuration(elapsed)}: ${errMsg}`);
+    }
     // If the error looks USB-related, advise the user to replug
     const usbKeywords = ["STALL", "NoDevice", "LIBUSB_ERROR_NO_DEVICE",
       "LIBUSB_ERROR_IO", "LIBUSB_ERROR_PIPE", "DeviceNotFound",

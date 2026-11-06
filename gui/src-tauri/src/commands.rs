@@ -145,10 +145,10 @@ fn run_pin_check_if_enabled(
             &format!("Pin contact check failed: {detail}. Operation aborted."),
         );
         emit_pin_test_result(window, &dto);
-        return Err(format!(
-            "Pin contact check failed: bad contact on {} pin(s): {}",
-            count, pin_list
-        ));
+        // Detail was already logged above; return the abort marker so
+        // runOp reports "X aborted (pin contact check)" instead of
+        // re-logging the full reason as an op failure.
+        return Err("aborted (pin contact check)".to_string());
     }
     Ok(())
 }
@@ -1265,7 +1265,7 @@ pub async fn do_read(
                     }
                     Err(e) => {
                         emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -1390,7 +1390,7 @@ pub async fn read_chip_to_bytes(
                     }
                     Err(e) => {
                         emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -1621,7 +1621,7 @@ pub async fn do_write(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -1804,7 +1804,7 @@ pub async fn do_batch_write_chip(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -2086,7 +2086,7 @@ pub async fn do_write_bytes(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -2238,7 +2238,7 @@ pub async fn do_verify(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
@@ -2329,7 +2329,7 @@ pub async fn do_erase(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
-                        return Err(e.to_string());
+                        return Err("aborted (chip ID check)".to_string());
                     }
                 }
             }
