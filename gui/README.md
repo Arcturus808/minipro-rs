@@ -6,7 +6,7 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Device Search** | Done | Search the 13,000+ device database with instant results; star-toggle favorites pinned in a collapsible section — filtered to the connected programmer model since device names differ per database section (e.g. `PIC16F628A` on TL866A vs `PIC16F628A@DIP18` on T76) |
+| **Device Search** | Done | Search the 30,000+ device database with instant results and a manufacturer column; star-toggle favorites pinned in a collapsible section — filtered to the connected programmer model since device names differ per database section (e.g. `PIC16F628A` on TL866A vs `PIC16F628A@DIP18` on T76) |
 | **ICSP Wiring Diagram** | Done | Scratch-built SVG of the programmer's ICSP header wired to the selected device — header shape per model (1×6 linear, 2×8/2×14 zigzag), per-model/per-class verified pin tables, collapsible scrollable panel; CLI: `minipro -p <dev> -d` |
 | **ZIF Socket Diagram** | Done | ZIF socket placement diagram for the selected device; shows insertion position and adapter guidance |
 | **Device Selection** | Done | Select a device to configure operations; shows chip type, pin count, voltages |
@@ -29,8 +29,16 @@ A desktop GUI for [minipro-rs](https://gitlab.com/arcturus8081/minipro-rs) built
 | **Draggable Panels** | Done | Resize Device Selector, Hex Viewer, and Terminal with mouse drag; widths persist |
 | **Layout Reset** | Done | One-click restore of panel widths, font size, and window position in Settings |
 | **Hack Font** | Done | Open-source Hack monospace font bundled for hex viewer |
-| **Firmware Update** | Done | TL866A/CS `update.dat` decryption + flashing via CLI (`-F`) and GUI Diagnostics panel |
+| **Firmware Update** | Done | Diagnostics panel + CLI (`-F`): TL866A/CS `update.dat` decryption and T48/T56/T76 family images; auto-discovers `firmware-<model>-*.dat` downloaded by the XGPro downloader, shows installed-vs-file version with downgrade/hw-revision warnings, file picker fallback |
 | **Fuse Bit Decoder** | Done | Bit-level fuse/config decoder with clickable bit cells (MSB→LSB), named fields, descriptions, and dangerous-bit warnings (RSTDISBL, SPIEN, JTAGEN, DWEN). Covers all 18 AVR config variants and all database-referenced PIC config variants (12/14/16-bit). Hex input stays in sync with bit toggles. Contextual help modal explains fuse basics, bit decoder usage, and PIC code protection bits |
+| **Config/Fuse Editor** | Done | Config tab auto-populates fuse/lock fields from database defaults on device select; read/write MCU configuration bytes via checkbox UI + direct hex input; "Read Config from Chip" merges real values; fuses and lock bits side-by-side |
+| **Pin Contact Test** | Done | Diagnostics button and optional pre-operation gate; bad pins shown on the ZIF diagram with a color legend (tested ok / bad / not tested); GND pins rendered as untestable (can't be contact-tested by design); all-open result hints "is a chip seated?"; CLI: `minipro -z` |
+| **SPI Auto Detect** | Done | "Auto Detect" buttons (8-pin / 16-pin) read the flash JEDEC ID via firmware `0x37` and list matching database devices; T76 verified, T56 implemented but gated pending hardware |
+| **ICSP Mode** | Done | ZIF / ICSP / ICSP-no-VCC mode dropdown in the operations panel; ICSP-only database devices auto-enable it |
+| **Voltage Overrides** | Done | Collapsible Advanced section in the Write panel with VPP/VCC/VDD dropdowns showing chip defaults; "Reset voltages" button |
+| **Batch + Serial Injection** | Done | "Batch Mode" programs N identical chips with a Next-Chip flow and summary; optional auto-incrementing serial numbers (bin/ascii/bcd, endianness, step, XOR/CRC-8 checksum) patch each buffer pre-write; CLI: `--batch`, `--serial-*` |
+| **Chip Health Check** | Done | Diagnostics button reads chip ID + full memory multiple times and reports a Stable / Marginal / Incomplete verdict with unstable-byte counts, worst regions, and a consensus-recovery dump save; opt-in "Stability check" checkbox on Read; CLI: `--health-check` |
+| **Custom Database & Algorithm Download** | Done | Settings → Database: directory picker for custom `infoic.xml`/`logicic.xml` (live reload, persists, falls back if missing) plus a "Download algorithm.xml + firmware…" button — pure-Rust XGPro downloader, no external tools needed on Windows |
 
 ## Screenshots
 
@@ -85,9 +93,11 @@ gui/
 │   └── main.ts                       # Svelte mount entry point
 ├── src-tauri/
 │   ├── src/
-│   │   ├── commands.rs               # All Tauri invoke handlers
+│   │   ├── main.rs                   # Binary entry → lib::run()
 │   │   ├── lib.rs                    # App setup + command registration
-│   │   └── state.rs                  # Shared AppState (handle, device, db paths)
+│   │   ├── commands.rs               # All Tauri invoke handlers
+│   │   ├── state.rs                  # Shared AppState (handle, device, db paths)
+│   │   └── fuse_defs.rs              # Fuse/config bit-field definitions per MCU family
 │   ├── capabilities/
 │   │   └── default.json              # Tauri v2 capability manifest
 │   └── Cargo.toml                    # Tauri deps + minipro-core path
@@ -101,7 +111,7 @@ gui/
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.88+ (use rustup, not distro packages, on older distros; the `rust-version` in `Cargo.toml` is stale)
+- [Rust](https://rustup.rs/) 1.88+ (use rustup, not distro packages, on older distros)
 - [Tauri CLI](https://tauri.app/) — install with `cargo install tauri-cli`
 - [Node.js](https://nodejs.org/) (LTS)
 - Windows: [Zadig](https://zadig.akeo.ie/) to install WinUSB driver (one-time)
@@ -158,12 +168,15 @@ Output:
 
 The **production installer bundles `infoic.xml` and `logicic.xml`** — end users do not need to download them separately.
 
-For **development**, copy them next to the built `.exe` so the database resolver can find them:
+For **development**, copy them next to the built `.exe` so the database resolver can find them (the resolver's exe-directory lookup — the dev-build `data/` check expects `<exe>/../../data`, which doesn't exist under `src-tauri/target/`):
 
 ```powershell
-Copy-Item ..\data\infoic.xml src-tauri\target\release\
-Copy-Item ..\data\logicic.xml src-tauri\target\release\
+Copy-Item src-tauri\resources\infoic.xml src-tauri\target\debug\
+Copy-Item src-tauri\resources\logicic.xml src-tauri\target\debug\
+# and again under target\release\ for release builds
 ```
+
+Or place them in any other searched location (`MINIPRO_HOME`, per-user data dir, etc.) — see [CLI and TUI setup](../README.md#cli-and-tui-setup) for the full search-path table.
 
 ## Architecture
 
@@ -183,20 +196,26 @@ All USB/programmer operations are exposed as async Tauri commands in `src-tauri/
 
 | Command | What It Does |
 |---------|-------------|
-| `get_programmer_info` | Detect connected programmer, return model/firmware/serial |
-| `search_devices` | Query `infoic.xml` by name substring |
+| `get_programmer_info` / `force_reconnect` | Detect connected programmer (model/firmware/serial); drop and re-open a stale USB handle |
+| `search_devices` / `get_device_info` / `get_device_pin_map` | Query `infoic.xml` by name; fetch device details and ZIF placement data |
 | `check_favorite_devices` | Report which favorites' names resolve for the connected model |
-| `select_device` | Resolve and select a `Device` for the connected model |
-| `get_icsp_wiring` | Per-model, per-class ICSP wiring table + connector pinout for the diagram |
+| `select_device` / `deselect_device` | Resolve/select a `Device` for the connected model |
+| `get_icsp_wiring` / `get_zif_layout` | ICSP wiring table + connector pinout; ZIF socket layout for the diagrams |
+| `get_voltage_options` | VPP/VCC/VDD override choices for the Write panel |
 | `do_read` / `do_write` / `do_verify` | High-level chip operations with progress events |
+| `do_write_bytes` / `do_batch_write_chip` | Write from an in-memory buffer; batch write with optional serial patching |
 | `do_erase` / `do_blank_check` / `do_chip_id` | Chip control operations |
+| `do_pin_test` / `do_spi_autodetect` | Pin-contact check; SPI flash JEDEC autodetect |
 | `read_chip_to_bytes` | Read chip to memory and return as base64 (for hex viewer) |
-| `save_bytes_to_file` | Write base64 data to disk (hex viewer Save button) |
-| `open_folder` | Open containing folder in OS file explorer |
-| `read_file_bytes` | Read a local file into bytes for the hex viewer |
-| `check_overcurrent` | Read programmer OVC status registers |
-| `hardware_check` | Run hardware self-test (T48/T56/T76 only) |
-| `check_database` | Verify `infoic.xml` / `logicic.xml` are locatable |
+| `read_file_bytes` / `save_bytes_to_file` / `save_buffer_to_file` / `file_exists` / `open_folder` | File I/O for hex viewer, save dialogs, and folder reveal |
+| `read_fuses` / `write_fuses` / `read_calibration` / `check_lock_protection` / `get_fuse_bit_defs` | Config/fuse/lock-byte operations and decoder definitions |
+| `do_logic_test` / `do_logic_identify` | Logic IC vector test; unknown-IC identification |
+| `run_health_check` | Multi-pass chip read-stability analysis |
+| `do_smart_diff` | Byte-level buffer-vs-file comparison |
+| `check_database` / `get_db_status` / `set_custom_db_dir` | Verify databases are locatable; report search-path status; set custom DB directory |
+| `download_algorithms` / `cancel_algo_download` / `find_downloaded_firmware` / `open_download_dir` | XGPro algorithm/firmware downloader |
+| `get_programmer_details` / `check_overcurrent` / `run_hardware_check` / `do_firmware_update` | Diagnostics: details, OVC registers, self-test, firmware update |
+| `get_dynamic_window_size` | Monitor-aware initial window sizing |
 
 Commands that access USB use `tokio::task::spawn_blocking` to avoid blocking Tauri's async executor.
 
