@@ -308,6 +308,12 @@ fn run_download_algorithms(cli: &Cli) -> Result<()> {
             if let Some(fw) = out.firmware.iter().find(|f| f.model == m) {
                 eprintln!("  bundled image for this model: {}", fw.path.display());
             }
+        } else {
+            eprintln!(
+                "  (no bundled image for {model} — its firmware isn't in the \
+                 pinned XGPro archives; extract update.dat from the official \
+                 installer)"
+            );
         }
     }
     Ok(())
