@@ -402,7 +402,9 @@ minipro --download-algorithms \
 minipro --download-algorithms --xgpro-url https://mirror.example/Xgpro/13
 ```
 
-Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866II+, T48, T56, T76) — useful for `minipro -F`. If a programmer is connected when the command finishes, the output notes which bundled image corresponds to it; this is informational only — the tool never flashes firmware on its own, and the bundled image may be older than the one already installed.
+Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866II+, T48, T56, T76) — useful for `minipro -F`.
+
+> **TL866A/CS firmware is not obtainable this way** — its last official release ships a RAR4 installer the downloader can't parse (and its newest firmware is itself the clone-detection brick vector, so the manual path is arguably safer anyway). Extract `update.dat` from the official XGPro TL866A installer and pass it to `minipro -F` directly — mind the clone warning in the firmware-update confirmation. If a programmer is connected when the command finishes, the output notes which bundled image corresponds to it; this is informational only — the tool never flashes firmware on its own, and the bundled image may be older than the one already installed.
 
 ---
 
