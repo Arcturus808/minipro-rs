@@ -180,6 +180,8 @@ Error: DeviceNotFound("cannot find database file 'infoic.xml'")
 | 5 | System data dir | Windows: `%PROGRAMDATA%\minipro-rs\`<br>Linux: `/usr/share/minipro-rs/`<br>macOS: `/Library/Application Support/minipro-rs/` |
 | 6 | C `minipro` fallback (DB may be older) | Windows: `%PROGRAMDATA%\minipro\`<br>Linux: `/usr/share/minipro/`<br>macOS: `/Library/Application Support/minipro/` |
 
+> **Already have the GUI installed?** Drop `minipro` / `minipro-tui` into the GUI's installation folder — the database files the installer placed there are found automatically (row 2, the executable's directory). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — use another row.)
+
 (Dev builds additionally check the repo `data/` directory relative to the executable.) Individual files can be overridden with `--infoic` / `--logicic` / `--algorithms`, or point `MINIPRO_HOME` at a prepared directory — see [Custom database files](#custom-database-files).
 
 > **T56 / T76 owners:** you need a third file, `algorithm.xml` (FPGA bitstreams), which is **never** bundled for IP reasons — run `minipro --download-algorithms` once to generate it (writes to the per-user dir, row 4). See [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support).
