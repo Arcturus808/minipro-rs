@@ -124,7 +124,7 @@ Pre-built GUI installers are available on the [GitHub Releases](https://github.c
 
 > **macOS users:** the GUI `.dmg` is unsigned, so Gatekeeper shows *"MINIPRO-RS-GUI is damaged and can't be opened"* — it's quarantine, not corruption: drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal. Separately, the `minipro-cli-macos-aarch64` binary may trigger heuristic detections on VirusTotal (e.g. `PUA:Win32/Puwaders.C!ml` — a Windows PUA rule misapplied to a macOS binary); the `.dmg` scans clean. Linux binaries are unaffected.
 
-> **Note:** All artifacts are on [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) (built from a [mirror](https://github.com/Arcturus808/minipro-rs) of this repo); the [GitLab release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) links the same files. The `minipro-tui` terminal UI ships alongside the `minipro` CLI — inside the Unix tarballs (with man page + shell completions), and as a separate `.exe` on Windows. **CLI/TUI binaries need the chip database installed separately** — see [CLI and TUI setup](#cli-and-tui-setup).
+> **Note:** All artifacts are on [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) (built from a [mirror](https://github.com/Arcturus808/minipro-rs) of this repo); the [GitLab release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) links the same files. The `minipro-tui` terminal UI ships alongside the `minipro` CLI — inside the Unix tarballs (with man page + shell completions) and the Windows `minipro-cli-tui-windows-x86_64.zip`. Starting with the release after v0.10.0 those archives bundle the chip databases too — extract and run. The bare Windows `.exe` downloads still need the database installed separately — see [CLI and TUI setup](#cli-and-tui-setup).
 
 ### Quick start
 
@@ -162,7 +162,7 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ## CLI and TUI setup
 
-The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). They are **not bundled** with the standalone binaries — the GUI packages (`.msi`, `.exe`, `.AppImage`, `.deb`, `.dmg`) and the CLI `.deb` / `.rpm` packages include them, so this section applies to the loose `.exe`s, Unix tarballs, and source builds. A first run of a bare binary fails with:
+The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). The GUI packages (`.msi`, `.exe`, `.AppImage`, `.deb`, `.dmg`), the CLI `.deb` / `.rpm` packages, and — starting with the release after v0.10.0 — the Unix `.tar.gz` archives and Windows `minipro-cli-tui-windows-x86_64.zip` all bundle them. This section therefore applies to the loose `.exe`s, archives from v0.10.0 or earlier, and source builds. A first run of a bare binary fails with:
 
 ```
 cannot find database file 'infoic.xml'; searched:
@@ -207,7 +207,7 @@ Otherwise it's a one-time, two-step fix:
 
 ### For end users
 
-The distributed binaries are **single self-contained `.exe`s** — no Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`. The chip database is **not bundled** with the standalone binaries, so your first step after downloading is the one-time setup in [CLI and TUI setup](#cli-and-tui-setup) — drop two XML files next to the `.exe`, or in `%LOCALAPPDATA%\minipro-rs\`. Skipping it gets you `cannot find database file 'infoic.xml'` on the first run.
+The distributed binaries are **single self-contained `.exe`s** — no Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`. Grab `minipro-cli-tui-windows-x86_64.zip` (releases after v0.10.0) and the chip database comes bundled next to the exes — extract and run. The bare `.exe` downloads need the one-time setup in [CLI and TUI setup](#cli-and-tui-setup) — drop two XML files next to the `.exe`, or in `%LOCALAPPDATA%\minipro-rs\`. Skipping it gets you `cannot find database file 'infoic.xml'` on the first run.
 
 **One-time USB driver step** — Windows associates USB devices with a driver that persists across reboots.  The programmer's interface must be associated with Microsoft's built-in **WinUSB** driver before first use:
 

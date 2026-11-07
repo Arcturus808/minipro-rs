@@ -31,6 +31,6 @@ fi
 echo '- **macOS users**: If you see "MINIPRO-RS-GUI is damaged and can'"'"'t be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.'
 echo ''
 echo '## CLI + TUI Binaries'
-echo 'Standalone `minipro` CLI binaries for Linux, macOS, and Windows are attached below. `minipro-tui` (terminal UI, MVP — feedback welcome) ships alongside: bundled inside the Unix `.tar.gz` archives (with man page + shell completions), and as a separate `minipro-tui-windows-x86_64.exe` on Windows.'
+echo 'Standalone `minipro` CLI binaries for Linux, macOS, and Windows are attached below; `minipro-tui` (terminal UI, MVP — feedback welcome) ships alongside. The Unix `.tar.gz` archives and the Windows `minipro-cli-tui-windows-x86_64.zip` bundle the `infoic.xml`/`logicic.xml` databases next to the binaries — extract and run, no setup needed. The bare Windows `.exe` assets remain for existing setups (they need the XMLs placed alongside or `MINIPRO_HOME` set — see README "CLI and TUI setup").'
 echo ''
 echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
