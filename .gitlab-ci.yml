@@ -286,29 +286,10 @@ release:
   script:
     - |
       source build.env
-      # Extract changelog section for this tag
-      TAG_VERSION="${CI_COMMIT_TAG#v}"
-      CHANGELOG_SECTION=$(sed -n "/^## \[$TAG_VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
-      if [ -z "$CHANGELOG_SECTION" ]; then
-        CHANGELOG_SECTION="Release ${CI_COMMIT_TAG}"
-      fi
-      # Assemble release notes: changelog first, then guidance
-      {
-        printf '%s\n' "$CHANGELOG_SECTION"
-        echo ''
-        echo '---'
-        echo ''
-        echo '## Installers'
-        echo ''
-        echo '- **Linux**: `.deb` (Debian/Ubuntu)'
-        echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
-        echo '- **macOS**: Download `.dmg` (GUI) and CLI binary from GitHub Releases (linked below under "Other")'
-        echo ''
-        echo '## CLI + TUI Binaries'
-        echo 'Standalone `minipro` + `minipro-tui` binaries are attached below; the macOS tarball bundles both.'
-        echo ''
-        echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
-      } > /tmp/release_notes.md
+      # Release notes: shared footer lives in scripts/release-notes.sh so the
+      # two forges can't drift. Pass the forge so platform-specific installer
+      # lines come out right.
+      sh scripts/release-notes.sh "${CI_COMMIT_TAG}" gitlab > /tmp/release_notes.md
       # release-cli exits non-zero on real errors AND on "release already
       # exists" (job retry after a successful create). Only the
       # already-exists case is tolerated — anything else must fail loudly.
