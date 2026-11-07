@@ -121,7 +121,7 @@ Pre-built GUI installers are available on the [GitHub Releases](https://github.c
 
 > **Linux WebKitGTK note:** The GUI uses WebKitGTK for its webview. The `.AppImage` (~79MB) is self-contained and bundles WebKitGTK — no system dependencies required. The `.deb` (~6MB) is much smaller because it relies on the system-installed `libwebkit2gtk-4.1`, which `apt install` pulls in automatically. On minimal installs, you may need to install it manually: `sudo apt install libwebkit2gtk-4.1`
 
-> **Note:** The GUI releases are built from a [GitHub mirror](https://github.com/Arcturus808/minipro-rs) of this repository. The CLI releases remain on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/releases). CLI archives (tarballs, `.deb`, `.rpm`, `.msi`, standalone `.exe`s) bundle the `minipro-tui` terminal UI alongside `minipro`.
+> **Note:** All artifacts are on [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) (built from a [mirror](https://github.com/Arcturus808/minipro-rs) of this repo); the [GitLab release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) links the same files. The `minipro-tui` terminal UI ships alongside the `minipro` CLI — inside the Unix tarballs (with man page + shell completions), and as a separate `.exe` on Windows. **CLI/TUI binaries need the chip database installed separately** — see [CLI and TUI setup](#cli-and-tui-setup).
 
 ### Quick start
 
@@ -157,6 +157,37 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ---
 
+## CLI and TUI setup
+
+The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). They are **not bundled** with the standalone binaries — only the GUI installer and the `.deb` / `.rpm` packages include them — so the first run of a bare binary fails with:
+
+```
+Error: DeviceNotFound("cannot find database file 'infoic.xml'")
+```
+
+`minipro-tui` exits immediately at that point — the device browser can't render without the database. The one-time fix:
+
+**1. Get the files.** Grab [`infoic.xml`](data/infoic.xml) and [`logicic.xml`](data/logicic.xml) from the repo's `data/` directory (they're also inside the `.deb` / `.rpm` packages under `/usr/share/minipro-rs/`).
+
+**2. Put them in any searched location** — the resolver checks these in order and uses the first match:
+
+| # | Location | Platform paths |
+|---|----------|----------------|
+| 1 | Current working directory | quick to test, not persistent |
+| 2 | The executable's directory | **easiest** — drop the XMLs next to `minipro` / `minipro-tui` |
+| 3 | `MINIPRO_HOME` env var | any directory you choose |
+| 4 | Per-user data dir (no admin needed) | Windows: `%LOCALAPPDATA%\minipro-rs\`<br>Linux: `~/.local/share/minipro-rs/`<br>macOS: `~/Library/Application Support/minipro-rs/` |
+| 5 | System data dir | Windows: `%PROGRAMDATA%\minipro-rs\`<br>Linux: `/usr/share/minipro-rs/`<br>macOS: `/Library/Application Support/minipro-rs/` |
+| 6 | C `minipro` fallback (DB may be older) | Windows: `%PROGRAMDATA%\minipro\`<br>Linux: `/usr/share/minipro/`<br>macOS: `/Library/Application Support/minipro/` |
+
+(Dev builds additionally check the repo `data/` directory relative to the executable.) Individual files can be overridden with `--infoic` / `--logicic` / `--algorithms`, or point `MINIPRO_HOME` at a prepared directory — see [Custom database files](#custom-database-files).
+
+> **T56 / T76 owners:** you need a third file, `algorithm.xml` (FPGA bitstreams), which is **never** bundled for IP reasons — run `minipro --download-algorithms` once to generate it (writes to the per-user dir, row 4). See [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support).
+
+> **GUI users don't need any of this** — the `.msi` / `.exe` / `.AppImage` / `.deb` / `.dmg` packages bundle the full database.
+
+---
+
 ## Windows support
 
 > **Note on antivirus false positives:** Some AV vendors (notably Bkav Pro) heuristically flag this binary because Rust's standard library links `ws2_32.dll` (Windows Sockets) on all Windows targets, even when the program never uses networking. This is a known characteristic of every Rust Windows binary, not malware. You can verify the binary integrity via the [VirusTotal scan linked in each release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) or build from source yourself. A code-signing certificate is on the roadmap.
@@ -167,22 +198,7 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ### For end users
 
-The distributed binary is a **single self-contained `.exe`** — no Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`. However, the CLI requires chip database files (`infoic.xml` and `logicic.xml`) to function. These are **not bundled** with the standalone CLI binary.
-
-**Database setup for CLI users:**
-
-1. Download `infoic.xml` and `logicic.xml` from the [release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) (included in the `.deb` / `.rpm` packages, or available in the repo's `data/` directory).
-2. Place both files in **any one** of these locations:
-   - `%PROGRAMDATA%\minipro-rs\` — recommended for system-wide use
-   - `%LOCALAPPDATA%\minipro-rs\` — per-user, no admin rights needed
-   - Same directory as `minipro.exe` — good for portable setups
-   - Current working directory — quick but not persistent
-   - A directory pointed to by the `MINIPRO_HOME` environment variable
-   - `%PROGRAMDATA%\minipro\` — fallback if you already have the C `minipro` installed; note this uses the C version's database, which may be older or differ from the one shipped with this project
-
-   If files exist in multiple locations, the first match is used. Search order: current directory → exe directory → `MINIPRO_HOME` → `%LOCALAPPDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro-rs\` → `%PROGRAMDATA%\minipro\`.
-
-> **GUI users don't need this step** — the `.msi` / `.exe` installer bundles the full chip database.
+The distributed binaries are **single self-contained `.exe`s** — no Cygwin, no MSYS2, no WSL, no Visual C++ Redistributable, no `libusb-1.0.dll`. The chip database is **not bundled** with the standalone binaries, so your first step after downloading is the one-time setup in [CLI and TUI setup](#cli-and-tui-setup) — drop two XML files next to the `.exe`, or in `%LOCALAPPDATA%\minipro-rs\`. Skipping it gets you `cannot find database file 'infoic.xml'` on the first run.
 
 **One-time USB driver step** — Windows associates USB devices with a driver that persists across reboots.  The programmer's interface must be associated with Microsoft's built-in **WinUSB** driver before first use:
 
@@ -389,7 +405,7 @@ Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs sk
 
 ## Custom database files
 
-The chip database (`infoic.xml`) and logic IC test vectors (`logicic.xml`) are bundled with the GUI installer and vendored in the repo's `data/` directory for CLI builds. You can override these with custom files — useful for community logic IC vector packs or custom chip definitions.
+The chip database (`infoic.xml`) and logic IC test vectors (`logicic.xml`) are bundled with the GUI installer and vendored in the repo's `data/` directory for CLI/TUI builds. You can override these with custom files — useful for community logic IC vector packs or custom chip definitions.
 
 ### CLI
 
