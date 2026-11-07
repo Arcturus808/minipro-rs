@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **README: dedicated "CLI and TUI setup" section for the required chip database** — the standalone binaries ship without `infoic.xml`/`logicic.xml`, so every first run fails with `cannot find database file 'infoic.xml'` (fatal at startup for `minipro-tui`, which can't render without the device list). The setup instructions previously lived inside the Windows section and read as CLI-only. They're now a cross-platform section covering both binaries: the full search-path table (cwd, exe dir, `MINIPRO_HOME`, per-user and system dirs on all three OSes, C-`minipro` fallback), the exact error string for searchability, and the extra `--download-algorithms` step T56/T76 require. The Download note now points straight at it. Bundling the database into the release archives (and a searched-paths error message) is on the roadmap.
+
 ### Fixed
 
 - **GitLab release job: silent failure on duplicate asset-link URLs** — the v0.10.0 tag pipeline's `release` job reported success but created no release: two `--assets-link` entries pointed at the same macOS tarball URL (CLI and TUI links — the tarball bundles both), and GitLab's Releases API rejects duplicate link URLs with a 400 that the trailing `|| echo` swallowed. The TUI-macOS link is dropped (the CLI link is renamed to say it bundles `minipro-tui`), and the `|| echo` is replaced by an existence check — only "release already exists" (job retry) is tolerated; any other failure now fails the job loudly.
