@@ -121,6 +121,8 @@ Pre-built GUI installers are available on the [GitHub Releases](https://github.c
 
 > **Linux WebKitGTK note:** The GUI uses WebKitGTK for its webview. The `.AppImage` (~79MB) is self-contained and bundles WebKitGTK — no system dependencies required. The `.deb` (~6MB) is much smaller because it relies on the system-installed `libwebkit2gtk-4.1`, which `apt install` pulls in automatically. On minimal installs, you may need to install it manually: `sudo apt install libwebkit2gtk-4.1`
 
+> **macOS users:** the GUI `.dmg` is unsigned, so Gatekeeper shows *"MINIPRO-RS-GUI is damaged and can't be opened"* — it's quarantine, not corruption: drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal. Separately, the `minipro-cli-macos-aarch64` binary may trigger heuristic detections on VirusTotal (e.g. `PUA:Win32/Puwaders.C!ml` — a Windows PUA rule misapplied to a macOS binary); the `.dmg` scans clean. Linux binaries are unaffected.
+
 > **Note:** All artifacts are on [GitHub Releases](https://github.com/Arcturus808/minipro-rs/releases) (built from a [mirror](https://github.com/Arcturus808/minipro-rs) of this repo); the [GitLab release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) links the same files. The `minipro-tui` terminal UI ships alongside the `minipro` CLI — inside the Unix tarballs (with man page + shell completions), and as a separate `.exe` on Windows. **CLI/TUI binaries need the chip database installed separately** — see [CLI and TUI setup](#cli-and-tui-setup).
 
 ### Quick start
@@ -195,8 +197,6 @@ Otherwise it's a one-time, two-step fix:
 > **Note on antivirus false positives:** Some AV vendors (notably Bkav Pro) heuristically flag this binary because Rust's standard library links `ws2_32.dll` (Windows Sockets) on all Windows targets, even when the program never uses networking. This is a known characteristic of every Rust Windows binary, not malware. You can verify the binary integrity via the [VirusTotal scan linked in each release](https://gitlab.com/arcturus8081/minipro-rs/-/releases) or build from source yourself. A code-signing certificate is on the roadmap.
 >
 > **GitLab vs. GitHub Windows binaries:** Windows `.exe` and `.msi` files on the [GitLab release page](https://gitlab.com/arcturus8081/minipro-rs/-/releases) are cross-compiled from Linux using MinGW-w64. This produces a PE structure that differs from native MSVC builds and may trigger additional heuristic detections (e.g., Kaspersky `VHO:Backdoor.Win64.AdaptixC2.gen`). The same source code builds on [GitHub Actions](https://github.com/Arcturus808/minipro-rs/releases) using native MSVC and scans clean. **Windows users should download from GitHub Releases.**
->
-> **macOS CLI binary:** The standalone `minipro-cli-macos-aarch64` binary may trigger heuristic detections on VirusTotal (e.g., Microsoft Defender `PUA:Win32/Puwaders.C!ml`) — a machine learning false positive that incorrectly applies Windows PUA rules to a macOS binary. The macOS GUI `.dmg` scans clean. **macOS users should prefer the GUI `.dmg` installer.** Linux binaries are unaffected.
 
 ### For end users
 
