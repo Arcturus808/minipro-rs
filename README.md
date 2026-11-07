@@ -50,6 +50,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 - **Structured logic test grid**: color-coded zoomable grid (Ctrl+Scroll) for logic IC test results — blue=input, green=output-pass, red=mismatch, gray=ignore. Copy button exports TSV for spreadsheets or forum posts. CLI: `minipro -p 74HC00 -T` prints a formatted text table
 
 ![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
+- **SPI flash auto detect**: identify an unknown SPI NOR chip by its JEDEC ID without selecting a device first — insert the chip and run it. CLI: `minipro -a` (or `-a 0` 8-pin / `-a 1` 16-pin) prints `Autodetecting device (ID:0xXXXX)` plus matching database names. GUI: "Auto Detect" buttons (8-pin / 16-pin) in the device selector list clickable matches. On TL866II+/T48 the pin-contact check runs automatically first (poor contact yields garbage IDs); works on T76, implemented on T56 but gated in the GUI pending hardware validation. Requires `algorithm.xml` on T56/T76
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Multi-pass stability check** (GUI): opt-in "Stability check" checkbox reads the chip 5 times and compares passes using the health-check analysis; stable reads proceed normally, unstable reads save the majority-vote consensus image with an unstable-byte warning in the log
