@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Release pipeline: AppImage permission gate** — the GitHub release job now scans the built AppImage's *stored* squashfs inode modes and repacks via `chmod -R a+rX` + appimagetool if any entry is owner-limited, re-uploading with `--clobber`. Guards against tauri-bundler regressions like tauri#16155 (which shipped `AppRun.wrapped` as `0o770` in the v0.9.0 AppImage and got the app rejected by the appimage.github.io catalog test — the "Test Failure" email). v0.10.0's AppImage is already clean (bundler fix landed in tauri 2.12.5); this keeps it that way.
+
+---
+
 ## [0.10.0] - 2026-11-06
 
 ### Fixed

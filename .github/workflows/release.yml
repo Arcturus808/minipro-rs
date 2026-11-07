@@ -109,7 +109,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            file
+            file \
+            squashfs-tools
 
       - name: Build CLI + TUI
         run: cargo build --release --locked --bin minipro --bin minipro-tui ${{ matrix.args }}
@@ -173,6 +174,39 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Check + fix AppImage file permissions (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # tauri-bundler has shipped owner-limited entries inside the
+          # AppImage (AppRun.wrapped 0700 — tauri#16155, fixed in 2.12).
+          # Stored squashfs modes govern other-uid mounts (firejail, the
+          # AppImage catalog test); normal users are unaffected since their
+          # uid owns the FUSE mount. Inspect STORED inode modes — extraction
+          # applies the local umask and can misreport.
+          APPIMAGE=$(ls gui/src-tauri/target/release/bundle/appimage/*.AppImage | head -1)
+          chmod +x "$APPIMAGE"
+          OFFSET=$("$APPIMAGE" --appimage-offset)
+          BAD=$(unsquashfs -lln -o "$OFFSET" "$APPIMAGE" | grep -cE '^[-dl][-rwx]{6}--- ' || true)
+          if [ "$BAD" -eq 0 ]; then
+            echo "AppImage permissions OK (no owner-limited entries)"
+            exit 0
+          fi
+          echo "::warning::$BAD owner-limited entries in AppImage — repacking with normalized modes"
+          unsquashfs -lln -o "$OFFSET" "$APPIMAGE" | grep -E '^[-dl][-rwx]{6}--- ' | head
+          WORK=/tmp/appimage-perm-fix
+          rm -rf "$WORK" && mkdir "$WORK"
+          unsquashfs -d "$WORK/squashfs-root" -o "$OFFSET" -f "$APPIMAGE" >/dev/null
+          chmod -R a+rX "$WORK/squashfs-root"
+          curl -fsSL -o "$WORK/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$WORK/appimagetool"
+          ARCH=x86_64 "$WORK/appimagetool" "$WORK/squashfs-root" "$APPIMAGE"
+          gh release upload "${{ github.ref_name }}" "$APPIMAGE" --clobber
+          echo "::warning::Repacked and re-uploaded $(basename "$APPIMAGE")"
 
       - name: Upload CLI + TUI binaries to release
         env:
