@@ -83,6 +83,7 @@ jobs:
             args: ''
             cli_name: 'minipro-cli-windows-x86_64.exe'
             tui_name: 'minipro-tui-windows-x86_64.exe'
+            pkg_name: 'minipro-cli-tui-windows-x86_64.zip'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -130,6 +131,9 @@ jobs:
           mkdir -p "$PKGDIR/man/man1" "$PKGDIR/completions"
           cp "$BIN" "$PKGDIR/minipro"
           cp "$TUI" "$PKGDIR/minipro-tui"
+          # XMLs beside the binaries → resolver's exe-dir search finds them;
+          # the tarball is self-contained. algorithm.xml stays out (IP).
+          cp data/infoic.xml data/logicic.xml "$PKGDIR/"
           "$BIN" --generate-man | gzip -9 > "$PKGDIR/man/man1/minipro.1.gz"
           "$BIN" --generate-completions bash > "$PKGDIR/completions/minipro.bash"
           "$BIN" --generate-completions zsh  > "$PKGDIR/completions/_minipro"
@@ -141,6 +145,14 @@ jobs:
         run: |
           copy target\release\minipro.exe ${{ matrix.cli_name }}
           copy target\release\minipro-tui.exe ${{ matrix.tui_name }}
+          # Self-contained zip: exes + XMLs in one dir → exe-dir resolver hit.
+          # Loose exes stay as assets too (existing links/bookmarks).
+          mkdir minipro-cli-tui-windows-x86_64
+          copy target\release\minipro.exe minipro-cli-tui-windows-x86_64\
+          copy target\release\minipro-tui.exe minipro-cli-tui-windows-x86_64\
+          copy data\infoic.xml minipro-cli-tui-windows-x86_64\
+          copy data\logicic.xml minipro-cli-tui-windows-x86_64\
+          Compress-Archive -Path minipro-cli-tui-windows-x86_64 -DestinationPath ${{ matrix.pkg_name }}
 
       - name: Install frontend dependencies
         working-directory: ./gui
@@ -202,7 +214,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            gh release upload ${{ github.ref_name }} "${{ matrix.cli_name }}" "${{ matrix.tui_name }}" --clobber
+            gh release upload ${{ github.ref_name }} "${{ matrix.cli_name }}" "${{ matrix.tui_name }}" "${{ matrix.pkg_name }}" --clobber
           else
             gh release upload ${{ github.ref_name }} "${{ matrix.cli_name }}.tar.gz" --clobber
           fi
