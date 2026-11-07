@@ -26,7 +26,11 @@ A native desktop GUI is included in the `gui/` directory. It is built with **Tau
 
 A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interface covering the six core operations: read / write / verify / erase / blank check / chip ID. Device search supports persistent favorites (pinned, model-filtered) and manufacturer display; reads land in a full-screen **hex buffer editor** — entropy gutter, overtype editing with undo, find with hex/ASCII patterns, and write/verify straight from the buffer, so a read→patch→write-back loop never leaves the terminal. It ships alongside the `minipro` CLI in release binaries — useful over SSH or on headless setups where a webview GUI isn't practical. Logic-test/config/fuse ops and voltage overrides are not in the TUI yet — use the CLI or GUI for those. See `docs/TUI-PLAN.md` for the design and `docs/TUI-INTERNALS.md` for how it works.
 
+![MINIPRO-RS TUI — three-pane layout with device search, options, log and ZIF diagram](docs/screenshots/minipro_rs_tui.png)
+
 ![MINIPRO-RS TUI — pin contact test on the ZIF diagram](docs/screenshots/pin_contact_test_tui.png)
+
+![MINIPRO-RS TUI — full-screen hex buffer editor](docs/screenshots/hex_editor_tui.png)
 
 ### Screenshots
 
