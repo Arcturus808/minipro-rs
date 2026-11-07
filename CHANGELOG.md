@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GitLab release job: silent failure on duplicate asset-link URLs** — the v0.10.0 tag pipeline's `release` job reported success but created no release: two `--assets-link` entries pointed at the same macOS tarball URL (CLI and TUI links — the tarball bundles both), and GitLab's Releases API rejects duplicate link URLs with a 400 that the trailing `|| echo` swallowed. The TUI-macOS link is dropped (the CLI link is renamed to say it bundles `minipro-tui`), and the `|| echo` is replaced by an existence check — only "release already exists" (job retry) is tolerated; any other failure now fails the job loudly.
 - **Release pipeline: AppImage permission gate** — the GitHub release job now scans the built AppImage's *stored* squashfs inode modes and repacks via `chmod -R a+rX` + appimagetool if any entry is owner-limited, re-uploading with `--clobber`. Guards against tauri-bundler regressions like tauri#16155 (which shipped `AppRun.wrapped` as `0o770` in the v0.9.0 AppImage and got the app rejected by the appimage.github.io catalog test — the "Test Failure" email). v0.10.0's AppImage is already clean (bundler fix landed in tauri 2.12.5); this keeps it that way.
 
 ---
