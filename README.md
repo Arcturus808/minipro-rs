@@ -159,7 +159,7 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 
 ## CLI and TUI setup
 
-The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). They are **not bundled** with the standalone binaries — only the GUI installer and the `.deb` / `.rpm` packages include them — so the first run of a bare binary fails with:
+The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). They are **not bundled** with the standalone binaries — the GUI packages (`.msi`, `.exe`, `.AppImage`, `.deb`, `.dmg`) and the CLI `.deb` / `.rpm` packages include them, so this section applies to the loose `.exe`s, Unix tarballs, and source builds. A first run of a bare binary fails with:
 
 ```
 Error: DeviceNotFound("cannot find database file 'infoic.xml'")
@@ -187,8 +187,6 @@ Otherwise it's a one-time, two-step fix:
 (Dev builds additionally check the repo `data/` directory relative to the executable.) Individual files can be overridden with `--infoic` / `--logicic` / `--algorithms`, or point `MINIPRO_HOME` at a prepared directory — see [Custom database files](#custom-database-files).
 
 > **T56 / T76 owners:** you need a third file, `algorithm.xml` (FPGA bitstreams), which is **never** bundled for IP reasons — run `minipro --download-algorithms` once to generate it (writes to the per-user dir, row 4). See [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support).
-
-> **GUI users don't need any of this** — the `.msi` / `.exe` / `.AppImage` / `.deb` / `.dmg` packages bundle the full database.
 
 ---
 
