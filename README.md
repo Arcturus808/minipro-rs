@@ -165,7 +165,11 @@ The standalone `minipro` and `minipro-tui` binaries need two database files to f
 Error: DeviceNotFound("cannot find database file 'infoic.xml'")
 ```
 
-`minipro-tui` exits immediately at that point — the device browser can't render without the database. The one-time fix:
+`minipro-tui` exits immediately at that point — the device browser can't render without the database.
+
+> **Shortcut — already have the GUI installed?** Drop `minipro` / `minipro-tui` into the GUI's installation folder and you're done — the database files the installer placed there are found automatically (the executable's directory is on the search path). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — read on.)
+
+Otherwise it's a one-time, two-step fix:
 
 **1. Get the files.** Grab [`infoic.xml`](data/infoic.xml) and [`logicic.xml`](data/logicic.xml) from the repo's `data/` directory (they're also inside the `.deb` / `.rpm` packages under `/usr/share/minipro-rs/`).
 
@@ -179,8 +183,6 @@ Error: DeviceNotFound("cannot find database file 'infoic.xml'")
 | 4 | Per-user data dir (no admin needed) | Windows: `%LOCALAPPDATA%\minipro-rs\`<br>Linux: `~/.local/share/minipro-rs/`<br>macOS: `~/Library/Application Support/minipro-rs/` |
 | 5 | System data dir | Windows: `%PROGRAMDATA%\minipro-rs\`<br>Linux: `/usr/share/minipro-rs/`<br>macOS: `/Library/Application Support/minipro-rs/` |
 | 6 | C `minipro` fallback (DB may be older) | Windows: `%PROGRAMDATA%\minipro\`<br>Linux: `/usr/share/minipro/`<br>macOS: `/Library/Application Support/minipro/` |
-
-> **Already have the GUI installed?** Drop `minipro` / `minipro-tui` into the GUI's installation folder — the database files the installer placed there are found automatically (row 2, the executable's directory). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — use another row.)
 
 (Dev builds additionally check the repo `data/` directory relative to the executable.) Individual files can be overridden with `--infoic` / `--logicic` / `--algorithms`, or point `MINIPRO_HOME` at a prepared directory — see [Custom database files](#custom-database-files).
 
