@@ -155,22 +155,10 @@ jobs:
           projectPath: './gui'
           tagName: ${{ github.ref_name }}
           releaseName: 'MINIPRO-RS ${{ github.ref_name }}'
+          # Placeholder only — the "Update release body" step overwrites this
+          # with notes from scripts/release-notes.sh once uploads finish.
           releaseBody: |
-            ## GUI Installers
-            - **Windows**: `.msi` installer + `.exe` NSIS installer
-            - **Linux**: `.AppImage` + `.deb` (Debian/Ubuntu)
-            - **macOS**: `.dmg` (Apple Silicon — M1/M2/M3)
-
-            > **macOS users:** If you see "'MINIPRO-RS-GUI' is damaged and can't be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.
-
-            ## CLI + TUI Binaries
-            `minipro` CLI binaries for each platform are attached below, with the
-            `minipro-tui` terminal UI (MVP — feedback welcome) bundled alongside.
-            Unix releases are `.tar.gz` archives bundling both binaries with the man page
-            (`man/man1/minipro.1.gz`) and bash/zsh/fish completions (`completions/`);
-            Windows is a pair of standalone `.exe` files.
-
-            See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for details.
+            Draft release — notes are assembled from CHANGELOG.md once all binaries are uploaded.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -224,26 +212,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          CHANGELOG_SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
-          if [ -z "$CHANGELOG_SECTION" ]; then
-            CHANGELOG_SECTION="Release ${TAG}"
-          fi
-          {
-            printf '%s\n' "$CHANGELOG_SECTION"
-            echo ''
-            echo '---'
-            echo ''
-            echo '## Installers'
-            echo ''
-            echo '- **Linux**: `.deb` (Debian/Ubuntu)'
-            echo '- **Windows users**: Download `.msi` / `.exe` from GitHub Releases — native MSVC builds scan clean. The GitLab Windows binaries are cross-compiled and may trigger AV heuristics.'
-            echo '- **macOS users**: If you see "MINIPRO-RS-GUI is damaged and can'"'"'t be opened," this is Gatekeeper, not real corruption — the app is unsigned. Drag the app to Applications, then run `xattr -cr /Applications/MINIPRO-RS-GUI.app` in Terminal to strip the quarantine attribute.'
-            echo ''
-            echo '## CLI + TUI Binaries'
-            echo 'Standalone `minipro` CLI binaries for Linux, macOS, and Windows are attached below. `minipro-tui` (terminal UI, MVP — feedback welcome) ships alongside: bundled inside the Unix `.tar.gz` archives (with man page + shell completions), and as a separate `minipro-tui-windows-x86_64.exe` on Windows.'
-            echo ''
-            echo 'See [CHANGELOG.md](https://gitlab.com/arcturus8081/minipro-rs/-/blob/main/CHANGELOG.md) for full history.'
-          } > /tmp/release_notes.md
-          gh release edit "${TAG}" --notes-file /tmp/release_notes.md
+          # Release notes: shared footer lives in scripts/release-notes.sh so
+          # the two forges can't drift.
+          sh scripts/release-notes.sh "${{ github.ref_name }}" github > /tmp/release_notes.md
+          gh release edit "${{ github.ref_name }}" --notes-file /tmp/release_notes.md
