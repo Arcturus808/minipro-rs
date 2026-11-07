@@ -3,7 +3,7 @@
 # Run locally during release prep (no CI job — conserves compute minutes):
 #   cargo install cargo-deny
 #   cargo deny check                              # CLI workspace (root)
-#   cd gui/src-tauri && cargo deny check -c ../../deny.toml   # GUI workspace
+#   cd gui/src-tauri && cargo deny --config ../../deny.toml check   # GUI workspace
 #
 # See https://embarkstudios.github.io/cargo-deny/ for full config reference.
 
@@ -30,6 +30,9 @@ allow = [
     "MPL-2.0",
     "Zlib",
     "CC0-1.0",
+    # webpki-roots / webpki-root-certs — Mozilla CA bundle data license,
+    # pulled in by rustls-platform-verifier (ureq TLS). Permissive.
+    "CDLA-Permissive-2.0",
     "Unicode-DFS-2016",
     "Unicode-3.0",
     "GPL-3.0",
