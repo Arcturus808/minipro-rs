@@ -24,6 +24,7 @@ use crate::{
         ChipConfig, Device, DeviceFlags, FuseConfig, FuseField, GalConfig, PackageDetails, Voltages,
     },
     error::{MiniproError, Result},
+    outln,
 };
 
 // ── Database type tags (from database.c) ────────────────────────────────────
@@ -92,115 +93,121 @@ fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> 
     if let Some(p) = override_path {
         return Ok(p.to_path_buf());
     }
+    let candidates = candidate_paths(filename);
+    if let Some(p) = candidates.iter().find(|p| p.exists()) {
+        return Ok(p.clone());
+    }
+
+    // Show exactly where we looked on stderr, then keep the error itself a
+    // single line — the CLI top level prints it via `{:?}`, which escapes
+    // embedded newlines.
+    let mut seen = std::collections::HashSet::new();
+    let listing = candidates
+        .iter()
+        .map(|p| display_candidate(filename, p))
+        .filter(|s| seen.insert(s.clone()))
+        .map(|s| format!("  {s}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    outln!("cannot find database file '{filename}'; searched:\n{listing}");
+
+    let flag = if filename == LOGICIC_FILENAME {
+        "--logicic"
+    } else {
+        "--infoic"
+    };
+    let hint = match user_data_dir() {
+        Some(d) => format!("place a copy next to the executable or in {}", d.display()),
+        None => "place a copy next to the executable".to_string(),
+    };
+    Err(MiniproError::DeviceNotFound(format!(
+        "cannot find database file '{filename}' ({hint}, or pass {flag} / set MINIPRO_HOME)"
+    )))
+}
+
+/// Like `resolve_one` but returns `None` instead of an error when the file
+/// cannot be found.  Used for optional databases (e.g. `algorithm.xml`) —
+/// missing optional files must not print the searched-paths diagnostic.
+fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = override_path {
+        return Some(p.to_path_buf());
+    }
+    candidate_paths(filename).into_iter().find(|p| p.exists())
+}
+
+/// Render a search candidate for the "searched:" listing. The cwd entry is
+/// stored relative (just `infoic.xml`), which reads poorly in a list of
+/// absolute paths — show it joined to the real cwd there.
+fn display_candidate(filename: &str, p: &Path) -> String {
+    if p == Path::new(filename) {
+        if let Ok(cwd) = std::env::current_dir() {
+            return cwd.join(filename).display().to_string();
+        }
+    }
+    p.display().to_string()
+}
+
+/// Ordered candidate paths for a database file, mirroring the search order
+/// documented on [`DatabasePaths::resolve`].
+fn candidate_paths(filename: &str) -> Vec<PathBuf> {
+    let mut v = Vec::new();
 
     // 1. Current directory
-    let cwd = PathBuf::from(filename);
-    if cwd.exists() {
-        return Ok(cwd);
-    }
+    v.push(PathBuf::from(filename));
 
     // 2. Directory containing the running executable (useful on Windows when
     //    users drop the XML files alongside minipro.exe)
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join(filename);
-            if p.exists() {
-                return Ok(p);
-            }
-        }
-    }
-
-    // 2a. Tauri resource directory on macOS: .app/Contents/Resources/
+    // 2a. (macOS) Tauri resource directory: .app/Contents/Resources/
     //     (the executable is at .app/Contents/MacOS/, resources are one level up)
-    #[cfg(target_os = "macos")]
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join("..").join("Resources").join(filename);
-            if p.exists() {
-                return Ok(p);
-            }
-        }
-    }
-
     // 2b. Repo `data/` directory — useful for dev builds where the binary
     //     lives under target/<profile>/ and the XMLs sit at the repo root.
     //     No-op for installed binaries: `C:\Program Files\minipro\bin\..\..\data`
     //     does not exist, so this falls through harmlessly.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let p = dir.join("..").join("..").join("data").join(filename);
-            if p.exists() {
-                return Ok(p);
-            }
+            v.push(dir.join(filename));
+            #[cfg(target_os = "macos")]
+            v.push(dir.join("..").join("Resources").join(filename));
+            v.push(dir.join("..").join("..").join("data").join(filename));
         }
     }
 
     // 3. MINIPRO_HOME env var
     if let Ok(home) = std::env::var("MINIPRO_HOME") {
-        let p = PathBuf::from(home).join(filename);
-        if p.exists() {
-            return Ok(p);
-        }
+        v.push(PathBuf::from(home).join(filename));
     }
 
     // 3a. Per-user data directory — writable without elevation, so it's the
     //     default target for features that fetch data files at runtime.
     if let Some(dir) = user_data_dir() {
-        let p = dir.join(filename);
-        if p.exists() {
-            return Ok(p);
-        }
+        v.push(dir.join(filename));
     }
 
     // 4. Platform data directory — try minipro-rs first, then fall back to
     //    the C minipro's directory so users with the C version installed
     //    don't need to duplicate the XML files.
     #[cfg(target_os = "windows")]
-    {
-        if let Ok(appdata) = std::env::var("PROGRAMDATA") {
-            for subdir in ["minipro-rs", "minipro"] {
-                let p = PathBuf::from(&appdata).join(subdir).join(filename);
-                if p.exists() {
-                    return Ok(p);
-                }
-            }
+    if let Ok(appdata) = std::env::var("PROGRAMDATA") {
+        for subdir in ["minipro-rs", "minipro"] {
+            v.push(PathBuf::from(&appdata).join(subdir).join(filename));
         }
     }
     #[cfg(target_os = "macos")]
-    {
-        for dir in [
-            "/Library/Application Support/minipro-rs",
-            "/Library/Application Support/minipro",
-        ] {
-            let p = PathBuf::from(dir).join(filename);
-            if p.exists() {
-                return Ok(p);
-            }
-        }
+    for dir in [
+        "/Library/Application Support/minipro-rs",
+        "/Library/Application Support/minipro",
+    ] {
+        v.push(PathBuf::from(dir).join(filename));
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let share_dir = option_env!("SHARE_INSTDIR").unwrap_or("/usr/share/minipro-rs");
-        let p = PathBuf::from(share_dir).join(filename);
-        if p.exists() {
-            return Ok(p);
-        }
+        v.push(PathBuf::from(share_dir).join(filename));
         // Fall back to C minipro's data directory.
-        let fallback = PathBuf::from("/usr/share/minipro").join(filename);
-        if fallback.exists() {
-            return Ok(fallback);
-        }
+        v.push(PathBuf::from("/usr/share/minipro").join(filename));
     }
 
-    Err(MiniproError::DeviceNotFound(format!(
-        "cannot find database file '{filename}'"
-    )))
-}
-
-/// Like `resolve_one` but returns `None` instead of an error when the file
-/// cannot be found.  Used for optional databases (e.g. `algorithm.xml`).
-fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<PathBuf> {
-    resolve_one(filename, override_path).ok()
+    v
 }
 
 /// `std::env::var_os` that treats a set-but-empty variable as unset.

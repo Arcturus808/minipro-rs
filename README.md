@@ -165,10 +165,16 @@ Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_don
 The standalone `minipro` and `minipro-tui` binaries need two database files to function: **`infoic.xml`** (30,000+ device definitions) and **`logicic.xml`** (logic IC test vectors). They are **not bundled** with the standalone binaries — the GUI packages (`.msi`, `.exe`, `.AppImage`, `.deb`, `.dmg`) and the CLI `.deb` / `.rpm` packages include them, so this section applies to the loose `.exe`s, Unix tarballs, and source builds. A first run of a bare binary fails with:
 
 ```
-Error: DeviceNotFound("cannot find database file 'infoic.xml'")
+cannot find database file 'infoic.xml'; searched:
+  D:\Downloads\infoic.xml
+  D:\Downloads\..\..\data\infoic.xml
+  C:\Users\you\AppData\Local\minipro-rs\infoic.xml
+  C:\ProgramData\minipro-rs\infoic.xml
+  C:\ProgramData\minipro\infoic.xml
+error: cannot find database file 'infoic.xml' (place a copy next to the executable or in C:\Users\you\AppData\Local\minipro-rs, or pass --infoic / set MINIPRO_HOME)
 ```
 
-`minipro-tui` exits immediately at that point — the device browser can't render without the database.
+`minipro-tui` exits immediately at that point — the device browser can't render without the database. (Releases up through v0.10.0 print only the terse `Error: DeviceNotFound("cannot find database file 'infoic.xml'")` with no searched-paths list.)
 
 > **Shortcut — already have the GUI installed?** Drop `minipro` / `minipro-tui` into the GUI's installation folder and you're done — the database files the installer placed there are found automatically (the executable's directory is on the search path). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — read on.)
 
