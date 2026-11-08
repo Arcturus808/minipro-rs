@@ -24,11 +24,12 @@ operation only proceeds if all pins are good. If `-z` is the only flag,
 the test runs standalone and exits.
 
 Model support and hardware caveats are documented in
-`docs/GUI-INTERNALS.md` under "Pin-contact test" (TL866II+ and T48 —
-the T48 has its own single-command `0x3E` pin-detect protocol that
-upstream never implemented; T76's `0x3E` is an unrelated adapter-init
-command that must not run standalone — see the xgecu-pro findings
-documented there). The `-z` handler prints from the returned
+`docs/GUI-INTERNALS.md` under "Pin-contact test" (TL866II+, T48, and
+T76 — the T48 and T76 each have their own single-command `0x3E`
+pin-detect protocol; the T76 form returns a 48-pin ZIF bitmap and
+requires a bitstream re-upload afterward to restore chip driving —
+see `docs/T76-SUPPORT-STATUS.md` and `KNOWN-BUGS.md`). The `-z`
+handler prints from the returned
 `PinTestResult` struct, preserving the upstream "Bad contact on pin: N"
 output format — annotated with the corresponding ZIF socket pin
 (`Bad contact on pin: 4 (ZIF pin 24)`), resolved through
