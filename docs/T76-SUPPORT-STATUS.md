@@ -54,10 +54,40 @@ redundant uploads.
 **Known limitation**: If a different chip requiring a different
 algorithm is selected in the same session, the flag is not reset.
 This matches C minipro behavior. Not an issue for batch operations
-(same chip, same algorithm). Exception: SPI autodetect *does* reset
-the flag — it uploads SPI25F11/SPI25F21 outside `begin_transaction`,
-so clearing the flag forces the next selected device's own algorithm
-to upload.
+(same chip, same algorithm). Exceptions that *do* reset the flag:
+SPI autodetect (it uploads SPI25F11/SPI25F21 outside
+`begin_transaction`) and the pin-contact test below — clearing the
+flag forces the next selected device's own algorithm to upload.
+
+### Pin contact test (`0x3E`)
+
+`0x3E` is dual-purpose: it reconfigures the socket pin drivers *and*
+returns a 48-pin ZIF contact bitmap. Both uses are real — the
+adapter-init sequences (NAND ×2, eMMC ×1) run it for configuration,
+and its 32-byte reply carries the contact map at bytes 16–21 (LE,
+bit *n* = ZIF pin *n*+1). Reply format and the DIP→ZIF mapping
+(device pin *d* of an *N*-pin DIP = ZIF pin `d + 24 − N/2`,
+bottom-justified) come from upstream MR !304's XGPro captures;
+eligibility is plain DIP only (`@DIPn`/`@PDIPn`, *n* even ≤ 40,
+`prog_support != MP_ICSP_ONLY`), enforced by
+`t76_pin_test_supported`.
+
+**Critical**: the detect leaves the FPGA in pin-sense mode and only a
+bitstream re-upload restores chip driving — `END_TRANS` and a plain
+`BEGIN_TRANS` don't. Without the forced re-upload (`pin_test_t76`
+clears `bitstream_uploaded` before re-beginning, mirroring XGPro's
+detect-before-bitstream order) the programmer stays corrupted:
+verified on hardware — chip ID read `0x0000fcff` instead of
+`0x001e950f`, persisted across ops with the check off, and a second
+detect returned all-bad. xgecu-pro's "0x3E corrupts reads, not a pin
+test" finding was this mode change misread as garbage. Upstream's
+merged `t76_pin_test` never re-uploads the bitstream either, so it
+likely wedges the T76 for the next command.
+
+**Validated (fw 00.1.18):** DIP28 pass (ATMEGA328P@DIP28, all
+expected pins incl. NC-pin exclusion), DIP8 fault detection
+(ATTINY85V@DIP8 with pins 2 + 8 lifted → reported exactly 2, 8).
+DIP16/20/24/40 and reversed insertion untested.
 
 ### OVC safety check
 `MiniproHandle::begin_transaction()` polls `get_ovc_status()` after
@@ -127,8 +157,9 @@ placeholder. Real capacity is detected at runtime (see above).
 
 ## Known Issues
 
-1. **Limited hardware validation** — only SPI NOR (8-pin) chip ID + read
-   verified on real hardware; all other chip classes untested
+1. **Limited hardware validation** — SPI NOR (8-pin) chip ID + read
+   and the pin contact test (DIP28 pass / DIP8 lifted-pin) verified on
+   real hardware; all other chip classes untested
 2. **`algorithm.xml` required, not bundled** — the T56/T76 FPGA ships
    blank, so every chip needs an uploaded bitstream. Without
    `algorithm.xml`, `begin_transaction` now fails hard (matching
