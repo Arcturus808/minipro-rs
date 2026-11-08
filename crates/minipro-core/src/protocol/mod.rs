@@ -270,7 +270,7 @@ pub trait Protocol: Send + Sync {
 /// listings, and ICSP-only parts are excluded — the bitmap has no
 /// documented meaning for them. (Upstream GitLab MR !304, unmerged.)
 pub fn t76_pin_test_supported(device: &Device) -> bool {
-    if device.package_details.icsp & crate::device::MP_ICSP_ONLY != 0 {
+    if device.flags.prog_support == crate::device::MP_ICSP_ONLY {
         return false;
     }
     // Multi-name entries ("X@DIP28,Y@DIP28") describe the same part —

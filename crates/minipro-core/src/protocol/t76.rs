@@ -1533,12 +1533,15 @@ mod tests {
     use crate::database::PinMap;
     use crate::device::PackageDetails;
 
-    fn dip_device(name: &str, pin_count: u8, icsp: u8) -> Device {
+    fn dip_device(name: &str, pin_count: u8, prog_support: u8) -> Device {
         Device {
             name: name.into(),
             package_details: PackageDetails {
                 pin_count,
-                icsp,
+                ..Default::default()
+            },
+            flags: crate::device::DeviceFlags {
+                prog_support,
                 ..Default::default()
             },
             ..Default::default()
@@ -1648,5 +1651,11 @@ mod tests {
             28,
             crate::device::MP_ICSP_ONLY
         )));
+
+        // ICSP wiring-class index is not the ICSP-only flag: ATMEGA328P@DIP28
+        // carries package_details icsp=7 but prog_support=MP_ZIF_ICSP.
+        let mut avr = dip_device("ATMEGA328P@DIP28", 28, crate::device::MP_ZIF_ICSP);
+        avr.package_details.icsp = 7;
+        assert!(crate::protocol::t76_pin_test_supported(&avr));
     }
 }
