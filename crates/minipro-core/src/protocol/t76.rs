@@ -343,8 +343,11 @@ fn t76_emmc_adapter_init(usb: &UsbDevice) -> Result<()> {
 /// t76-improvements finding — the adapter-init uses above are real),
 /// but its reply ALSO carries measured contact state. Upstream's broken
 /// stub never parsed the reply, and xgecu-pro's "corrupted every read"
-/// was the undrained-32-byte-reply artifact — draining it here is what
-/// keeps the stream in sync.
+/// was likely a mix of the undrained 32-byte reply desyncing the stream
+/// and the FPGA being left in pin-sense mode — the detect reconfigures
+/// the pin drivers and only a bitstream re-upload restores them, which
+/// is why `pin_test_t76` forces `bitstream_uploaded` off before
+/// re-beginning.
 fn pin_test_t76(
     proto: &T76Protocol,
     usb: &UsbDevice,
@@ -358,15 +361,25 @@ fn pin_test_t76(
     }
 
     // XGPro ordering: the detect runs inside the current transaction and
-    // END_TRANS is what exits pin-detect mode on the T76. Sending 0x3E
-    // after END_TRANS leaves the firmware in detect mode — the next
-    // BEGIN_TRANS alone doesn't restore chip driving, so subsequent
-    // commands return garbage. Re-open afterwards for the caller.
+    // END_TRANS follows the reply. 0x3E doesn't just sense pins — it
+    // reconfigures the FPGA into pin-detect mode (the adapter-init paths
+    // use it for exactly that). Verified on hardware: the FPGA stays in
+    // detect mode until the algorithm bitstream is re-uploaded —
+    // END_TRANS alone doesn't restore chip driving, and every later
+    // begin_transaction keeps skipping the upload, so reads return
+    // contact-matrix bytes (chip ID 0x0000fcff) even with the check off.
     let mut msg = [0u8; 16];
     msg[0] = CMD_PIN_DETECTION;
     usb.msg_send(&msg)?;
-    let resp = usb.msg_recv(32)?;
+    // Request 64, not 32: if the real reply is longer than the documented
+    // 32 bytes, a short read leaves the tail queued and the NEXT command's
+    // response returns stale bytes. A shorter reply completes as a short
+    // bulk packet, so this is harmless either way.
+    let resp = usb.msg_recv(64)?;
     proto.end_transaction(usb)?;
+    // Force the re-begin to re-upload the FPGA algorithm — this is the
+    // step that actually exits pin-detect mode.
+    proto.bitstream_uploaded.store(false, Ordering::Relaxed);
     proto.begin_transaction(usb, device, 0)?;
 
     if resp.first().copied() != Some(CMD_PIN_DETECTION) || resp.len() < 22 {
