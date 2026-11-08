@@ -14,10 +14,8 @@ use minipro_core::{
     operations::{
         blank_check, check_chip_id, chip_id_info, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_check_gate_applies, pin_contact_check,
-        read_chip,
-        read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip, verify_chip_bytes,
-        write_chip, write_chip_bytes,
-        write_file, OpStats, SizeMismatch,
+        read_chip, read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip,
+        verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch,
     },
     MiniproHandle,
 };
@@ -2680,9 +2678,9 @@ pub async fn run_health_check(
                 chipIdErrors: report.chip_id_errors.clone(),
                 notes: report.notes.clone(),
                 referenceMismatches: report.reference_mismatches,
-                consensusB64: report.consensus.map(|c| {
-                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, c)
-                }),
+                consensusB64: report
+                    .consensus
+                    .map(|c| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, c)),
             };
             let level = match report.verdict {
                 HV::Stable => "info",
@@ -2956,8 +2954,7 @@ pub async fn do_spi_autodetect(
             // 0x3E pin-detect is implemented, but the synthetic pin_map
             // indices below (0x01/0x03) are II+ conventions — leave the
             // autodetect pre-check II+-only.
-            if matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) && handle.icsp == 0
-            {
+            if matches!(handle.info.model, ProgrammerModel::Tl866iiPlus) && handle.icsp == 0 {
                 let pin_count = if idType == 0 { 8 } else { 16 };
                 let temp_device = Arc::new(Device {
                     pin_map: if idType == 0 { 0x01 } else { 0x03 },
@@ -2976,22 +2973,33 @@ pub async fn do_spi_autodetect(
                     }
                     Ok(r) => {
                         let count = r.bad_pins.len();
-                        let pin_list = r.bad_pins.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
+                        let pin_list = r
+                            .bad_pins
+                            .iter()
+                            .map(|p| p.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
                         let detail = if r.all_expected_open() {
-                            format!("all {count} expected pins open — is a chip seated in the socket?")
+                            format!(
+                                "all {count} expected pins open — is a chip seated in the socket?"
+                            )
                         } else {
                             format!("bad contact on pin(s) {pin_list}")
                         };
-                        let msg = format!("Pin contact check failed: {detail}. Autodetect aborted.");
+                        let msg =
+                            format!("Pin contact check failed: {detail}. Autodetect aborted.");
                         emit_log(&window_clone, "warn", &msg);
-                        emit_pin_test_result(&window_clone, &PinTestResultDto {
-                            supported: true,
-                            pass: false,
-                            bad_pins: r.bad_pins,
-                            expected_pins: r.expected_pins,
-                            untestable_pins: r.untestable_pins,
-                            message: format!("Bad contact on {} pin(s)", count),
-                        });
+                        emit_pin_test_result(
+                            &window_clone,
+                            &PinTestResultDto {
+                                supported: true,
+                                pass: false,
+                                bad_pins: r.bad_pins,
+                                expected_pins: r.expected_pins,
+                                untestable_pins: r.untestable_pins,
+                                message: format!("Bad contact on {} pin(s)", count),
+                            },
+                        );
                         return Err(msg);
                     }
                     Err(e) => {
@@ -3002,8 +3010,8 @@ pub async fn do_spi_autodetect(
                 }
             }
 
-            let autodetect = spi_autodetect_and_lookup(&mut handle, &db, idType)
-                .map_err(|e| e.to_string())?;
+            let autodetect =
+                spi_autodetect_and_lookup(&mut handle, &db, idType).map_err(|e| e.to_string())?;
             let matches = autodetect
                 .matches
                 .into_iter()
