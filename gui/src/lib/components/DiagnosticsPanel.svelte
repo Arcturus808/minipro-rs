@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { programmer, refreshProgrammer, selectedDevice } from "../stores/device";
+  import { programmer, refreshProgrammer, selectedDevice, type DeviceInfo } from "../stores/device";
   import { logs } from "../stores/logs";
   import { doFirmwareUpdate } from "../stores/operations";
   import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
@@ -26,15 +26,25 @@
   // T48 has its own single-command pin detect (0x3E → 7-byte contact
   // bitmap, documented at proghq.org/wiki/XGecu_Protocol and used by
   // XGPro's "Pin Detect" — upstream never implemented it, ported from
-  // USB captures). TL866A/CS and T56 are likewise unimplemented. T76 is
-  // FPGA-based with no dedicated contact-test bitstream; its 0x3E
-  // command is an adapter-init pin-driver configuration step, not a
-  // standalone test — the xgecu-pro project confirmed it "measured
-  // nothing and corrupted every read."
+  // USB captures). T76's 0x3E is also a real contact test — 32-byte
+  // reply, 48-ZIF bitmap at bytes 16-21 (upstream MR !304 captures) —
+  // but only for plain DIP packages in the ZIF. TL866A/CS and T56 are
+  // unimplemented.
   const PIN_TEST_SUPPORTED = new Set([
     "TL866II+",
     "T48",
+    "T76",
   ]);
+
+  // T76 contact test is documented for plain DIP parts only
+  // (@DIPn/@PDIPn, n even ≤ 40, non-ICSP) — mirrors
+  // t76_pin_test_supported in core.
+  function t76PinTestOk(dev: DeviceInfo): boolean {
+    if ((dev.icsp & 0x02) !== 0) return false; // ICSP-only
+    const pkg = dev.name.split(",")[0]?.split("@").pop() ?? "";
+    const m = /^(?:P?DIP)(\d+)$/.exec(pkg);
+    return !!m && +m[1] % 2 === 0 && +m[1] <= 40 && +m[1] === dev.pin_count;
+  }
 
   const hardwareCheckSupported = $derived(
     $programmer ? HARDWARE_CHECK_SUPPORTED.has($programmer.model) : false,
@@ -48,13 +58,15 @@
     $programmer ? PIN_TEST_SUPPORTED.has($programmer.model) : false,
   );
 
-  // Pin test requires a device with pin_map data and ZIF mode
+  // Pin test requires a device with pin_map data and ZIF mode; on T76
+  // the device must also be a plain DIP package.
   const pinTestEnabled = $derived(
     pinTestSupported
       && $programmer !== null
       && $selectedDevice !== null
       && $selectedDevice.pin_map !== 0
       && $settings.icspMode === "zif"
+      && ($programmer.model !== "T76" || t76PinTestOk($selectedDevice))
       && !$pinTestRunning,
   );
 
@@ -284,7 +296,7 @@
           class={actionClass}
           onclick={runPinTest}
           disabled={!pinTestEnabled}
-          title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : "Run ZIF socket pin-contact test"}
+          title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : $programmer?.model === "T76" && !t76PinTestOk($selectedDevice) ? "T76 pin test supports plain DIP packages only" : "Run ZIF socket pin-contact test"}
         >
           {#if $pinTestRunning}
             Pin Contact Test (running...)

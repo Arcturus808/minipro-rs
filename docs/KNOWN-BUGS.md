@@ -204,8 +204,14 @@ versions of these are byte-identical):
   which is also the best existing reference for the rest of the T48
   pin-control protocol (0x2D-0x36 command maps, 0x29 AUTO_FIND, 0x33
   MEASURE_VOLTAGES, 0x24 adapter DRM). Do NOT conflate T48 `0x3E` with
-  T76 `0x3E` — the latter is an unrelated adapter-init command that
-  corrupts reads when run standalone (xgecu-pro finding).
+  T76 `0x3E` — same opcode, different protocol: the T76 form is a bare
+  16-byte request whose 32-byte reply carries a real contact bitmap at
+  bytes 16-21 (48-pin ZIF; DIP pin d of an N-pin part = ZIF pin
+  `d + 24 − N/2`), verified by upstream MR !304's XGPro captures. We
+  previously believed it "adapter-init only, corrupts reads standalone"
+  (xgecu-pro finding) — the corruption was the undrained reply desyncing
+  the next response, and the adapter-init use is real too; both are
+  true. `pin_test_t76` is now implemented for plain DIP parts.
 - `write_block` (TL866II+ path): upstream always transfers
   `write_buffer_size` payload bytes even when the final block is short
   (it reads ahead into padded file data). We now pad short blocks to
