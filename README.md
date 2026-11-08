@@ -51,6 +51,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 
 ![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
 - **SPI flash auto detect**: identify an unknown SPI NOR chip by its JEDEC ID without selecting a device first — insert the chip and run it. CLI: `minipro -a` (or `-a 0` 8-pin / `-a 1` 16-pin) prints `Autodetecting device (ID:0xXXXX)` plus matching database names. GUI: "Auto Detect" buttons (8-pin / 16-pin) in the device selector list clickable matches. On TL866II+ the GUI runs the pin-contact check automatically first (poor contact yields garbage IDs); works on T76, implemented on T56 but gated in the GUI pending hardware validation. Requires `algorithm.xml` on T56/T76
+- **Native T56/T76 algorithm provisioning** — `minipro --download-algorithms` downloads the official XGPro setup archives (pinned SHA-256 checksums), extracts the FPGA bitstreams and programmer firmware images, and generates a validated `algorithm.xml` — pure Rust, no bash/bsdtar/XGPro install needed (so it works natively on Windows). Required once before any T56/T76 chip operation; see [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support)
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Multi-pass stability check** (GUI): opt-in "Stability check" checkbox reads the chip 5 times and compares passes using the health-check analysis; stable reads proceed normally, unstable reads save the majority-vote consensus image with an unstable-byte warning in the log
@@ -101,7 +102,8 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 - **Context-aware options panel**: only relevant controls shown per operation
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
-- Diagnostics panel (programmer info, overcurrent check, hardware check)
+- Diagnostics panel (programmer info, overcurrent check, hardware check, firmware update)
+- **Firmware update** — flash programmer firmware from an official update file (`update.dat` / `UpdateII.dat` / `updateT76.dat`). CLI: `minipro -F update.dat`; GUI: "Firmware Update" in Diagnostics. Supported on TL866A/CS, TL866II+, T48, and T76
 
 ![MINIPRO-RS GUI — Diagnostics Panel](docs/screenshots/diagnostics_panel.png)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
