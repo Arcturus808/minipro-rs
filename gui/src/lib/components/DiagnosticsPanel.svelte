@@ -58,6 +58,12 @@
       && !$pinTestRunning,
   );
 
+  // Menu-row idiom for the diagnostic actions — bare rows with a hover
+  // wash instead of bordered buttons; ~10px less chrome per row and the
+  // same look the reference-picker/clear controls already use.
+  const actionClass =
+    "w-full text-left text-sm px-2 py-1 cursor-pointer enabled:hover:bg-surface-200-800 disabled:opacity-40 disabled:cursor-not-allowed";
+
   // TL866A/CS clones are ubiquitous — firmware >=3.2.85 (MiniPro 6.82+)
   // detects them and disables boot mode, bricking the unit until boot
   // mode is forced in hardware. Warn on every firmware-update path.
@@ -262,20 +268,20 @@
   <details class="text-sm">
     <summary class="cursor-pointer opacity-70 hover:opacity-100 select-none py-1">Diagnostics</summary>
     <div class="space-y-1 mt-1">
-      <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={checkOvc} disabled={!$programmer}>Check Overcurrent</button>
+      <button class={actionClass} onclick={checkOvc} disabled={!$programmer}>Check Overcurrent</button>
       {#if hardwareCheckSupported}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
+        <button class={actionClass} onclick={runHardwareCheck} disabled={!$programmer}>Hardware Check</button>
       {:else}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Hardware Check</button>
+        <button class={actionClass} disabled title="Not supported on this programmer model">Hardware Check</button>
       {/if}
       {#if firmwareUpdateSupported}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40" onclick={updateFirmware} disabled={!$programmer}>Firmware Update</button>
+        <button class={actionClass} onclick={updateFirmware} disabled={!$programmer}>Firmware Update</button>
       {:else}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Firmware Update</button>
+        <button class={actionClass} disabled title="Not supported on this programmer model">Firmware Update</button>
       {/if}
       {#if pinTestSupported}
         <button
-          class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
+          class={actionClass}
           onclick={runPinTest}
           disabled={!pinTestEnabled}
           title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : "Run ZIF socket pin-contact test"}
@@ -287,10 +293,10 @@
           {/if}
         </button>
       {:else}
-        <button class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 opacity-40 cursor-not-allowed" disabled title="Not supported on this programmer model">Pin Contact Test</button>
+        <button class={actionClass} disabled title="Not supported on this programmer model">Pin Contact Test</button>
       {/if}
       <button
-        class="w-full text-left text-sm px-2 py-1.5 border border-surface-200-800 hover:bg-surface-200-800 disabled:opacity-40"
+        class={actionClass}
         onclick={runHealthCheck}
         disabled={!healthCheckEnabled}
         title={!$selectedDevice ? "Select a device first" : healthRefCompare && !healthRefPath ? "Choose a reference file or uncheck the option" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
@@ -370,7 +376,7 @@
           {/each}
           {#if healthResult.consensusB64}
             <button
-              class="w-full text-left text-xs px-2 py-1 border border-surface-200-800 hover:bg-surface-200-800"
+              class={actionClass}
               onclick={saveConsensus}
             >
               Save consensus dump (majority-vote reconstruction)
