@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-08
+
 ### Added
 
 - **Pin contact test on T76 for DIP parts** — the T76's `0x3E` command is a real contact test after all: its 32-byte reply carries a ZIF contact bitmap at bytes 16–21 (48-pin ZIF; a DIP pin `d` of an N-pin part sits at ZIF pin `d + 24 − N/2`), decoded from XGPro_T76 USB captures documented in upstream GitLab MR !304 (unmerged — implemented from its capture tables). Works through every surface: the `-z`/`--pin-check` gate, the pre-operation pin check, the GUI diagnostics button (enabled for T76 + plain DIP devices), and the TUI ZIF diagram's bad-pin highlighting. Restricted to `@DIPn`/`@PDIPn` packages (n even, ≤ 40, non-ICSP) per the documented format; other packages report "Pin test is not supported for this package." Firmwares other than 00.1.18 (the only verified one) print a one-line note. Unit-tested against the MR's actual capture frames — seated, dirty-pin, and reversed-chip bitmaps.
