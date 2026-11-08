@@ -19,6 +19,7 @@ export interface AppSettings {
   windowWidth: number | null;
   windowHeight: number | null;
   customDbDir: string | null;
+  simulatedModel: string | null;
 }
 
 // Panel widths as fractions of window width (0.0–1.0)
@@ -41,6 +42,7 @@ const DEFAULTS: AppSettings = {
   windowWidth: null,
   windowHeight: null,
   customDbDir: null,
+  simulatedModel: null,
 };
 
 let store: Store | null = null;

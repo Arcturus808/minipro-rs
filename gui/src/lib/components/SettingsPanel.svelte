@@ -5,7 +5,7 @@
   import { LogicalSize } from "@tauri-apps/api/dpi";
   import { invoke } from "@tauri-apps/api/core";
   import { pickDirectory } from "../file-dialog";
-  import { getDbStatus, setCustomDbDir, reloadDatabase, type DbDirStatus } from "../stores/device";
+  import { getDbStatus, setCustomDbDir, reloadDatabase, setSimulatedProgrammer, type DbDirStatus } from "../stores/device";
   import { progress } from "../stores/operations";
 
   interface AlgoDownloadOutcome {
@@ -24,6 +24,25 @@
   let dlBusy = $state(false);
   let dlError = $state<string | null>(null);
   let dlResult = $state<AlgoDownloadOutcome | null>(null);
+  let simBusy = $state(false);
+
+  const SIM_MODELS = ["TL866A", "TL866CS", "TL866II+", "T48", "T56", "T76"];
+
+  async function applySimulated(e: Event) {
+    const model = (e.currentTarget as HTMLSelectElement).value || null;
+    simBusy = true;
+    try {
+      // Sets/clears MINIPRO_SIMULATE_PROGRAMMER in the backend and
+      // re-resolves. An error here just means no real programmer answered
+      // after disabling — the setting itself was applied, so persist it.
+      await setSimulatedProgrammer(model);
+    } catch {
+      // expected when turning off with no hardware attached
+    } finally {
+      simBusy = false;
+      await setSetting("simulatedModel", model);
+    }
+  }
 
   let isDark = $derived(
     $settings.theme === "dark" ||
@@ -367,6 +386,33 @@
               <span class="font-mono">algorithm.xml</span> plus firmware images.
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Simulation -->
+      <div class="space-y-3">
+        <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Simulation</h3>
+        <div class="text-sm space-y-2">
+          <label class="flex items-center gap-2 text-xs">
+            Simulated programmer:
+            <select
+              class="select text-sm flex-1"
+              value={$settings.simulatedModel ?? ""}
+              onchange={applySimulated}
+              disabled={simBusy}
+            >
+              <option value="">Off</option>
+              {#each SIM_MODELS as m}
+                <option value={m}>{m}</option>
+              {/each}
+            </select>
+          </label>
+          <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+            Reports a programmer of that model as connected — for testing and demos without hardware.
+            Chip operations still fail, and the status badge shows "simulated" while active.
+            Persists until turned off (a simulated programmer takes precedence over real hardware).
+            Same mechanism as the <span class="font-mono">MINIPRO_SIMULATE_PROGRAMMER</span> env var.
+          </p>
         </div>
       </div>
     </div>

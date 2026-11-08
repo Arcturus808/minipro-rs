@@ -145,12 +145,12 @@ npm install              # once
 cargo tauri dev          # hot-reload frontend + Rust backend
 ```
 
-To exercise the UI with no programmer attached, fake a model via env var:
+To exercise the UI with no programmer attached, simulate a model via env var — or just pick it in Settings → Simulation:
 
 ```powershell
-$env:MINIPRO_FAKE_PROGRAMMER = "T76"   # TL866A, TL866CS, TL866II+, T48, T56, T76
+$env:MINIPRO_SIMULATE_PROGRAMMER = "T76"   # TL866A, TL866CS, TL866II+, T48, T56, T76
 cargo tauri dev
-Remove-Item Env:MINIPRO_FAKE_PROGRAMMER  # restore real-hardware detection
+Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER  # restore real-hardware detection
 ```
 
 ### Production Build

@@ -726,16 +726,24 @@ pub struct ProgrammerInfo {
 }
 
 impl ProgrammerInfo {
-    /// Synthetic programmer for `MINIPRO_FAKE_PROGRAMMER=<model>` — the
-    /// documented dev-mode escape hatch: frontends report a connected
+    /// Synthetic programmer for `MINIPRO_SIMULATE_PROGRAMMER=<model>` —
+    /// the documented dev-mode escape hatch: frontends report a connected
     /// programmer of that model without opening USB, so the UI can be
     /// exercised without hardware. Chip operations still fail.
+    /// `MINIPRO_FAKE_PROGRAMMER` is accepted as a deprecated alias.
     ///
-    /// `Ok(None)` when the env var is unset or empty; `Err` on an
-    /// unrecognized model name.
-    pub fn fake_from_env() -> crate::error::Result<Option<Self>> {
-        let Ok(name) = std::env::var("MINIPRO_FAKE_PROGRAMMER") else {
-            return Ok(None);
+    /// `Ok(None)` when neither var is set or the value is empty; `Err` on
+    /// an unrecognized model name.
+    pub fn simulated_from_env() -> crate::error::Result<Option<Self>> {
+        let name = match std::env::var("MINIPRO_SIMULATE_PROGRAMMER") {
+            Ok(n) => n,
+            Err(_) => match std::env::var("MINIPRO_FAKE_PROGRAMMER") {
+                Ok(n) => {
+                    crate::outln!("MINIPRO_FAKE_PROGRAMMER is deprecated — renamed to MINIPRO_SIMULATE_PROGRAMMER");
+                    n
+                }
+                Err(_) => return Ok(None),
+            },
         };
         let name = name.trim();
         if name.is_empty() {
@@ -748,9 +756,9 @@ impl ProgrammerInfo {
             model,
             status: ProgrammerStatus::Normal,
             firmware: 0,
-            firmware_str: "fake".to_string(),
+            firmware_str: "sim".to_string(),
             device_code: "00".to_string(),
-            serial_number: "FAKE".to_string(),
+            serial_number: "SIM".to_string(),
             hardware_version: 0,
         }))
     }
