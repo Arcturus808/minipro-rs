@@ -109,6 +109,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 - **Layout reset** in Settings: one-click restore of panel widths, font size, and window position
 - Settings persistence (theme, operation defaults, last directory, hex font size, panel widths)
 - Icon-based top bar (gear settings, monitor/moon/sun theme toggles)
+- **Simulated-programmer mode** — exercise the UI with no hardware attached: pick a model in Settings → Simulation (persisted, applied live and at startup; the status badge turns amber `MODEL · simulated`), run `minipro-tui --simulate MODEL`, or set `MINIPRO_SIMULATE_PROGRAMMER` before launch. Device search, device info, and the ICSP/ZIF diagrams work; chip operations refuse with "simulated programmer — operations need real hardware"
 
 ### Download
 
