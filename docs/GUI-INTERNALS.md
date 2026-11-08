@@ -23,7 +23,7 @@ gui/
         HexViewer.svelte         — hex dump with offset/hex/ascii, save/open/clear, in-place editing, smart diff (Compare button)
         TerminalLog.svelte       — scrollable log panel with copy/clear
         DeviceSelector.svelte    — search + paginated IC list (syncs from external selection via $effect)
-        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test, chip health check (buttons collapsible)
+        DiagnosticsPanel.svelte  — overcurrent, calibration, hardware check, firmware update, pin test, chip health check (collapsible; actions render as borderless menu rows via the shared `actionClass` string)
         ZifSocketDiagram.svelte  — ZIF socket placement diagram (right sidebar, below terminal log; shown when icspMode is "zif"); highlights bad pins in red with "PIN N" labels when pin test results are active, good occupied pins in green on pass
         IcspConnectorDiagram.svelte — ICSP connector diagram (right sidebar; shown when icspMode is "icsp" or "icsp_no_vcc"); renders pin numbering plus per-class signal wiring when a verified table exists
         FuseBitDecoder.svelte   — AVR fuse bit decoder (8-bit grid with named fields, shown in config panel when fuseBitDefs store is non-null)
