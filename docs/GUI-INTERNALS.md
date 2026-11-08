@@ -396,10 +396,14 @@ labels get a bold indigo pin number + `dx="7"` gap before the signal
 name. Text opacity convention: notes and actionable fallbacks at 80%,
 pure placeholders at 50–60%.
 
-**Testing without hardware:** `MINIPRO_FAKE_PROGRAMMER=<MODEL>` (see
-AGENTS.md) makes `get_programmer_info`/`force_reconnect` return a
-synthetic programmer — device search, device info, and both diagram
-panels work with no USB device attached.
+**Testing without hardware:** `MINIPRO_SIMULATE_PROGRAMMER=<MODEL>`
+(deprecated alias `MINIPRO_FAKE_PROGRAMMER`; see AGENTS.md) makes
+`get_programmer_info`/`force_reconnect` return a synthetic programmer —
+device search, device info, and both diagram panels work with no USB
+device attached. The same mode is exposed in-app via Settings →
+Simulation (persists `simulatedModel`, calls
+`set_simulated_programmer`, and marks the status badge "simulated";
+`ProgrammerInfoDto.simulated` distinguishes it from a real connect).
 
 **Adding a new class:** verify against official docs or hardware, then
 add a `static` table in `icsp.rs` and a match arm. Never ship a

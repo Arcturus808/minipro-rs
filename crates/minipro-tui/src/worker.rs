@@ -47,23 +47,23 @@ pub fn spawn(paths: DatabasePaths, tx: Sender<AppEvent>) -> Sender<WorkerCmd> {
 }
 
 fn worker(paths: DatabasePaths, rx: Receiver<WorkerCmd>, tx: Sender<AppEvent>) {
-    // Handle state: `Some` = real USB handle, `None` + `fake` = the
-    // MINIPRO_FAKE_PROGRAMMER dev mode (info exists, no USB).
+    // Handle state: `Some` = real USB handle, `None` + `simulated` = the
+    // MINIPRO_SIMULATE_PROGRAMMER dev mode (info exists, no USB).
     let mut handle: Option<MiniproHandle> = None;
-    let mut fake = false;
+    let mut simulated = false;
 
     while let Ok(cmd) = rx.recv() {
         match cmd {
             WorkerCmd::Connect => {
                 handle = None;
-                fake = false;
+                simulated = false;
                 match connect(&paths) {
-                    Ok((h, info, is_fake)) => {
+                    Ok((h, info, is_simulated)) => {
                         handle = h;
-                        fake = is_fake;
+                        simulated = is_simulated;
                         let _ = tx.send(AppEvent::Connected {
                             info: Box::new(info),
-                            fake: is_fake,
+                            simulated: is_simulated,
                         });
                     }
                     Err(e) => {
@@ -77,8 +77,8 @@ fn worker(paths: DatabasePaths, rx: Receiver<WorkerCmd>, tx: Sender<AppEvent>) {
                 input,
                 options,
             } => {
-                let result = if fake {
-                    Err("MINIPRO_FAKE_PROGRAMMER is set — operations need real hardware".into())
+                let result = if simulated {
+                    Err("simulated programmer — operations need real hardware".into())
                 } else {
                     match handle.as_mut() {
                         Some(h) => run_op(h, &paths, &tx, op, &device_name, input, &options),
@@ -91,7 +91,7 @@ fn worker(paths: DatabasePaths, rx: Receiver<WorkerCmd>, tx: Sender<AppEvent>) {
                 if let Err(ref e) = result {
                     if looks_like_disconnect(e) {
                         handle = None;
-                        fake = false;
+                        simulated = false;
                         let _ = tx.send(AppEvent::Disconnected);
                     }
                 }
@@ -101,17 +101,17 @@ fn worker(paths: DatabasePaths, rx: Receiver<WorkerCmd>, tx: Sender<AppEvent>) {
     }
 }
 
-/// Open the programmer, honoring MINIPRO_FAKE_PROGRAMMER first.
+/// Open the programmer, honoring MINIPRO_SIMULATE_PROGRAMMER first.
 ///
-/// Returns `(handle, info, is_fake)` — `handle` is `None` in fake mode.
+/// Returns `(handle, info, is_simulated)` — `handle` is `None` in simulated mode.
 /// Real opens retry like the GUI: Windows USB enumeration can lag the
 /// plug event by seconds.
 fn connect(
     paths: &DatabasePaths,
 ) -> Result<(Option<MiniproHandle>, ProgrammerInfo, bool), MiniproError> {
-    if let Some(info) = ProgrammerInfo::fake_from_env()? {
+    if let Some(info) = ProgrammerInfo::simulated_from_env()? {
         log::warn!(
-            "MINIPRO_FAKE_PROGRAMMER={}: no hardware, model faked",
+            "MINIPRO_SIMULATE_PROGRAMMER={}: no hardware, model simulated",
             info.model
         );
         return Ok((None, info, true));

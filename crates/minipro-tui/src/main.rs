@@ -43,6 +43,37 @@ use ratatui::{
 use worker::WorkerCmd;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // --simulate <MODEL>: dev/demo mode — report a connected programmer of
+    // that model without USB (same mechanism as MINIPRO_SIMULATE_PROGRAMMER;
+    // the flag just sets the var before the worker connects).
+    const USAGE: &str =
+        "usage: minipro-tui [--simulate <MODEL>]\n  MODEL: TL866A | TL866CS | TL866II+ | T48 | T56 | T76";
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let model = if arg == "--simulate" {
+            args.next()
+        } else if let Some(m) = arg.strip_prefix("--simulate=") {
+            Some(m.to_string())
+        } else {
+            eprintln!("minipro-tui: unknown argument '{arg}'\n{USAGE}");
+            std::process::exit(2);
+        };
+        match model {
+            Some(m) if !m.trim().is_empty() => {
+                let m = m.trim();
+                if m.parse::<minipro_core::device::ProgrammerModel>().is_err() {
+                    eprintln!("minipro-tui: unknown model '{m}'\n{USAGE}");
+                    std::process::exit(2);
+                }
+                std::env::set_var("MINIPRO_SIMULATE_PROGRAMMER", m);
+            }
+            _ => {
+                eprintln!("minipro-tui: --simulate requires a model name\n{USAGE}");
+                std::process::exit(2);
+            }
+        }
+    }
+
     // Load the device DB before touching the terminal — a resolution
     // failure prints to the normal screen, not a raw-mode alt buffer.
     let mut app = App::new()?;
@@ -162,17 +193,21 @@ fn run<W: io::Write>(
 /// Header badge for the current connection state.
 fn conn_badge(app: &App) -> Line<'static> {
     match &app.conn {
-        ConnState::Connected { info, fake } => Line::from(vec![
+        ConnState::Connected { info, simulated } => Line::from(vec![
             sp(" ● ", theme::green()),
             sp(
                 format!(
                     "{} · FW {} · S/N {}",
                     info.model, info.firmware_str, info.serial_number
                 ),
-                if *fake { theme::amber() } else { theme::dim() },
+                if *simulated {
+                    theme::amber()
+                } else {
+                    theme::dim()
+                },
             ),
-            if *fake {
-                sp(" (FAKE)", theme::amber())
+            if *simulated {
+                sp(" (SIM)", theme::amber())
             } else {
                 Span::raw("")
             },

@@ -86,7 +86,10 @@ pub enum Pane {
 pub enum ConnState {
     Disconnected,
     Connecting,
-    Connected { info: ProgrammerInfo, fake: bool },
+    Connected {
+        info: ProgrammerInfo,
+        simulated: bool,
+    },
     Failed(String),
 }
 
@@ -782,7 +785,7 @@ impl App {
     /// Handle one `AppEvent` from the worker/logger.
     pub fn handle_event(&mut self, ev: AppEvent) {
         match ev {
-            AppEvent::Connected { info, fake } => {
+            AppEvent::Connected { info, simulated } => {
                 self.model = info.model;
                 self.push_log(
                     log::Level::Info,
@@ -791,10 +794,13 @@ impl App {
                         info.model,
                         info.firmware_str,
                         info.serial_number,
-                        if fake { " (fake)" } else { "" }
+                        if simulated { " (simulated)" } else { "" }
                     ),
                 );
-                self.conn = ConnState::Connected { info: *info, fake };
+                self.conn = ConnState::Connected {
+                    info: *info,
+                    simulated,
+                };
                 self.reload_devices();
             }
             AppEvent::ConnectFailed(e) => {
@@ -1018,10 +1024,12 @@ impl App {
         let device_name = dev.name.clone();
         let is_logic = dev.chip_type == ChipType::Logic as u32;
         match &self.conn {
-            ConnState::Connected { fake: true, .. } => {
+            ConnState::Connected {
+                simulated: true, ..
+            } => {
                 self.push_log(
                     log::Level::Warn,
-                    "MINIPRO_FAKE_PROGRAMMER is set — operations need real hardware",
+                    "simulated programmer — operations need real hardware",
                 );
                 return;
             }
@@ -1232,10 +1240,12 @@ impl App {
         };
         let device_name = dev.name.clone();
         match &self.conn {
-            ConnState::Connected { fake: true, .. } => {
+            ConnState::Connected {
+                simulated: true, ..
+            } => {
                 self.push_log(
                     log::Level::Warn,
-                    "MINIPRO_FAKE_PROGRAMMER is set — operations need real hardware",
+                    "simulated programmer — operations need real hardware",
                 );
                 return;
             }
@@ -2189,7 +2199,7 @@ mod tests {
         a.handle_key(key(KeyCode::Enter));
         assert!(!a.search_editing);
         // activate() ran: pane jumped to Options (find_device fails on
-        // the fake paths, but the dispatch still happened).
+        // the simulated paths, but the dispatch still happened).
         assert_eq!(a.pane, Pane::Options);
     }
 
@@ -2376,7 +2386,7 @@ mod tests {
                 serial_number: "TEST".into(),
                 hardware_version: 0,
             },
-            fake: false,
+            simulated: false,
         };
         // No device selected → warns, no op starts.
         a.handle_key(key(KeyCode::Enter));
@@ -2422,9 +2432,10 @@ mod tests {
                 serial_number: "TEST".into(),
                 hardware_version: 0,
             },
-            fake: false,
+            simulated: false,
         };
-        // Fake a selected device — from_devices has no real Device; the
+        // Fake a selected device in the test — from_devices has no real
+        // Device; the
         // modal flow only needs a name, so inject one via a match arm.
         a.selected = Some(Device::default());
         a.handle_key(key(KeyCode::Enter));
@@ -2457,7 +2468,7 @@ mod tests {
                 serial_number: "TEST".into(),
                 hardware_version: 0,
             },
-            fake: false,
+            simulated: false,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         a.cmd_tx = Some(tx);
@@ -2494,7 +2505,7 @@ mod tests {
                 serial_number: "TEST".into(),
                 hardware_version: 0,
             },
-            fake: false,
+            simulated: false,
         };
         a.selected = Some(Device::default());
         a

@@ -61,11 +61,12 @@ crossterm ──poll(100ms)──► main loop ──WorkerCmd──► worker t
 
 ## Connection state
 
-`ConnState::{Disconnected, Connecting, Connected{info,fake},
+`ConnState::{Disconnected, Connecting, Connected{info,simulated},
 Failed(msg)}`. Auto-connect at startup (`WorkerCmd::Connect`); **F5**
-re-sends it. `MINIPRO_FAKE_PROGRAMMER=<MODEL>` produces a `fake`
-connection (info exists, no USB handle): the badge renders amber with a
-`(FAKE)` marker, and op dispatch warns instead of running. Op errors
+re-sends it. `MINIPRO_SIMULATE_PROGRAMMER=<MODEL>` (or `--simulate
+<MODEL>`) produces a `simulated` connection (info exists, no USB
+handle): the badge renders amber with a `(SIM)` marker, and op dispatch
+warns instead of running. Op errors
 containing the USB keyword table (`looks_like_disconnect` — mirrors the
 GUI's `handle_usb_error`) drop `Connected` back to `Disconnected`.
 
@@ -213,13 +214,14 @@ tests.
 ## Dev mode
 
 ```powershell
-$env:MINIPRO_FAKE_PROGRAMMER = "T48"
+cargo run -p minipro-tui -- --simulate T48
+# or via env var (MINIPRO_FAKE_PROGRAMMER still works, deprecated):
+$env:MINIPRO_SIMULATE_PROGRAMMER = "T48"
 cargo run -p minipro-tui
-# back to real hardware in the same shell:
-Remove-Item Env:MINIPRO_FAKE_PROGRAMMER
+Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER
 ```
 
-Fake mode exercises connect state, search, selection, options, modals,
+Simulated mode exercises connect state, search, selection, options, modals,
 and rendering. Op dispatch logs a warning and returns — ops still
 require real hardware.
 

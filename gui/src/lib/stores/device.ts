@@ -6,6 +6,7 @@ export interface ProgrammerInfo {
   firmware: string;
   serial_number: string;
   hardware_version: string;
+  simulated: boolean;
 }
 
 export interface FuseField {
@@ -129,6 +130,22 @@ export async function forceReconnect() {
     const info = await invoke<ProgrammerInfo>("force_reconnect");
     programmer.set(info);
   } catch (e) {
+    programmer.set(null);
+    throw e;
+  }
+}
+
+/// Enable/disable simulated-programmer mode at runtime. `model` is the
+/// display model ("T48", …) or null to turn simulation off. The backend
+/// sets/clears MINIPRO_SIMULATE_PROGRAMMER and re-resolves; simulation
+/// wins over real hardware while enabled.
+export async function setSimulatedProgrammer(model: string | null) {
+  try {
+    const info = await invoke<ProgrammerInfo>("set_simulated_programmer", { model });
+    programmer.set(info);
+  } catch (e) {
+    // Clearing sim with no hardware attached errors after the env var was
+    // already unset — the store must drop the stale simulated info anyway.
     programmer.set(null);
     throw e;
   }

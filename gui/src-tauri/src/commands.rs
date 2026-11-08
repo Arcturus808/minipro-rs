@@ -191,6 +191,7 @@ pub struct ProgrammerInfoDto {
     firmware: String,
     serial_number: String,
     hardware_version: String,
+    simulated: bool,
 }
 
 #[derive(Serialize)]
@@ -693,11 +694,11 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 
 // ── Tauri commands ─────────────────────────────────────────────────────────
 
-/// If MINIPRO_FAKE_PROGRAMMER is set (e.g. "T48"), install a synthetic
+/// If MINIPRO_SIMULATE_PROGRAMMER is set (e.g. "T48"), install a synthetic
 /// programmer of that model so the GUI can be exercised without hardware.
 /// No USB handle is opened — operations that need the device will fail.
-fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
-    let Some(info) = minipro_core::device::ProgrammerInfo::fake_from_env()
+fn simulated_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
+    let Some(info) = minipro_core::device::ProgrammerInfo::simulated_from_env()
         .map_err(|e| e.to_string())?
     else {
         return Ok(None);
@@ -708,13 +709,45 @@ fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto
         *guard = Some(info);
     }
     let _ = state.reload_device_names_for_model(model);
-    log::warn!("MINIPRO_FAKE_PROGRAMMER={model}: no hardware connected, model faked");
+    log::warn!("MINIPRO_SIMULATE_PROGRAMMER={model}: no hardware connected, model simulated");
     Ok(Some(ProgrammerInfoDto {
         model: model.to_string(),
-        firmware: "fake".to_string(),
-        serial_number: "FAKE".to_string(),
+        firmware: "sim".to_string(),
+        serial_number: "SIM".to_string(),
         hardware_version: "00".to_string(),
+        simulated: true,
     }))
+}
+
+/// Turn simulated-programmer mode on/off at runtime (Settings → Simulation).
+/// Sets or clears MINIPRO_SIMULATE_PROGRAMMER for this process, drops any
+/// cached info/open handle, and re-resolves — simulation wins over real
+/// hardware while enabled. `model: null` turns simulation off.
+#[tauri::command]
+pub async fn set_simulated_programmer(
+    state: State<'_, Arc<AppState>>,
+    model: Option<String>,
+) -> Result<ProgrammerInfoDto, String> {
+    match model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => {
+            m.parse::<ProgrammerModel>()
+                .map_err(|_| format!("unknown programmer model '{m}'"))?;
+            std::env::set_var("MINIPRO_SIMULATE_PROGRAMMER", m);
+        }
+        None => {
+            std::env::remove_var("MINIPRO_SIMULATE_PROGRAMMER");
+            std::env::remove_var("MINIPRO_FAKE_PROGRAMMER");
+        }
+    }
+    {
+        let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
+        *guard = None;
+    }
+    {
+        let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
+        *guard = None;
+    }
+    get_programmer_info(state).await
 }
 
 /// Open the programmer and return its info.
@@ -725,7 +758,7 @@ fn fake_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto
 pub async fn get_programmer_info(
     state: State<'_, Arc<AppState>>,
 ) -> Result<ProgrammerInfoDto, String> {
-    if let Some(dto) = fake_programmer_from_env(&state)? {
+    if let Some(dto) = simulated_programmer_from_env(&state)? {
         return Ok(dto);
     }
     {
@@ -736,6 +769,7 @@ pub async fn get_programmer_info(
                 firmware: info.firmware_str.clone(),
                 serial_number: info.serial_number.clone(),
                 hardware_version: format!("{:02x}", info.hardware_version),
+                simulated: false,
             });
         }
     }
@@ -816,6 +850,7 @@ pub async fn get_programmer_info(
             firmware: info.firmware_str,
             serial_number: info.serial_number,
             hardware_version: format!("{:02x}", info.hardware_version),
+            simulated: false,
         });
     }
 
@@ -841,7 +876,7 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
         *info_guard = None;
     }
 
-    if let Some(dto) = fake_programmer_from_env(&state)? {
+    if let Some(dto) = simulated_programmer_from_env(&state)? {
         return Ok(dto);
     }
 
@@ -912,6 +947,7 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
                     firmware: info.firmware_str,
                     serial_number: info.serial_number,
                     hardware_version: format!("{:02x}", info.hardware_version),
+                    simulated: false,
                 });
             }
             Ok(Ok(Err(e))) => {

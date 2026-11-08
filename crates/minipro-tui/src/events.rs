@@ -123,10 +123,10 @@ pub enum OpOutcome {
 
 /// Everything the worker thread can tell the app.
 pub enum AppEvent {
-    /// Programmer opened (or faked via MINIPRO_FAKE_PROGRAMMER).
+    /// Programmer opened (or simulated via MINIPRO_SIMULATE_PROGRAMMER).
     Connected {
         info: Box<ProgrammerInfo>,
-        fake: bool,
+        simulated: bool,
     },
     /// Open attempt failed after all retries.
     ConnectFailed(String),

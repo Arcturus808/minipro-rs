@@ -82,7 +82,7 @@ its own sake:
 
 | Item | From | To in core | Needed by |
 |------|------|-----------|-----------|
-| Fake programmer info (`MINIPRO_FAKE_PROGRAMMER` → synthetic `ProgrammerInfo`) | `commands.rs` | `device::ProgrammerInfo::fake(model)` or `usb::open_or_fake()` | P0 |
+| Simulated programmer info (`MINIPRO_SIMULATE_PROGRAMMER` → synthetic `ProgrammerInfo`) | `commands.rs` | `device::ProgrammerInfo::simulated(model)` or `usb::open_or_simulated()` | P0 |
 | Voltage-override resolution (`apply_voltage_overrides`, table lookup + errors) | `commands.rs` | `operations`/`device` helper | P1 |
 | Pin-contact pre-op gate (supported models, ZIF-only, pin_map != 0, emits result) | `commands.rs` `run_pin_check_if_enabled` | `operations::pin_check_gate()` | P1 |
 | ICSP mode mapping incl. `MP_ICSP_ONLY`/`MP_ZIF_ONLY` auto-activation | `commands.rs` `set_icsp_from_mode` | `device`/`handle` method | P1 |
@@ -230,7 +230,7 @@ possible later enhancement — do not promise it.
 
 - **P0 — foundation:** crate skeleton, terminal lifecycle + panic hook,
   layout + keybar, log pane, device search/select/favorites, connect with
-  `MINIPRO_FAKE_PROGRAMMER` parity. Core extraction step 1 (fake info).
+  `MINIPRO_SIMULATE_PROGRAMMER` parity. Core extraction step 1 (simulated info).
 - **P1 — core workflow (MVP cut):** read/write/verify/erase/blank-check/
   chip-id, options form, path prompt, progress, pin-check gate, lock/variant
   warnings. Core extraction step 2 (op-runner glue). **Ship here first.**
@@ -261,8 +261,8 @@ possible later enhancement — do not promise it.
   all key handling without a terminal.
 - `ratatui::backend::TestBackend` for render assertions on widgets
   (hex rows, ZIF diagram, forms).
-- `MINIPRO_FAKE_PROGRAMMER=<MODEL>` for end-to-end exercise without hardware
-  — same env var as the GUI (this is why the fake-info helper moves to core).
+- `MINIPRO_SIMULATE_PROGRAMMER=<MODEL>` for end-to-end exercise without hardware
+  — same env var as the GUI (this is why the simulated-info helper moves to core).
 
 ## CI / MSRV / packaging impact
 

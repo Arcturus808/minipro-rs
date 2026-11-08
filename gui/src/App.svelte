@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import pkg from "../package.json";
   import { theme } from "./lib/stores/theme";
-  import { programmer, refreshProgrammer, forceReconnect, selectedDevice, deselectDevice, checkDatabase, voltageOptions, loadVoltageOptions, fuseBitDefs, loadFuseBitDefs, isConnected } from "./lib/stores/device";
+  import { programmer, refreshProgrammer, forceReconnect, setSimulatedProgrammer, selectedDevice, deselectDevice, checkDatabase, voltageOptions, loadVoltageOptions, fuseBitDefs, loadFuseBitDefs, isConnected } from "./lib/stores/device";
   import { logs } from "./lib/stores/logs";
   import { hexLoading, loadFile, hexMeta, getHexData, hexEdits, applyHexEdits, confirmOverwriteEdits } from "./lib/stores/hex";
   import { settings, initSettings, setSetting, type AppSettings } from "./lib/stores/settings";
@@ -348,6 +348,12 @@
       sizeMismatch = s.defaultSizeMismatch;
       if (s.theme !== themeValue) {
         theme.set(s.theme);
+      }
+      // Re-apply a persisted simulated-programmer selection — the backend
+      // env var is per-process, so a saved choice must be reinstalled each
+      // launch (the standalone set-var run below connects it).
+      if (s.simulatedModel) {
+        setSimulatedProgrammer(s.simulatedModel).catch(() => {});
       }
     });
 
@@ -759,12 +765,24 @@
           : "No programmer detected. Unplug the USB cable, wait 20-30 seconds, plug it back in, then click here to reconnect. On Windows, if this is a new device, you may need to install the WinUSB driver with Zadig (https://zadig.akeo.ie/)."}
       >
         {#if $programmer}
-          <span class="badge bg-emerald-600 text-white text-xs flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {$programmer.model} connected
-          </span>
+          {#if $programmer.simulated}
+            <span
+              class="badge bg-amber-600 text-white text-xs flex items-center gap-1"
+              title="Simulated programmer — chip operations will fail. Change in Settings → Simulation."
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              {$programmer.model} · simulated
+            </span>
+          {:else}
+            <span class="badge bg-emerald-600 text-white text-xs flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {$programmer.model} connected
+            </span>
+          {/if}
         {:else}
           <span class="badge bg-red-600 text-white text-xs flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">

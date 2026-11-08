@@ -58,18 +58,22 @@ instantly AND Tauri commands work; `src-tauri` edits rebuild and relaunch.
 `icsp.rs` wiring tables) require restarting `cargo tauri dev`.
 (`npm run dev` alone serves only the frontend — `invoke()` calls fail.)
 
-**Testing without hardware:** set `MINIPRO_FAKE_PROGRAMMER` to a model name
-(`TL866A`, `TL866CS`, `TL866II+`, `T48`, `T56`, `T76`) before launching —
-`get_programmer_info`/`force_reconnect` skip USB and fake the model.
-Device search, device info, and the ICSP/ZIF diagrams work; chip
-operations fail. Works under `tauri dev` and release exes alike.
+**Testing without hardware:** simulated-programmer mode reports a
+connected programmer of a chosen model (`TL866A`, `TL866CS`, `TL866II+`,
+`T48`, `T56`, `T76`) without opening USB —
+`get_programmer_info`/`force_reconnect` skip hardware and synthesize the
+model. Device search, device info, and the ICSP/ZIF diagrams work; chip
+operations fail. Enable it per frontend: **GUI** — Settings → Simulation
+dropdown (persists; status badge shows "simulated"); **TUI** —
+`minipro-tui --simulate T76`; **any** — `MINIPRO_SIMULATE_PROGRAMMER`
+env var (`MINIPRO_FAKE_PROGRAMMER` still works, deprecated).
 
 ```powershell
 cd gui
-$env:MINIPRO_FAKE_PROGRAMMER = "T76"
+$env:MINIPRO_SIMULATE_PROGRAMMER = "T76"
 cargo tauri dev
 # Back to real hardware in the same shell:
-Remove-Item Env:MINIPRO_FAKE_PROGRAMMER
+Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER
 ```
 
 **Pre-commit verification (release exe, no installers):**
@@ -333,7 +337,7 @@ Read the relevant doc before working in that area:
 - `docs/TUI-INTERNALS.md` — `minipro-tui` crate map, two-thread event
   model, worker op orchestration (pin/ID gates, erase/verify ordering,
   `can_erase` gating), rendering invariants (resize hysteresis,
-  BufWriter frame atomicity), and the fake-programmer dev mode.
+  BufWriter frame atomicity), and the simulated-programmer dev mode.
 - `docs/CLI-INTERNALS.md` — CLI flag semantics, `--logic-identify`,
   `-z`/`--pin-check` gate behavior.
 - `docs/KNOWN-BUGS.md` — historical bugs & fixes. Check before touching
