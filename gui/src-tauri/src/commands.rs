@@ -3644,10 +3644,11 @@ pub async fn do_pin_test(
         tokio::task::spawn_blocking(move || -> Result<PinTestResultDto, String> {
             let mut handle = state_task.take_handle()?;
 
-            // Check programmer model support
+            // Check programmer model support (T76 included — its package
+            // restrictions are enforced inside pin_test_t76)
             if !matches!(
                 handle.info.model,
-                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
             ) {
                 let _ = state_task.store_handle(handle);
                 return Ok(PinTestResultDto {
