@@ -42,7 +42,7 @@ history live in `docs/` — see "Feature internals" at the bottom.
 |------|---------|-------|
 | Compile check only | `cd gui/src-tauri && cargo build --release` | Produces a **dev-mode exe** that loads `devUrl` (localhost:5173), not embedded assets — plain `cargo build` lacks the `tauri/custom-protocol` feature that `cargo tauri build` injects. Do NOT run this binary; it shows ERR_CONNECTION_REFUSED. |
 | Runnable release exe | `cd gui && cargo tauri build --no-bundle` | Embeds `dist/`; skips MSI/NSIS packaging. Use for pre-commit verification. |
-| Full build + installers | `cd gui && cargo tauri build` | MSI + NSIS bundles under `gui/src-tauri/target/release/bundle/`. Required for installer/resource testing and release prep (see `docs/RELEASE.md`). `.exe` at `gui/src-tauri/target/release/minipro-gui.exe`. |
+| Full build + installers | `cd gui && cargo tauri build` | MSI + NSIS bundles under `gui/src-tauri/target/release/bundle/`. Required for installer/resource testing and release prep (see `docs/RELEASE.md`). `.exe` at `gui/src-tauri/target/release/minipro-gui.exe`. On Windows, `build.rs` also stages `target/release/minipro{,-tui}.exe` (root workspace) into the installer — build the release CLI/TUI first to bundle them. |
 
 **Critical rule:** If you change any `.svelte`, `.ts`, `.css`, or `.html`
 file, you **must** run `cargo tauri build` (`--no-bundle` is fine) —

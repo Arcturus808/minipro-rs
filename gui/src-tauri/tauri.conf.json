@@ -38,7 +38,8 @@
     ],
     "resources": {
       "resources/infoic.xml": "infoic.xml",
-      "resources/logicic.xml": "logicic.xml"
+      "resources/logicic.xml": "logicic.xml",
+      "resources/bin/": ""
     }
   },
   "plugins": {}

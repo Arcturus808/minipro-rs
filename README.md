@@ -176,7 +176,7 @@ error: cannot find database file 'infoic.xml' (place a copy next to the executab
 
 `minipro-tui` exits immediately at that point — the device browser can't render without the database. (Releases up through v0.10.0 print only the terse `Error: DeviceNotFound("cannot find database file 'infoic.xml'")` with no searched-paths list.)
 
-> **Shortcut — already have the GUI installed?** Drop `minipro` / `minipro-tui` into the GUI's installation folder and you're done — the database files the installer placed there are found automatically (the executable's directory is on the search path). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — read on.)
+> **Shortcut — already have the GUI installed?** On Windows, releases after v0.10.0 already did the work: the `.msi` / `.exe` installer drops `minipro.exe` and `minipro-tui.exe` into the install folder next to the bundled database, so both are ready to run from there (they're not on `PATH` — launch them via their full path or add the folder yourself). For older installers or other OSes, drop `minipro` / `minipro-tui` into the GUI's installation folder — the database files the installer placed there are found automatically (the executable's directory is on the search path). On Windows that's `C:\Program Files\MINIPRO-RS-GUI\` (admin rights needed to copy in) or `%LOCALAPPDATA%\Programs\MINIPRO-RS-GUI\` for a per-user install. On Linux the GUI `.deb` puts them under `/usr/lib/MINIPRO-RS-GUI/`; on macOS dropping the binary inside `MINIPRO-RS-GUI.app/Contents/MacOS/` works via the app-bundle Resources lookup. (AppImages are a single file — no install dir — read on.)
 
 Otherwise it's a one-time, two-step fix:
 
@@ -219,7 +219,7 @@ This is a one-time step per machine.  It is the same requirement the original C 
 
 > **Programmer shows a garbled name in Device Manager?** XGecu programmers ship a buggy USB product string — Windows displays the raw bytes as random CJK characters. It's cosmetic and harmless (not a counterfeit sign, not a driver problem). See [docs/GARBLED-DEVICE-NAME.md](docs/GARBLED-DEVICE-NAME.md) for the explanation and how to give it a proper name.
 
-**GUI installer** — The `.msi` / `.exe` installer includes the full chip database and the Hack font. After installation, run `MINIPRO-RS` from the Start Menu. No manual file copying needed.
+**GUI installer** — The `.msi` / `.exe` installer includes the full chip database and the Hack font — and, starting with the release after v0.10.0, the standalone `minipro.exe` + `minipro-tui.exe` in the same folder, so the CLI/TUI work out of the box via their full install-dir paths. After installation, run `MINIPRO-RS` from the Start Menu. No manual file copying needed.
 
 ### For developers
 
