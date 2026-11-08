@@ -262,6 +262,34 @@ pub trait Protocol: Send + Sync {
     }
 }
 
+/// Whether the T76 `0x3E` contact test applies to this device/package.
+///
+/// The reply format is only verified for plain DIP parts seated in the
+/// ZIF: the name must be `@DIPn`/`@PDIPn` with n even, at most 40, and
+/// equal to the package pin count. Adapters, PLCC, multi-package
+/// listings, and ICSP-only parts are excluded — the bitmap has no
+/// documented meaning for them. (Upstream GitLab MR !304, unmerged.)
+pub fn t76_pin_test_supported(device: &Device) -> bool {
+    if device.package_details.icsp & crate::device::MP_ICSP_ONLY != 0 {
+        return false;
+    }
+    // Multi-name entries ("X@DIP28,Y@DIP28") describe the same part —
+    // check the first, which is the name the user selected.
+    let Some(pkg) = device
+        .name
+        .split(',')
+        .next()
+        .and_then(|n| n.rsplit('@').next())
+    else {
+        return false;
+    };
+    let digits = pkg.strip_prefix("PDIP").or_else(|| pkg.strip_prefix("DIP"));
+    match digits.and_then(|d| d.parse::<u32>().ok()) {
+        Some(n) => n % 2 == 0 && n <= 40 && n == device.package_details.pin_count as u32,
+        None => false,
+    }
+}
+
 pub mod t48;
 pub mod t56;
 pub mod t76;

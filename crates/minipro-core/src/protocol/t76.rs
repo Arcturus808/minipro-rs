@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
+    ProgrammerModel,
 };
 
 /// Minimum firmware version for the T76.
@@ -308,6 +309,106 @@ fn t76_emmc_adapter_init(usb: &UsbDevice) -> Result<()> {
     usb.msg_send(&pd)?;
     let _ = usb.msg_recv(32)?;
     Ok(())
+}
+
+/// T76 pin-contact check (`0x3E`) — a single command returning a ZIF
+/// contact bitmap; no bit-banging like the TL866II+ path.
+///
+/// Reply format and DIP→ZIF mapping from USB captures of XGPro_T76
+/// V13.21 (firmware 00.1.18), documented in upstream GitLab MR !304
+/// (unmerged as of writing — implemented from its capture tables, not
+/// merged upstream code):
+///
+/// ```text
+/// 16-byte request:  [0]=0x3E, rest zero
+/// 32-byte reply:    [0]     = 0x3E echo
+///                   [2..3]  = may hold a stale chip ID — ignore
+///                   [8..15] = leftover reply garbage — ignore
+///                   [16..21]= contact map, LE: bit n set = contact on
+///                             ZIF pin n+1 (the T76 ZIF has 48 positions)
+/// ```
+///
+/// A plain N-pin DIP sits at the bottom of the 48-pin ZIF, so device pin
+/// d is ZIF pin `d + 24 − N/2` (DIP28 → ZIF 11..38, matching the captured
+/// `00 fc ff ff 37 00` frame). The `pin_map` mask is the shared 40-ZIF
+/// frame used by the T48 path — its entries select which device pins are
+/// expected to contact, so NC pins (e.g. DIP28 pin 26) don't report.
+///
+/// Only flat DIP packages are supported (`@DIPn`/`@PDIPn`, n even ≤ 40 —
+/// enforced by `t76_pin_test_supported`); the bitmap has no documented
+/// meaning for adapters or PLCC.
+///
+/// This refines the earlier "0x3E is adapter-init only" analysis: the
+/// command does configure socket pin drivers (Matt Brown's
+/// t76-improvements finding — the adapter-init uses above are real),
+/// but its reply ALSO carries measured contact state. Upstream's broken
+/// stub never parsed the reply, and xgecu-pro's "corrupted every read"
+/// was the undrained-32-byte-reply artifact — draining it here is what
+/// keeps the stream in sync.
+fn pin_test_t76(
+    proto: &T76Protocol,
+    usb: &UsbDevice,
+    device: &Device,
+    pin_map: &crate::database::PinMap,
+) -> Result<crate::protocol::PinTestResult> {
+    if !crate::protocol::t76_pin_test_supported(device) {
+        return Err(MiniproError::Protocol(
+            "Pin test is not supported for this package.".into(),
+        ));
+    }
+
+    proto.end_transaction(usb)?;
+
+    let mut msg = [0u8; 16];
+    msg[0] = CMD_PIN_DETECTION;
+    usb.msg_send(&msg)?;
+    let resp = usb.msg_recv(32)?;
+    proto.begin_transaction(usb, device, 0)?;
+
+    if resp.first().copied() != Some(CMD_PIN_DETECTION) || resp.len() < 22 {
+        return Err(MiniproError::Protocol("T76 pin detect failed".into()));
+    }
+
+    Ok(decode_t76_pin_bitmap(&resp, device, pin_map))
+}
+
+/// Decode the T76 `0x3E` contact bitmap into a [`PinTestResult`].
+/// Split from `pin_test_t76` so the decode is unit-testable against the
+/// documented capture frames.
+fn decode_t76_pin_bitmap(
+    resp: &[u8],
+    device: &Device,
+    pin_map: &crate::database::PinMap,
+) -> crate::protocol::PinTestResult {
+    const MASK_ZIF: usize = 40; // pin_map mask entries are 40-ZIF numbered
+
+    let d_pins = device.package_details.pin_count as usize;
+    let x_pin = d_pins / 2;
+    let pno = MASK_ZIF - d_pins;
+    let spec = crate::zif::zif_spec(ProgrammerModel::T76);
+
+    let mut bad_pins = Vec::new();
+    let mut expected_pins = Vec::new();
+    for &p_pin in &pin_map.mask {
+        let p = p_pin as usize;
+        if !(1..=MASK_ZIF).contains(&p) {
+            continue;
+        }
+        let d_pin = if p > x_pin { p - pno } else { p };
+        let Some(z) = crate::zif::device_to_zif(&spec, d_pin, d_pins) else {
+            continue;
+        };
+        expected_pins.push(d_pin as u16);
+        if resp[16 + (z - 1) / 8] & (1 << ((z - 1) & 7)) == 0 {
+            bad_pins.push(d_pin as u16);
+        }
+    }
+
+    crate::protocol::PinTestResult {
+        bad_pins,
+        expected_pins,
+        untestable_pins: super::tl866iiplus::gnd_device_pins(&pin_map.gnd_table, x_pin, pno),
+    }
 }
 
 /// Send one 0x27 eMMC command tunnel packet.
@@ -1271,34 +1372,11 @@ impl Protocol for T76Protocol {
 
     fn pin_test(
         &self,
-        _usb: &UsbDevice,
-        _device: &Device,
-        _pin_map: &crate::database::PinMap,
+        usb: &UsbDevice,
+        device: &Device,
+        pin_map: &crate::database::PinMap,
     ) -> Result<crate::protocol::PinTestResult> {
-        // T76 pin-contact test is not supported.
-        //
-        // The T76 is FPGA-based and the C minipro source does not define
-        // the bit-banging commands (0x2D-0x36) that the TL866II+/T48 use
-        // for contact testing. Matt Brown's t76-improvements branch
-        // (https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements)
-        // discovered that the T76's 0x3E command (T76_PIN_DETECTION) is
-        // an adapter-init pin-driver configuration step, not a standalone
-        // contact test — his t76_adapter_init() uses it to configure
-        // socket pin drivers for the selected package before bitstream
-        // upload. Running it standalone returns meaningless data and can
-        // corrupt subsequent reads by disrupting FPGA state.
-        //
-        // The upstream C minipro's t76_pin_test receives the response
-        // but never parses it — `value` is initialized to 0 and never
-        // updated from the response buffer, so `if (!value)` is always
-        // true and every pin reports as bad. The xgecu-pro project
-        // (https://github.com/jfabienke/xgecu-pro) confirmed on real
-        // hardware that it "measured nothing and corrupted every read."
-        //
-        // A true T76 contact test would require a dedicated FPGA bitstream
-        // that XGecu has never written. Use the default trait impl
-        // (UnsupportedOperation).
-        Err(MiniproError::UnsupportedOperation)
+        pin_test_t76(self, usb, device, pin_map)
     }
 
     fn firmware_update(&self, usb: &UsbDevice, firmware: &[u8]) -> Result<()> {
@@ -1447,4 +1525,128 @@ fn firmware_update_t76(usb: &UsbDevice, dat: &[u8]) -> Result<()> {
 
     crate::outln!("T76 firmware written successfully. Please reconnect the programmer.");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::PinMap;
+    use crate::device::PackageDetails;
+
+    fn dip_device(name: &str, pin_count: u8, icsp: u8) -> Device {
+        Device {
+            name: name.into(),
+            package_details: PackageDetails {
+                pin_count,
+                icsp,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// 32-byte reply with the 6-byte contact map placed at resp[16..21].
+    fn reply(frame: [u8; 6]) -> Vec<u8> {
+        let mut resp = vec![0u8; 32];
+        resp[0] = CMD_PIN_DETECTION;
+        resp[16..22].copy_from_slice(&frame);
+        resp
+    }
+
+    /// DIP28 mask expecting every device pin except the listed ones —
+    /// positions 1..14 map to device pins 1..14, positions 27..40 to
+    /// device pins 15..28 (the shared 40-ZIF frame transform).
+    fn dip28_mask_except(skip: &[u16]) -> PinMap {
+        let mut mask: Vec<u16> = (1..=14).chain(27..=40).collect();
+        mask.retain(|p| !skip.contains(p));
+        PinMap {
+            gnd_table: vec![],
+            mask,
+        }
+    }
+
+    // Capture frames from upstream MR !304 (XGPro_T76 V13.21, DIP28):
+    // seated     00 fc ff ff 37 00 → ZIF 11..38 set except 36 (dev pin 26)
+    // dirty      00 bc ff ff 37 00 → ZIF 15 clear → device pin 5
+    // reversed   ff 37 00 00 fc ff → expected-contact ZIF 11..38 has
+    //              12,15..34 clear → device 2 + devices 5..24
+
+    #[test]
+    fn t76_bitmap_seated_dip28_passes() {
+        // Device pin 26 is not connected on this part — excluded from the
+        // mask, so its clear ZIF-36 bit is not a failure.
+        let r = decode_t76_pin_bitmap(
+            &reply([0x00, 0xfc, 0xff, 0xff, 0x37, 0x00]),
+            &dip_device("MBM2764@DIP28", 28, 0),
+            &dip28_mask_except(&[38]),
+        );
+        assert!(r.bad_pins.is_empty(), "bad: {:?}", r.bad_pins);
+        assert_eq!(r.expected_pins.len(), 27);
+    }
+
+    #[test]
+    fn t76_bitmap_dirty_pin_reports_device_pin() {
+        let r = decode_t76_pin_bitmap(
+            &reply([0x00, 0xbc, 0xff, 0xff, 0x37, 0x00]),
+            &dip_device("MBM2764@DIP28", 28, 0),
+            &dip28_mask_except(&[38]),
+        );
+        assert_eq!(r.bad_pins, vec![5]);
+    }
+
+    #[test]
+    fn t76_bitmap_reversed_chip_reports_masked_pins() {
+        let r = decode_t76_pin_bitmap(
+            &reply([0xff, 0x37, 0x00, 0x00, 0xfc, 0xff]),
+            &dip_device("MBM2764@DIP28", 28, 0),
+            &dip28_mask_except(&[38]),
+        );
+        let mut want: Vec<u16> = vec![2];
+        want.extend(5..=24);
+        assert_eq!(r.bad_pins, want);
+    }
+
+    #[test]
+    fn t76_supported_packages() {
+        assert!(crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP28", 28, 0
+        )));
+        assert!(crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@PDIP28", 28, 0
+        )));
+        assert!(crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP8", 8, 0
+        )));
+        assert!(crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP40", 40, 0
+        )));
+        assert!(crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP28,Y@DIP28",
+            28,
+            0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP42", 42, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP27", 27, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@PLCC32", 32, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@TQFP32", 32, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "MBM2764", 28, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP28", 24, 0
+        )));
+        assert!(!crate::protocol::t76_pin_test_supported(&dip_device(
+            "X@DIP28",
+            28,
+            crate::device::MP_ICSP_ONLY
+        )));
+    }
 }

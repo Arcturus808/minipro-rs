@@ -215,19 +215,29 @@ XGPro runs pin detect before beginning the transaction, so
 `pin_test_t48` ends the transaction, measures, then re-begins — callers
 stay inside a transaction transparently. See KNOWN-BUGS.md.
 
-Do NOT run `0x3E` standalone on a T76: there it is an adapter-init
-pin-driver configuration step, not a contact test — running it
-standalone returns meaningless data and can corrupt subsequent reads.
-This was discovered by Matt Brown's t76-improvements branch, whose
-t76_adapter_init() uses 0x3E to configure socket pin drivers before
-bitstream upload. The upstream C minipro's `t76_pin_test` receives the
-response but never parses it — `value` is initialized to 0 and never
-updated from the response buffer, so every pin reports as bad. The
-xgecu-pro project (https://github.com/jfabienke/xgecu-pro) confirmed
-on real hardware that it "measured nothing and corrupted every read."
+The T76 path (`pin_test_t76` in `t76.rs`) uses `0x3E` too but with a
+different protocol: 16-byte bare request → 32-byte reply with the
+contact bitmap at `resp[16..21]` (LE, bit n = ZIF pin n+1 — the T76 ZIF
+has **48** positions, not 40). A DIP pin d of an N-pin part is ZIF pin
+`d + 24 − N/2` (bottom-seated). Format from XGPro_T76 V13.21 USB
+captures documented in upstream MR !304 (unmerged as of writing —
+implemented from its capture tables; reply verified on firmware
+00.1.18, other firmware prints a note). DIP-only: `@DIPn`/`@PDIPn`,
+n even ≤ 40, non-ICSP — enforced by `t76_pin_test_supported` in
+`protocol/mod.rs` (mirrored frontend-side in DiagnosticsPanel) and
+inside `pin_test_t76` itself.
+
+History: we previously believed T76 `0x3E` was adapter-init only —
+Matt Brown's t76-improvements branch found it configures socket pin
+drivers (true — our own `t76_adapter_init`/`t76_emmc_adapter_init` use
+it that way), upstream's stub never parsed the reply so every pin
+reported bad, and xgecu-pro saw it "corrupt every read". The MR's
+captures resolve the contradiction: the reply *does* carry measured
+contact state, and the read corruption was the undrained 32-byte reply
+desyncing the next response — `pin_test_t76` drains it.
 The T56 also defines `0x3E`, labelled pin detect on proghq like the
-T48's — but whether it is the pin-detect variant or the T76-style
-adapter-init is unverified on hardware.
+T48's — but whether it is the pin-detect variant or an adapter-init is
+still unverified on hardware.
 
 **Result semantics:** the backend's `PinTestResult` carries both
 `bad_pins` and `expected_pins` (every device pin the `pin_map` mask
@@ -241,7 +251,8 @@ contacts. The CLI `-z` prints the same hint.
 
 **Button disabled when:** no programmer connected, no device selected,
 device has `pin_map == 0` (no contact-test data in database), ICSP mode
-active, unsupported programmer model, or a test is already running.
+active, unsupported programmer model, a non-DIP package on T76
+(`t76PinTestOk` mirrors the core check), or a test is already running.
 
 **Checkbox disabled when:** no programmer connected, no device selected,
 ICSP mode active, unsupported programmer model, or device has

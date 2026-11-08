@@ -1342,16 +1342,21 @@ pub fn hardware_check(handle: &mut MiniproHandle) -> Result<()> {
 /// Whether the pre-operation pin-contact gate should run for this
 /// model/mode/device.
 ///
-/// The gate applies only on TL866II+/T48 (the two models with a real
-/// `0x3E` pin-detect command — T76's `0x3E` is an unrelated adapter-init
-/// that corrupts subsequent reads), only in ZIF mode, and only when the
-/// device carries contact-test data (`pin_map` low byte nonzero).
+/// ZIF mode and `pin_map` contact data are required for every model.
+/// TL866II+/T48 accept any such device; T76's `0x3E` contact test is
+/// additionally restricted to plain DIP packages in the socket (see
+/// [`crate::protocol::t76_pin_test_supported`]).
 /// Frontends call [`pin_contact_check`] when this returns true and abort
 /// the operation if `bad_pins` is non-empty.
-pub fn pin_check_gate_applies(model: ProgrammerModel, icsp_active: bool, pin_map: u32) -> bool {
-    matches!(model, ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48)
-        && !icsp_active
-        && pin_map & 0xFF != 0
+pub fn pin_check_gate_applies(model: ProgrammerModel, icsp_active: bool, device: &Device) -> bool {
+    if icsp_active || device.pin_map & 0xFF == 0 {
+        return false;
+    }
+    match model {
+        ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 => true,
+        ProgrammerModel::T76 => crate::protocol::t76_pin_test_supported(device),
+        _ => false,
+    }
 }
 
 /// Perform a pin-contact test on the device currently loaded in the ZIF socket.
@@ -1373,6 +1378,9 @@ pub fn pin_contact_check(
             return Ok(crate::protocol::PinTestResult::default());
         }
     };
+    if handle.info.model == ProgrammerModel::T76 && handle.info.firmware_str != "00.1.18" {
+        crate::outln!("Note: T76 pin test reply format verified on firmware 00.1.18 only.");
+    }
     handle.protocol.pin_test(&handle.usb, &device, &pin_map)
 }
 

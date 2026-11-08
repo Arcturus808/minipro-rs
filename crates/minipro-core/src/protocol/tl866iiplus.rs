@@ -1731,7 +1731,7 @@ pub(super) fn pin_test_tl866(
 /// Translate ZIF-pin `<gnd>` entries to device-pin numbers with the same
 /// mapping the mask loop uses — pins > `x_pin` sit `pno` lower on the
 /// right side of the socket.
-fn gnd_device_pins(gnd_table: &[u16], x_pin: usize, pno: usize) -> Vec<u16> {
+pub(crate) fn gnd_device_pins(gnd_table: &[u16], x_pin: usize, pno: usize) -> Vec<u16> {
     gnd_table
         .iter()
         .filter(|&&p| (1..=40).contains(&(p as usize)))

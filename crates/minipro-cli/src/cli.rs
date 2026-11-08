@@ -204,7 +204,7 @@ struct Cli {
     #[arg(short = 't', long = "hardware-check", action = ArgAction::SetTrue)]
     hardware_check: bool,
 
-    /// Test pin contact of the chip in the ZIF socket (TL866II+ and T48).
+    /// Test pin contact of the chip in the ZIF socket (TL866II+, T48, and T76 DIP parts).
     /// With an operation, runs first and aborts it on bad pins; failures
     /// are annotated with the ZIF socket position
     #[arg(short = 'z', long = "pin-check", action = ArgAction::SetTrue)]

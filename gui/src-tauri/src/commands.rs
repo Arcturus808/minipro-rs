@@ -100,7 +100,7 @@ fn run_pin_check_if_enabled(
         return Ok(());
     }
     let device = handle.device().map_err(|e| e.to_string())?.clone();
-    if !pin_check_gate_applies(handle.info.model, icsp_mode != "zif", device.pin_map) {
+    if !pin_check_gate_applies(handle.info.model, icsp_mode != "zif", &device) {
         return Ok(());
     }
 

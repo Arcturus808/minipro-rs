@@ -762,12 +762,14 @@ fn do_operations(
             eprintln!("Pin test is not supported in ICSP mode.");
             return Ok(());
         }
-        // TL866II+ (upstream bit-bang) and T48 (0x3E contact bitmap —
-        // ported from XGPro USB captures; upstream never implemented it).
-        // Other models return UnsupportedOperation.
+        // TL866II+ (upstream bit-bang), T48 (0x3E contact bitmap —
+        // ported from XGPro USB captures; upstream never implemented
+        // it), and T76 (0x3E 32-byte contact bitmap — upstream MR !304
+        // captures; plain DIP packages only — the device check happens
+        // inside pin_test_t76). Other models return UnsupportedOperation.
         if !matches!(
             handle.info.model,
-            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+            ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48 | ProgrammerModel::T76
         ) {
             eprintln!("Pin test is not supported on this programmer model.");
             return Ok(());
