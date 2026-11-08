@@ -153,12 +153,13 @@
     aria-modal="true"
     tabindex="-1"
   >
-    <div class={`rounded-lg shadow-xl w-full max-w-md p-6 space-y-6 border ${isDark ? 'bg-slate-800 text-white border-slate-600' : 'bg-white text-gray-900 border-gray-300'}`}>
-      <div class="flex items-center justify-between">
+    <div class={`rounded-lg shadow-xl w-full max-w-md max-h-[85vh] flex flex-col p-6 border ${isDark ? 'bg-slate-800 text-white border-slate-600' : 'bg-white text-gray-900 border-gray-300'}`}>
+      <div class="flex items-center justify-between pb-6">
         <h2 class="text-lg font-semibold">Settings</h2>
         <button class="text-sm opacity-60 hover:opacity-100" onclick={close}>Close</button>
       </div>
 
+      <div class="overflow-y-auto space-y-6 pr-1">
       <!-- Operation Defaults -->
       <div class="space-y-3">
         <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Operation Defaults</h3>
@@ -414,6 +415,7 @@
             Same mechanism as the <span class="font-mono">MINIPRO_SIMULATE_PROGRAMMER</span> env var.
           </p>
         </div>
+      </div>
       </div>
     </div>
   </div>
