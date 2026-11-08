@@ -6,6 +6,16 @@ use minipro_core::{
     MiniproHandle,
 };
 
+/// Error for op paths that found no USB handle. A simulated connect has
+/// no handle by design — name that instead of telling the user to replug
+/// a real device.
+pub(crate) fn no_programmer_error() -> String {
+    match ProgrammerInfo::simulated_from_env() {
+        Ok(Some(_)) => "simulated programmer — operations need real hardware".into(),
+        _ => "No programmer connected".into(),
+    }
+}
+
 /// Shared application state managed by Tauri.
 pub struct AppState {
     /// The active USB programmer handle, if any.
@@ -76,7 +86,7 @@ impl AppState {
                 // Clear cached info so the UI badge updates on next check.
                 drop(guard);
                 self.clear_programmer();
-                Err("No programmer connected".into())
+                Err(no_programmer_error())
             }
         }
     }

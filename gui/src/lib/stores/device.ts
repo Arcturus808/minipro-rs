@@ -1,5 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
+import { logs } from "./logs";
 
 export interface ProgrammerInfo {
   model: string;
@@ -143,10 +144,20 @@ export async function setSimulatedProgrammer(model: string | null) {
   try {
     const info = await invoke<ProgrammerInfo>("set_simulated_programmer", { model });
     programmer.set(info);
+    // Log the transition explicitly — without it the log's last line can
+    // name a simulated model while the badge already shows real hardware.
+    logs.info(
+      info.simulated
+        ? `Simulated programmer enabled: ${info.model} — no real hardware; chip operations will fail`
+        : `Simulation disabled — real programmer connected: ${info.model} (FW ${info.firmware})`,
+    );
   } catch (e) {
     // Clearing sim with no hardware attached errors after the env var was
     // already unset — the store must drop the stale simulated info anyway.
     programmer.set(null);
+    if (model === null) {
+      logs.info("Simulation disabled — no programmer detected");
+    }
     throw e;
   }
 }
