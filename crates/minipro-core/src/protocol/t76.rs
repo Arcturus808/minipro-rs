@@ -357,12 +357,16 @@ fn pin_test_t76(
         ));
     }
 
-    proto.end_transaction(usb)?;
-
+    // XGPro ordering: the detect runs inside the current transaction and
+    // END_TRANS is what exits pin-detect mode on the T76. Sending 0x3E
+    // after END_TRANS leaves the firmware in detect mode — the next
+    // BEGIN_TRANS alone doesn't restore chip driving, so subsequent
+    // commands return garbage. Re-open afterwards for the caller.
     let mut msg = [0u8; 16];
     msg[0] = CMD_PIN_DETECTION;
     usb.msg_send(&msg)?;
     let resp = usb.msg_recv(32)?;
+    proto.end_transaction(usb)?;
     proto.begin_transaction(usb, device, 0)?;
 
     if resp.first().copied() != Some(CMD_PIN_DETECTION) || resp.len() < 22 {

@@ -212,6 +212,13 @@ versions of these are byte-identical):
   (xgecu-pro finding) — the corruption was the undrained reply desyncing
   the next response, and the adapter-init use is real too; both are
   true. `pin_test_t76` is now implemented for plain DIP parts.
+  Ordering matters: upstream sends `0x3E` INSIDE the transaction and
+  calls `end_transaction` after the reply — END_TRANS is what exits
+  pin-detect mode. Ending first and then sending `0x3E` leaves the
+  firmware in detect mode, and the next BEGIN_TRANS alone doesn't
+  restore chip driving (verified: chip ID returned `0x0000fcff` after
+  the check, `0x001e950f` without). Our implementation mirrors the
+  upstream order: `0x3E` → recv → end → re-begin for the caller.
 - `write_block` (TL866II+ path): upstream always transfers
   `write_buffer_size` payload bytes even when the final block is short
   (it reads ahead into padded file data). We now pad short blocks to
