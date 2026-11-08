@@ -131,6 +131,13 @@ The logic test help modal explains the single-character vector symbols
 (0, 1, L, H, C, Z, X, G, V) used in the test result table, matching the
 XGPro definitions.
 
+**Modal convention:** every fullscreen overlay must cap its height and
+scroll — `max-height: 80vh`/`max-h-[85vh]` + `overflow-y: auto` — because
+an unbounded card overflows the window once content outgrows it (the
+Settings modal shipped without a cap and clipped its own Close button;
+fixed via a flex-column card, pinned header, scrollable body). Follow the
+pinned-header + scrollable-body pattern whenever the content can grow.
+
 ## Pin-contact test (GUI)
 
 The Diagnostics panel has a "Pin Contact Test" button that runs the ZIF socket
