@@ -53,6 +53,8 @@ export interface DeviceInfo {
   protect_after: boolean;
   /** ICSP wiring-class index (package_details bits 8–15). 0 = no ICSP. */
   icsp: number;
+  /** flags.prog_support == MP_ICSP_ONLY — programmable on the ICSP header only. */
+  icsp_only: boolean;
 }
 
 export interface IcspWire {

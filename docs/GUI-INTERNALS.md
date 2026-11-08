@@ -225,7 +225,10 @@ implemented from its capture tables; reply verified on firmware
 00.1.18, other firmware prints a note). DIP-only: `@DIPn`/`@PDIPn`,
 n even ≤ 40, non-ICSP — enforced by `t76_pin_test_supported` in
 `protocol/mod.rs` (mirrored frontend-side in DiagnosticsPanel) and
-inside `pin_test_t76` itself.
+inside `pin_test_t76` itself. "Non-ICSP" tests
+`flags.prog_support != MP_ICSP_ONLY` — NOT `package_details.icsp`,
+which is a wiring-class index (e.g. ATMEGA328P@DIP28 carries class 7
+yet is fully ZIF-programmable); the DTO exposes it as `icsp_only`.
 
 History: we previously believed T76 `0x3E` was adapter-init only —
 Matt Brown's t76-improvements branch found it configures socket pin

@@ -40,7 +40,7 @@
   // (@DIPn/@PDIPn, n even ≤ 40, non-ICSP) — mirrors
   // t76_pin_test_supported in core.
   function t76PinTestOk(dev: DeviceInfo): boolean {
-    if ((dev.icsp & 0x02) !== 0) return false; // ICSP-only
+    if (dev.icsp_only) return false;
     const pkg = dev.name.split(",")[0]?.split("@").pop() ?? "";
     const m = /^(?:P?DIP)(\d+)$/.exec(pkg);
     return !!m && +m[1] % 2 === 0 && +m[1] <= 40 && +m[1] === dev.pin_count;

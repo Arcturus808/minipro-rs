@@ -269,6 +269,9 @@ pub struct DeviceInfoDto {
     /// ICSP wiring-class index from `package_details` bits 8–15.
     /// 0 = no ICSP. Nonzero selects a wiring diagram (see `icsp::icsp_wiring`).
     icsp: u8,
+    /// `flags.prog_support == MP_ICSP_ONLY` — the part can only be
+    /// programmed on the ICSP header, never in the ZIF socket.
+    icsp_only: bool,
 }
 
 #[derive(Serialize)]
@@ -3976,6 +3979,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         off_protect_before: dev.flags.off_protect_before,
         protect_after: dev.flags.protect_after,
         icsp: dev.package_details.icsp,
+        icsp_only: dev.flags.prog_support == minipro_core::device::MP_ICSP_ONLY,
     }
 }
 
