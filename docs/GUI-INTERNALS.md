@@ -404,6 +404,11 @@ device attached. The same mode is exposed in-app via Settings →
 Simulation (persists `simulatedModel`, calls
 `set_simulated_programmer`, and marks the status badge "simulated";
 `ProgrammerInfoDto.simulated` distinguishes it from a real connect).
+Op paths that find no USB handle emit "simulated programmer — operations
+need real hardware" (via `state::no_programmer_error`) instead of
+"No programmer connected", and both the settings toggle and the
+badge-reconnect path log the transition so the log can't end on a
+simulated-model line while the badge shows real hardware.
 
 **Adding a new class:** verify against official docs or hardware, then
 add a `static` table in `icsp.rs` and a match arm. Never ship a

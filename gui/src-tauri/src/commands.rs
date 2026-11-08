@@ -698,8 +698,8 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 /// programmer of that model so the GUI can be exercised without hardware.
 /// No USB handle is opened — operations that need the device will fail.
 fn simulated_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
-    let Some(info) = minipro_core::device::ProgrammerInfo::simulated_from_env()
-        .map_err(|e| e.to_string())?
+    let Some(info) =
+        minipro_core::device::ProgrammerInfo::simulated_from_env().map_err(|e| e.to_string())?
     else {
         return Ok(None);
     };
@@ -3730,7 +3730,9 @@ pub async fn do_firmware_update(
     let window_clone = window.clone();
     let updated_info = {
         let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
-        let handle = guard.as_mut().ok_or("No programmer connected")?;
+        let handle = guard
+            .as_mut()
+            .ok_or_else(crate::state::no_programmer_error)?;
         let mut output = Vec::new();
         let result = firmware_update(
             handle,

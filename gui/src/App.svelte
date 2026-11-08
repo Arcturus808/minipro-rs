@@ -753,7 +753,11 @@
           try {
             await forceReconnect();
             if ($programmer) {
-              logs.info(`Programmer reconnected: ${$programmer.model} (FW ${$programmer.firmware})`);
+              logs.info(
+                $programmer.simulated
+                  ? `Simulated programmer connected: ${$programmer.model} — no real hardware`
+                  : `Programmer reconnected: ${$programmer.model} (FW ${$programmer.firmware})`,
+              );
             }
           } catch (e: any) {
             const msg = typeof e === "string" ? e : e?.message || "Unknown error";
