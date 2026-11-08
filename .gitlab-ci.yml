@@ -56,6 +56,9 @@ fmt:
   script:
     - rustup component add rustfmt
     - cargo fmt --all -- --check
+    # gui/src-tauri is excluded from the root workspace (own MSRV/lockfile)
+    # — its fmt gate must run separately or formatting drifts unchecked.
+    - cd gui/src-tauri && cargo fmt --check
 
 clippy:
   stage: check

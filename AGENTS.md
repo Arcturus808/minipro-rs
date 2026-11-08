@@ -19,7 +19,10 @@ history live in `docs/` — see "Feature internals" at the bottom.
   frontend type gate; must report 0 errors.
 - **Code changed? Verify locally before committing:**
   `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
-  `cargo test --all --locked`.
+  `cargo test --all --locked`. The fmt gate covers the **root workspace
+  only** — `gui/src-tauri` is `exclude`d (own MSRV/lockfile), so when you
+  touch it also run `cd gui/src-tauri && cargo fmt --check` (and
+  `cargo clippy` there for good measure).
 - **Keep docs & changelog in sync with the change:**
   - User-facing change (fix, feature, behavior)? Add a `CHANGELOG.md`
     `[Unreleased]` entry under Added/Changed/Fixed.
@@ -297,7 +300,8 @@ Local CI-equivalent checks (run from repo root):
 
 | Check | Command |
 |-------|---------|
-| fmt | `cargo fmt --all -- --check` |
+| fmt (root workspace) | `cargo fmt --all -- --check` |
+| fmt (gui crate — `gui/src-tauri` is a separate workspace) | `cd gui/src-tauri && cargo fmt --check` |
 | clippy | `cargo clippy --all-targets -- -D warnings` |
 | tests | `cargo test --all --locked` |
 | frontend types | `cd gui && npm run check` |
