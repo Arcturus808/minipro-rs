@@ -9,6 +9,7 @@
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
   import { pickOpenFile, pickSaveFile } from "./lib/file-dialog";
+  import { PIN_TEST_SUPPORTED, pinCheckModelOk, t76PinTestOk } from "./lib/pinTest";
   import {
     initProgressListener,
     initLogListener,
@@ -267,19 +268,21 @@
   let hasHexData = $derived(!!$hexMeta?.data && $hexMeta.data.length > 0);
   let hasPendingHexEdits = $derived($hexEdits.size > 0);
 
-  // Pin contact check checkbox disabled state — only available on TL866II+/T48
-  // in ZIF mode with a device that has pin-map data.
+  // Pin contact check checkbox disabled state — needs a supported model
+  // (T76 additionally requires a plain DIP device), ZIF mode, and a
+  // device with pin-map data.
   let pinCheckDisabled = $derived(
     !$programmer ||
     !$selectedDevice ||
     icspMode !== "zif" ||
-    !["TL866II+", "T48"].includes($programmer.model) ||
+    !pinCheckModelOk($programmer.model, $selectedDevice) ||
     !$selectedDevice.pin_map
   );
   let pinCheckTooltip = $derived(
     !$programmer ? "No programmer connected" :
     icspMode !== "zif" ? "Not available in ICSP mode" :
-    !["TL866II+", "T48"].includes($programmer?.model ?? "") ? "Not supported on this programmer model" :
+    !PIN_TEST_SUPPORTED.has($programmer?.model ?? "") ? "Not supported on this programmer model" :
+    $programmer?.model === "T76" && $selectedDevice && !t76PinTestOk($selectedDevice) ? "T76 pin test supports plain DIP packages only" :
     !$selectedDevice?.pin_map ? "Device has no pin-map data" :
     "Test pin contact before operation"
   );

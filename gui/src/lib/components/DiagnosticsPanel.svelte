@@ -1,11 +1,12 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { programmer, refreshProgrammer, selectedDevice, type DeviceInfo } from "../stores/device";
+  import { programmer, refreshProgrammer, selectedDevice } from "../stores/device";
   import { logs } from "../stores/logs";
   import { doFirmwareUpdate } from "../stores/operations";
   import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
   import { settings } from "../stores/settings";
   import { pickOpenFile, pickSaveFile, confirmDialog } from "../file-dialog";
+  import { PIN_TEST_SUPPORTED, t76PinTestOk } from "../pinTest";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
     "TL866II+",
@@ -29,23 +30,8 @@
   // USB captures). T76's 0x3E is also a real contact test — 32-byte
   // reply, 48-ZIF bitmap at bytes 16-21 (upstream MR !304 captures) —
   // but only for plain DIP packages in the ZIF. TL866A/CS and T56 are
-  // unimplemented.
-  const PIN_TEST_SUPPORTED = new Set([
-    "TL866II+",
-    "T48",
-    "T76",
-  ]);
-
-  // T76 contact test is documented for plain DIP parts only
-  // (@DIPn/@PDIPn, n even ≤ 40, non-ICSP) — mirrors
-  // t76_pin_test_supported in core.
-  function t76PinTestOk(dev: DeviceInfo): boolean {
-    if (dev.icsp_only) return false;
-    const pkg = dev.name.split(",")[0]?.split("@").pop() ?? "";
-    const m = /^(?:P?DIP)(\d+)$/.exec(pkg);
-    return !!m && +m[1] % 2 === 0 && +m[1] <= 40 && +m[1] === dev.pin_count;
-  }
-
+  // unimplemented. Model/package eligibility lives in ../pinTest so the
+  // pre-op checkbox in App.svelte applies the same rules.
   const hardwareCheckSupported = $derived(
     $programmer ? HARDWARE_CHECK_SUPPORTED.has($programmer.model) : false,
   );

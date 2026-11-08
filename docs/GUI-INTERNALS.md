@@ -258,8 +258,11 @@ active, unsupported programmer model, a non-DIP package on T76
 (`t76PinTestOk` mirrors the core check), or a test is already running.
 
 **Checkbox disabled when:** no programmer connected, no device selected,
-ICSP mode active, unsupported programmer model, or device has
-`pin_map == 0`. The checkbox is located right of "Chip ID check" for
+ICSP mode active, unsupported programmer model, a non-DIP package on
+T76, or device has `pin_map == 0`. Model/package eligibility for both
+the standalone button and this checkbox comes from `lib/pinTest.ts`
+(`PIN_TEST_SUPPORTED`, `t76PinTestOk`, `pinCheckModelOk`) — a single
+frontend mirror of the core checks, after the two sites drifted apart. The checkbox is located right of "Chip ID check" for
 read/write/verify/erase, replaces "No options for this operation." for
 blank check and chip ID, and appears in a thin options row above the
 collapsible fuse editor for config. Logic test has no checkbox (uses
