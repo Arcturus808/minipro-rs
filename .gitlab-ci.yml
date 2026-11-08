@@ -70,6 +70,11 @@ clippy:
 msrv:
   stage: check
   image: rust:1.85
+  # rust-toolchain.toml pins channel 1.93 — without this override the
+  # job's plain `cargo check` silently builds on 1.93 and the MSRV gate
+  # verifies nothing.
+  variables:
+    RUSTUP_TOOLCHAIN: "1.85"
   cache:
     key: "cargo-msrv-1.85-${CI_COMMIT_REF_SLUG}"
     paths:
