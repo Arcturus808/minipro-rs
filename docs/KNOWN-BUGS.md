@@ -212,13 +212,17 @@ versions of these are byte-identical):
   (xgecu-pro finding) — the corruption was the undrained reply desyncing
   the next response, and the adapter-init use is real too; both are
   true. `pin_test_t76` is now implemented for plain DIP parts.
-  Ordering matters: upstream sends `0x3E` INSIDE the transaction and
-  calls `end_transaction` after the reply — END_TRANS is what exits
-  pin-detect mode. Ending first and then sending `0x3E` leaves the
-  firmware in detect mode, and the next BEGIN_TRANS alone doesn't
-  restore chip driving (verified: chip ID returned `0x0000fcff` after
-  the check, `0x001e950f` without). Our implementation mirrors the
-  upstream order: `0x3E` → recv → end → re-begin for the caller.
+  Ordering matters twice over: the detect must run inside the
+  transaction (`0x3E` → recv → `end_transaction`, matching upstream),
+  AND the T76 keeps its FPGA in pin-sense mode until the algorithm
+  bitstream is re-uploaded — `begin_transaction` alone doesn't restore
+  chip driving, and `bitstream_uploaded` stays set, so without the
+  forced re-upload every subsequent command reads contact-matrix bytes
+  (verified: chip ID `0x0000fcff` instead of `0x001e950f`, sticky across
+  ops with the check off, and a second detect returned all-bad).
+  `pin_test_t76` clears `bitstream_uploaded` before re-beginning —
+  mirroring XGPro's order, where `0x3E` always precedes the bitstream
+  (the NAND/eMMC adapter inits do the same).
 - `write_block` (TL866II+ path): upstream always transfers
   `write_buffer_size` payload bytes even when the final block is short
   (it reads ahead into padded file data). We now pad short blocks to

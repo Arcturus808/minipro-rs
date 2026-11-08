@@ -296,6 +296,21 @@ impl UsbDevice {
         Ok(completion.data)
     }
 
+    /// Probe EP 0x81 for unexpected trailing bytes, returning whatever
+    /// arrives within `timeout` (empty on timeout or error). Used to
+    /// detect reply-size mismatches that would desync the next command's
+    /// response without hanging on a quiet endpoint.
+    pub fn msg_recv_probe(&self, size: usize, timeout: Duration) -> Vec<u8> {
+        let iface = match self.iface() {
+            Ok(i) => i,
+            Err(_) => return Vec::new(),
+        };
+        match block_on_with_timeout(iface.bulk_in(CMD_EP_IN, RequestBuffer::new(size)), timeout) {
+            Ok(c) if c.status.is_ok() => c.data,
+            _ => Vec::new(),
+        }
+    }
+
     /// Write a payload to the chip.
     ///
     /// For payloads > 64 bytes the data is split across EP2/EP3 in the
