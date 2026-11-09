@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`-w` with a missing input file reported "USB error" and erased the chip first** — two bugs behind `minipro -p <chip> -w missing.bin` failing as `USB error: The system cannot find the file specified. (os error 2)`. `std::io::Error` results are routed into `MiniproError::Usb` by the blanket `From<io::Error>` impl (`nusb::Error` is an `io::Error` alias), so every file I/O failure masqueraded as a USB failure — `read_file`/`write_file` now reclassify them with the real path (`cannot read "dump.bin": …`). And the CLI previously opened the input file only inside `write_chip`, *after* erasing — the file is now read before the protect/erase sequence, so a bad path fails fast without touching the chip.
+
 ## [0.11.0] - 2026-11-08
 
 ### Added

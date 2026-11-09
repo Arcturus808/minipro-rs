@@ -689,3 +689,25 @@ with the TL866 path, and calls `protocol.invalidate_bitstream()`
 afterwards so a stale `TestLgcDown` isn't mistaken for the next
 device's algorithm. T56 needs no per-pass upload — its TTL1/TTL2
 bitstream honors the runtime pull flag, so the shared path stays.
+
+## Missing input file reported as "USB error" — and the chip got erased first (fixed)
+
+`minipro -p <chip> -w missing.bin` failed with
+`USB error: The system cannot find the file specified. (os error 2)` —
+two bugs stacked:
+
+1. `nusb::Error` is an `io::Error` alias, so the blanket
+   `impl From<nusb::Error> for MiniproError` covers **every** `io::Error`
+   in the codebase, including `std::fs` failures. `read_file`'s
+   `std::fs::read(path)?` produced `MiniproError::Usb`, which prints
+   "USB error: <os message>" — a file-not-found masquerading as a USB
+   failure (it sent a T76 SPI write investigation chasing phantom
+   endpoint/transaction problems; the write path itself was fine).
+2. The CLI opened the input file only inside `write_chip`, **after**
+   the auto-erase — a bad path cost a full chip erase for nothing.
+
+`read_file`/`write_file` now reclassify `Usb(io)` into
+`FileFormat("cannot read|write {path:?}: {io}")`, and the CLI pre-reads
+the input before the protect/erase sequence and writes the buffer via
+`write_chip_bytes`. Guard: any new bare `?` on an `io::Error` result
+silently becomes `Usb` — wrap file I/O with an explicit `map_err`.
