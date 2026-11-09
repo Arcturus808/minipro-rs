@@ -1338,6 +1338,63 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
     Ok(())
 }
 
+// ── SPI status register ─────────────────────────────────────────────────────
+
+/// SPI NOR (25-series flash) protocol id in the device database.
+pub const SPI_NOR_PROTOCOL_ID: u8 = 0x03;
+
+/// Bit names for the common 25-series status-register-1 layout, LSB first.
+///
+/// The BP field is bits 2–4 (BP0–BP2) on Winbond-style parts; Macronix
+/// parts like the MX25L8006E extend it through bit 5 (BP0–BP3) and call
+/// bit 7 SRWD, and other vendors put TB/SEC/CMP in bits 3–6. Consult the
+/// chip's datasheet — these names are a best-effort common denominator.
+pub const SPI_SR1_BIT_NAMES: [&str; 8] = ["WIP", "WEL", "BP0", "BP1", "BP2", "-", "-", "SRP"];
+
+/// Read-only status-register bits (WIP + WEL) — driven by the chip, not
+/// writable through WRSR.
+pub const SPI_SR1_READ_ONLY: u8 = 0b0000_0011;
+
+/// Read the SPI status register of a 25-series NOR chip.
+///
+/// The firmware surfaces the status register under the CFG fuse type —
+/// verified on T76 + W25X20CL: arbitrary byte writes via `spi_status_write`
+/// persist across reads, and the PROTECT_OFF (`0x18`) command clears the
+/// same register's BP bits, proving it is the real on-chip SR rather than
+/// a firmware shadow. Returns whatever bytes the firmware reports (one
+/// byte on T76), or an empty vec when the model reports nothing for this
+/// fuse type.
+///
+/// SPI NOR only — MCU config fuses also live under `MP_FUSE_CFG`, so
+/// non-`0x03` protocol devices return `UnsupportedOperation`.
+pub fn spi_status_read(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
+    let device = handle.device()?.clone();
+    if device.protocol_id != SPI_NOR_PROTOCOL_ID {
+        return Err(MiniproError::UnsupportedOperation);
+    }
+    handle
+        .protocol
+        .read_fuses(&handle.usb, &device, MP_FUSE_CFG, 8, 1)
+}
+
+/// Write one byte to the SPI status register (WRSR via WRITE_CFG), then
+/// read it back so the caller can see what actually stuck — the chip owns
+/// the WIP/WEL bits and may refuse writes while a cycle is in progress.
+///
+/// WARNING: the BP/SRP bits are non-volatile on most parts — they survive
+/// power cycles and can leave the chip write-protected. On T76 the
+/// `protect_off` command clears the BP bits (verified on W25X20CL).
+pub fn spi_status_write(handle: &mut MiniproHandle, value: u8) -> Result<Vec<u8>> {
+    let device = handle.device()?.clone();
+    if device.protocol_id != SPI_NOR_PROTOCOL_ID {
+        return Err(MiniproError::UnsupportedOperation);
+    }
+    handle
+        .protocol
+        .write_fuses(&handle.usb, &device, MP_FUSE_CFG, 1, 1, &[value])?;
+    spi_status_read(handle)
+}
+
 /// Read the chip's calibration bytes (OSCCAL word for PIC devices).
 ///
 /// For devices with `osccal_save == 1`, returns the calibration word bytes

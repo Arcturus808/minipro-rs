@@ -145,3 +145,21 @@ emitted bitstream → atomic writes.
   warn-only, so a future XGPro repack doesn't hard-fail.
 - `.gitignore` covers `algorithm.xml`, `firmware-*.dat`, `*.rar` — the
   outputs are XGecu-proprietary and must never be committed.
+
+## SPI status register (`--spi-status` / `--spi-status-write`)
+
+25-series SPI NOR (`protocol_id 0x03`) only — bails with a protocol-id
+message on anything else. Both flags run inside the normal transaction
+(they're ordinary action blocks in `do_operations`).
+
+- `--spi-status` reads the SR via `spi_status_read` — the fuse `0x01`
+  (CFG) path, which on T76 is the real on-chip register (verified on
+  W25X20CL; see `docs/T76-SUPPORT-STATUS.md`). Prints the raw byte plus a
+  best-effort decode of the common SR1 layout (`SPI_SR1_BIT_NAMES`,
+  WIP/WEL marked read-only via `SPI_SR1_READ_ONLY`), a warning when any
+  BP bits are set, and any extra bytes the firmware returned.
+- `--spi-status-write <BYTE>` writes one byte via `spi_status_write`
+  (fuse `0x01` write then a read-back) and prints the post-write state.
+  Accepts `0xNN` or decimal. The BP/SRP bits are non-volatile on most
+  parts — the flag's help text warns, and `-u`/protect-off clears BP
+  bits on T76 if the chip ends up protected.

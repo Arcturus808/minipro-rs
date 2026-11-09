@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--spi-status` / `--spi-status-write <BYTE>`: SPI status register access for 25-series NOR** — reads and writes the chip's status register (BP block-protect bits, SRP/SRWD, WEL, WIP) through the fuse `0x01` command path. Verified on T76 + W25X20CL where arbitrary writes persist and `protect_off` clears the same register — this is the real on-chip SR, not a firmware shadow; other models sharing the fuse command family are implemented identically but unverified. `--spi-status` prints the raw byte plus a best-effort decode of the common SR1 bit layout (WIP/WEL flagged read-only; warns when BP bits are set). `--spi-status-write` accepts `0xNN` or decimal and prints the read-back state — note the BP/SRP bits are non-volatile on most parts, and `-u`/protect-off clears BP bits on T76 if a write leaves the chip protected. Non-SPI devices are refused with a clear error.
+
 ### Fixed
 
 - **`-w` with a missing input file reported "USB error" and erased the chip first** — two bugs behind `minipro -p <chip> -w missing.bin` failing as `USB error: The system cannot find the file specified. (os error 2)`. `std::io::Error` results are routed into `MiniproError::Usb` by the blanket `From<io::Error>` impl (`nusb::Error` is an `io::Error` alias), so every file I/O failure masqueraded as a USB failure — `read_file`/`write_file` now reclassify them with the real path (`cannot read "dump.bin": …`). And the CLI previously opened the input file only inside `write_chip`, *after* erasing — the file is now read before the protect/erase sequence, so a bad path fails fast without touching the chip.
