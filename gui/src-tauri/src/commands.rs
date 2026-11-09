@@ -3444,6 +3444,11 @@ pub async fn write_fuses(
 pub struct LockStatusDto {
     is_protected: bool,
     lock_byte: u16,
+    /// Raw READ_LOCK (0x15) reply bytes for chips with no declared lock
+    /// element — e.g. SPI NOR status registers. Surfaced for diagnostics.
+    raw_lock: Vec<u8>,
+    /// Per-fuse-type probe results for chips with no declared lock element.
+    probe_notes: Vec<String>,
 }
 
 /// Quick check whether the chip's lock bits indicate read/write protection.
@@ -3482,6 +3487,8 @@ pub async fn check_lock_protection(
                         (0, 1)
                     };
 
+                let mut raw_lock: Vec<u8> = Vec::new();
+                let mut probe_notes: Vec<String> = Vec::new();
                 let lock_byte = if lock_count > 0 {
                     handle
                         .protocol
@@ -3495,6 +3502,33 @@ pub async fn check_lock_protection(
                         .map(|b| minipro_core::operations::parse_fuse_element(&b, 0, element_size))
                         .unwrap_or(0xffff)
                 } else {
+                    // No declared lock element (SPI NOR etc.): probe every fuse
+                    // type — the firmware may expose a status register under
+                    // any of them (lock 0x02, config 0x01, user 0x00).
+                    for ft in [0x02u8, 0x01, 0x00] {
+                        match handle.protocol.read_fuses(
+                            &handle.usb,
+                            handle.device().map_err(|e| e.to_string())?,
+                            ft,
+                            8,
+                            1,
+                        ) {
+                            Ok(b) if !b.is_empty() => {
+                                if ft == minipro_core::operations::MP_FUSE_LOCK {
+                                    raw_lock = b.clone();
+                                }
+                                probe_notes.push(format!(
+                                    "fuse {ft:#04x}: {}",
+                                    b.iter()
+                                        .map(|x| format!("{x:02x}"))
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
+                                ));
+                            }
+                            Ok(_) => probe_notes.push(format!("fuse {ft:#04x}: empty")),
+                            Err(e) => probe_notes.push(format!("fuse {ft:#04x}: {e}")),
+                        }
+                    }
                     0xffff
                 };
 
@@ -3518,7 +3552,10 @@ pub async fn check_lock_protection(
                         false
                     };
 
-                let is_protected = if is_avr {
+                let is_protected = if lock_count == 0 {
+                    // No declared lock element — the 0xffff sentinel is not protection.
+                    false
+                } else if is_avr {
                     // AVR: only LB bits (1:0) control external read/write.
                     // 11 = no protection, 10 = further programming disabled,
                     // 00 = programming and verification disabled.
@@ -3535,6 +3572,8 @@ pub async fn check_lock_protection(
                 Ok::<LockStatusDto, String>(LockStatusDto {
                     is_protected,
                     lock_byte,
+                    raw_lock,
+                    probe_notes,
                 })
             })();
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **GUI: SPI chips no longer report a phantom "lock bits active" state** — chips with no declared lock element (SPI NOR and others) previously fell back to a `0xFFFF` lock byte, which the lock check then reported as protected. The check now reports such chips as unprotected and instead probes all three fuse sub-types (`lock`/`config`/`user`), logging the raw bytes each returns — which exposes e.g. the SPI status register that the T76 surfaces under the config fuse type.
+
 ## [0.11.0] - 2026-11-08
 
 ### Added

@@ -551,6 +551,11 @@
   async function warnIfLocked() {
     try {
       const status = await checkLockProtection(icspMode);
+      if (status.probe_notes?.length) {
+        logs.info(`READ_LOCK probe: ${status.probe_notes.join(' | ')}`);
+      } else if (status.raw_lock?.length) {
+        logs.info(`READ_LOCK raw: ${status.raw_lock.map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
+      }
       if (status.is_protected) {
         logs.warn(`Lock bits are active (0x${status.lock_byte.toString(16).toUpperCase().padStart(fuseHexDigits(), '0')}). This chip may be read/write protected.`);
       }
