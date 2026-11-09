@@ -350,6 +350,8 @@ export async function writeFuses(cfg: FuseValue[], lock: FuseValue[], icspMode: 
 export interface LockStatus {
   is_protected: boolean;
   lock_byte: number;
+  raw_lock: number[];
+  probe_notes: string[];
 }
 
 export async function checkLockProtection(icspMode: string): Promise<LockStatus> {

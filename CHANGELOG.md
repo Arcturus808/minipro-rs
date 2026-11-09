@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`-w` with a missing input file reported "USB error" and erased the chip first** — two bugs behind `minipro -p <chip> -w missing.bin` failing as `USB error: The system cannot find the file specified. (os error 2)`. `std::io::Error` results are routed into `MiniproError::Usb` by the blanket `From<io::Error>` impl (`nusb::Error` is an `io::Error` alias), so every file I/O failure masqueraded as a USB failure — `read_file`/`write_file` now reclassify them with the real path (`cannot read "dump.bin": …`). And the CLI previously opened the input file only inside `write_chip`, *after* erasing — the file is now read before the protect/erase sequence, so a bad path fails fast without touching the chip.
+- **GUI: SPI chips no longer report a phantom "lock bits active" state** — chips with no declared lock element (SPI NOR and others) previously fell back to a `0xFFFF` lock byte, which the lock check then reported as protected. The check now reports such chips as unprotected and instead probes all three fuse sub-types (`lock`/`config`/`user`), logging the raw bytes each returns — which exposes e.g. the SPI status register that the T76 surfaces under the config fuse type.
 
 ## [0.11.0] - 2026-11-08
 
