@@ -116,16 +116,32 @@ pub fn read_file(path: &Path, format: &str, size: usize, blank_value: u8) -> Res
             "jedec" => jedec::read_from(&mut reader, size),
             _ => {
                 let mut buf = Vec::new();
-                reader.read_to_end(&mut buf)?;
-                Ok(buf)
+                match reader.read_to_end(&mut buf) {
+                    Ok(_) => Ok(buf),
+                    Err(e) => Err(e.into()),
+                }
             }
-        };
+        }
+        .map_err(|e| reclassify_file_error(e, "cannot read", Path::new("stdin")));
     }
     match effective_format(format, path) {
         "ihex" => ihex::read(path, size, blank_value),
         "srec" => srec::read(path, size, blank_value),
         "jedec" => jedec::read(path, size),
-        _ => Ok(std::fs::read(path)?),
+        _ => std::fs::read(path).map_err(Into::into),
+    }
+    .map_err(|e| reclassify_file_error(e, "cannot read", path))
+}
+
+/// Rewrap file I/O errors that were routed into the `Usb` variant by the
+/// blanket `From<io::Error>` impl (`nusb::Error` is an `io::Error` alias, so
+/// every io error — including a missing input file — lands in
+/// `MiniproError::Usb` and gets reported as "USB error: file not found").
+/// Reclassifies them with the actual file path and operation.
+fn reclassify_file_error(e: MiniproError, op: &str, path: &Path) -> MiniproError {
+    match e {
+        MiniproError::Usb(io) => MiniproError::FileFormat(format!("{op} {path:?}: {io}")),
+        other => other,
     }
 }
 
@@ -143,17 +159,21 @@ pub fn write_file(path: &Path, format: &str, data: &[u8], device_name: Option<&s
             "srec" => srec::write_to(&mut writer, data),
             "jedec" => jedec::write_to(&mut writer, data, device_name),
             _ => {
-                writer.write_all(data)?;
+                if let Err(e) = writer.write_all(data) {
+                    return Err(e.into());
+                }
                 Ok(())
             }
-        };
+        }
+        .map_err(|e| reclassify_file_error(e, "cannot write", Path::new("stdout")));
     }
     match effective_format(format, path) {
         "ihex" => ihex::write(path, data),
         "srec" => srec::write(path, data),
         "jedec" => jedec::write(path, data, device_name),
-        _ => Ok(std::fs::write(path, data)?),
+        _ => std::fs::write(path, data).map_err(Into::into).map(|_| ()),
     }
+    .map_err(|e| reclassify_file_error(e, "cannot write", path))
 }
 
 /// Read chip memory and save to `path`.

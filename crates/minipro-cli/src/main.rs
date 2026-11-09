@@ -27,7 +27,7 @@ use minipro_core::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
         read_chip_calibration, read_file, read_fuses, spi_autodetect_and_lookup, verify_chip,
-        write_chip, write_fuses, FuseValue, SizeMismatch,
+        write_chip_bytes, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -1100,6 +1100,26 @@ fn do_operations(
         } else if page == PageType::Calibration {
             anyhow::bail!("calibration page is read-only");
         } else {
+            // Read the input file before touching the chip: a missing or
+            // unreadable file must fail fast, not erase the device first.
+            let (buf, size_mismatch) = {
+                let device = handle.device()?.clone();
+                let code_size = handle.protocol.effective_code_size(&device) as usize;
+                let size = match proto_page {
+                    0x01 => device.data_memory_size as usize,
+                    _ => code_size,
+                };
+                let buf = read_file(path, &cli.format, size, device.blank_value as u8)?;
+                let size_mismatch = if cli.size_ignore {
+                    SizeMismatch::Ignore
+                } else if cli.size_warn {
+                    SizeMismatch::Warn
+                } else {
+                    SizeMismatch::Error
+                };
+                (buf, size_mismatch)
+            };
+
             // ── Protect off (before erase/write) ──────────────────────────────
             // T76 + off_protect_before: auto-unprotect regardless of -u flag.
             // The firmware needs this before erase for protected parallel-NOR.
@@ -1157,13 +1177,6 @@ fn do_operations(
                 }
             }
 
-            let size_mismatch = if cli.size_ignore {
-                SizeMismatch::Ignore
-            } else if cli.size_warn {
-                SizeMismatch::Warn
-            } else {
-                SizeMismatch::Error
-            };
             let pb = ProgressBar::new(0);
             pb.set_style(
                 ProgressStyle::with_template(
@@ -1171,11 +1184,10 @@ fn do_operations(
                 )
                 .unwrap_or_else(|_| ProgressStyle::default_bar()),
             );
-            let stats = write_chip(
+            let stats = write_chip_bytes(
                 handle,
-                path,
+                buf,
                 proto_page,
-                &cli.format,
                 size_mismatch,
                 cli.skip_blank,
                 Some(&mut |done, total| {
