@@ -594,6 +594,32 @@ frontend uses for the lookup. Bit definitions are sourced from avr-libc
 device headers and Microchip datasheets — see `fuse_defs.rs` for the
 config-name keying analysis and chip-prefix override logic.
 
+### SPI status register panel (25-series NOR)
+
+For devices with `protocol_id === 0x03` (exposed as `protocol_id` on
+`DeviceInfoDto`) and no MCU config, the Config operation shows a status
+register panel instead of the fuse editor — the Config button stays
+enabled via the `isSpiNor` derived flag, and the "Read Config from Chip"
+Start button routes to `readSpiStatus()` rather than `readFuses()`.
+
+- Backend: `spi_status_read`/`spi_status_write` commands
+  (`commands.rs`), thin wrappers over `minipro_core::spi_status_*`
+  inside the usual take_handle → begin_transaction → end_transaction →
+  store_handle flow via the shared `spi_status_op` helper.
+  `UnsupportedOperation` maps to `{ supported: false }` so the frontend
+  can warn instead of failing — the ops layer itself gates on
+  `protocol_id`.
+- Frontend: `spiStatus` state (`number | null`, reset on device change),
+  a hex input synced with eight bit-toggle checkboxes in MSB-first order
+  (`SR_BITS` in `App.svelte` — the common SR1 layout; WEL/WIP are
+  disabled read-only), and Read/Write buttons. `writeSpiStatus` logs a
+  non-volatile warning when BP bits are being set. The `showSpiSrHelp`
+  modal documents bit semantics, layout variance (MX25L8006E BP0–BP3),
+  and the protect-off recovery path.
+- The SR byte read/written here is the real on-chip status register —
+  verified T76/TL866A/T48, see `docs/T76-SUPPORT-STATUS.md`. BP/SRP
+  bits are non-volatile; a `0x00` write or T76 protect-off recovers.
+
 ## Terminal Rendering (TerminalLog.svelte)
 
 The GUI terminal simulates a real terminal using HTML. Column alignment

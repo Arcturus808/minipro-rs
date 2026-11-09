@@ -55,6 +55,8 @@ export interface DeviceInfo {
   icsp: number;
   /** flags.prog_support == MP_ICSP_ONLY — programmable on the ICSP header only. */
   icsp_only: boolean;
+  /** Raw protocol_id — 0x03 selects the SPI status register panel (25-series NOR). */
+  protocol_id: number;
 }
 
 export interface IcspWire {

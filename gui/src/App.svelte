@@ -28,6 +28,8 @@
     readFuses,
     writeFuses,
     checkLockProtection,
+    spiStatusRead,
+    spiStatusWrite,
     clearPinTestResult,
     pinTestResult,
     pinTestRunning,
@@ -100,9 +102,24 @@
   let selectedDeviceKey = $derived($selectedDevice?.name ?? "none");
   let showConfigHelp = $state(false);
   let configExpanded = $state(false);
+  // SPI status register (25-series NOR): null = not read yet this session.
+  let spiStatus = $state<number | null>(null);
+  // Common SR1 bit layout, MSB first. WIP/WEL are chip-driven read-only.
+  const SR_BITS = [
+    { bit: 7, name: "SRP", ro: false },
+    { bit: 6, name: "-", ro: false },
+    { bit: 5, name: "-", ro: false },
+    { bit: 4, name: "BP2", ro: false },
+    { bit: 3, name: "BP1", ro: false },
+    { bit: 2, name: "BP0", ro: false },
+    { bit: 1, name: "WEL", ro: true },
+    { bit: 0, name: "WIP", ro: true },
+  ];
+  let isSpiNor = $derived(($selectedDevice?.protocol_id ?? -1) === 0x03);
   let showBatchHelp = $state(false);
   let showFuseWriteConfirm = $state(false);
   let showLogicHelp = $state(false);
+  let showSpiSrHelp = $state(false);
 
   // Identify (auto-find) state
   let identifyPinCount = $state<number | null>(null);
@@ -111,7 +128,7 @@
 
   // Close help/confirm modals on Escape (global listener — modals don't receive focus on open)
   $effect(() => {
-    if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm && !showLogicHelp) return;
+    if (!showConfigHelp && !showBatchHelp && !showFuseWriteConfirm && !showLogicHelp && !showSpiSrHelp) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -119,6 +136,7 @@
         showBatchHelp = false;
         showFuseWriteConfirm = false;
         showLogicHelp = false;
+        showSpiSrHelp = false;
       }
     };
     document.addEventListener("keydown", handler);
@@ -154,6 +172,8 @@
     } else {
       configData = null;
     }
+    // SPI status register is per-chip, not per-device-selection — clear it.
+    spiStatus = null;
   });
 
   // Reload voltage override options when programmer or device changes.
@@ -467,6 +487,51 @@
     }
   }
 
+  // ── SPI status register (25-series NOR) ──────────────────────────────────
+  function srHex(): string {
+    return spiStatus === null ? "--" : spiStatus.toString(16).padStart(2, "0").toUpperCase();
+  }
+
+  function toggleSrBit(bit: number, on: boolean) {
+    if (spiStatus === null) return;
+    spiStatus = on ? spiStatus | (1 << bit) : spiStatus & ~(1 << bit);
+  }
+
+  async function readSpiStatus() {
+    try {
+      const r = await spiStatusRead(icspMode);
+      if (!r.supported) {
+        logs.warn("SPI status register is not available for this device.");
+        return;
+      }
+      spiStatus = r.bytes[0] ?? 0;
+      logs.info(`SPI status register: 0x${srHex()}`);
+      if (spiStatus & 0x7c) {
+        logs.warn("Block-protect bits are set — the chip may refuse erase/write.");
+      }
+    } catch (e) {
+      logs.error(`SPI status read failed: ${e}`);
+    }
+  }
+
+  async function writeSpiStatus() {
+    if (spiStatus === null) return;
+    if (spiStatus & 0x7c) {
+      logs.warn("BP/SRP bits are non-volatile — they persist across power cycles. Protect Off clears BP bits on T76.");
+    }
+    try {
+      const r = await spiStatusWrite(icspMode, spiStatus);
+      if (!r.supported) {
+        logs.warn("SPI status register is not available for this device.");
+        return;
+      }
+      spiStatus = r.bytes[0] ?? 0;
+      logs.info(`SPI status register written — read-back 0x${srHex()}`);
+    } catch (e) {
+      logs.error(`SPI status write failed: ${e}`);
+    }
+  }
+
   // Check if any fuse field name matches a dangerous fuse pattern
   function hasDangerousFuseChange(): boolean {
     if (!configData) return false;
@@ -695,6 +760,11 @@
         await doLogicTest(icspMode, overrideVcc || null);
         break;
       case "config":
+        // SPI NOR: the Config panel shows the status register instead of fuses.
+        if (isSpiNor && !($selectedDevice?.config && $selectedDevice.config.type === "Mcu")) {
+          await readSpiStatus();
+          break;
+        }
         try {
           const read = await readFuses(icspMode, pinCheck);
           if (configData) {
@@ -989,7 +1059,7 @@
           <button
             class="btn preset-tonal px-2 py-1 text-sm hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
             onclick={() => selectOp("config")}
-            disabled={$isRunning || ($selectedDevice !== null && !$selectedDevice.config)}
+            disabled={$isRunning || ($selectedDevice !== null && !$selectedDevice.config && !isSpiNor)}
             class:opacity-60={!$selectedDevice}
             class:preset-filled-primary={$activeOperation === "config"}
             class:ring-2={$activeOperation === "config"}
@@ -1050,7 +1120,7 @@
                   <p class="text-xs text-amber-700-200 mt-2">Connect a programmer to use Identify.</p>
                 {/if}
               </div>
-            {:else if $selectedDevice && ($activeOperation !== "config" || $selectedDevice.config)}
+            {:else if $selectedDevice && ($activeOperation !== "config" || $selectedDevice.config || isSpiNor)}
             {#if $activeOperation !== "config"}
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider opacity-60">Options for {opLabel}</span>
@@ -1510,6 +1580,75 @@
                       Write Config to Chip
                     </button>
                   </div>
+                {:else if isSpiNor}
+                  <!-- 25-series SPI NOR: status register panel (no MCU fuses) -->
+                  <div class="col-span-2 space-y-3">
+                    <div class="bg-surface-100-900 rounded-lg p-3 space-y-3">
+                      <div class="flex items-center gap-2">
+                        <span class="uppercase tracking-wider text-sm font-semibold opacity-70">SPI Status Register</span>
+                        <button
+                          class="opacity-50 hover:opacity-100 transition-opacity p-1 rounded border border-transparent hover:border-surface-200-800 shrink-0"
+                          onclick={() => showSpiSrHelp = true}
+                          title="Status register help"
+                          aria-label="Status register help"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <div class="flex-1"></div>
+                        <input
+                          type="text"
+                          class="input text-xs font-mono px-1 py-0.5 w-14 text-center"
+                          value={spiStatus === null ? "" : srHex()}
+                          placeholder="--"
+                          onchange={(e) => {
+                            const v = parseInt(e.currentTarget.value, 16);
+                            if (!isNaN(v) && v >= 0 && v <= 0xff) spiStatus = v;
+                          }}
+                          onclick={(e) => e.stopPropagation()}
+                          maxlength={2}
+                        />
+                        <button
+                          class="text-xs px-2.5 py-1 rounded border border-surface-300-600 hover:bg-primary-500/10 hover:border-primary-400 transition-colors disabled:opacity-40"
+                          onclick={readSpiStatus}
+                          disabled={$isRunning || !$isConnected}
+                        >
+                          Read
+                        </button>
+                        <button
+                          class="text-xs px-2.5 py-1 rounded border border-surface-300-600 hover:bg-primary-500/10 hover:border-primary-400 transition-colors disabled:opacity-40"
+                          onclick={writeSpiStatus}
+                          disabled={$isRunning || !$isConnected || spiStatus === null}
+                        >
+                          Write
+                        </button>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        {#each SR_BITS as bit}
+                          <label
+                            class="flex items-center gap-1 text-xs font-mono"
+                            class:opacity-40={bit.ro}
+                            title={bit.ro ? `${bit.name} — driven by the chip, read-only` : undefined}
+                          >
+                            <input
+                              type="checkbox"
+                              class="checkbox"
+                              disabled={bit.ro || spiStatus === null}
+                              checked={spiStatus !== null && (spiStatus & (1 << bit.bit)) !== 0}
+                              onchange={(e) => toggleSrBit(bit.bit, e.currentTarget.checked)}
+                            />
+                            {bit.name}{bit.ro ? " (RO)" : ""}
+                          </label>
+                        {/each}
+                      </div>
+                      <p class="text-xs opacity-60">
+                        Block-protect (BP) and SRP bits are non-volatile — they persist across power cycles.
+                        WEL/WIP are driven by the chip. Bit names follow the common SR1 layout; extended parts
+                        (e.g. MX25L8006E, BP0–BP3 in bits 2–5) differ — check the datasheet.
+                      </p>
+                    </div>
+                  </div>
                 {:else}
                   <p class="text-sm opacity-50 col-span-2">No configuration data for this device.</p>
                 {/if}
@@ -1885,6 +2024,51 @@
           <li>For <b>AVR</b>: only the LB bits (bits 1:0) control external ISP read/write. BLB0 and BLB1 only affect internal SPM/LPM access and do not prevent external programming. The app only warns when LB bits indicate external protection.</li>
           <li>For <b>PIC</b>: config words include code protection bits (CP, CPB, CPD, WRT, WRTC, WRTB, WRTD, EBTR). Setting these can prevent future reads or writes. A chip erase is usually required to clear them.</li>
           <li>Read the chip's lock protection status before writing (the app warns if the chip is locked).</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
+          Press <span style="font-family: 'Hack', 'Consolas', monospace;">Esc</span> or click outside to close
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showSpiSrHelp}
+    <!-- svelte-ignore a11y_click_events_have_key_events,a11y_no_static_element_interactions -->
+    <div
+      style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0,0,0,0.4);"
+      onclick={(e) => { if (e.target === e.currentTarget) showSpiSrHelp = false; }}
+    >
+      <div style="background: var(--bg-color, #fff); color: var(--modal-text-color, #1a1a1a); border: 1px solid var(--modal-border-color, #ccc); border-radius: 6px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); min-width: 380px; max-width: 480px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div style="font-size: 15px; font-weight: 600;">SPI Status Register Help</div>
+          <button
+            style="padding: 2px 8px; border: none; background: transparent; cursor: pointer; font-size: 16px; opacity: 0.6;"
+            onclick={() => showSpiSrHelp = false}
+            title="Close"
+          >✕</button>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">What it is</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>25-series SPI NOR flash chips carry a status register controlling write protection — the same register XGPro shows as radio buttons + a hex field.</li>
+          <li><b>Read</b> fetches the live register. <b>Write</b> sends the edited byte and shows the read-back, so you can see what actually stuck.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Bits (common SR1 layout)</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li><b>WIP</b> (bit 0) — write in progress. Driven by the chip, read-only.</li>
+          <li><b>WEL</b> (bit 1) — write-enable latch. Driven by the chip, read-only.</li>
+          <li><b>BP0–BP2</b> (bits 2–4) — block protect: which memory regions refuse erase/write. <b>Non-volatile</b> on most parts.</li>
+          <li><b>SRP</b> (bit 7) — status-register protect: can lock the SR itself (with /WP low).</li>
+          <li>Layouts vary: Macronix parts like MX25L8006E use <b>BP0–BP3</b> in bits 2–5 and call bit 7 <b>SRWD</b>; others put TB/SEC/CMP in bits 3–6. Check the datasheet.</li>
+        </ul>
+
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; opacity: 0.8;">Caution</div>
+        <ul style="font-size: 12px; line-height: 1.5; padding-left: 18px; margin: 0 0 14px 0;">
+          <li>BP/SRP bits <b>survive power cycles</b> — a write can leave the chip permanently protected until cleared.</li>
+          <li>Recovery: write <b>0x00</b>, or use <b>Protect Off</b> (clears BP bits on T76, verified).</li>
+          <li>Verified working on T76, TL866A, and T48. If your programmer reports no register, the panel shows a warning instead.</li>
         </ul>
 
         <div style="text-align: center; margin-top: 12px; font-size: 11px; opacity: 0.5;">
