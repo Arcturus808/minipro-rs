@@ -114,6 +114,12 @@ Exposed as `--spi-status` / `--spi-status-write <BYTE>` in the CLI
 bits are non-volatile on most parts; `minipro -u` (protect off) clears
 BP bits on T76 if a write leaves the chip protected.
 
+**TL866A (fw 03.2.72) verified too:** `CMD_WRITE_CFG` (`0x13`, fuse type
+`0x01`) writes the same physical SR — `0x04` set on the TL866A persisted
+across processes and was cleared by a T76 `protect_off`. Full-chip reads
+before/after SR writes (warm and cold-boot-first-command) returned
+byte-identical data: no data-memory side effects.
+
 ### eMMC capacity detection
 eMMC database entries have `code_memory_size="0x200"` (512 bytes), a
 placeholder. Real capacity is detected at runtime:
