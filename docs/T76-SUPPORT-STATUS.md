@@ -114,11 +114,20 @@ Exposed as `--spi-status` / `--spi-status-write <BYTE>` in the CLI
 bits are non-volatile on most parts; `minipro -u` (protect off) clears
 BP bits on T76 if a write leaves the chip protected.
 
-**TL866A (fw 03.2.72) verified too:** `CMD_WRITE_CFG` (`0x13`, fuse type
-`0x01`) writes the same physical SR — `0x04` set on the TL866A persisted
-across processes and was cleared by a T76 `protect_off`. Full-chip reads
-before/after SR writes (warm and cold-boot-first-command) returned
-byte-identical data: no data-memory side effects.
+**Model verification (W25X20CL):**
+
+| Model | Read | Write persists | Data side effects |
+|---|---|---|---|
+| T76 (fw 00.1.18) | yes | yes | none — `protect_off` clears the same SR |
+| TL866A (fw 03.2.72) | yes | yes | none — incl. cold-boot-first-command |
+| T48 (fw 00.1.35) | yes | yes | none |
+| T56 | same command family — untested | | |
+| TL866II+ | same impl as T48 — untested | | |
+
+TL866A detail: `CMD_WRITE_CFG` (`0x13`, fuse type `0x01`) writes the same
+physical SR — `0x04` set on the TL866A persisted across processes and was
+cleared by a T76 `protect_off`. T48 rides the TL866II+ impl
+(`CMD_READ_FUSES`/`CMD_WRITE_FUSES`, fuse type `0x01`).
 
 ### eMMC capacity detection
 eMMC database entries have `code_memory_size="0x200"` (512 bytes), a
