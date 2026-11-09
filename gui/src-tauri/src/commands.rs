@@ -272,6 +272,9 @@ pub struct DeviceInfoDto {
     /// `flags.prog_support == MP_ICSP_ONLY` — the part can only be
     /// programmed on the ICSP header, never in the ZIF socket.
     icsp_only: bool,
+    /// Raw `protocol_id` from the database — `0x03` selects the SPI status
+    /// register panel (25-series NOR).
+    protocol_id: u8,
 }
 
 #[derive(Serialize)]
@@ -3594,6 +3597,96 @@ pub async fn check_lock_protection(
     }
 }
 
+/// SPI status-register result for 25-series NOR devices.
+#[derive(Serialize)]
+pub struct SpiStatusDto {
+    /// False when the selected device isn't a 25-series SPI NOR.
+    supported: bool,
+    /// Raw status-register bytes (one byte on all verified models).
+    bytes: Vec<u8>,
+}
+
+fn spi_status_op(
+    icspMode: String,
+    state_task: Arc<AppState>,
+    op: impl FnOnce(
+            &mut minipro_core::MiniproHandle,
+        ) -> Result<Vec<u8>, minipro_core::error::MiniproError>
+        + Send
+        + 'static,
+) -> tokio::task::JoinHandle<Result<SpiStatusDto, String>> {
+    tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let result = (|| {
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
+            handle
+                .begin_transaction(device)
+                .map_err(|e| e.to_string())?;
+            match op(&mut handle) {
+                Ok(bytes) => Ok(SpiStatusDto {
+                    supported: true,
+                    bytes,
+                }),
+                Err(minipro_core::error::MiniproError::UnsupportedOperation) => Ok(SpiStatusDto {
+                    supported: false,
+                    bytes: Vec::new(),
+                }),
+                Err(e) => Err(e.to_string()),
+            }
+        })();
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        result
+    })
+}
+
+/// Read the SPI status register of a 25-series NOR chip (fuse type 0x01).
+#[tauri::command]
+pub async fn spi_status_read(
+    icspMode: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SpiStatusDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+    let join = spi_status_op(icspMode, state_clone.clone(), |h| {
+        minipro_core::spi_status_read(h)
+    });
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), join).await;
+    state_clone.release();
+    match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
+/// Write one byte to the SPI status register and return the read-back.
+/// BP/SRP bits are non-volatile on most parts — the frontend warns.
+#[tauri::command]
+pub async fn spi_status_write(
+    icspMode: String,
+    value: u8,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SpiStatusDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+    let join = spi_status_op(icspMode, state_clone.clone(), move |h| {
+        minipro_core::spi_status_write(h, value)
+    });
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), join).await;
+    state_clone.release();
+    match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => Err(format!("Task panicked: {}", e)),
+        Err(_) => Err("Operation timed out".into()),
+    }
+}
+
 /// Run the programmer's built-in hardware self-test.
 #[tauri::command]
 pub async fn run_hardware_check(
@@ -4020,6 +4113,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         protect_after: dev.flags.protect_after,
         icsp: dev.package_details.icsp,
         icsp_only: dev.flags.prog_support == minipro_core::device::MP_ICSP_ONLY,
+        protocol_id: dev.protocol_id,
     }
 }
 

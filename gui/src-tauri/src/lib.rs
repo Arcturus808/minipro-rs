@@ -184,6 +184,8 @@ pub fn run() {
             commands::read_fuses,
             commands::write_fuses,
             commands::check_lock_protection,
+            commands::spi_status_read,
+            commands::spi_status_write,
             commands::get_fuse_bit_defs,
             commands::download_algorithms,
             commands::cancel_algo_download,

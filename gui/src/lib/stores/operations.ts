@@ -358,6 +358,19 @@ export async function checkLockProtection(icspMode: string): Promise<LockStatus>
   return await invoke<LockStatus>("check_lock_protection", { icspMode });
 }
 
+export interface SpiStatus {
+  supported: boolean;
+  bytes: number[];
+}
+
+export async function spiStatusRead(icspMode: string): Promise<SpiStatus> {
+  return await invoke<SpiStatus>("spi_status_read", { icspMode });
+}
+
+export async function spiStatusWrite(icspMode: string, value: number): Promise<SpiStatus> {
+  return await invoke<SpiStatus>("spi_status_write", { icspMode, value });
+}
+
 // ── Pin contact test ────────────────────────────────────────────────────────
 
 export interface PinTestResult {
