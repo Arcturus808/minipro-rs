@@ -106,7 +106,8 @@ pub use icsp::{icsp_wiring, IcspWire, IcspWiring};
 pub use operations::{
     chip_id_info, firmware_update, hardware_check, health_check, logic_auto_find, logic_ic_test,
     pin_check_gate_applies, pin_contact_check, read_fuses, spi_autodetect,
-    spi_autodetect_and_lookup, write_fuses, AutoFindEntry, ChipIdInfo, FuseValue, OpStats,
-    SizeMismatch, SpiAutodetectResult,
+    spi_autodetect_and_lookup, spi_status_read, spi_status_write, write_fuses, AutoFindEntry,
+    ChipIdInfo, FuseValue, OpStats, SizeMismatch, SpiAutodetectResult, SPI_SR1_BIT_NAMES,
+    SPI_SR1_READ_ONLY,
 };
 pub use protocol::{LogicTestResult, PinTestResult};

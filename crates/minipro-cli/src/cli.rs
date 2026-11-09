@@ -188,6 +188,17 @@ struct Cli {
     #[arg(long = "write-fuses", value_name = "FILE")]
     write_fuses: Option<PathBuf>,
 
+    /// Read the SPI status register and decode its bits (25-series NOR only)
+    #[arg(long = "spi-status", action = ArgAction::SetTrue)]
+    spi_status: bool,
+
+    /// Write BYTE (hex or decimal) to the SPI status register, then read it
+    /// back for verification. WARNING: BP/SRP bits are non-volatile on most
+    /// parts — they survive power cycles and can leave the chip protected.
+    /// -u / protect-off clears the BP bits on T76.
+    #[arg(long = "spi-status-write", value_name = "BYTE")]
+    spi_status_write: Option<String>,
+
     /// Auto-detect SPI flash chip JEDEC ID (0 = 8-pin, 1 = 16-pin) [default: 0]
     #[arg(short = 'a', long = "spi-autodetect", alias = "auto_detect", value_name = "TYPE")]
     spi_autodetect: Option<Option<u8>>,

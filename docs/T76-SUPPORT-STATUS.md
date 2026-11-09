@@ -94,6 +94,26 @@ DIP16/20/24/40 and reversed insertion untested.
 FPGA initialization. NAND and eMMC skip this (zeroed 0x39 deselects
 the chip). Applies to all programmer models.
 
+### SPI status register (fuse type `0x01`)
+
+For 25-series SPI NOR (`protocol_id 0x03`) the T76 surfaces the chip's
+real status register through the fuse commands:
+
+- `READ_CFG` (`0x08`, fuse type `0x01`) → RDSR, returns the SR byte
+- `WRITE_CFG` (`0x09`, fuse type `0x01`) → WRSR, arbitrary byte writes
+  persist across reads
+- `READ_USER` (`0x06`, fuse type `0x00`) returns the same byte — an alias
+- `READ_LOCK` (`0x15`, fuse type `0x02`) returns nothing for SPI parts
+- `PROTECT_OFF` (`0x18`) clears the SR's block-protect bits
+
+Verified on W25X20CL (fw 00.1.18): writing `0x04`/`0x1C` to fuse `0x01`
+read back exactly, and a subsequent `protect_off` reset the register to
+`0x00` — proving the register is the on-chip SR, not a firmware shadow.
+Exposed as `--spi-status` / `--spi-status-write <BYTE>` in the CLI
+(`spi_status_read`/`spi_status_write` in `operations.rs`). The BP/SRP
+bits are non-volatile on most parts; `minipro -u` (protect off) clears
+BP bits on T76 if a write leaves the chip protected.
+
 ### eMMC capacity detection
 eMMC database entries have `code_memory_size="0x200"` (512 bytes), a
 placeholder. Real capacity is detected at runtime:

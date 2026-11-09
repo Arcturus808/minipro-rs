@@ -57,6 +57,17 @@ fn parse_erase_value(s: &str) -> Result<u8> {
     Ok(val)
 }
 
+/// Parse a u8 from decimal or hex (0x-prefixed).
+fn parse_u8(s: &str) -> Result<u8> {
+    let s = s.trim();
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u8::from_str_radix(hex, 16)
+    } else {
+        s.parse::<u8>()
+    }
+    .map_err(|e| anyhow::anyhow!("invalid value '{s}': {e}"))
+}
+
 /// Parse a u64 from decimal or hex (0x-prefixed).
 fn parse_u64(s: &str) -> Result<u64> {
     let s = s.trim();
@@ -1380,6 +1391,29 @@ fn do_operations(
         eprintln!("Fuses written.");
     }
 
+    // ── SPI status register ───────────────────────────────────────────────────
+    if cli.spi_status || cli.spi_status_write.is_some() {
+        if handle.device()?.protocol_id != minipro_core::operations::SPI_NOR_PROTOCOL_ID {
+            anyhow::bail!(
+                "--spi-status is only supported for 25-series SPI NOR devices \
+                 (this chip uses protocol {:#04x})",
+                handle.device()?.protocol_id
+            );
+        }
+        let sr = if let Some(ref raw) = cli.spi_status_write {
+            let value = parse_u8(raw).with_context(|| {
+                format!("invalid --spi-status-write byte '{raw}' (use 0xNN for hex)")
+            })?;
+            eprint!("Writing SPI status register {value:#04x}... ");
+            let readback = minipro_core::spi_status_write(handle, value)?;
+            eprintln!("done.");
+            readback
+        } else {
+            minipro_core::spi_status_read(handle)?
+        };
+        print_spi_status(&sr);
+    }
+
     // ── SPI autodetect ────────────────────────────────────────────────────────
     if let Some(id_type_opt) = cli.spi_autodetect {
         let id_type = id_type_opt.unwrap_or(0);
@@ -1580,6 +1614,45 @@ fn format_fuse_value(value: u16, element_size: usize) -> String {
         format!("{:#06x}", value)
     } else {
         format!("{:#04x}", value)
+    }
+}
+
+/// Print the SPI status register with a best-effort bit decode. The names
+/// follow the common 25-series SR1 layout (Winbond-style BP0–BP2 in bits
+/// 2–4); parts like the MX25L8006E extend BP through bit 5 and name bit 7
+/// SRWD — the datasheet is authoritative.
+fn print_spi_status(bytes: &[u8]) {
+    if bytes.is_empty() {
+        println!("SPI status register: (no data reported by this programmer/chip)");
+        return;
+    }
+    let sr = bytes[0];
+    let mut bits = String::new();
+    for i in (0..8).rev() {
+        let name = minipro_core::SPI_SR1_BIT_NAMES[i];
+        let set = sr & (1 << i) != 0;
+        let ro = minipro_core::SPI_SR1_READ_ONLY & (1 << i) != 0;
+        bits.push_str(&format!(
+            "{name}={}{}{}",
+            u8::from(set),
+            if ro { "(RO)" } else { "" },
+            if i == 0 { "" } else { "  " }
+        ));
+    }
+    println!("SPI status register: {sr:#04x}");
+    println!("  {bits}");
+    if sr & 0x7c != 0 {
+        println!("  -> block-protect bits set: the chip may refuse erase/write");
+    }
+    if bytes.len() > 1 {
+        println!(
+            "  additional bytes: {}",
+            bytes[1..]
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
     }
 }
 
