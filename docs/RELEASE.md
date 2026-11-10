@@ -197,6 +197,31 @@ time. If you bump `package.json` but only run `cargo build --release`
 (without `cargo tauri build`), the stale embedded frontend persists. Always
 run `cargo tauri build` after any frontend or version change.
 
+## Testing installers on a dev machine — clean up afterward
+
+Running the NSIS `.exe` installer with `/D=<path>` to inspect what it lays
+down is a **real install**, not a dry run — even pointed at a scratch dir
+it writes persistent machine state:
+
+- An Uninstall entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\
+  Uninstall\MINIPRO-RS-GUI`) pointing at that path
+- The install-state key `HKCU\Software\minipro\MINIPRO-RS-GUI`, whose
+  `(default)` value is the INSTDIR — **later installers (MSI included)
+  read this as the remembered install location and offer it as the
+  default destination**
+- Start Menu / Desktop shortcuts targeting that path
+
+If that directory is later deleted without uninstalling (e.g., pointed at
+a temp dir that Windows cleans), all three become orphans: Settings →
+Apps → Uninstall fails with "cannot find uninstall.exe", the next
+installer defaults to the stale path, and the stale same-named shortcut
+collides with the new one (MSI **Warning 1946** on `System.AppUserModel.ID`).
+
+**Either** run the produced `uninstall.exe` when finished testing, **or**
+test in Windows Sandbox / a VM. If it's already orphaned, remove
+`HKCU\Software\minipro\MINIPRO-RS-GUI`, the matching `Uninstall\` entry,
+and any `.lnk` targeting the dead path.
+
 ## Bumping the MSRV
 
 MSRV: CLI/core 1.85, GUI 1.88. When bumping either, update ALL of these
