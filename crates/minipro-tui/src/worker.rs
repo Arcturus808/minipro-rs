@@ -322,23 +322,39 @@ fn run_in_transaction(
                 }
                 Err(e) => return Err(e.to_string()),
             };
-            // read_fuses returns fuses then locks in field order; zip to
-            // recover each field's mask for the view.
-            let rows = fc
-                .fuses
-                .iter()
-                .chain(fc.locks.iter())
-                .zip(values.iter())
-                .map(|(f, v)| FuseRow {
+            // read_fuses returns fuses, then user_idN entries, then locks
+            // (upstream fuses-file order); zip the field tables for masks.
+            // User ids have no field mask — show the chip's compare_mask.
+            let n_fuses = fc.fuses.len();
+            let n_uids = values.len().saturating_sub(n_fuses + fc.locks.len());
+            let mut rows = Vec::with_capacity(values.len());
+            for (f, v) in fc.fuses.iter().zip(values.iter()) {
+                rows.push(FuseRow {
                     name: f.name.clone(),
                     value: v.value,
                     mask: f.mask,
-                })
-                .collect();
+                });
+            }
+            for v in &values[n_fuses..n_fuses + n_uids] {
+                rows.push(FuseRow {
+                    name: v.name.clone(),
+                    value: v.value,
+                    mask: device.compare_mask,
+                });
+            }
+            for (f, v) in fc.locks.iter().zip(values[n_fuses + n_uids..].iter()) {
+                rows.push(FuseRow {
+                    name: f.name.clone(),
+                    value: v.value,
+                    mask: f.mask,
+                });
+            }
             Ok(OpOutcome::ConfigFuses {
                 rows,
-                n_fuses: fc.fuses.len(),
+                n_fuses,
+                n_uids,
                 nibbles: fuse_element_size(&fc.name) * 2,
+                uid_nibbles: minipro_core::operations::uid_element_size(&device) * 2,
             })
         }
         OpKind::ConfigWrite => match input {

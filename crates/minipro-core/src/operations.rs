@@ -1082,9 +1082,261 @@ pub fn normalize_fuse_value(value: u16, mask: u16, element_size: usize) -> u16 {
     v
 }
 
+/// Element width for user-id entries: upstream uses `data_org ? 2 : 1` —
+/// word- or bit-organized devices carry 16-bit user-id words,
+/// byte-organized devices carry bytes.
+pub fn uid_element_size(device: &Device) -> usize {
+    match device.flags.data_org {
+        DataOrg::Bytes => 1,
+        _ => 2,
+    }
+}
+
+/// Canonical name of user-id slot `i` — upstream prints `user_id0`, …
+/// (`user_id[]` in `main.c`) in fuses files.
+fn uid_name(i: usize) -> String {
+    format!("user_id{i}")
+}
+
+/// Look a value up by field name — the same routing upstream's
+/// `get_fuse_value` applies to each expected name in a fuses file.
+fn fuse_lookup(values: &[FuseValue], name: &str) -> Result<u16> {
+    values
+        .iter()
+        .find(|v| v.name == name)
+        .map(|v| v.value)
+        .ok_or_else(|| MiniproError::Protocol(format!("missing value for '{name}'")))
+}
+
+/// Pack the user-id section for a fuse write. The section is optional —
+/// absent `user_idN` names mean the caller carries fuses+locks only (GUI);
+/// present-but-incomplete fails, matching upstream's per-name lookup error.
+fn pack_uid_values(
+    device: &Device,
+    num_uids: usize,
+    values: &[FuseValue],
+) -> Result<Option<Vec<u8>>> {
+    if num_uids == 0 || !values.iter().any(|v| v.name.starts_with("user_id")) {
+        return Ok(None);
+    }
+    let item = uid_element_size(device);
+    let mut out = Vec::with_capacity(num_uids * item);
+    for i in 0..num_uids {
+        let v = fuse_lookup(values, &uid_name(i))? & device.compare_mask;
+        out.extend(pack_fuse_element(v, item));
+    }
+    Ok(Some(out))
+}
+
+/// Build the ordered config-row list — fuse fields, `user_idN` entries,
+/// then lock fields. This is upstream's fuses-file order; `write_fuses`
+/// consumes the same order (plus name routing for the uid section).
+fn config_rows(
+    config: &crate::device::FuseConfig,
+    device: &Device,
+    cfg_bytes: &[u8],
+    uid_rows: usize,
+    uid_bytes: &[u8],
+    lock_bytes: &[u8],
+) -> Vec<FuseValue> {
+    let element_size = fuse_element_size(&config.name);
+    let uid_item = uid_element_size(device);
+    let mut out = Vec::with_capacity(config.fuses.len() + uid_rows + config.locks.len());
+    for (i, field) in config.fuses.iter().enumerate() {
+        let raw = parse_fuse_element(cfg_bytes, i, element_size);
+        out.push(FuseValue {
+            name: field.name.clone(),
+            value: normalize_fuse_value(raw, field.mask, element_size),
+        });
+    }
+    for i in 0..uid_rows {
+        // Upstream masks user ids by compare_mask only — no mask-fill.
+        out.push(FuseValue {
+            name: uid_name(i),
+            value: parse_fuse_element(uid_bytes, i, uid_item) & device.compare_mask,
+        });
+    }
+    for (i, field) in config.locks.iter().enumerate() {
+        let raw = parse_fuse_element(lock_bytes, i, element_size);
+        out.push(FuseValue {
+            name: field.name.clone(),
+            value: normalize_fuse_value(raw, field.mask, element_size),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn uid_test_device(data_org: DataOrg) -> Device {
+        let mut device = Device::default();
+        device.flags.data_org = data_org;
+        device.compare_mask = 0xff;
+        device
+    }
+
+    fn uid_test_config() -> crate::device::FuseConfig {
+        crate::device::FuseConfig {
+            name: "avr_11".into(),
+            num_uids: 4,
+            fuses: vec![
+                crate::device::FuseField {
+                    name: "fuses_lo".into(),
+                    mask: 0xff,
+                    default: 0,
+                },
+                crate::device::FuseField {
+                    name: "fuses_hi".into(),
+                    mask: 0xff,
+                    default: 0,
+                },
+            ],
+            locks: vec![crate::device::FuseField {
+                name: "lock_byte".into(),
+                mask: 0x3f,
+                default: 0,
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_uid_element_size() {
+        assert_eq!(uid_element_size(&uid_test_device(DataOrg::Bytes)), 1);
+        assert_eq!(uid_element_size(&uid_test_device(DataOrg::Words)), 2);
+    }
+
+    #[test]
+    fn test_config_rows_ordering_with_uids() {
+        let device = uid_test_device(DataOrg::Bytes);
+        let config = uid_test_config();
+        // fuses=[0x21,0x62], uids=[0x10,0x11,0x12,0x13], lock=[0x3f]
+        let rows = config_rows(
+            &config,
+            &device,
+            &[0x21, 0x62],
+            4,
+            &[0x10, 0x11, 0x12, 0x13],
+            &[0x3f],
+        );
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "fuses_lo",
+                "fuses_hi",
+                "user_id0",
+                "user_id1",
+                "user_id2",
+                "user_id3",
+                "lock_byte"
+            ]
+        );
+        let values: Vec<u16> = rows.iter().map(|r| r.value).collect();
+        // lock_byte mask 0x3f: unused bits fill with 1s → 0xff (upstream).
+        assert_eq!(values, [0x21, 0x62, 0x10, 0x11, 0x12, 0x13, 0xff]);
+    }
+
+    #[test]
+    fn test_config_rows_no_uids() {
+        // uid_rows = 0 (TL866A/CS gate or num_uids == 0): plain
+        // fuses-then-locks ordering, unchanged from before.
+        let device = uid_test_device(DataOrg::Bytes);
+        let config = uid_test_config();
+        let rows = config_rows(&config, &device, &[0x21, 0x62], 0, &[], &[0x3f]);
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["fuses_lo", "fuses_hi", "lock_byte"]);
+    }
+
+    #[test]
+    fn test_config_rows_uid_word_width() {
+        // data_org = Words → 2-byte little-endian user ids (PIC etc.).
+        let device = uid_test_device(DataOrg::Words);
+        let config = uid_test_config();
+        let rows = config_rows(&config, &device, &[], 2, &[0x78, 0x56, 0xbc, 0x9a], &[]);
+        assert_eq!(rows.len(), config.fuses.len() + 2 + config.locks.len());
+        assert_eq!(rows[2].name, "user_id0");
+        assert_eq!(rows[2].value, 0x5678 & device.compare_mask);
+        assert_eq!(rows[3].name, "user_id1");
+        assert_eq!(rows[3].value, 0x9abc & device.compare_mask);
+    }
+
+    #[test]
+    fn test_config_rows_uid_compare_mask_only() {
+        // User ids are masked by compare_mask only — no unused-bit fill.
+        let mut device = uid_test_device(DataOrg::Bytes);
+        device.compare_mask = 0x0f;
+        let config = uid_test_config();
+        let rows = config_rows(&config, &device, &[], 1, &[0xab], &[]);
+        let uid = &rows[config.fuses.len()];
+        assert_eq!(uid.name, "user_id0");
+        assert_eq!(uid.value, 0x0b);
+    }
+
+    #[test]
+    fn test_config_rows_uid_truncated() {
+        // Short uid buffer → erased-state fallback, same as fuses/locks.
+        let device = uid_test_device(DataOrg::Bytes);
+        let config = uid_test_config();
+        let rows = config_rows(&config, &device, &[], 3, &[0x10], &[]);
+        assert_eq!(rows[2].value, 0x10);
+        assert_eq!(rows[3].value, 0xff); // fallback
+        assert_eq!(rows[4].value, 0xff);
+    }
+
+    #[test]
+    fn test_pack_uid_values() {
+        let device = uid_test_device(DataOrg::Bytes);
+        let values = vec![
+            FuseValue {
+                name: "user_id0".into(),
+                value: 0x10,
+            },
+            FuseValue {
+                name: "user_id1".into(),
+                value: 0x11,
+            },
+        ];
+        // num_uids = 0 → section absent.
+        assert_eq!(pack_uid_values(&device, 0, &values).unwrap(), None);
+        // No user_id names at all → section skipped (GUI sends fuses+locks).
+        assert_eq!(
+            pack_uid_values(
+                &device,
+                4,
+                &[FuseValue {
+                    name: "fuses_lo".into(),
+                    value: 0x21
+                }]
+            )
+            .unwrap(),
+            None
+        );
+        // Present names pack in user_id order (name-routed, not positional).
+        assert_eq!(
+            pack_uid_values(&device, 2, &values).unwrap(),
+            Some(vec![0x10, 0x11])
+        );
+        // A partial section errors (upstream get_fuse_value semantic).
+        assert!(pack_uid_values(&device, 4, &values).is_err());
+    }
+
+    #[test]
+    fn test_pack_uid_values_word_width_and_mask() {
+        let mut device = uid_test_device(DataOrg::Words);
+        device.compare_mask = 0x3fff;
+        let values = vec![FuseValue {
+            name: "user_id0".into(),
+            value: 0xbeef,
+        }];
+        // 2-byte LE packing; compare_mask applies before the wire.
+        assert_eq!(
+            pack_uid_values(&device, 1, &values).unwrap(),
+            Some(vec![0xef, 0x3e])
+        );
+    }
 
     #[test]
     fn test_fuse_element_size() {
@@ -1205,6 +1457,18 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
     let fuse_count = config.fuses.len();
     let lock_count = config.locks.len();
 
+    // User-ID section — TL866A/CS firmware hangs on the MP_FUSE_USER
+    // request, so those models omit the section entirely (KNOWN-BUGS).
+    let uid_rows = if matches!(
+        handle.info.model,
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs
+    ) {
+        0
+    } else {
+        config.num_uids as usize
+    };
+    let uid_item = uid_element_size(&device);
+
     let device_ref = &device;
     // Read CFG fuses — request fuse_count * element_size bytes so the
     // firmware returns the full 12/14/16-bit PIC config words.
@@ -1218,6 +1482,22 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
             fuse_count as u8,
         )
         .unwrap_or_default();
+
+    // Read USER ids — upstream passes items_count = 0 for this fuse type.
+    let uid_bytes = if uid_rows > 0 {
+        handle
+            .protocol
+            .read_fuses(
+                &handle.usb,
+                device_ref,
+                MP_FUSE_USER,
+                uid_rows * uid_item,
+                0,
+            )
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
 
     // Read LOCK bits (optional — not all devices have them).
     // Upstream uses items_count = word_size for locks; we use element_size
@@ -1237,32 +1517,25 @@ pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
         vec![]
     };
 
-    let mut result = Vec::with_capacity(fuse_count + lock_count);
-
-    for (i, field) in config.fuses.iter().enumerate() {
-        let raw = parse_fuse_element(&cfg_bytes, i, element_size);
-        let value = normalize_fuse_value(raw, field.mask, element_size);
-        result.push(FuseValue {
-            name: field.name.clone(),
-            value,
-        });
-    }
-    for (i, field) in config.locks.iter().enumerate() {
-        let raw = parse_fuse_element(&lock_bytes, i, element_size);
-        let value = normalize_fuse_value(raw, field.mask, element_size);
-        result.push(FuseValue {
-            name: field.name.clone(),
-            value,
-        });
-    }
-    Ok(result)
+    Ok(config_rows(
+        &config,
+        &device,
+        &cfg_bytes,
+        uid_rows,
+        &uid_bytes,
+        &lock_bytes,
+    ))
 }
 
 /// Write fuse values to the chip.
 ///
-/// `fuses` should contain values in the same order as returned by `read_fuses`.
-/// Values are split back into CFG fuses and LOCK bits based on the device config.
-pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()> {
+/// `values` should contain the same entries `read_fuses` returned — values
+/// resolve **by name** (upstream's `get_fuse_value` semantic), so files may
+/// list fields in any order and unknown names are ignored. Expected fuse
+/// and lock names are required; the `user_idN` section is optional — when
+/// no `user_idN` name appears at all the section is skipped (the GUI writes
+/// fuses+locks only), but a partial user-id section is an error.
+pub fn write_fuses(handle: &mut MiniproHandle, values: &[FuseValue]) -> Result<()> {
     use crate::device::ChipConfig;
 
     let device = handle.device()?.clone();
@@ -1273,7 +1546,6 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
 
     let element_size = fuse_element_size(&config.name);
     let fuse_count = config.fuses.len();
-    let _lock_count = config.locks.len();
 
     // Normalize fuse values before packing, matching upstream C minipro:
     //   value |= ~mask;           // fill unused bits with 1s
@@ -1291,25 +1563,42 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
     };
 
     // Pack each fuse value as 1 or 2 little-endian bytes.
-    let cfg_data: Vec<u8> = fuses
+    let cfg_data: Vec<u8> = config
+        .fuses
         .iter()
-        .take(fuse_count)
-        .enumerate()
-        .flat_map(|(i, f)| {
-            let v = normalize_write(&config.fuses[i], f.value);
-            pack_fuse_element(v, element_size)
+        .map(|f| {
+            fuse_lookup(values, &f.name)
+                .map(|v| pack_fuse_element(normalize_write(f, v), element_size))
         })
-        .collect();
+        .collect::<Result<Vec<Vec<u8>>>>()?
+        .concat();
 
-    let lock_data: Vec<u8> = fuses
+    // Optional user-id section — skipped when the caller supplies no
+    // user_idN entries. TL866A/CS firmware hangs on MP_FUSE_USER, so
+    // those models never write it (KNOWN-BUGS).
+    let tl866a_family = matches!(
+        handle.info.model,
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs
+    );
+    let uid_data = if tl866a_family {
+        if values.iter().any(|v| v.name.starts_with("user_id")) {
+            log::warn!("user-id section skipped — TL866A/CS firmware cannot write it");
+        }
+        None
+    } else {
+        pack_uid_values(&device, config.num_uids as usize, values)?
+    };
+    let uid_item = uid_element_size(&device);
+
+    let lock_data: Vec<u8> = config
+        .locks
         .iter()
-        .skip(fuse_count)
-        .enumerate()
-        .flat_map(|(i, f)| {
-            let v = normalize_write(&config.locks[i], f.value);
-            pack_fuse_element(v, element_size)
+        .map(|f| {
+            fuse_lookup(values, &f.name)
+                .map(|v| pack_fuse_element(normalize_write(f, v), element_size))
         })
-        .collect();
+        .collect::<Result<Vec<Vec<u8>>>>()?
+        .concat();
 
     let device_ref = &device;
 
@@ -1321,6 +1610,17 @@ pub fn write_fuses(handle: &mut MiniproHandle, fuses: &[FuseValue]) -> Result<()
             cfg_data.len(),
             fuse_count as u8,
             &cfg_data,
+        )?;
+    }
+    if let Some(uid) = &uid_data {
+        // Upstream passes items_count = item_size for USER writes.
+        handle.protocol.write_fuses(
+            &handle.usb,
+            device_ref,
+            MP_FUSE_USER,
+            uid.len(),
+            uid_item as u8,
+            uid,
         )?;
     }
     if !lock_data.is_empty() {

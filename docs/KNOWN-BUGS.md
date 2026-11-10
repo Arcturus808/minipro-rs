@@ -742,3 +742,19 @@ Two use-site details mirrored from upstream:
 Verified on real data: `GD5F1GQ5UExxG(x4)@WSON8` reports
 `0x8800000` (1024 × 64 × 0x880) post-fix — was `0` bytes with
 `pages_per_block = 2147483712`.
+
+## TL866A/CS firmware hangs on `MP_FUSE_USER` — never send it (constraint)
+
+The TL866A/CS firmware does not answer the user-id fuse-type request
+(`MP_FUSE_USER = 0x00`): the read stalls indefinitely — first observed
+in the GUI where the user-fuse read had to be dropped ("user fuse read
+hangs firmware"). Upstream C minipro has the same exposure; it just
+isn't hit often.
+
+Rule: `read_fuses`/`write_fuses` in `operations.rs` gate the user-id
+section on `handle.info.model` — `Tl866a`/`Tl866cs` emit **no**
+`user_idN` rows on read and skip the section on write (with a
+`log::warn` when a config file still carries `user_id` lines). Any new
+caller that touches `MP_FUSE_USER` directly must keep the same gate;
+the binary `-c user` page (`MP_USER = 0x02`, a different command) is
+unaffected and works on all models.

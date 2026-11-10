@@ -594,6 +594,18 @@ frontend uses for the lookup. Bit definitions are sourced from avr-libc
 device headers and Microchip datasheets — see `fuse_defs.rs` for the
 config-name keying analysis and chip-prefix override logic.
 
+### User-id bytes in the config DTO
+
+`read_fuses` (the core op) returns fuses, then `user_idN` entries, then
+locks — upstream's fuses-file order. The `read_fuses` command splits the
+flat list by `fuse_len` plus a `user_id`-name count: `cfg_fuses` /
+`lock_bits` keep their `FuseValueDto` shape while `user_fuses` carries
+the raw user-id bytes (LE at the `data_org` element width) that the
+frontend shows as a hex list. The GUI's `write_fuses` sends only
+cfg+lock values — the core write keeps the whole user-id section
+optional for exactly this reason. TL866A/CS carry no user-id rows at
+all (their firmware hangs on `MP_FUSE_USER` — see KNOWN-BUGS).
+
 ### SPI status register panel (25-series NOR)
 
 For devices with `protocol_id === 0x03` (exposed as `protocol_id` on

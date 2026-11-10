@@ -103,9 +103,11 @@ reports `Erased{supported:false}` rather than calling the op.
 `Verified`, `Erased{supported}`, `Blank`, `NotBlank{address}`,
 `ChipId(info)` — chip-ID results reuse core `chip_id_info` so
 variant/no-ID normalization matches the GUI — plus the Config
-outcomes: `ConfigFuses{rows,n_fuses,nibbles}` (each row carries
-name+value+mask; `n_fuses` splits fuses from locks for the section
-render), `ConfigSr{bytes}` (read *and* write read-back, so the view
+outcomes: `ConfigFuses{rows,n_fuses,n_uids,nibbles,uid_nibbles}` (each
+row carries name+value+mask; `n_fuses`/`n_uids` mark the fuse →
+user-id → lock section boundaries — upstream's fuses-file order — and
+the uid section can be wider than fuse rows since it follows
+`data_org`), `ConfigSr{bytes}` (read *and* write read-back, so the view
 always reflects chip state), and `ConfigWritten`.
 
 ## Config view (fuses/locks + SPI status register)
@@ -118,14 +120,17 @@ the hex view (its own key space; hex digits are data, not op mnemonics).
 - **Device split** (worker, `OpKind::Config` arm): `protocol_id 0x03`
   (SPI NOR) → `spi_status_read` — no `ChipConfig` exists for those
   parts; the fuse-0x01 path reaches the physical SR. `ChipConfig::Mcu`
-  → `read_fuses`, zipped back against `config.fuses`+`config.locks` to
-  recover masks and the fuse/lock boundary. Neither → "no
+  → `read_fuses`, split against `config.fuses`/`num_uids`/
+  `config.locks` to recover masks and section boundaries (user-id rows
+  get `device.compare_mask` — they have no field mask). Neither → "no
   configuration available" error (GUI parity).
 - **Editing**: `↑↓` move the row cursor (resets `nibble`), `←→` move
   the nibble, hex digits overtype at `nibble` (position 0 = most
-  significant, auto-advances, clamps at `nibbles` — 2 for byte fuses,
-  4 for `pic_*` config words via `fuse_element_size`). Per-row `dirty`
-  marks render amber.
+  significant, auto-advances, clamps at the row's width — 2 nibbles for
+  byte fuses, 4 for `pic_*` config words, and `uid_nibbles` for
+  user-id rows since those follow `data_org`, not
+  `fuse_element_size`; `row_nibbles(i)` resolves per row). Per-row
+  `dirty` marks render amber.
 - **Write**: `w` requires a dirty row, then opens the mandatory
   `Modal::Confirm` (`OpKind::ConfigWrite` is `is_destructive`) with
   context warnings — lock-section edits add "lock bits can permanently

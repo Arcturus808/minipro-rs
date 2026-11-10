@@ -204,10 +204,15 @@ pub struct CfgRow {
 pub struct CfgView {
     pub kind: CfgKind,
     pub rows: Vec<CfgRow>,
-    /// Fuse/lock boundary — rows[..n_fuses] are fuses, the rest locks.
+    /// Section boundaries — rows[..n_fuses] are fuses, the next n_uids
+    /// are user-id entries, the rest locks (upstream fuses-file order).
     pub n_fuses: usize,
-    /// Hex digits per value (2 for byte fuses, 4 for PIC config words).
+    pub n_uids: usize,
+    /// Hex digits per fuse/lock value (2 for byte fuses, 4 for PIC words).
     pub nibbles: usize,
+    /// Hex digits per user-id value — follows data_org, can differ from
+    /// `nibbles` (AVR: 2-nibble fuses, 4-nibble user ids).
+    pub uid_nibbles: usize,
     /// Selected row.
     pub cursor: usize,
     /// Nibble position within the value — 0 is the most significant.
@@ -219,6 +224,16 @@ pub struct CfgView {
 }
 
 impl CfgView {
+    /// Hex width of row `idx` — user-id rows follow data_org, so the
+    /// middle section can be wider than the fuse/lock rows around it.
+    pub fn row_nibbles(&self, idx: usize) -> usize {
+        if self.kind == CfgKind::Fuses && idx >= self.n_fuses && idx < self.n_fuses + self.n_uids {
+            self.uid_nibbles
+        } else {
+            self.nibbles
+        }
+    }
+
     /// The write payload for `w`: fuse values in field order, or the
     /// SR byte for SPI parts.
     fn write_input(&self) -> OpInput {
@@ -1030,7 +1045,9 @@ impl App {
             Ok(OpOutcome::ConfigFuses {
                 rows,
                 n_fuses,
+                n_uids,
                 nibbles,
+                uid_nibbles,
             }) => {
                 let n = rows.len();
                 self.cfg = Some(CfgView {
@@ -1044,7 +1061,9 @@ impl App {
                         })
                         .collect(),
                     n_fuses,
+                    n_uids,
                     nibbles,
+                    uid_nibbles,
                     cursor: 0,
                     nibble: 0,
                     dirty: std::collections::BTreeSet::new(),
@@ -1081,7 +1100,9 @@ impl App {
                         mask: 0xff,
                     }],
                     n_fuses: 1,
+                    n_uids: 0,
                     nibbles: 2,
+                    uid_nibbles: 2,
                     cursor: 0,
                     nibble: 0,
                     dirty: std::collections::BTreeSet::new(),
@@ -1976,7 +1997,8 @@ impl App {
                 cfg.nibble = cfg.nibble.saturating_sub(1);
             }
             KeyCode::Right => {
-                cfg.nibble = (cfg.nibble + 1).min(cfg.nibbles - 1);
+                let nib = cfg.row_nibbles(cfg.cursor);
+                cfg.nibble = (cfg.nibble + 1).min(nib - 1);
             }
             KeyCode::Char('r') => {
                 self.send_run(OpKind::Config, OpInput::None);
@@ -1984,11 +2006,12 @@ impl App {
             KeyCode::Char('w') => self.cfg_write_confirm(),
             KeyCode::Char(c) if c.is_ascii_hexdigit() => {
                 if let Some(d) = c.to_digit(16) {
+                    let nib = cfg.row_nibbles(cfg.cursor);
                     let row = &mut cfg.rows[cfg.cursor];
-                    let shift = (cfg.nibbles - 1 - cfg.nibble) * 4;
+                    let shift = (nib - 1 - cfg.nibble) * 4;
                     row.value = (row.value & !(0xf << shift)) | ((d as u16) << shift);
                     cfg.dirty.insert(cfg.cursor);
-                    cfg.nibble = (cfg.nibble + 1).min(cfg.nibbles - 1);
+                    cfg.nibble = (cfg.nibble + 1).min(nib - 1);
                 }
             }
             _ => {}
@@ -2020,7 +2043,7 @@ impl App {
                 // Lock bits are one-way on most parts — a set lock bit
                 // can't be cleared without a full erase, and on some
                 // MCUs not even then. The GUI warns the same way.
-                if cfg.dirty.iter().any(|&i| i >= cfg.n_fuses) {
+                if cfg.dirty.iter().any(|&i| i >= cfg.n_fuses + cfg.n_uids) {
                     lines.push(
                         "⚠ lock bits can permanently lock the chip — check values".to_string(),
                     );
@@ -3418,7 +3441,9 @@ mod tests {
             result: Ok(OpOutcome::ConfigFuses {
                 rows: fuse_rows(),
                 n_fuses: 2,
+                n_uids: 0,
                 nibbles: 2,
+                uid_nibbles: 2,
             }),
         });
     }
@@ -3483,6 +3508,58 @@ mod tests {
         a.handle_key(key(KeyCode::Right));
         a.handle_key(key(KeyCode::Right));
         assert_eq!(a.cfg.as_ref().unwrap().nibble, 1); // 2 nibbles: 0..1
+    }
+
+    #[test]
+    fn cfg_uid_section_widths_and_lock_boundary() {
+        let mut a = op_ready_app();
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Config,
+            result: Ok(OpOutcome::ConfigFuses {
+                rows: vec![
+                    FuseRow {
+                        name: "LOW".into(),
+                        value: 0x62,
+                        mask: 0xff,
+                    },
+                    FuseRow {
+                        name: "user_id0".into(),
+                        value: 0x1234,
+                        mask: 0x3fff,
+                    },
+                    FuseRow {
+                        name: "LOCKBIT".into(),
+                        value: 0xff,
+                        mask: 0x3f,
+                    },
+                ],
+                n_fuses: 1,
+                n_uids: 1,
+                nibbles: 2,
+                uid_nibbles: 4,
+            }),
+        });
+        let cfg = a.cfg.as_ref().unwrap();
+        assert_eq!(cfg.row_nibbles(0), 2); // fuse row
+        assert_eq!(cfg.row_nibbles(1), 4); // uid row follows data_org
+        assert_eq!(cfg.row_nibbles(2), 2); // lock row
+
+        // A dirty uid row must NOT raise the lock-bit warning — the
+        // boundary is n_fuses + n_uids, not n_fuses.
+        a.handle_key(key(KeyCode::Down));
+        a.handle_key(key(KeyCode::Char('5'))); // uid top nibble: 0x1234→0x5234
+        assert_eq!(a.cfg.as_ref().unwrap().rows[1].value, 0x5234);
+        a.handle_key(key(KeyCode::Right));
+        a.handle_key(key(KeyCode::Right));
+        a.handle_key(key(KeyCode::Right));
+        assert_eq!(a.cfg.as_ref().unwrap().nibble, 3); // 4 nibbles: 0..3
+        a.handle_key(key(KeyCode::Char('w')));
+        match &a.modal {
+            Some(Modal::Confirm { lines, .. }) => {
+                assert!(!lines.iter().any(|l| l.contains("lock bits")));
+            }
+            _ => panic!("expected ConfigWrite confirm"),
+        }
     }
 
     #[test]

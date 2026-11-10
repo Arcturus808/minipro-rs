@@ -3313,6 +3313,14 @@ pub async fn read_fuses(
                     } else {
                         (0, 1)
                     };
+                // read_fuses returns fuses, user_idN entries, then locks —
+                // count the uid rows by name (absent on TL866A/CS and on
+                // devices without a user-id section).
+                let uid_len = named
+                    .iter()
+                    .filter(|v| v.name.starts_with("user_id"))
+                    .count();
+                let uid_item = minipro_core::operations::uid_element_size(dev);
 
                 // Read chip calibration bytes (OSCCAL word for PIC devices)
                 let calibration = minipro_core::operations::read_chip_calibration(&mut handle)
@@ -3329,13 +3337,22 @@ pub async fn read_fuses(
                         .collect(),
                     lock_bits: named
                         .iter()
-                        .skip(fuse_len)
+                        .skip(fuse_len + uid_len)
                         .map(|v| FuseValueDto {
                             name: v.name.clone(),
                             value: v.value,
                         })
                         .collect(),
-                    user_fuses: vec![], // TODO: TL866A user fuse read hangs firmware
+                    // Raw LE bytes at the user-id element width — the
+                    // frontend shows them as a hex list.
+                    user_fuses: named
+                        .iter()
+                        .skip(fuse_len)
+                        .take(uid_len)
+                        .flat_map(|v| {
+                            minipro_core::operations::pack_fuse_element(v.value, uid_item)
+                        })
+                        .collect(),
                     calibration,
                     element_size,
                 })

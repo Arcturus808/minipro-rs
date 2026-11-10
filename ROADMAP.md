@@ -437,6 +437,26 @@ This is a living list of features and improvements planned for minipro-rs.
     override row (upstream is CLI-only here too). Hardware validation
     pending — needs an in-circuit target that trips the default limit.
 
+  - [x] **`user_idN` entries in fuse/config files** — DONE
+    (`feat/user-id-fuses`). Upstream `read_fuses_file` writes
+    `user_id0..N=0xNN` lines (MP_FUSE_USER) between fuses and locks when
+    the device's `<config num_uids>` is nonzero — the MCU "OTP Secu.R"
+    region XGPro's save dialog offers. Our `read_fuses`/`write_fuses`
+    previously ignored `num_uids` entirely. Now: reads emit the section
+    in upstream's order (fuses → user_id → locks), writes resolve
+    fields by name (upstream `get_fuse_value` semantics — fuses/locks
+    required, the uid section optional so the GUI's fuse-only write
+    still works, partial sections error). Element width follows
+    `data_org` not `fuse_element_size` (AVR: 1-byte fuses, 2-byte user
+    ids). **TL866A/CS gate:** that firmware hangs on MP_FUSE_USER —
+    those models skip the section on read *and* write (warns if a file
+    carries user_id lines). TUI Config view gained a USER ID section
+    with its own width; the GUI panel shows the raw bytes. The binary
+    `-c user` page (`MP_USER`, page 0x02) is a different feature and
+    unchanged. Unit-tested (ordering, compare_mask-only masking, both
+    widths, optional/partial-section rules); hardware read/write
+    validation pending.
+
   ### Low — niche or deferred
 
   - [x] **VGA/HDMI chip support** — NOT APPLICABLE. Investigated: the
@@ -454,6 +474,30 @@ This is a living list of features and improvements planned for minipro-rs.
   - [ ] **T76 eMMC bring-up query response lengths** — response lengths
     (32B, 32B, 24B) are from a single chip capture and may not generalize.
     **Impact:** eMMC init may desync on other chips.
+
+  - [ ] **SPI NOR security registers / OTP pages ("OTP Secu.R")** —
+    XGPro's save dialog offers a Secu.R buffer for 25-series parts
+    (Winbond-style 3×256-byte security registers). Neither we nor
+    upstream C minipro have a command path to them — the fuse-type
+    commands reach only the status register (`--spi-status`), and
+    security-region I/O needs reverse engineering from XGPro USB
+    captures plus a chip that has real secregs (the W25Q128 on the
+    16-pin shopping list qualifies). **Impact:** none today — the
+    region is small OTP storage, distinct from both the MCU user-id
+    rows now in fuse files and the `-c user` binary page.
+
+  - [ ] **`--partition` CLI flag for eMMC** — upstream exposes
+    `--partition user|boot1|boot2|rpmb`; we currently gate partition
+    selection behind the `T76_EMMC_PARTITION` env var. Promote to a
+    real flag alongside eMMC hardware validation rather than shipping
+    an untested switch.
+
+  - [ ] **XGPro-style "Select Buffer" save dialog** — XGPro keeps
+    Flash/data/security buffers resident simultaneously and picks one
+    at save time; our model is one region per operation
+    (`-c code`/`data`/`user`/`config`), which is equivalent in
+    capability but simpler. Only worth revisiting if a genuine need
+    for simultaneous multi-region buffers appears — not planned.
 
   ### Gaps vs Matt Brown's merged MR #292
 
