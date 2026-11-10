@@ -499,6 +499,17 @@ This is a living list of features and improvements planned for minipro-rs.
     capability but simpler. Only worth revisiting if a genuine need
     for simultaneous multi-region buffers appears — not planned.
 
+  - [ ] **Multiple programmers connected simultaneously** — today
+    `open_programmer()` errors with `MultipleProgrammersFound` when
+    two or more supported programmers are plugged in (upstream parity;
+    all frontends share the single `MiniproHandle::open()` path).
+    Supporting selection would need a discriminator (enumeration index
+    or serial — open question whether T56/T76 units expose a stable
+    serial via `DeviceInfo::serial_number()` or the system-info
+    response), a `-d/--device` CLI flag, and a GUI/TUI picker.
+    **Impact:** niche — mainly matters for running two models side by
+    side or batch-programming.
+
   ### Gaps vs Matt Brown's merged MR #292
 
   Matt Brown's MR #292 (https://gitlab.com/DavidGriffith/minipro/-/merge_requests/292)
