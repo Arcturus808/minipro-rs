@@ -8,6 +8,7 @@
 //! destructive-op confirms — no native dialogs.
 
 mod app;
+mod cfgview;
 mod events;
 mod hexview;
 mod theme;
@@ -313,6 +314,20 @@ fn draw(f: &mut Frame, app: &mut App) {
         }
         buf.set_string(area.x, y, "├", theme::border());
         buf.set_string(area.x + area.width - 1, y, "┤", theme::border());
+    }
+
+    // The Config view owns the pane region when open — frame, separator,
+    // keybar, and overlays still draw around it.
+    if app.cfg.is_some() {
+        cfgview::draw(f, v[1], app);
+        keybar(f, v[2], app);
+        if app.show_help {
+            help_overlay(f, area);
+        }
+        if let Some(m) = &app.modal {
+            modal_overlay(f, area, m);
+        }
+        return;
     }
 
     // The hex-buffer view owns the pane region when open — frame,
@@ -1140,6 +1155,28 @@ fn keybar(f: &mut Frame, area: Rect, app: &App) {
         let line = Line::from(vec![
             key(" ◐"),
             sep(" running — ops can't be aborted mid-transfer "),
+        ]);
+        f.render_widget(
+            Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),
+            area,
+        );
+        return;
+    }
+    // Config view context — hex digits edit values, not mnemonics.
+    if app.cfg.is_some() {
+        let line = Line::from(vec![
+            key(" ↑↓"),
+            sep(" field  ·  "),
+            key("←→"),
+            sep(" nibble  ·  "),
+            key("0-9a-f"),
+            sep(" edit  ·  "),
+            key("r"),
+            sep(" read  ·  "),
+            key("w"),
+            sep(" write  ·  "),
+            key("Esc"),
+            sep(" close "),
         ]);
         f.render_widget(
             Paragraph::new(line).style(Style::default().bg(theme::KEY_BG)),

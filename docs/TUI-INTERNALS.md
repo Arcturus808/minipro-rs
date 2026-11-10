@@ -19,6 +19,7 @@ it or let it creep back into `--workspace` MSRV checks.
 | `worker.rs` | worker thread: owns `MiniproHandle`, runs ops, reports events |
 | `zif.rs` | `ZifDiagram` widget — ZIF socket + chip overlay + pin states |
 | `hexview.rs` | full-screen hex-buffer view — rows, entropy gutter, cursor |
+| `cfgview.rs` | full-screen Config view — fuse/lock rows, SPI SR decode |
 | `theme.rs` | color/style palette used by every pane |
 
 ## Threading & event flow
@@ -101,7 +102,39 @@ reports `Erased{supported:false}` rather than calling the op.
 `OpOutcome` variants carry result data back to the reducer: `Stats`,
 `Verified`, `Erased{supported}`, `Blank`, `NotBlank{address}`,
 `ChipId(info)` — chip-ID results reuse core `chip_id_info` so
-variant/no-ID normalization matches the GUI.
+variant/no-ID normalization matches the GUI — plus the Config
+outcomes: `ConfigFuses{rows,n_fuses,nibbles}` (each row carries
+name+value+mask; `n_fuses` splits fuses from locks for the section
+render), `ConfigSr{bytes}` (read *and* write read-back, so the view
+always reflects chip state), and `ConfigWritten`.
+
+## Config view (fuses/locks + SPI status register)
+
+The `c` mnemonic (tab 7) dispatches `OpKind::Config` through the normal
+transaction machinery — pin gate and chip-ID gate apply unchanged. On
+`OpDone` the reducer opens `App::cfg`, a dedicated input context like
+the hex view (its own key space; hex digits are data, not op mnemonics).
+
+- **Device split** (worker, `OpKind::Config` arm): `protocol_id 0x03`
+  (SPI NOR) → `spi_status_read` — no `ChipConfig` exists for those
+  parts; the fuse-0x01 path reaches the physical SR. `ChipConfig::Mcu`
+  → `read_fuses`, zipped back against `config.fuses`+`config.locks` to
+  recover masks and the fuse/lock boundary. Neither → "no
+  configuration available" error (GUI parity).
+- **Editing**: `↑↓` move the row cursor (resets `nibble`), `←→` move
+  the nibble, hex digits overtype at `nibble` (position 0 = most
+  significant, auto-advances, clamps at `nibbles` — 2 for byte fuses,
+  4 for `pic_*` config words via `fuse_element_size`). Per-row `dirty`
+  marks render amber.
+- **Write**: `w` requires a dirty row, then opens the mandatory
+  `Modal::Confirm` (`OpKind::ConfigWrite` is `is_destructive`) with
+  context warnings — lock-section edits add "lock bits can permanently
+  lock the chip", SR edits add the non-volatile-BP note. `y` dispatches
+  `OpInput::Fuses(Vec<FuseValue>)` or `OpInput::SpiSr(u8)`; fuse writes
+  clear dirty on `ConfigWritten`, SR writes refresh the row from the
+  firmware's post-write read-back.
+- The view stays open across re-reads (`r`) and refreshes in place for
+  SR; fuse reads rebuild it. `Esc`/`q`/`x` close.
 
 ## UI state & rendering invariants
 
@@ -227,10 +260,11 @@ require real hardware.
 
 ## Deliberately out of MVP scope
 
-Logic-vector test, config/fuse read+write, identify, diagnostics/health
+Logic-vector test, identify, diagnostics/health
 check, batch ops, voltage overrides (needs the
 deferred `OpOptions`/voltage-glue extraction), ICSP wiring diagrams.
-The tabs render but warn "not in this MVP" — extend `OpKind`, `OPS`,
-and the worker `match` arm together when adding phases. The hex view
+The Logic tab renders but warns "not in this MVP" — extend `OpKind`,
+`OPS`, and the worker `match` arm together when adding phases. The hex
+view
 shipped with the P2 subset: find, undo/redo, selection, diff/compare,
 bytes-per-row, and mouse remain future work.

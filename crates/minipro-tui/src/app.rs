@@ -171,14 +171,70 @@ pub enum Modal {
     /// Hex-view find prompt (`/`/Ctrl-F) — literal text, or an `x:`
     /// prefix for hex pairs (e.g. `x:de ad be ef`).
     Find { input: String, cursor: usize },
-    /// y/N confirmation for destructive ops (write, erase).
+    /// y/N confirmation for destructive ops (write, erase, config write).
     Confirm {
         op: OpKind,
-        path: Option<PathBuf>,
-        /// Write-from-buffer payload (hex-view `w`) — `path` is `None`.
-        buffer: Option<Vec<u8>>,
+        /// The op's operand — file, buffer, fuse values, or SR byte.
+        input: OpInput,
         lines: Vec<String>,
     },
+}
+
+/// Which kind of configuration the Config view is showing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CfgKind {
+    /// MCU fuse/lock fields (AVR/PIC config words).
+    Fuses,
+    /// SPI 25-series status register.
+    SpiSr,
+}
+
+/// One editable row in the Config view.
+#[derive(Clone)]
+pub struct CfgRow {
+    pub name: String,
+    pub value: u16,
+    pub mask: u16,
+}
+
+/// The Config view's state — a dedicated input context like the hex
+/// view. `c` reads fuses/SR into this view; hex digits overtype the
+/// nibble at `nibble` within the cursor row's value; `w` writes the
+/// edited values back through a confirm modal; `r` re-reads.
+pub struct CfgView {
+    pub kind: CfgKind,
+    pub rows: Vec<CfgRow>,
+    /// Fuse/lock boundary — rows[..n_fuses] are fuses, the rest locks.
+    pub n_fuses: usize,
+    /// Hex digits per value (2 for byte fuses, 4 for PIC config words).
+    pub nibbles: usize,
+    /// Selected row.
+    pub cursor: usize,
+    /// Nibble position within the value — 0 is the most significant.
+    pub nibble: usize,
+    /// Rows edited since the last read/write — rendered amber.
+    pub dirty: std::collections::BTreeSet<usize>,
+    /// Extra SR bytes past byte 0 (kind == SpiSr; display only).
+    pub sr_extra: Vec<u8>,
+}
+
+impl CfgView {
+    /// The write payload for `w`: fuse values in field order, or the
+    /// SR byte for SPI parts.
+    fn write_input(&self) -> OpInput {
+        match self.kind {
+            CfgKind::Fuses => OpInput::Fuses(
+                self.rows
+                    .iter()
+                    .map(|r| minipro_core::operations::FuseValue {
+                        name: r.name.clone(),
+                        value: r.value,
+                    })
+                    .collect(),
+            ),
+            CfgKind::SpiSr => OpInput::SpiSr(self.rows[0].value as u8),
+        }
+    }
 }
 
 /// The hex-buffer view's state: data plus cursor/scroll/edit marks.
@@ -476,6 +532,9 @@ pub struct App {
     /// Full-screen hex view is open — replaces the three-pane layout
     /// and routes all keys to `handle_hex_key`.
     pub hex_view: bool,
+    /// Config view (fuses/locks or SPI status register) — opened by the
+    /// `c` op's OpDone, routes all keys to `handle_cfg_key`.
+    pub cfg: Option<CfgView>,
     /// Last file path handed to a file op — for the buffer line.
     /// Last file op's resolved path — shown full in the log, `file_name`
     /// in the status strip.
@@ -580,6 +639,7 @@ impl App {
             pin_test: None,
             hex: None,
             hex_view: false,
+            cfg: None,
             last_path: None,
             last_stats: None,
             chip_id: None,
@@ -967,6 +1027,80 @@ impl App {
                 }
                 self.chip_id = Some(*info);
             }
+            Ok(OpOutcome::ConfigFuses {
+                rows,
+                n_fuses,
+                nibbles,
+            }) => {
+                let n = rows.len();
+                self.cfg = Some(CfgView {
+                    kind: CfgKind::Fuses,
+                    rows: rows
+                        .into_iter()
+                        .map(|r| CfgRow {
+                            name: r.name,
+                            value: r.value,
+                            mask: r.mask,
+                        })
+                        .collect(),
+                    n_fuses,
+                    nibbles,
+                    cursor: 0,
+                    nibble: 0,
+                    dirty: std::collections::BTreeSet::new(),
+                    sr_extra: vec![],
+                });
+                self.push_log(
+                    log::Level::Info,
+                    format!("✓ config read — {n} field(s) · hex edits · w writes · r re-reads · Esc closes"),
+                );
+            }
+            Ok(OpOutcome::ConfigSr { bytes }) => {
+                let mut it = bytes.iter();
+                let first = it.next().copied().unwrap_or(0xff);
+                let extra: Vec<u8> = it.copied().collect();
+                if let Some(cfg) = &mut self.cfg {
+                    if cfg.kind == CfgKind::SpiSr {
+                        // Write read-back or re-read: refresh in place,
+                        // keep the user's cursor position.
+                        cfg.rows[0].value = u16::from(first);
+                        cfg.sr_extra = extra;
+                        cfg.dirty.clear();
+                        self.push_log(
+                            log::Level::Info,
+                            "✓ status register updated — w writes · r re-reads · Esc closes",
+                        );
+                        return;
+                    }
+                }
+                self.cfg = Some(CfgView {
+                    kind: CfgKind::SpiSr,
+                    rows: vec![CfgRow {
+                        name: "SR1".to_string(),
+                        value: u16::from(first),
+                        mask: 0xff,
+                    }],
+                    n_fuses: 1,
+                    nibbles: 2,
+                    cursor: 0,
+                    nibble: 0,
+                    dirty: std::collections::BTreeSet::new(),
+                    sr_extra: extra,
+                });
+                self.push_log(
+                    log::Level::Info,
+                    "✓ status register read — hex edits · w writes · r re-reads · Esc closes",
+                );
+            }
+            Ok(OpOutcome::ConfigWritten) => {
+                if let Some(cfg) = &mut self.cfg {
+                    cfg.dirty.clear();
+                }
+                self.push_log(
+                    log::Level::Info,
+                    "✓ config written — r re-reads from the chip",
+                );
+            }
             Ok(OpOutcome::Aborted { gate }) => {
                 self.push_log(
                     log::Level::Warn,
@@ -1056,7 +1190,7 @@ impl App {
         match op {
             // Reads land in the hex-buffer view — no file prompt.
             // `s` inside the view saves to a path.
-            OpKind::Read => self.send_run(op, None, None),
+            OpKind::Read => self.send_run(op, OpInput::None),
             OpKind::Write => {
                 self.modal = Some(Modal::Path {
                     action: PathAction::Op(op),
@@ -1076,21 +1210,22 @@ impl App {
             OpKind::Erase => {
                 self.modal = Some(Modal::Confirm {
                     op,
-                    path: None,
-                    buffer: None,
+                    input: OpInput::None,
                     lines: vec![
                         format!("Erase {device_name}?"),
                         "this erases the whole chip".to_string(),
                     ],
                 });
             }
-            OpKind::Blank | OpKind::ChipId => self.send_run(op, None, None),
+            OpKind::Blank | OpKind::ChipId | OpKind::Config => self.send_run(op, OpInput::None),
+            // Only dispatched from inside the Config view's confirm flow.
+            OpKind::ConfigWrite => {}
         }
     }
 
-    /// Dispatch the op to the worker. `path` is `Some` for file ops,
-    /// `buffer` `Some` for write/verify issued from the hex view.
-    fn send_run(&mut self, op: OpKind, path: Option<PathBuf>, buffer: Option<Vec<u8>>) {
+    /// Dispatch the op to the worker. `input` is the file path, the hex
+    /// buffer, fuse values, or the SR byte — `OpInput::None` otherwise.
+    fn send_run(&mut self, op: OpKind, input: OpInput) {
         let Some(tx) = self.cmd_tx.clone() else {
             self.push_log(log::Level::Error, "worker not started");
             return;
@@ -1099,17 +1234,15 @@ impl App {
             return;
         };
         let device_name = dev.name.clone();
-        self.last_path = path.clone();
+        self.last_path = match &input {
+            OpInput::File(p) => Some(p.clone()),
+            _ => None,
+        };
         self.op_running = Some(op);
         self.op_started = Some(Instant::now());
         self.progress = Some((0, 1));
         let options = Box::new(self.op_options());
         self.push_log(log::Level::Info, format!("{} {}…", op.name(), device_name));
-        let input = match (path, buffer) {
-            (Some(p), _) => OpInput::File(p),
-            (None, Some(buf)) => OpInput::Buffer(buf),
-            (None, None) => OpInput::None,
-        };
         let _ = tx.send(WorkerCmd::Run {
             op,
             device_name,
@@ -1266,8 +1399,7 @@ impl App {
             OpKind::Write => {
                 self.modal = Some(Modal::Confirm {
                     op,
-                    path: None,
-                    buffer: Some(buf),
+                    input: OpInput::Buffer(buf),
                     lines: vec![
                         format!("Write buffer to {device_name}?"),
                         if self.options[1] {
@@ -1279,7 +1411,7 @@ impl App {
                     ],
                 });
             }
-            OpKind::Verify => self.send_run(op, None, Some(buf)),
+            OpKind::Verify => self.send_run(op, OpInput::Buffer(buf)),
             _ => {}
         }
     }
@@ -1313,8 +1445,7 @@ impl App {
                                 .unwrap_or_default();
                             self.modal = Some(Modal::Confirm {
                                 op,
-                                path: Some(path.clone()),
-                                buffer: None,
+                                input: OpInput::File(path.clone()),
                                 lines: vec![
                                     format!("Write {} to {name}?", path.display()),
                                     if self.options[1] {
@@ -1326,7 +1457,7 @@ impl App {
                                 ],
                             });
                         }
-                        PathAction::Op(op) => self.send_run(op, Some(path), None),
+                        PathAction::Op(op) => self.send_run(op, OpInput::File(path)),
                         PathAction::SaveBuffer => self.save_buffer(path),
                         PathAction::LoadBuffer => self.load_buffer(path),
                     }
@@ -1542,27 +1673,15 @@ impl App {
                     _ => keep(input, cursor),
                 }
             }
-            Some(Modal::Confirm {
-                op,
-                path,
-                buffer,
-                lines,
-            }) => match k.code {
+            Some(Modal::Confirm { op, input, lines }) => match k.code {
                 // Only an explicit y confirms — Enter is deliberately
                 // excluded: key-repeat on the path prompt's submit could
                 // carry a held Enter into this dialog and fire the op.
-                KeyCode::Char('y') | KeyCode::Char('Y') => self.send_run(op, path, buffer),
+                KeyCode::Char('y') | KeyCode::Char('Y') => self.send_run(op, input),
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {} // cancel
                 // Stray keys are ignored — a bumped key must not silently
                 // abandon a destructive-op confirm.
-                _ => {
-                    self.modal = Some(Modal::Confirm {
-                        op,
-                        path,
-                        buffer,
-                        lines,
-                    })
-                }
+                _ => self.modal = Some(Modal::Confirm { op, input, lines }),
             },
             None => {}
         }
@@ -1837,6 +1956,90 @@ impl App {
         false
     }
 
+    /// The Config view's key context — own input space like the hex
+    /// view (hex digits are data, not mnemonics).
+    fn handle_cfg_key(&mut self, k: KeyEvent) -> bool {
+        let Some(cfg) = &mut self.cfg else {
+            return false;
+        };
+        match k.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('x') => self.cfg = None,
+            KeyCode::Up => {
+                cfg.cursor = cfg.cursor.saturating_sub(1);
+                cfg.nibble = 0;
+            }
+            KeyCode::Down => {
+                cfg.cursor = (cfg.cursor + 1).min(cfg.rows.len() - 1);
+                cfg.nibble = 0;
+            }
+            KeyCode::Left => {
+                cfg.nibble = cfg.nibble.saturating_sub(1);
+            }
+            KeyCode::Right => {
+                cfg.nibble = (cfg.nibble + 1).min(cfg.nibbles - 1);
+            }
+            KeyCode::Char('r') => {
+                self.send_run(OpKind::Config, OpInput::None);
+            }
+            KeyCode::Char('w') => self.cfg_write_confirm(),
+            KeyCode::Char(c) if c.is_ascii_hexdigit() => {
+                if let Some(d) = c.to_digit(16) {
+                    let row = &mut cfg.rows[cfg.cursor];
+                    let shift = (cfg.nibbles - 1 - cfg.nibble) * 4;
+                    row.value = (row.value & !(0xf << shift)) | ((d as u16) << shift);
+                    cfg.dirty.insert(cfg.cursor);
+                    cfg.nibble = (cfg.nibble + 1).min(cfg.nibbles - 1);
+                }
+            }
+            _ => {}
+        }
+        false
+    }
+
+    /// `w` in the Config view — the write confirm modal, with the
+    /// lock/SR-specific warnings the GUI shows.
+    fn cfg_write_confirm(&mut self) {
+        let Some(cfg) = &self.cfg else {
+            return;
+        };
+        if cfg.dirty.is_empty() {
+            self.push_log(log::Level::Warn, "no changes to write — edit a value first");
+            return;
+        }
+        let name = self
+            .selected
+            .as_ref()
+            .map(|d| d.name.clone())
+            .unwrap_or_default();
+        let lines = match cfg.kind {
+            CfgKind::Fuses => {
+                let mut lines = vec![format!(
+                    "Write {} config field(s) to {name}?",
+                    cfg.dirty.len()
+                )];
+                // Lock bits are one-way on most parts — a set lock bit
+                // can't be cleared without a full erase, and on some
+                // MCUs not even then. The GUI warns the same way.
+                if cfg.dirty.iter().any(|&i| i >= cfg.n_fuses) {
+                    lines.push(
+                        "⚠ lock bits can permanently lock the chip — check values".to_string(),
+                    );
+                }
+                lines
+            }
+            CfgKind::SpiSr => vec![
+                format!("Write status register to {name}?"),
+                "BP/SRP bits are non-volatile on most parts — they persist through".to_string(),
+                "power cycles until cleared (protect-off clears BP bits)".to_string(),
+            ],
+        };
+        self.modal = Some(Modal::Confirm {
+            op: OpKind::ConfigWrite,
+            input: cfg.write_input(),
+            lines,
+        });
+    }
+
     /// Returns true when the app should quit.
     pub fn handle_key(&mut self, k: KeyEvent) -> bool {
         // Windows emits Press + Release (+ Repeat for held keys); acting
@@ -1885,6 +2088,8 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Char('x') | KeyCode::Esc => {
                     if self.hex_view {
                         self.hex_view = false;
+                    } else if self.cfg.is_some() {
+                        self.cfg = None;
                     } else {
                         self.push_log(
                             log::Level::Warn,
@@ -1901,6 +2106,11 @@ impl App {
                 }
             }
             return false;
+        }
+        // The Config view owns all keys while open — its own input
+        // context, checked before the hex view (only one can be active).
+        if self.cfg.is_some() {
+            return self.handle_cfg_key(k);
         }
         // The hex view owns all keys while open — its own input context.
         if self.hex_view {
@@ -2122,6 +2332,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::FuseRow;
 
     fn dev(name: &str) -> DeviceListItem {
         DeviceListItem {
@@ -3177,5 +3388,223 @@ mod tests {
         a.handle_key(key(KeyCode::Enter));
         assert!(matches!(a.modal, Some(Modal::Find { .. })));
         a.handle_key(key(KeyCode::Esc));
+    }
+
+    // ── Config view ──────────────────────────────────────────────────
+
+    fn fuse_rows() -> Vec<FuseRow> {
+        vec![
+            FuseRow {
+                name: "LOW".into(),
+                value: 0x62,
+                mask: 0xff,
+            },
+            FuseRow {
+                name: "HIGH".into(),
+                value: 0xd9,
+                mask: 0xff,
+            },
+            FuseRow {
+                name: "LOCKBIT".into(),
+                value: 0xff,
+                mask: 0x3f,
+            },
+        ]
+    }
+
+    fn cfg_fuses_done(a: &mut App) {
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Config,
+            result: Ok(OpOutcome::ConfigFuses {
+                rows: fuse_rows(),
+                n_fuses: 2,
+                nibbles: 2,
+            }),
+        });
+    }
+
+    #[test]
+    fn config_opdone_opens_fuse_view() {
+        let mut a = op_ready_app();
+        a.op_running = Some(OpKind::Config);
+        cfg_fuses_done(&mut a);
+        let cfg = a.cfg.as_ref().expect("view open");
+        assert_eq!(cfg.kind, CfgKind::Fuses);
+        assert_eq!(cfg.rows.len(), 3);
+        assert_eq!(cfg.n_fuses, 2);
+        assert_eq!(cfg.rows[0].value, 0x62);
+        assert_eq!(cfg.rows[1].mask, 0xff);
+        assert!(cfg.dirty.is_empty());
+    }
+
+    #[test]
+    fn config_opdone_opens_sr_view() {
+        let mut a = op_ready_app();
+        a.op_running = Some(OpKind::Config);
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Config,
+            result: Ok(OpOutcome::ConfigSr {
+                bytes: vec![0x1c, 0x00],
+            }),
+        });
+        let cfg = a.cfg.as_ref().expect("view open");
+        assert_eq!(cfg.kind, CfgKind::SpiSr);
+        assert_eq!(cfg.rows[0].value, 0x1c);
+        assert_eq!(cfg.sr_extra, vec![0x00]);
+    }
+
+    #[test]
+    fn cfg_hex_edit_marks_dirty_and_advances_nibble() {
+        let mut a = op_ready_app();
+        cfg_fuses_done(&mut a);
+        a.handle_key(key(KeyCode::Char('a')));
+        let cfg = a.cfg.as_ref().unwrap();
+        assert_eq!(cfg.rows[0].value, 0xa2); // top nibble of 0x62
+        assert!(cfg.dirty.contains(&0));
+        assert_eq!(cfg.nibble, 1);
+        a.handle_key(key(KeyCode::Char('f')));
+        let cfg = a.cfg.as_ref().unwrap();
+        assert_eq!(cfg.rows[0].value, 0xaf);
+        assert_eq!(cfg.nibble, 1); // clamped at last nibble
+    }
+
+    #[test]
+    fn cfg_nav_clamps() {
+        let mut a = op_ready_app();
+        cfg_fuses_done(&mut a);
+        a.handle_key(key(KeyCode::Up));
+        assert_eq!(a.cfg.as_ref().unwrap().cursor, 0); // already top
+        a.handle_key(key(KeyCode::Down));
+        a.handle_key(key(KeyCode::Down));
+        a.handle_key(key(KeyCode::Down));
+        assert_eq!(a.cfg.as_ref().unwrap().cursor, 2); // clamped at last row
+        a.handle_key(key(KeyCode::Left));
+        assert_eq!(a.cfg.as_ref().unwrap().nibble, 0);
+        a.handle_key(key(KeyCode::Right));
+        a.handle_key(key(KeyCode::Right));
+        assert_eq!(a.cfg.as_ref().unwrap().nibble, 1); // 2 nibbles: 0..1
+    }
+
+    #[test]
+    fn cfg_write_blocked_when_clean() {
+        let mut a = op_ready_app();
+        cfg_fuses_done(&mut a);
+        a.handle_key(key(KeyCode::Char('w')));
+        assert!(a.modal.is_none());
+        assert!(a.log_lines.back().unwrap().msg.contains("no changes"));
+    }
+
+    #[test]
+    fn cfg_write_confirm_carries_fuse_values() {
+        let mut a = op_ready_app();
+        cfg_fuses_done(&mut a);
+        // Dirty the lock row too — the confirm should gain the lock warning.
+        a.handle_key(key(KeyCode::Down));
+        a.handle_key(key(KeyCode::Down));
+        a.handle_key(key(KeyCode::Char('0')));
+        a.handle_key(key(KeyCode::Char('w')));
+        match a.modal.take() {
+            Some(Modal::Confirm {
+                op: OpKind::ConfigWrite,
+                input: OpInput::Fuses(vals),
+                lines,
+            }) => {
+                assert_eq!(vals.len(), 3);
+                assert_eq!(vals[2].value, 0x0f); // 0xff → top nibble 0
+                assert!(lines.iter().any(|l| l.contains("lock bits")));
+            }
+            _ => panic!("expected ConfigWrite confirm"),
+        }
+    }
+
+    #[test]
+    fn cfg_w_then_y_dispatches_config_write() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        cfg_fuses_done(&mut a);
+        a.handle_key(key(KeyCode::Char('f'))); // dirty row 0
+        a.handle_key(key(KeyCode::Char('w')));
+        assert!(matches!(
+            a.modal,
+            Some(Modal::Confirm {
+                op: OpKind::ConfigWrite,
+                ..
+            })
+        ));
+        a.handle_key(key(KeyCode::Char('y')));
+        assert_eq!(a.op_running, Some(OpKind::ConfigWrite));
+        match rx.try_recv() {
+            Ok(WorkerCmd::Run {
+                op: OpKind::ConfigWrite,
+                input: OpInput::Fuses(vals),
+                ..
+            }) => assert_eq!(vals[0].value, 0xf2),
+            _ => panic!("expected fuse-write Run"),
+        }
+        // Written → dirty marks cleared on ConfigWritten.
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::ConfigWrite,
+            result: Ok(OpOutcome::ConfigWritten),
+        });
+        assert!(a.cfg.as_ref().unwrap().dirty.is_empty());
+    }
+
+    #[test]
+    fn cfg_sr_write_carries_byte_and_refreshes() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.op_running = Some(OpKind::Config);
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::Config,
+            result: Ok(OpOutcome::ConfigSr { bytes: vec![0x00] }),
+        });
+        a.handle_key(key(KeyCode::Char('1')));
+        a.handle_key(key(KeyCode::Char('w')));
+        a.handle_key(key(KeyCode::Char('y')));
+        match rx.try_recv() {
+            Ok(WorkerCmd::Run {
+                input: OpInput::SpiSr(b),
+                ..
+            }) => assert_eq!(b, 0x10),
+            _ => panic!("expected SpiSr Run"),
+        }
+        // Write read-back refreshes the view byte and clears dirty.
+        a.handle_event(AppEvent::OpDone {
+            op: OpKind::ConfigWrite,
+            result: Ok(OpOutcome::ConfigSr { bytes: vec![0x10] }),
+        });
+        let cfg = a.cfg.as_ref().unwrap();
+        assert_eq!(cfg.rows[0].value, 0x10);
+        assert!(cfg.dirty.is_empty());
+    }
+
+    #[test]
+    fn cfg_esc_closes_and_mnemonic_c_dispatches() {
+        let mut a = op_ready_app();
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.cmd_tx = Some(tx);
+        a.handle_key(key(KeyCode::Char('c')));
+        assert_eq!(a.op, 7); // armed on the Config tab
+        assert_eq!(a.op_running, Some(OpKind::Config));
+        assert!(matches!(rx.try_recv(), Ok(WorkerCmd::Run { .. })));
+        // The view opens on OpDone; Esc closes it.
+        cfg_fuses_done(&mut a);
+        a.handle_key(key(KeyCode::Esc));
+        assert!(a.cfg.is_none());
+    }
+
+    #[test]
+    fn cfg_hex_keys_are_data_not_mnemonics() {
+        let mut a = op_ready_app();
+        cfg_fuses_done(&mut a);
+        // 'e' and 'b' are hex digits inside the view — not erase/blank ops.
+        a.handle_key(key(KeyCode::Char('e')));
+        a.handle_key(key(KeyCode::Char('b')));
+        let cfg = a.cfg.as_ref().unwrap();
+        assert_eq!(cfg.rows[0].value, 0xeb);
+        assert!(a.op_running.is_none());
+        assert!(a.modal.is_none());
     }
 }

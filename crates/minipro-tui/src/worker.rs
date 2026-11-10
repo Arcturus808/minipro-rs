@@ -17,12 +17,13 @@ use minipro_core::device::{ChipType, ProgrammerInfo, ProgrammerModel};
 use minipro_core::error::MiniproError;
 use minipro_core::handle::MiniproHandle;
 use minipro_core::operations::{
-    blank_check, check_chip_id, chip_id_info, erase_chip, pin_check_gate_applies,
-    pin_contact_check, read_chip_buffer, verify_chip, verify_chip_bytes, write_chip,
-    write_chip_bytes, SizeMismatch,
+    blank_check, check_chip_id, chip_id_info, erase_chip, fuse_element_size,
+    pin_check_gate_applies, pin_contact_check, read_chip_buffer, read_fuses, spi_status_read,
+    spi_status_write, verify_chip, verify_chip_bytes, write_chip, write_chip_bytes, write_fuses,
+    SizeMismatch,
 };
 
-use crate::events::{AppEvent, OpInput, OpKind, OpOptions, OpOutcome, SizeDiff};
+use crate::events::{AppEvent, FuseRow, OpInput, OpKind, OpOptions, OpOutcome, SizeDiff};
 
 /// UI → worker commands.
 pub enum WorkerCmd {
@@ -282,7 +283,7 @@ fn run_in_transaction(
                     .map_err(|e| e.to_string())?,
                 OpInput::File(p) => verify_chip(h, &p, o.page, o.format, Some(&mut progress))
                     .map_err(|e| e.to_string())?,
-                OpInput::None => return Err("verify needs a file path or a buffer".into()),
+                _ => return Err("verify needs a file path or a buffer".into()),
             }
             Ok(OpOutcome::Verified)
         }
@@ -302,8 +303,59 @@ fn run_in_transaction(
             let info = chip_id_info(h).map_err(|e| e.to_string())?;
             Ok(OpOutcome::ChipId(Box::new(info)))
         }
+        OpKind::Config => {
+            // SPI 25-series NOR carries the status register, not MCU
+            // fuse metadata — the fuse 0x01 path reaches it (same op
+            // the CLI's --spi-status uses; verified T76/TL866A/T48).
+            if device.protocol_id == 0x03 {
+                let bytes = spi_status_read(h).map_err(|e| e.to_string())?;
+                return Ok(OpOutcome::ConfigSr { bytes });
+            }
+            use minipro_core::device::ChipConfig;
+            let Some(ChipConfig::Mcu(fc)) = device.config.as_ref() else {
+                return Err("no configuration available for this device".into());
+            };
+            let values = match read_fuses(h) {
+                Ok(v) => v,
+                Err(MiniproError::UnsupportedOperation) => {
+                    return Err("no configuration available for this device".into())
+                }
+                Err(e) => return Err(e.to_string()),
+            };
+            // read_fuses returns fuses then locks in field order; zip to
+            // recover each field's mask for the view.
+            let rows = fc
+                .fuses
+                .iter()
+                .chain(fc.locks.iter())
+                .zip(values.iter())
+                .map(|(f, v)| FuseRow {
+                    name: f.name.clone(),
+                    value: v.value,
+                    mask: f.mask,
+                })
+                .collect();
+            Ok(OpOutcome::ConfigFuses {
+                rows,
+                n_fuses: fc.fuses.len(),
+                nibbles: fuse_element_size(&fc.name) * 2,
+            })
+        }
+        OpKind::ConfigWrite => match input {
+            OpInput::Fuses(values) => {
+                write_fuses(h, &values).map_err(|e| e.to_string())?;
+                Ok(OpOutcome::ConfigWritten)
+            }
+            OpInput::SpiSr(byte) => {
+                // spi_status_write returns the post-write read-back —
+                // the view refreshes from real chip state.
+                let bytes = spi_status_write(h, byte).map_err(|e| e.to_string())?;
+                Ok(OpOutcome::ConfigSr { bytes })
+            }
+            _ => Err("config write needs fuse values or an SR byte".into()),
+        },
         OpKind::Write => {
-            if matches!(input, OpInput::None) {
+            if !matches!(input, OpInput::File(_) | OpInput::Buffer(_)) {
                 return Err("write needs a file path or a buffer".into());
             }
             // Protect-off before erase/write — T76 always honors
@@ -349,7 +401,7 @@ fn run_in_transaction(
                     Some(&mut progress),
                 )
                 .map_err(|e| e.to_string())?,
-                OpInput::None => unreachable!("checked above"),
+                _ => unreachable!("checked above"),
             };
             if !o.skip_verify {
                 match input {
@@ -357,7 +409,7 @@ fn run_in_transaction(
                         .map_err(|e| e.to_string())?,
                     OpInput::File(p) => verify_chip(h, &p, o.page, o.format, Some(&mut progress))
                         .map_err(|e| e.to_string())?,
-                    OpInput::None => unreachable!("checked above"),
+                    _ => unreachable!("checked above"),
                 }
             }
             if o.protect_after && device.flags.protect_after {
