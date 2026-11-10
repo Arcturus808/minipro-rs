@@ -161,5 +161,5 @@ message on anything else. Both flags run inside the normal transaction
 - `--spi-status-write <BYTE>` writes one byte via `spi_status_write`
   (fuse `0x01` write then a read-back) and prints the post-write state.
   Accepts `0xNN` or decimal. The BP/SRP bits are non-volatile on most
-  parts — the flag's help text warns, and `-u`/protect-off can clear BP
-  bits if the chip ends up protected.
+  parts — the flag's help text warns, and `-u`/protect-off clears BP
+  bits if the chip ends up protected (verified T76/TL866A/T48).

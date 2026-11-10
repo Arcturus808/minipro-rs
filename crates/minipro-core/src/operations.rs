@@ -1382,8 +1382,8 @@ pub fn spi_status_read(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
 /// the WIP/WEL bits and may refuse writes while a cycle is in progress.
 ///
 /// WARNING: the BP/SRP bits are non-volatile on most parts — they survive
-/// power cycles and can leave the chip write-protected. On T76 the
-/// `protect_off` command clears the BP bits (verified on W25X20CL).
+/// power cycles and can leave the chip write-protected. `protect_off`
+/// clears the BP bits (verified T76/TL866A/T48 on W25X20CL).
 pub fn spi_status_write(handle: &mut MiniproHandle, value: u8) -> Result<Vec<u8>> {
     let device = handle.device()?.clone();
     if device.protocol_id != SPI_NOR_PROTOCOL_ID {

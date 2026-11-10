@@ -112,15 +112,16 @@ read back exactly, and a subsequent `protect_off` reset the register to
 Exposed as `--spi-status` / `--spi-status-write <BYTE>` in the CLI
 (`spi_status_read`/`spi_status_write` in `operations.rs`). The BP/SRP
 bits are non-volatile on most parts; `minipro -u` (protect off) clears
-BP bits on T76 if a write leaves the chip protected.
+BP bits if a write leaves the chip protected — verified on all three
+models below, each via its own unprotect opcode.
 
 **Model verification (W25X20CL):**
 
 | Model | Read | Write persists | Data side effects |
 |---|---|---|---|
-| T76 (fw 00.1.18) | yes | yes | none — `protect_off` clears the same SR |
-| TL866A (fw 03.2.72) | yes | yes | none — incl. cold-boot-first-command |
-| T48 (fw 00.1.35) | yes | yes | none |
+| T76 (fw 00.1.18) | yes | yes | none — `protect_off` (`0x18`) clears the same SR |
+| TL866A (fw 03.2.72) | yes | yes | none — incl. cold-boot-first-command; `protect_off` (`0x44`) clears the SR |
+| T48 (fw 00.1.35) | yes | yes | none — `protect_off` (`0x18`) clears the SR |
 | T56 | same command family — untested | | |
 | TL866II+ | same impl as T48 — untested | | |
 
