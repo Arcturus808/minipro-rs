@@ -164,6 +164,27 @@ message on anything else. Both flags run inside the normal transaction
   parts — the flag's help text warns, and `-u`/protect-off clears BP
   bits if the chip ends up protected (verified T76/TL866A/T48).
 
+## Fuse/config files (`-c config`, `--read-fuses`, `--write-fuses`)
+
+Config files are `NAME=VALUE` lines (`#` comments ok), one per field, in
+**upstream's fuses-file order**: config fuses, `user_id0..N` entries
+(when the device's `<config num_uids>` is nonzero — read via
+`MP_FUSE_USER`), then lock bytes. Values are `0xNN` or `0xNNNN` —
+`user_id` rows follow the chip's data organization
+(`uid_element_size`, upstream's `data_org ? 2 : 1`), which can be wider
+than the fuse rows (AVR: 1-byte fuses, 2-byte user ids).
+
+On write, fields resolve **by name** (upstream `get_fuse_value`
+semantic) — order doesn't matter, unknown names are ignored, expected
+fuse/lock names are required. The user-id section is optional *as a
+whole*: no `user_id` names → skipped; a partial section → error.
+
+**TL866A/CS caveat:** that firmware hangs on `MP_FUSE_USER`, so those
+models omit user-id rows on read and skip them on write (with a
+warning if a file carries them). The binary `-c user` page
+(`MP_USER`, page `0x02`) is a different feature — raw user-row data,
+not the fuse-file entries.
+
 ## Overrides (`-o KEY=VALUE`)
 
 `-o` merges into the `Device` before `begin_transaction` (see

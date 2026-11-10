@@ -1272,13 +1272,12 @@ fn do_operations(
     if let Some(ref path) = cli.read {
         if page == PageType::Config {
             let values = read_fuses(handle)?;
-            let element_size = fuse_element_size_from_handle(handle);
             let mut text = String::new();
             for fv in &values {
                 text.push_str(&format!(
                     "{}={}\n",
                     fv.name,
-                    format_fuse_value(fv.value, element_size)
+                    format_fuse_value(fv.value, fuse_value_item_size(handle, &fv.name))
                 ));
             }
             std::fs::write(path, &text)
@@ -1365,13 +1364,12 @@ fn do_operations(
     // ── Read fuses ────────────────────────────────────────────────────────────
     if let Some(ref out_path) = cli.read_fuses {
         let values = read_fuses(handle)?;
-        let element_size = fuse_element_size_from_handle(handle);
         let mut text = String::new();
         for fv in &values {
             text.push_str(&format!(
                 "{}={}\n",
                 fv.name,
-                format_fuse_value(fv.value, element_size)
+                format_fuse_value(fv.value, fuse_value_item_size(handle, &fv.name))
             ));
         }
         match out_path {
@@ -1605,6 +1603,19 @@ fn fuse_element_size_from_handle(handle: &MiniproHandle) -> usize {
             _ => None,
         })
         .unwrap_or(1)
+}
+
+/// Element width for a single config-file entry. `user_idN` rows follow
+/// the chip's data organization (upstream's `data_org ? 2 : 1`), which can
+/// differ from the fuse element size — AVR fuses are 1 byte while the same
+/// chip's user ids are 16-bit words.
+fn fuse_value_item_size(handle: &MiniproHandle, name: &str) -> usize {
+    if name.starts_with("user_id") {
+        if let Ok(dev) = handle.device() {
+            return minipro_core::operations::uid_element_size(dev);
+        }
+    }
+    fuse_element_size_from_handle(handle)
 }
 
 /// Format a fuse value as hex, using 2 digits for 1-byte elements and 4 digits

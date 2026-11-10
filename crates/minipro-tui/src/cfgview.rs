@@ -36,6 +36,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
     .split(area);
 
     let title = match cfg.kind {
+        CfgKind::Fuses if cfg.n_uids > 0 => " CONFIG — fuses, user id & lock bits ",
         CfgKind::Fuses => " CONFIG — fuses & lock bits ",
         CfgKind::SpiSr => " CONFIG — SPI status register ",
     };
@@ -54,10 +55,16 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
 
     let mut lines: Vec<Line> = Vec::new();
     if cfg.kind == CfgKind::Fuses {
+        // Upstream fuses-file order: fuses, user ids, locks.
+        let lock_lo = cfg.n_fuses + cfg.n_uids;
         section(&mut lines, " FUSES", cfg, 0, cfg.n_fuses);
-        if cfg.n_fuses < cfg.rows.len() {
+        if cfg.n_uids > 0 {
             lines.push(Line::from(""));
-            section(&mut lines, " LOCKS", cfg, cfg.n_fuses, cfg.rows.len());
+            section(&mut lines, " USER ID", cfg, cfg.n_fuses, lock_lo);
+        }
+        if lock_lo < cfg.rows.len() {
+            lines.push(Line::from(""));
+            section(&mut lines, " LOCKS", cfg, lock_lo, cfg.rows.len());
         }
     } else {
         section(&mut lines, " STATUS REGISTER", cfg, 0, cfg.rows.len());
@@ -69,7 +76,12 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_widget(
         Paragraph::new(Line::from(vec![
             sp(
-                format!(" {} = 0x{:0w$X}", row.name, row.value, w = cfg.nibbles),
+                format!(
+                    " {} = 0x{:0w$X}",
+                    row.name,
+                    row.value,
+                    w = cfg.row_nibbles(cfg.cursor)
+                ),
                 theme::dim(),
             ),
             if cfg.dirty.contains(&cfg.cursor) {
@@ -100,6 +112,7 @@ fn section(
         .max(4);
     for i in from..to {
         let row = &cfg.rows[i];
+        let w = cfg.row_nibbles(i);
         let sel = i == cfg.cursor;
         let dirty = cfg.dirty.contains(&i);
         let base = if dirty { theme::amber() } else { theme::text() };
@@ -112,7 +125,7 @@ fn section(
             sp("  0x", theme::dim()),
         ];
         // Value digits — the nibble-under-cursor gets inverse video.
-        let digits = format!("{:0w$X}", row.value, w = cfg.nibbles);
+        let digits = format!("{:0w$X}", row.value, w = w);
         for (j, ch) in digits.chars().enumerate() {
             let st = if sel && j == cfg.nibble {
                 theme::text().add_modifier(Modifier::REVERSED)
@@ -122,7 +135,7 @@ fn section(
             spans.push(sp(ch.to_string(), st));
         }
         spans.push(sp(
-            format!("   mask 0x{:0w$X}", row.mask, w = cfg.nibbles),
+            format!("   mask 0x{:0w$X}", row.mask, w = w),
             theme::faint(),
         ));
         if dirty {

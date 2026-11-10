@@ -132,13 +132,18 @@ pub enum OpOutcome {
         address: u32,
     },
     ChipId(Box<ChipIdInfo>),
-    /// Config read — MCU fuse/lock rows (fuses first, `n_fuses` marks
-    /// the boundary) with per-field masks, or the SPI status register
-    /// bytes. `nibbles` is the hex width per element (2 or 4).
+    /// Config read — MCU fuse/lock rows in upstream fuses-file order:
+    /// fuses, `user_idN` entries, then locks (`n_fuses`/`n_uids` mark the
+    /// boundaries) with per-field masks, or the SPI status register bytes.
+    /// `nibbles` is the fuse/lock hex width (2 or 4); `uid_nibbles` is the
+    /// user-id width — it follows the chip's data organization and can
+    /// differ (AVR: 1-byte fuses, 2-byte user ids).
     ConfigFuses {
         rows: Vec<FuseRow>,
         n_fuses: usize,
+        n_uids: usize,
         nibbles: usize,
+        uid_nibbles: usize,
     },
     /// SPI status-register bytes — returned by both the read and the
     /// write read-back, so the view always reflects chip state.
