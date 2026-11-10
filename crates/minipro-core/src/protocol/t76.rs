@@ -671,6 +671,24 @@ impl Protocol for T76Protocol {
             // msg[63] = high byte of variant = algorithm number
             msg[63] = (device.variant >> 8) as u8;
 
+            // OVC "Vcc Current Imax" level at 0x34: unlike T48/T56 (raw
+            // trip code, written by build_begin_msg above), the T76 takes
+            // the 1..9 level as an enum and the firmware picks the mA —
+            // overwrite the shared field. T76_OVC_LEVEL is an env
+            // fallback when no -o override was given.
+            let lvl = if device.ovc_level != 0 {
+                device.ovc_level.min(9)
+            } else {
+                std::env::var("T76_OVC_LEVEL")
+                    .ok()
+                    .and_then(|e| e.parse::<u8>().ok())
+                    .unwrap_or(0)
+                    .min(9)
+            };
+            if lvl != 0 {
+                put_le16(&mut msg[0x34..0x36], lvl as u32);
+            }
+
             let mut msglen = 64;
 
             // SPI 25-series NOR needs a geometry block in the extension area.

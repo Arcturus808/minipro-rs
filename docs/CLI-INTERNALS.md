@@ -163,3 +163,22 @@ message on anything else. Both flags run inside the normal transaction
   Accepts `0xNN` or decimal. The BP/SRP bits are non-volatile on most
   parts — the flag's help text warns, and `-u`/protect-off clears BP
   bits if the chip ends up protected (verified T76/TL866A/T48).
+
+## Overrides (`-o KEY=VALUE`)
+
+`-o` merges into the `Device` before `begin_transaction` (see
+`apply_overrides` in `main.rs`). Keys: `vpp`/`vdd`/`vcc` (validated
+against the per-model firmware voltage tables; logic ICs take `vcc`
+only), `pulse` (µs), `spi_clock` (raw index), `address` (I²C slave,
+`0xNN` ok), `ovc_level`.
+
+- `ovc_level=N` (0–9) sets the VCC over-current trip level sent as LE16
+  at offset `0x34` of BEGIN_TRANS. `0` = firmware default; 1–9 ≈
+  120–400 mA nominal. Encoding differs per model: T48/T56/TL866II+ get
+  the raw calibrated trip code (`OVC_IMAX` in `protocol/mod.rs` — T48
+  and TL866II+ share `tl866iiplus.rs`, upstream wires t48.c only but the
+  vendor TL866II build sends the same field); the T76 sends the level
+  enum itself and additionally honors the `T76_OVC_LEVEL` env var when
+  no `-o` override was given. Purpose: ICSP/in-circuit work, where the
+  target board loads the VCC rail and trips the default limit — the
+  hardware OVC protection stays active, just at the higher trip point.

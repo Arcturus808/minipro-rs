@@ -1527,6 +1527,7 @@ fn build_device(
         t56_only,
         spi_clock,
         i2c_address,
+        ovc_level: 0,
         algorithm: None,
     }))
 }
@@ -1588,6 +1589,7 @@ fn build_logic_device(e: &BytesStart, name: &str, manufacturer: &str) -> Result<
         t56_only: false,
         spi_clock: 0,
         i2c_address: 0,
+        ovc_level: 0,
         algorithm: None,
     };
 

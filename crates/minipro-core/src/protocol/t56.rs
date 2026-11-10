@@ -9,7 +9,7 @@
 //! addition of T56-specific commands 0x26 (write bitstream), 0x2A (write
 //! bitstream 2, logic chips), 0x39 (request OVC status), etc.
 
-use super::{DataSet, Device, JedecSet, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, OvcStatus, Protocol, OVC_IMAX};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -173,6 +173,17 @@ pub(super) fn build_begin_msg(device: &Device, icsp: u8) -> [u8; 64] {
     put_le32(&mut msg[40..44], device.package_details.raw);
     put_le16(&mut msg[44..46], device.read_buffer_size as u32);
     put_le32(&mut msg[56..60], device.flags.raw);
+
+    // OVC "Vcc Current Imax" trip level at 0x34. T56 expects the raw
+    // calibrated trip code; T76 reuses this builder but overwrites the
+    // field with the level enum in its own begin_transaction. Raising
+    // the trip point helps in-circuit work where the target board
+    // loads the VCC rail; hardware OVC protection stays active, just
+    // at the higher limit.
+    let lvl = device.ovc_level.min(9);
+    if lvl != 0 {
+        put_le16(&mut msg[0x34..0x36], OVC_IMAX[lvl as usize] as u32);
+    }
 
     msg
 }
@@ -650,4 +661,34 @@ pub fn firmware_update_t56(
 
     writeln!(out, "Firmware update completed successfully.").ok();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn begin_msg_encodes_ovc_trip_code() {
+        let mut device = Device {
+            ovc_level: 5,
+            ..Default::default()
+        };
+        let msg = build_begin_msg(&device, 0);
+        assert_eq!(&msg[0x34..0x36], &220u16.to_le_bytes());
+
+        // Level 0 leaves the field at firmware default (zeros).
+        device.ovc_level = 0;
+        let msg = build_begin_msg(&device, 0);
+        assert_eq!(&msg[0x34..0x36], &[0, 0]);
+    }
+
+    #[test]
+    fn begin_msg_clamps_ovc_level() {
+        let device = Device {
+            ovc_level: 42,
+            ..Default::default()
+        };
+        let msg = build_begin_msg(&device, 0);
+        assert_eq!(&msg[0x34..0x36], &400u16.to_le_bytes());
+    }
 }

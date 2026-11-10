@@ -424,25 +424,18 @@ This is a living list of features and improvements planned for minipro-rs.
     **Impact:** Parallel NOR flash chips can be read and erased but not
     written. Niche use case (parallel NOR is uncommon).
 
-  - [ ] **`-o ovc_level` — OVC trip-level override** — upstream added
-    this in 2026 (commits `1473189`, `7eeddba`): it raises the Vcc
-    current-limit trip point, which matters for in-circuit work where
-    the target board loads the VCC rail and trips the default limit
-    ("Overcurrent protection!").
-    - **T48/T56/TL866II+:** raw calibrated trip code as LE16 at
-      `msg[0x34]` in the 0x03 BEGIN_TRANS command (identical encoding
-      on all three — upstream verified against the vendor build).
-      Levels 1–9 map to 130/150/180/200/220/250/300/335/400 nominal
-      mA; 0 = firmware default.
-    - **T76:** takes the 1..9 level as an enum; firmware picks the
-      actual mA value itself.
-    - **Scope:** new `ovc_level` key in the `-o` override parser,
-      plumbing into `begin_transaction` for tl866iiplus.rs (T48 and
-      TL866II+) and the t56.rs/t76.rs equivalents, plus a GUI
-      advanced-override row if surfaced there.
-    - **Difficulty: Low-Medium** — mechanical plumbing; upstream's
-      comments document the raw table verbatim. Real-world relevance:
-      ICSP/in-circuit targets are exactly the scenario this exists for.
+  - [x] **`-o ovc_level` — OVC trip-level override** — DONE 2026-11-10.
+    Raises the Vcc current-limit trip point for in-circuit work where
+    the target board loads the VCC rail and trips the default limit.
+    `Device.ovc_level` (0–9) set by `-o ovc_level=N`; sent as LE16 at
+    `msg[0x34]` of BEGIN_TRANS — T48/T56/TL866II+ get the raw calibrated
+    trip code (`OVC_IMAX` table in `protocol/mod.rs`, identical encoding
+    per the vendor builds — upstream wires t48.c only, we cover the
+    TL866II+ field too since its vendor build sends it), T76 sends the
+    level enum and honors the `T76_OVC_LEVEL` env fallback. Unit-tested
+    (`build_begin_msg` encoding + clamp, CLI parse/reject). No GUI
+    override row (upstream is CLI-only here too). Hardware validation
+    pending — needs an in-circuit target that trips the default limit.
 
   ### Low — niche or deferred
 

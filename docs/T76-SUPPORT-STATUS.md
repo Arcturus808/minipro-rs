@@ -200,6 +200,7 @@ placeholder. Real capacity is detected at runtime (see above).
 | Variable | Purpose | Example |
 |----------|---------|---------|
 | `T76_EMMC_SIZE_MB` | Override eMMC capacity (MiB), skip EXT_CSD read | `4096` for 4 GiB |
+| `T76_OVC_LEVEL` | OVC trip level 1–9 fallback when `-o ovc_level` is unset | `5` (~220 mA) |
 
 ## Known Issues
 
