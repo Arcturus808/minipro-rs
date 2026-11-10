@@ -1597,6 +1597,7 @@
                           </svg>
                         </button>
                         <div class="flex-1"></div>
+                        <span class="text-xs font-mono opacity-50">SR:</span>
                         <input
                           type="text"
                           class="input text-xs font-mono px-1 py-0.5 w-14 text-center"
