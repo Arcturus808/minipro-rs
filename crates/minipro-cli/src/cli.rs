@@ -102,7 +102,8 @@ struct Cli {
     #[arg(long = "uid", action = ArgAction::SetTrue)]
     uid: bool,
 
-    /// Select the lock-bits page (equivalent to -c config; lock bits are included in fuse output)
+    /// Select the lock-bits page (equivalent to -c config; lock bits and
+    /// user-id rows are included in fuse output on devices that have them)
     #[arg(long = "lock", action = ArgAction::SetTrue)]
     lock: bool,
 
