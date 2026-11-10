@@ -88,6 +88,13 @@ pub struct OvcStatus {
     pub c2: u32,
 }
 
+/// Raw calibrated VCC-current trip codes for `-o ovc_level`, sent as LE16
+/// at offset 0x34 of the 0x03 BEGIN_TRANS command on T48/T56/TL866II+.
+/// Index = level 0–9 (0 = firmware default); levels 1–9 select
+/// ~120/150/180/200/220/250/300/350/400 mA nominal. The T76 sends the
+/// level enum itself instead of the raw code.
+pub(crate) const OVC_IMAX: [u16; 10] = [0, 130, 150, 180, 200, 220, 250, 300, 335, 400];
+
 /// All operations a programmer model must implement.
 ///
 /// Methods return `Ok(())` on success or an appropriate `MiniproError`.

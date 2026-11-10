@@ -26,7 +26,7 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Bootloader erase             |
 
-use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol};
+use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol, OVC_IMAX};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -754,6 +754,14 @@ impl Protocol for Tl866iiPlusProtocol {
         le32(&mut pkt[40..44], device.package_details.raw);
         le16(&mut pkt[44..46], device.read_buffer_size);
         le32(&mut pkt[56..60], device.flags.raw);
+        // OVC "Vcc Current Imax" trip level at 0x34 — raw calibrated trip
+        // code, identical field on the T48 and TL866II+ vendor builds
+        // (upstream wires it in t48.c only; the vendor TL866II build
+        // sends it too). 0 = firmware default.
+        let lvl = device.ovc_level.min(9);
+        if lvl != 0 {
+            le16(&mut pkt[0x34..0x36], OVC_IMAX[lvl as usize]);
+        }
         usb.msg_send(&pkt)
     }
 

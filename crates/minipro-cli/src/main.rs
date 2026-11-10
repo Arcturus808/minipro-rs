@@ -1704,6 +1704,8 @@ fn parse_fuse_file(text: &str) -> anyhow::Result<Vec<FuseValue>> {
 /// - `pulse=N` — write pulse delay in microseconds (0–65535)
 /// - `spi_clock=N` — SPI clock index (raw u8)
 /// - `address=N`   — I²C slave address (0–255)
+/// - `ovc_level=N` — VCC over-current trip level 0–9 (0 = firmware default;
+///   T48/T56/TL866II+/T76 only — raises the trip point for in-circuit work)
 ///
 /// Voltage names are validated against the firmware encoding table for the
 /// connected programmer model (see `vcc_voltage_table`/`vpp_voltage_table` in
@@ -1811,8 +1813,15 @@ fn apply_overrides(
                 };
                 device.i2c_address = n;
             }
+            "ovc_level" => {
+                let n: u8 = value.parse().with_context(|| {
+                    format!("invalid ovc_level value '{value}': expected integer 0–9")
+                })?;
+                anyhow::ensure!(n <= 9, "ovc_level value {n} out of range (max 9)");
+                device.ovc_level = n;
+            }
             other => anyhow::bail!(
-                "unknown override key '{other}'; valid keys: vpp, vdd, vcc, pulse, spi_clock, address"
+                "unknown override key '{other}'; valid keys: vpp, vdd, vcc, pulse, spi_clock, address, ovc_level"
             ),
         }
     }
@@ -2167,5 +2176,20 @@ mod tests {
         assert_eq!(dev.pulse_delay, 500);
         assert_eq!(dev.spi_clock, 2);
         assert_eq!(dev.i2c_address, 0xA0);
+    }
+
+    #[test]
+    fn test_ovc_level_override() {
+        let mut dev = memory_device();
+        apply_overrides(&mut dev, &["ovc_level=5".into()], ProgrammerModel::T76).unwrap();
+        assert_eq!(dev.ovc_level, 5);
+    }
+
+    #[test]
+    fn test_ovc_level_rejects_over_9() {
+        let mut dev = memory_device();
+        let err =
+            apply_overrides(&mut dev, &["ovc_level=10".into()], ProgrammerModel::T76).unwrap_err();
+        assert!(err.to_string().contains("out of range"), "{err:#}");
     }
 }

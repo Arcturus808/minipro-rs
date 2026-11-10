@@ -696,6 +696,9 @@ pub struct Device {
     pub t56_only: bool,
     pub spi_clock: u8,
     pub i2c_address: u8,
+    /// Over-current trip level for `-o ovc_level` (0 = firmware default,
+    /// 1–9 ≈ 120–400 mA nominal; T48/T56/TL866II+/T76 only).
+    pub ovc_level: u8,
     pub algorithm: Option<Algorithm>,
 }
 
