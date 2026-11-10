@@ -618,7 +618,7 @@ Start button routes to `readSpiStatus()` rather than `readFuses()`.
   and the protect-off recovery path.
 - The SR byte read/written here is the real on-chip status register —
   verified T76/TL866A/T48, see `docs/T76-SUPPORT-STATUS.md`. BP/SRP
-  bits are non-volatile; a `0x00` write or T76 protect-off recovers.
+  bits are non-volatile; a `0x00` write or protect-off recovers.
 
 ## Terminal Rendering (TerminalLog.svelte)
 

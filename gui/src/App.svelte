@@ -517,7 +517,7 @@
   async function writeSpiStatus() {
     if (spiStatus === null) return;
     if (spiStatus & 0x7c) {
-      logs.warn("BP/SRP bits are non-volatile — they persist across power cycles. Protect Off clears BP bits on T76.");
+      logs.warn("BP/SRP bits are non-volatile — they persist across power cycles. Protect Off can clear BP bits.");
     }
     try {
       const r = await spiStatusWrite(icspMode, spiStatus);

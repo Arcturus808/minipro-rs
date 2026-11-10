@@ -195,7 +195,7 @@ struct Cli {
     /// Write BYTE (hex or decimal) to the SPI status register, then read it
     /// back for verification. WARNING: BP/SRP bits are non-volatile on most
     /// parts — they survive power cycles and can leave the chip protected.
-    /// -u / protect-off clears the BP bits on T76.
+    /// -u / protect-off can clear the BP bits.
     #[arg(long = "spi-status-write", value_name = "BYTE")]
     spi_status_write: Option<String>,
 
