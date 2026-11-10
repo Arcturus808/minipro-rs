@@ -170,6 +170,16 @@ work correctly.
 Per-block erase uses 0x3A bad-block check to skip factory-marked bad
 blocks. Bad block count is printed to stderr.
 
+### NAND program commit
+Per-block program (`0x1F` init + per-page EP05 packets, 16-byte header
+each) is followed by a plain `0x39` REQUEST_STATUS (8-byte send, 32-byte
+recv). The firmware cache-programs: page N commits when page N+1's data
+arrives, so the last page is left pending until the `0x39` poll — without
+it the final page of each block reads back erased (upstream-observed).
+The vendor also posts EP83 status reads, but they complete with 0 bytes
+(overlapped/aborted telemetry) — upstream's `status_recv()` for EP83
+exists but has no call sites; we do not read EP83 here either.
+
 ### Parallel NOR program
 PROGRAM is non-functional (upstream C has the same limitation). READ
 and ERASE may work. The vendor uses a per-command descriptor that

@@ -489,14 +489,21 @@ This is a living list of features and improvements planned for minipro-rs.
     `(ppb * page_or_blocks)` size check could also overflow u32 with the
     packed value).
 
-  - [ ] **status_recv on EP83** — Matt Brown added a `status_recv()` function
-    that reads per-block NAND program status from EP83 (endpoint 0x83 IN).
-    Our `usb.rs` uses EP83 for payload reads but has no dedicated status
-    polling function. Our NAND program at `t76.rs:837-865` may not properly
-    check per-block status responses.
-    **Impact:** NAND program may not detect per-block write failures.
-    **Location:** `crates/minipro-core/src/usb.rs` (missing function),
-    `crates/minipro-core/src/protocol/t76.rs:837-865`
+  - [x] **NAND per-block commit status** — ALREADY SATISFIED (audited
+    2026-11-10). The ROADMAP item assumed EP83 status reads were the commit
+    mechanism; upstream's evolved implementation shows they are *not* —
+    the vendor posts EP83 reads that complete with 0 bytes (overlapped,
+    aborted telemetry), and `status_recv()` exists in upstream `usb_*.c`
+    but has **zero call sites**. The real commit mechanism is a plain
+    `0x39 REQUEST_STATUS` (8B send + 32B recv) after each block's page
+    stream — already implemented at `t76.rs` write_block NAND path
+    (`st[0] = CMD_REQUEST_STATUS`), which waits for the last page's
+    program to finish (upstream: "without the 0x39, page 63 of every
+    block reads back erased — observed"). Our per-page loop also
+    diverges favorably: it iterates only pages present in `ds.data` and
+    pads a short last page with `0xFF`, vs upstream's unconditional
+    `ppb` pages with a potential out-of-bounds `memcpy` on partial
+    blocks. No `status_recv` port — dead-code parity isn't a goal.
 
   ### Bugs — correctness gaps vs upstream
 
