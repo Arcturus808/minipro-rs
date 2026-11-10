@@ -39,14 +39,17 @@ optimization — external contributors never trigger our CI (GitLab runs on
 
 **Scope:** this validates the CLI/core workspace only. The Tauri GUI's
 Linux build has heavier system dependencies and is covered separately
-below as an optional step.
+below as an optional step. On the 1.85 toolchain `minipro-tui` is
+excluded from every command (`--workspace --exclude minipro-tui`) —
+ratatui 0.30 floors it at Rust 1.88, mirroring the CI `msrv` job.
 
 Pick whichever recipe matches your platform:
 
 ### Native Linux
 
 ```bash
-cargo +1.85 check --all --locked && cargo test --all --locked && \
+cargo +1.85 check --workspace --exclude minipro-tui --locked && \
+  cargo test --all --locked && \
   cargo clippy --all-targets -- -D warnings
 ```
 
@@ -68,7 +71,7 @@ wsl -d Ubuntu -- bash -c "source ~/.cargo/env && rustup install 1.85"
 wsl -d Ubuntu -- bash -c "source ~/.cargo/env && \
   git clone /mnt/<your-repo-path> ~/minipro-rs-check && \
   cd ~/minipro-rs-check && \
-  cargo +1.85 check --all --locked && \
+  cargo +1.85 check --workspace --exclude minipro-tui --locked && \
   cargo test --all --locked && \
   cargo clippy --all-targets -- -D warnings"
 ```
@@ -77,8 +80,9 @@ wsl -d Ubuntu -- bash -c "source ~/.cargo/env && \
 
 ```bash
 docker run --rm -v "$PWD:/src" -w /src rust:1.85 \
-  sh -c "cargo check --all --locked && cargo test --all --locked && \
-         cargo clippy --all-targets -- -D warnings"
+  sh -c "cargo check --workspace --exclude minipro-tui --locked && \
+         cargo test --workspace --exclude minipro-tui --locked && \
+         cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
 ```
 
 Uses the same `rust:1.85` image as the GitLab `msrv` job, so results match
