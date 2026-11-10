@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-10
+
 ### Added
 
 - **MCU user-id rows (`user_idN`) in fuse/config files** — upstream parity: `read_fuses` now reads the device's user-ID section (`MP_FUSE_USER`, driven by the database's `num_uids`) and emits `user_id0=0xNN`, `user_id1=0xNN`, … entries *between* fuses and locks — the same order upstream's `read_fuses_file` produces, so `-c config` dumps are line-compatible. `write_fuses` resolves fields **by name** now (upstream's `get_fuse_value` semantic): expected fuse and lock names are required, `user_id` lines are written via `MP_FUSE_USER` when present, and the whole user-id section stays optional so callers that only carry fuses+locks (the GUI) are unaffected. Element width follows the chip's data organization (`uid_element_size`, upstream's `data_org ? 2 : 1`) — AVR chips have 1-byte fuses but 16-bit user-id words, handled on both the file format and the new per-row widths in the TUI Config view's new USER ID section. The GUI config panel now displays the raw user-id bytes too. **TL866A/CS caveat:** that firmware hangs on the `MP_FUSE_USER` request, so those two models skip the section entirely on read *and* write (a config file carrying `user_id` lines logs a warning rather than hanging the programmer). The separate binary `-c user` page (`MP_USER`, page `0x02`) is unchanged.
