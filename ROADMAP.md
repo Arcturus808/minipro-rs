@@ -61,6 +61,7 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Model-filtered favorites** — favorites whose exact name doesn't exist in the connected programmer's database section are hidden (names differ per family, e.g. `PIC16F628A` vs `PIC16F628A@DIP18`). Stored favorites are untouched and reappear on a compatible model. Backend: `check_favorite_devices` → `list_devices_by_model()`.
 - [x] **Hardware-free GUI testing** — `MINIPRO_FAKE_PROGRAMMER=<MODEL>` env var fakes programmer presence so device search/selection and the ICSP/ZIF diagrams can be exercised with no USB device attached.
 - [x] **ZIF socket placement diagram** — per-model SVG placement panel driven by `minipro_core::zif` rules (socket size, lever position, top- vs bottom-justified insertion — T48 is 40-pin/bottom-lever; T56/T76 bottom-justify at ZIF 24). Pin-test bad pins highlight at mapped ZIF positions; CLI `-d` prints insertion hints and `-z` annotates bad pins with ZIF positions. Adapter-based packages pending (Phase 3).
+- [x] **SPI status register access for 25-series NOR** — CLI `--spi-status` / `--spi-status-write <BYTE>` and a GUI Config-panel editor (hex field + 8 bit toggles, WEL/WIP read-only, help modal, non-volatile-BP warning). Uses the fuse `0x01` path (READ_CFG/WRITE_CFG), which is the physical on-chip SR — verified read/write/persist on T76, TL866A, T48; each model's `protect_off` clears BP bits (`0x18` T76/T48, `0x44` TL866A). Refused cleanly on non-SPI protocols. Upstream issue 389.
 
 ## Near-term
 
@@ -590,7 +591,10 @@ This is a living list of features and improvements planned for minipro-rs.
   but has never been tested on real hardware. Validation requires physical
   T56/T76 devices and chips.
 
-  - [ ] T76 SPI NOR (8-pin and 16-pin) — read/erase/program
+  - [x] T76 SPI NOR — read/erase/program — 8-pin VALIDATED on W25X20CL
+    (fw 00.1.18): read, `-u` write with erase+verify, chip ID, and
+    status-register access all working. 16-pin path implemented, pending
+    a SOIC-16 chip (W25Q128 on order).
   - [x] T76 SPI-NAND — read/erase/program — VALIDATED by Agnius (GitLab work
     item #3) on GD5F1GQ5UExxG(x4)@WSON8, T76 firmware 00.1.18, XGPro v13.21.
     Full read (142MB, SHA-256 verified across two reads), erase, write, and
