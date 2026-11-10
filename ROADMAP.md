@@ -469,25 +469,25 @@ This is a living list of features and improvements planned for minipro-rs.
   identified 3 items we are missing. These may be partially addressed by
   Agnius's pending MR (GitLab work item #3).
 
-  - [ ] **SPI-NAND geometry fix-up (database layer)** — ~1780 SPI-NAND chips
-    in the database have `code_memory_size == 0` because XGecu packs geometry
-    into other fields: `page_size` holds block count, `pages_per_block` has
-    vendor flags in the top byte, `write_buffer_size` is page + spare. Matt
-    Brown added fix-up logic in `database.c` that computes the real
-    `code_memory_size = block_count * pages_per_block * (page + spare)`. Our
-    `database.rs` reads these fields directly with no unpacking.
-    **Impact:** SPI-NAND chips with packed geometry read as zero-size.
-    **Location:** `crates/minipro-core/src/database.rs:1037`
+  - [x] **SPI-NAND geometry fix-up (database layer)** — DONE
+    (`fix/spi-nand-geometry`). ~1900 SPI-NAND chips in the database have
+    `code_memory_size == 0` because XGecu packs geometry into other
+    fields: `page_size` holds block count, `pages_per_block` has vendor
+    flags in the top byte, `write_buffer_size` is page + spare. Ported
+    Matt Brown's `database.c` fix-up verbatim (NAND `0x2d` + zero size +
+    top-byte flag signature; `code_memory_size = blocks × ppb ×
+    (page+spare)`; `pages_per_block` masked to 24 bits; packed
+    `data_memory2_size` leftover cleared; INFOIC section excluded).
+    Verified on real data: `GD5F1GQ5UExxG(x4)@WSON8` now reports
+    `0x8800000` (136 MB) and `Pages/block: 64` — was `0` / `2147483712`.
 
-  - [ ] **pages_per_block masking (0xFFFF)** — the upper bits of
-    `pages_per_block` contain database flags, not geometry. Matt Brown's
-    database fix-up masks these. We use the raw value in at least 3 places
-    in `t76.rs` (lines 648, 830, 1045). Agnius independently found this same
-    bug during hardware testing.
-    **Impact:** Incorrect block calculations for NAND chips with non-zero
-    flag bits in pages_per_block.
-    **Location:** `crates/minipro-core/src/database.rs:1037`,
-    `crates/minipro-core/src/protocol/t76.rs:648, 830, 1045`
+  - [x] **pages_per_block masking** — DONE (`fix/spi-nand-geometry`,
+    same change). The DB fix-up masks the top flag byte at parse for
+    packed entries; t76.rs use sites now mask to `& 0xffff`, mirroring
+    upstream's `uint16_t ppb` truncation (the program command writes ppb
+    as a 4-byte LE field — raw flags would leak onto the wire; the
+    `(ppb * page_or_blocks)` size check could also overflow u32 with the
+    packed value).
 
   - [ ] **status_recv on EP83** — Matt Brown added a `status_recv()` function
     that reads per-block NAND program status from EP83 (endpoint 0x83 IN).
