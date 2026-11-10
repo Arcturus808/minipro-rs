@@ -1391,11 +1391,11 @@ fn build_device(
     let variant = get_attr_u32(e, b"variant").unwrap_or(0);
     let read_buffer_size = get_attr_u32(e, b"read_buffer_size").unwrap_or(0) as u16;
     let write_buffer_size = get_attr_u32(e, b"write_buffer_size").unwrap_or(0) as u16;
-    let code_memory_size = get_attr_u32(e, b"code_memory_size").unwrap_or(0);
+    let mut code_memory_size = get_attr_u32(e, b"code_memory_size").unwrap_or(0);
     let data_memory_size = get_attr_u32(e, b"data_memory_size").unwrap_or(0);
-    let data_memory2_size = get_attr_u32(e, b"data_memory2_size").unwrap_or(0);
+    let mut data_memory2_size = get_attr_u32(e, b"data_memory2_size").unwrap_or(0);
     let page_size = get_attr_u32(e, b"page_size").unwrap_or(0);
-    let pages_per_block = get_attr_u32(e, b"pages_per_block").unwrap_or(0);
+    let mut pages_per_block = get_attr_u32(e, b"pages_per_block").unwrap_or(0);
     let chip_id = get_attr_u32(e, b"chip_id").unwrap_or(0);
     let voltages_raw = get_attr_u32(e, b"voltages").unwrap_or(0);
     let pulse_delay = get_attr_u32(e, b"pulse_delay").unwrap_or(0);
@@ -1412,6 +1412,26 @@ fn build_device(
     let protocol_id = protocol_id_raw as u8;
     if protocol_id_raw & 0x8000_0000 != 0 {
         flags.custom_protocol = true;
+    }
+
+    // XGecu SPI-NAND geometry fix-up (ported from upstream database.c):
+    // packed entries leave code_memory_size == 0 and stash the block
+    // count in page_size, vendor flags in the top byte of
+    // pages_per_block (real count in the low 24 bits), and page + spare
+    // in write_buffer_size.  data_memory2_size is a packed leftover that
+    // would read as a spurious "user" section.  INFOIC (TL866A/CS)
+    // entries are excluded, matching upstream.
+    const IC2_ALG_NAND: u8 = 0x2d;
+    if !matches!(model, ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs)
+        && protocol_id == IC2_ALG_NAND
+        && code_memory_size == 0
+        && pages_per_block & 0xff00_0000 != 0
+    {
+        code_memory_size = (page_size as u64
+            * (pages_per_block & 0x00ff_ffff) as u64
+            * write_buffer_size as u64) as u32;
+        pages_per_block &= 0x00ff_ffff;
+        data_memory2_size = 0;
     }
 
     // Apply can_adjust_clock / can_adjust_address per programmer model
@@ -1759,18 +1779,18 @@ mod tests {
 </infoic>
 "#;
 
-    fn chipid_fixture_paths() -> DatabasePaths {
+    fn infoic_fixture_paths(xml: &str) -> DatabasePaths {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::SeqCst);
         let dir = std::env::temp_dir().join(format!(
-            "minipro-rs-chipid-test-{}-{}",
+            "minipro-rs-infoic-test-{}-{}",
             std::process::id(),
             id
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let infoic = dir.join("infoic.xml");
-        std::fs::write(&infoic, INFOIC_CHIPID_FIXTURE).unwrap();
+        std::fs::write(&infoic, xml).unwrap();
         let logicic = dir.join("logicic.xml");
         std::fs::write(&logicic, r#"<logicic></logicic>"#).unwrap();
         DatabasePaths {
@@ -1778,6 +1798,10 @@ mod tests {
             logicic,
             algorithms: None,
         }
+    }
+
+    fn chipid_fixture_paths() -> DatabasePaths {
+        infoic_fixture_paths(INFOIC_CHIPID_FIXTURE)
     }
 
     #[test]
@@ -1985,5 +2009,75 @@ mod tests {
         ] {
             assert!(names(m).contains("74HC00"), "74HC00 missing for {m}");
         }
+    }
+
+    // ── SPI-NAND geometry fix-up ───────────────────────────────────────
+
+    const NAND_GEOMETRY_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<infoic>
+  <database type="INFOIC2PLUS">
+    <manufacturer name="GigaDevice">
+      <!-- Packed SPI-NAND — mirrors real GD5F1GQ5UExxG fields. -->
+      <ic name="NANDPACKED" type="6" protocol_id="0x2d" variant="0xd540"
+         chip_id="0x0000c851" voltages="0x80008"
+         read_buffer_size="0x2200" write_buffer_size="0x880"
+         code_memory_size="0x00" data_memory_size="0x00"
+         data_memory2_size="0x04" page_size="0x0400"
+         pages_per_block="0x80000040"
+         package_details="0x08000000" />
+      <!-- Properly-sized NAND — must be left untouched. -->
+      <ic name="NANDSIZED" type="6" protocol_id="0x2d" variant="0"
+         chip_id="0x0" voltages="0x0"
+         write_buffer_size="0x840" code_memory_size="0x8400000"
+         page_size="0x800" pages_per_block="0x40"
+         package_details="0x08000000" />
+    </manufacturer>
+  </database>
+  <database type="INFOIC">
+    <manufacturer name="GigaDevice">
+      <!-- Same packing in the TL866A/CS section — upstream excludes INFOIC. -->
+      <ic name="NANDPACKED" type="6" protocol_id="0x2d" variant="0xd540"
+         chip_id="0x0000c851" voltages="0x80008"
+         read_buffer_size="0x2200" write_buffer_size="0x880"
+         code_memory_size="0x00" data_memory_size="0x00"
+         data_memory2_size="0x04" page_size="0x0400"
+         pages_per_block="0x80000040"
+         package_details="0x08000000" />
+    </manufacturer>
+  </database>
+</infoic>
+"#;
+
+    #[test]
+    fn test_spi_nand_geometry_fixup() {
+        let paths = infoic_fixture_paths(NAND_GEOMETRY_FIXTURE);
+        let dev = find_device(&paths, "NANDPACKED", ProgrammerModel::T48).unwrap();
+        // 0x400 blocks * 0x40 pages * 0x880 bytes (page+spare) = 0x8800000
+        assert_eq!(dev.code_memory_size, 0x880_0000);
+        assert_eq!(dev.pages_per_block, 0x40);
+        assert_eq!(dev.data_memory2_size, 0);
+        // page_size keeps the block count — the begin-transaction
+        // prelude needs it verbatim.
+        assert_eq!(dev.page_size, 0x400);
+    }
+
+    #[test]
+    fn test_spi_nand_fixup_skips_infoic_section() {
+        let paths = infoic_fixture_paths(NAND_GEOMETRY_FIXTURE);
+        // INFOIC (TL866A/CS) is excluded upstream — packed fields pass
+        // through unchanged.
+        let dev = find_device(&paths, "NANDPACKED", ProgrammerModel::Tl866a).unwrap();
+        assert_eq!(dev.code_memory_size, 0);
+        assert_eq!(dev.pages_per_block, 0x8000_0040);
+        assert_eq!(dev.data_memory2_size, 4);
+    }
+
+    #[test]
+    fn test_spi_nand_fixup_skips_sized_devices() {
+        let paths = infoic_fixture_paths(NAND_GEOMETRY_FIXTURE);
+        // A NAND entry with a real code_memory_size is left alone.
+        let dev = find_device(&paths, "NANDSIZED", ProgrammerModel::T48).unwrap();
+        assert_eq!(dev.code_memory_size, 0x840_0000);
+        assert_eq!(dev.pages_per_block, 0x40);
     }
 }

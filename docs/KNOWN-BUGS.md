@@ -711,3 +711,34 @@ two bugs stacked:
 the input before the protect/erase sequence and writes the buffer via
 `write_chip_bytes`. Guard: any new bare `?` on an `io::Error` result
 silently becomes `Usb` — wrap file I/O with an explicit `map_err`.
+
+## SPI-NAND geometry is packed, not missing — `code_memory_size == 0` is the signature (fixed)
+
+~1900 SPI-NAND entries in `infoic.xml` report `code_memory_size = 0` —
+not a data omission but XGecu's packed encoding: `page_size` holds the
+**block count**, `pages_per_block` carries vendor flags in its top byte
+(real count in the low 24 bits), and `write_buffer_size` is page + spare.
+Upstream `database.c` (Matt Brown, MR #292) unpacks it as
+`code_memory_size = blocks × pages_per_block × (page+spare)` when the
+signature matches: NAND protocol `0x2d`, zero size, top-byte flag set —
+a deliberately tight signature so properly-sized parallel NAND and all
+other devices pass through untouched. `data_memory2_size` is also a
+packed leftover and is cleared, otherwise it reads as a spurious "user"
+section. The fix-up is **excluded on INFOIC (TL866A/CS) sections** —
+upstream's `version != INFOIC_DATABASE` gate; our equivalent is the
+`Tl866a|Tl866cs` model check in `build_device`.
+
+Two use-site details mirrored from upstream:
+
+- `pages_per_block` reaches the wire and size math as `uint16_t`
+  upstream — our `u32` field needed `& 0xffff` at the four T76 sites.
+  The `CMD_NAND_PROGRAM` command writes ppb as a 4-byte LE field where
+  raw flag bits would leak onto the wire, and
+  `(ppb * page_or_blocks) > 0x10000` in the begin prelude overflows u32
+  when the packed value is still present.
+- `page_size` is **left in place** as the block count — the
+  begin-transaction prelude (`pre[10..14]`) needs it verbatim.
+
+Verified on real data: `GD5F1GQ5UExxG(x4)@WSON8` reports
+`0x8800000` (1024 × 64 × 0x880) post-fix — was `0` bytes with
+`pages_per_block = 2147483712`.

@@ -733,7 +733,7 @@ impl Protocol for T76Protocol {
                 if device.pages_per_block > 0 {
                     put_le32(
                         &mut msg[16..20],
-                        (device.write_buffer_size as u32) * device.pages_per_block,
+                        (device.write_buffer_size as u32) * (device.pages_per_block & 0xffff),
                     );
                 }
                 // NAND flag bit 0x800 in raw_flags.
@@ -763,7 +763,7 @@ impl Protocol for T76Protocol {
             pre[0] = CMD_BEGIN_TRANS_LOGIC;
 
             let page_or_blocks = device.page_size;
-            let ppb = device.pages_per_block;
+            let ppb = device.pages_per_block & 0xffff;
             let wbuf = device.write_buffer_size;
             let mut real_page: u16 = 1;
             while (real_page as u32) * 2 <= (wbuf as u32) {
@@ -952,7 +952,7 @@ impl Protocol for T76Protocol {
             // NAND program (protocol_id 0x2d).
             if device.protocol_id == 0x2d {
                 let page_full = device.write_buffer_size;
-                let ppb = device.pages_per_block;
+                let ppb = device.pages_per_block & 0xffff;
                 let block_index = if size > 0 {
                     ds.address / (size as u32)
                 } else {
@@ -1198,7 +1198,7 @@ impl Protocol for T76Protocol {
     fn erase(&self, usb: &UsbDevice, device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
         // NAND erase: per-block with bad-block skip.
         if device.protocol_id == 0x2d {
-            let block_size = (device.write_buffer_size as u32) * device.pages_per_block;
+            let block_size = (device.write_buffer_size as u32) * (device.pages_per_block & 0xffff);
             if block_size == 0 {
                 return Err(MiniproError::Protocol(
                     "NAND geometry missing (block size 0).".into(),
