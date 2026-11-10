@@ -1439,11 +1439,13 @@ mod tests {
     }
 }
 
-/// Read all fuse bytes from the chip and map them to named fields.
+/// Read all fuse, user-id, and lock values from the chip.
 ///
-/// Returns a `Vec<FuseValue>` with one entry per fuse field defined in the
-/// device's `ChipConfig`.  Fields that don't have a corresponding read result
-/// byte default to `0xff`.
+/// Returns a `Vec<FuseValue>` in upstream's fuses-file order — config fuse
+/// fields, `user_idN` entries (when the device's `num_uids` is nonzero),
+/// then lock fields. Fields that don't have a corresponding read result
+/// byte default to `0xff`. TL866A/CS models omit the user-id rows — their
+/// firmware hangs on `MP_FUSE_USER` (see `docs/KNOWN-BUGS.md`).
 pub fn read_fuses(handle: &mut MiniproHandle) -> Result<Vec<FuseValue>> {
     use crate::device::ChipConfig;
 

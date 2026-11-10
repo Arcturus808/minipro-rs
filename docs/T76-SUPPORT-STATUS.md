@@ -104,6 +104,10 @@ real status register through the fuse commands:
   persist across reads
 - `READ_USER` (`0x06`, fuse type `0x00`) returns the same byte — an alias
 - `READ_LOCK` (`0x15`, fuse type `0x02`) returns nothing for SPI parts
+
+(On MCU devices fuse type `0x00` instead serves the `user_idN` rows —
+`num_uids` devices only; TL866A/CS firmware hangs on it and is gated off
+— see `docs/KNOWN-BUGS.md`.)
 - `PROTECT_OFF` (`0x18`) clears the SR's block-protect bits
 
 Verified on W25X20CL (fw 00.1.18): writing `0x04`/`0x1C` to fuse `0x01`
