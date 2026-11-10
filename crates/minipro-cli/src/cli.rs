@@ -181,11 +181,13 @@ struct Cli {
     #[arg(short = 'F', long = "firmware-update", alias = "update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,
 
-    /// Read fuse/configuration bits and print them to stdout (or write to FILE)
+    /// Read fuse/config bits — including user-id and lock entries on
+    /// devices that have them — and print to stdout (or write to FILE)
     #[arg(long = "read-fuses", value_name = "FILE")]
     read_fuses: Option<Option<PathBuf>>,
 
-    /// Write fuse/configuration bits from a key=value text file
+    /// Write fuse/config bits (and user-id entries, when present) from a
+    /// key=value text file
     #[arg(long = "write-fuses", value_name = "FILE")]
     write_fuses: Option<PathBuf>,
 
