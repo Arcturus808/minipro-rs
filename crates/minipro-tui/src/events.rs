@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
 use minipro_core::device::ProgrammerInfo;
-use minipro_core::operations::{ChipIdInfo, OpStats};
+use minipro_core::operations::{ChipIdInfo, FuseValue, OpStats};
 
-/// The six P1 operations, in tab order.
+/// The six P1 operations, in tab order, plus the Config op pair.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OpKind {
     Read,
@@ -20,10 +20,14 @@ pub enum OpKind {
     Erase,
     Blank,
     ChipId,
+    /// Config read — MCU fuses/locks or the SPI status register.
+    Config,
+    /// Config write — fuse/lock values or the SR byte.
+    ConfigWrite,
 }
 
 impl OpKind {
-    /// Tab index → op. Tabs 6 (Logic) and 7 (Config) are P3 — no op yet.
+    /// Tab index → op. Tab 6 (Logic) is P3 — no op yet.
     pub fn from_tab(i: usize) -> Option<Self> {
         Some(match i {
             0 => Self::Read,
@@ -32,6 +36,7 @@ impl OpKind {
             3 => Self::Erase,
             4 => Self::Blank,
             5 => Self::ChipId,
+            7 => Self::Config,
             _ => return None,
         })
     }
@@ -45,12 +50,14 @@ impl OpKind {
             Self::Erase => "erase",
             Self::Blank => "blank check",
             Self::ChipId => "chip ID",
+            Self::Config => "config read",
+            Self::ConfigWrite => "config write",
         }
     }
 
     /// True for ops that alter the chip (get a confirm modal before run).
     pub fn is_destructive(self) -> bool {
-        matches!(self, Self::Write | Self::Erase)
+        matches!(self, Self::Write | Self::Erase | Self::ConfigWrite)
     }
 }
 
@@ -65,12 +72,16 @@ pub enum SizeDiff {
 /// File/buffer operand for an op — mutually exclusive by construction.
 #[derive(Clone)]
 pub enum OpInput {
-    /// No operand (read-to-buffer, erase, blank, chip-id).
+    /// No operand (read-to-buffer, erase, blank, chip-id, config read).
     None,
     /// A filesystem path (write/verify file ops, …).
     File(PathBuf),
     /// An in-memory image from the hex-buffer view (write/verify).
     Buffer(Vec<u8>),
+    /// Fuse/lock values for a config write (read order: fuses then locks).
+    Fuses(Vec<FuseValue>),
+    /// The status-register byte for an SPI config write.
+    SpiSr(u8),
 }
 
 /// Options pane snapshot taken when an op starts.
@@ -88,6 +99,14 @@ pub struct OpOptions {
     /// "auto" | "bin" | "ihex" | "srec".
     pub format: &'static str,
     pub size_diff: SizeDiff,
+}
+
+/// One editable config row — a named fuse or lock field.
+#[derive(Clone)]
+pub struct FuseRow {
+    pub name: String,
+    pub value: u16,
+    pub mask: u16,
 }
 
 /// Successful outcome of a completed operation.
@@ -113,6 +132,21 @@ pub enum OpOutcome {
         address: u32,
     },
     ChipId(Box<ChipIdInfo>),
+    /// Config read — MCU fuse/lock rows (fuses first, `n_fuses` marks
+    /// the boundary) with per-field masks, or the SPI status register
+    /// bytes. `nibbles` is the hex width per element (2 or 4).
+    ConfigFuses {
+        rows: Vec<FuseRow>,
+        n_fuses: usize,
+        nibbles: usize,
+    },
+    /// SPI status-register bytes — returned by both the read and the
+    /// write read-back, so the view always reflects chip state.
+    ConfigSr {
+        bytes: Vec<u8>,
+    },
+    /// Fuse/lock write completed (no read-back — `r` refreshes).
+    ConfigWritten,
     /// The op never ran — a pre-op gate stopped it. The gate already
     /// logged the specific reason; `on_op_done` prints only the short
     /// status line. (Not an `Err`: the op didn't fail, it didn't run.)
