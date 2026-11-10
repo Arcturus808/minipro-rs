@@ -36,7 +36,7 @@ gui/
     src/
       commands.rs                — all Rust command handlers (includes set_custom_db_dir, get_db_status, get_fuse_bit_defs)
       fuse_defs.rs               — AVR fuse bit definitions (static data keyed by infoic.xml config name, with chip-prefix overrides for mixed configs)
-      lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup)
+      lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup); registers tauri-plugin-single-instance first — a second launch focuses the existing "main" window (unminimize/show/set_focus) and exits, preventing shared-state races (favorites.txt, settings.json, algorithm cache) and dead USB-claim attempts
       state.rs                   — AppState (USB handle, selected device, db_paths cache, db_dir_invalid flag)
     Cargo.toml
     tauri.conf.json
