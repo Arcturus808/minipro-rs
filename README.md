@@ -253,7 +253,7 @@ cargo build --release
 
 ### CLI
 
-**Rust 1.85+ is required.** Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
+**Rust 1.85+ is required** for the CLI (1.88+ to also build `minipro-tui` — its ratatui 0.30 dependency floors it there, same as the GUI). Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
 
 The CLI builds with no system dependencies beyond glibc:
 
@@ -261,8 +261,9 @@ The CLI builds with no system dependencies beyond glibc:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 git clone https://gitlab.com/arcturus8081/minipro-rs
 cd minipro-rs
-cargo build --release
+cargo build --release -p minipro
 # Binary is at target/release/minipro
+# Drop "-p minipro" to build the TUI too (needs Rust 1.88+).
 ```
 
 **Man page & shell completions** — the `.deb`/`.rpm` packages and the GitHub release tarballs install them for you. From a source build (or the bare macOS/Linux binary), generate them yourself:
