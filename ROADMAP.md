@@ -510,6 +510,20 @@ This is a living list of features and improvements planned for minipro-rs.
     **Impact:** niche — mainly matters for running two models side by
     side or batch-programming.
 
+  - [ ] **T76 pin-contact test: widen the `@DIPn` name gate** —
+    `t76_pin_test_supported` only accepts names literally tagged
+    `@DIPn`/`@PDIPn`, but large parts of the DB name plain DIP parts
+    differently (`S-93C66B(DP)`, bare DIP names, vendor package codes)
+    — the entire 93-series EEPROM family, for example, has zero
+    `@DIP`-tagged entries, so the contact test is silently
+    unavailable for them. Extend the check to accept non-`@` DIP-style
+    names where `package_details` confirms an even ≤40-pin DIP and the
+    device isn't ICSP-only — same underlying safety invariant (bitmap
+    semantics verified only for plain-DIP ZIF seating), wider
+    coverage. Care needed: `(DP)`-style codes aren't uniformly DIP
+    across all vendors — gate on package_details, not the suffix
+    alone.
+
   ### Gaps vs Matt Brown's merged MR #292
 
   Matt Brown's MR #292 (https://gitlab.com/DavidGriffith/minipro/-/merge_requests/292)
