@@ -36,7 +36,7 @@ gui/
     src/
       commands.rs                — all Rust command handlers (includes set_custom_db_dir, get_db_status, get_fuse_bit_defs)
       fuse_defs.rs               — AVR fuse bit definitions (static data keyed by infoic.xml config name, with chip-prefix overrides for mixed configs)
-      lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup); registers tauri-plugin-single-instance first — a second launch focuses the existing "main" window (unminimize/show/set_focus) and exits, preventing shared-state races (favorites.txt, settings.json, algorithm cache) and dead USB-claim attempts
+      lib.rs                     — Tauri app builder + plugin init (reads saved customDbDir on startup); registers tauri-plugin-single-instance first — a second launch focuses the existing "main" window (unminimize/show/set_focus) and exits, preventing shared-state races (favorites.txt, settings.json, algorithm cache) and dead USB-claim attempts. Dev/--no-bundle exes find the XMLs via the Tauri resource dir (gui/src-tauri/resources/) — NOT the shared resolver's exe_dir/../../data candidate, which only covers root-workspace binaries (target/release/minipro, minipro-tui)
       state.rs                   — AppState (USB handle, selected device, db_paths cache, db_dir_invalid flag); `search_device_names` returns every substring match — no result cap, so broad queries can't silently drop late-file manufacturers
     Cargo.toml
     tauri.conf.json
