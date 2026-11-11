@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **GUI enforces a single running instance** — launching a second copy now focuses the existing window instead of spawning a duplicate that can't claim the programmer and races shared state (`favorites.txt`, settings store, algorithm cache). Implemented via `tauri-plugin-single-instance`; the second process exits silently while the first window unminimizes/shows/focuses. CLI and TUI are unchanged — the exclusive USB claim is their natural gate.
 
+### Fixed
+
+- **Device search silently dropped matches past 200** — `search_device_names` truncated results to the first 200 hits in XML document order, so broad queries (e.g. `93c66`, ~300 matches) never surfaced late-file manufacturers (Seiko's `S-93C66` entries were cut while a narrower `s-93c66` query still found them). The cap is removed — every substring match is returned.
+
 ## [0.12.0] - 2026-11-10
 
 ### Added
