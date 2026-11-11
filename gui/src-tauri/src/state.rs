@@ -149,12 +149,11 @@ impl AppState {
     pub fn search_device_names(&self, query: &str) -> Result<Vec<DeviceListItem>, String> {
         let guard = self.all_device_names.lock().map_err(|e| e.to_string())?;
         let filter = query.to_ascii_lowercase();
-        let mut results: Vec<DeviceListItem> = guard
+        let results: Vec<DeviceListItem> = guard
             .iter()
             .filter(|item| item.name.to_ascii_lowercase().contains(&filter))
             .cloned()
             .collect();
-        results.truncate(200);
         Ok(results)
     }
 }
