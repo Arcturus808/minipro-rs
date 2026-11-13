@@ -667,6 +667,22 @@ pub fn firmware_update_tl866a(
         std::cmp::Ordering::Equal => {}
     }
 
+    // Anti-clone warning, printed before the point of no return. MiniPro
+    // 6.85 (firmware 03.2.86) is widely reported to carry serial-number
+    // checks that erase the PIC on counterfeit TL866A/CS units, bricking
+    // them. 03.2.85 (MiniPro 6.82) is the last release reported as
+    // clone-tolerant — but no vendor payload is certified clone-safe.
+    if file_version_minor >= 86 {
+        writeln!(
+            out,
+            "*** WARNING: firmware 03.2.{file_version_minor:02} is reported to contain \
+             anti-clone logic that erases the PIC on counterfeit TL866A/CS \
+             programmers, bricking the device. If you are not certain this \
+             unit is genuine, disconnect it now."
+        )
+        .ok();
+    }
+
     // ── Switch to bootloader ─────────────────────────────────────────────────
     if handle.info.status != ProgrammerStatus::Bootloader {
         write!(out, "Switching to bootloader... ").ok();

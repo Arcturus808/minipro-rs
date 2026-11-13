@@ -305,26 +305,20 @@ fn run_download_algorithms(cli: &Cli) -> Result<()> {
     if let Ok(handle) = MiniproHandle::open() {
         let model = handle.info.model;
         let fw_model = match model {
-            ProgrammerModel::Tl866iiPlus => Some("TL866II+"),
-            ProgrammerModel::T48 => Some("T48"),
-            ProgrammerModel::T56 => Some("T56"),
-            ProgrammerModel::T76 => Some("T76"),
-            _ => None,
+            ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => "TL866A",
+            ProgrammerModel::Tl866iiPlus => "TL866II+",
+            ProgrammerModel::T48 => "T48",
+            ProgrammerModel::T56 => "T56",
+            ProgrammerModel::T76 => "T76",
         };
         eprintln!(
             "connected programmer: {model} firmware {}",
             handle.info.firmware_str
         );
-        if let Some(m) = fw_model {
-            if let Some(fw) = out.firmware.iter().find(|f| f.model == m) {
-                eprintln!("  bundled image for this model: {}", fw.path.display());
-            }
-        } else {
-            eprintln!(
-                "  (no bundled image for {model} — its firmware isn't in the \
-                 pinned XGPro archives; extract update.dat from the official \
-                 installer)"
-            );
+        // TL866A/CS get two bundled images (6.82 and 6.85) — the choice is
+        // deliberate, see the anti-clone warning above.
+        for fw in out.firmware.iter().filter(|f| f.model == fw_model) {
+            eprintln!("  bundled image for this model: {}", fw.path.display());
         }
     }
     Ok(())

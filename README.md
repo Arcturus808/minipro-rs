@@ -51,7 +51,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 
 ![MINIPRO-RS GUI — Logic Test Grid](docs/screenshots/logic_test.png)
 - **SPI flash auto detect**: identify an unknown SPI NOR chip by its JEDEC ID without selecting a device first — insert the chip and run it. CLI: `minipro -a` (or `-a 0` 8-pin / `-a 1` 16-pin) prints `Autodetecting device (ID:0xXXXX)` plus matching database names. GUI: "Auto Detect" buttons (8-pin / 16-pin) in the device selector list clickable matches. On TL866II+ the GUI runs the pin-contact check automatically first (poor contact yields garbage IDs); works on T76, implemented on T56 but gated in the GUI pending hardware validation. Requires `algorithm.xml` on T56/T76
-- **Native T56/T76 algorithm provisioning** — `minipro --download-algorithms` downloads the official XGPro setup archives (pinned SHA-256 checksums), extracts the FPGA bitstreams and programmer firmware images, and generates a validated `algorithm.xml` — pure Rust, no bash/bsdtar/XGPro install needed (so it works natively on Windows). Required once before any T56/T76 chip operation; see [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support)
+- **Native T56/T76 algorithm provisioning** — `minipro --download-algorithms` downloads the official XGPro setup archives (pinned SHA-256 checksums), extracts the FPGA bitstreams and programmer firmware images, and generates a validated `algorithm.xml` — pure Rust, no bash/bsdtar/XGPro install needed (so it works natively on Windows). Required once before any T56/T76 chip operation; see [T56 / T76 FPGA algorithm support](#t56--t76-fpga-algorithm-support). The same command also fetches both pinned TL866A/CS firmware images (MiniPro 6.82 and 6.85) from the legacy MiniPro installers
 - **Write with auto-erase and auto-verify**: automatically erases before writing and verifies afterward (skippable)
 - **Read-to-memory**: chip reads go directly to the hex viewer — no immediate file save required
 - **Multi-pass stability check** (GUI): opt-in "Stability check" checkbox reads the chip 5 times and compares passes using the health-check analysis; stable reads proceed normally, unstable reads save the majority-vote consensus image with an unstable-byte warning in the log
@@ -105,7 +105,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
 - Diagnostics panel (programmer info, overcurrent check, hardware check, firmware update)
-- **Firmware update** — flash programmer firmware from an official update file (`update.dat` / `UpdateII.dat` / `updateT76.dat`). CLI: `minipro -F update.dat`; GUI: "Firmware Update" in Diagnostics. Supported on TL866A/CS, TL866II+, T48, and T76
+- **Firmware update** — flash programmer firmware from an official update file (`update.dat` / `UpdateII.dat` / `updateT76.dat`). CLI: `minipro -F update.dat`; GUI: "Firmware Update" in Diagnostics. Supported on TL866A/CS, TL866II+, T48, and T76. TL866A/CS owners get both bundled images (03.2.85 and 03.2.86) from `--download-algorithms` — 03.2.86 is reported to brick counterfeit units, so pick deliberately
 
 ![MINIPRO-RS GUI — Diagnostics Panel](docs/screenshots/diagnostics_panel.png)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
@@ -405,18 +405,20 @@ minipro --download-algorithms
 minipro --download-algorithms --output /usr/local/share/minipro-rs
 
 # Fully offline: supply the archives yourself (outer .rar, the setup
-# .exe, or the bare inner RAR — auto-detected; repeat for both archives)
+# .exe, or the bare inner RAR — auto-detected; repeat once per archive)
 minipro --download-algorithms \
     --from-file xgproV1304_T48_T56_T866II_Setup.rar \
-    --from-file xgpro_T76_V1319.rar
+    --from-file xgpro_T76_V1319.rar \
+    --from-file minipro_setup682.rar \
+    --from-file minipro_setup685.rar
 
 # Mirror / custom URL base (pinned checksums still enforced)
 minipro --download-algorithms --xgpro-url https://mirror.example/Xgpro/13
 ```
 
-Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866II+, T48, T56, T76) — useful for `minipro -F`.
+Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs skip the network. Firmware images are extracted alongside the algorithms as `firmware-<MODEL>-<VERSION>.dat` (TL866A, TL866II+, T48, T56, T76) — useful for `minipro -F`.
 
-> **TL866A/CS firmware is not obtainable this way** — its last official release ships a RAR4 installer the downloader can't parse (and its newest firmware is itself the clone-detection brick vector, so the manual path is arguably safer anyway). Extract `update.dat` from the official XGPro TL866A installer and pass it to `minipro -F` directly — mind the clone warning in the firmware-update confirmation. If a programmer is connected when the command finishes, the output notes which bundled image corresponds to it; this is informational only — the tool never flashes firmware on its own, and the bundled image may be older than the one already installed.
+> **TL866A/CS firmware — two versions, deliberate choice.** The downloader fetches *both* pinned MiniPro installers: 6.82 yields `firmware-TL866A-03.2.85.dat` (the last release widely reported as clone-tolerant) and 6.85 yields `firmware-TL866A-03.2.86.dat` (the latest — reported to carry anti-clone serial checks that erase the PIC on counterfeit units, bricking them). Neither is "the latest" by default: choose the file explicitly at `minipro -F` time, and flash 03.2.86 only on hardware you know is genuine. minipro-rs does not certify any vendor payload as clone-safe — it ships them faithfully. If a programmer is connected when the command finishes, the output notes which bundled image(s) correspond to it; this is informational only — the tool never flashes firmware on its own.
 
 ---
 
@@ -467,7 +469,7 @@ The selected directory persists across restarts. If the directory is later moved
 
 > **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. Validated on real hardware: SPI NOR 8-pin read/erase/write/verify byte-exact against a TL866A ground-truth dump (W25X20CL — 16-pin path still unvalidated), SPI-NAND read/erase/write/verify (GD5F1GQ5UExxG, T76 firmware 00.1.18), SPI JEDEC autodetect (W25X20CL, LE25FS406M), and logic IC test (7408). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
-> **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism.
+> **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism. **Counterfeit TL866A/CS units:** firmware 03.2.86 (MiniPro 6.85) is reported to contain anti-clone logic that bricks clones — flash 03.2.85 (MiniPro 6.82) on suspected counterfeits; a warning is printed before flashing ≥03.2.86.
 
 ---
 

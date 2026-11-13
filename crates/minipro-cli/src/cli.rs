@@ -177,7 +177,9 @@ struct Cli {
     #[arg(long = "pin-count", value_name = "N")]
     pin_count: Option<u8>,
 
-    /// Update programmer firmware from binary file (update.dat / UpdateII.dat / updateT76.dat)
+    /// Update programmer firmware from binary file (update.dat / UpdateII.dat / updateT76.dat).
+    /// TL866A/CS: firmware 03.2.86+ is reported to brick counterfeit units — see
+    /// --download-algorithms output for the bundled 03.2.85/03.2.86 images.
     #[arg(short = 'F', long = "firmware-update", alias = "update", value_name = "FILE")]
     firmware_update: Option<PathBuf>,
 
@@ -269,7 +271,8 @@ struct Cli {
     address: Option<String>,
 
     /// Download T56/T76 FPGA algorithm definitions and firmware images from
-    /// the official XGPro release and generate algorithm.xml.
+    /// the official XGPro release, plus both pinned TL866A/CS firmware
+    /// images (MiniPro 6.82 and 6.85), and generate algorithm.xml.
     /// No programmer hardware required.
     #[arg(long = "download-algorithms", action = ArgAction::SetTrue)]
     download_algorithms: bool,
@@ -279,9 +282,9 @@ struct Cli {
     #[arg(long = "output", value_name = "DIR")]
     output: Option<PathBuf>,
 
-    /// Use a local XGPro archive instead of downloading — accepts the outer
-    /// .rar, the setup .exe, or the inner RAR; role is auto-detected.
-    /// May be given twice (once per archive).
+    /// Use a local XGPro/MiniPro archive instead of downloading — accepts
+    /// the outer .rar, the setup .exe, or the inner RAR; role is
+    /// auto-detected. May be given up to four times (once per archive).
     #[arg(long = "from-file", value_name = "FILE", action = ArgAction::Append)]
     from_file: Vec<PathBuf>,
 

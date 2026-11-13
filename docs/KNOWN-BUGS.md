@@ -780,3 +780,18 @@ hex/decimal slip fails at compile time; a synthetic roundtrip test
 builds a valid file in memory, and `UPDATE_DAT=<path> cargo test
 update_dat_real` validates decryption+CRC against real vendor blobs
 (03.2.82, 03.2.85, 03.2.86 all verified).
+
+## libarchive-rs `skip_sfx` only scans 16-aligned offsets (upstream parity, constraint)
+
+The vendored RAR4 decoder locates the archive mark inside SFX stubs via
+`skip_sfx`, which — like libarchive's original — checks only 16-byte-
+aligned offsets. Real WinRAR SFX stubs pad the archive to an aligned
+boundary, so this works on genuine files; a mark at an arbitrary offset
+(hand-built or repacked stub) would be missed and the archive rejected
+with `SignatureNotFound`. `xgpro_fetch::rar4_archive` therefore
+pre-locates the mark byte-precisely (`find_signature`) and slices the
+input before constructing `Archive` — a deliberate superset of upstream.
+Do not "simplify" the call sites back to `Archive::new(data)` on
+unverified stubs, and keep the alignment constraint in mind when writing
+synthetic fixtures (a stub length that isn't a multiple of 16 exercises
+the tolerant path, not the real-world shape).

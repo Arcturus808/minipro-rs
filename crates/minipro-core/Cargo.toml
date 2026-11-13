@@ -19,6 +19,7 @@ serde       = { workspace = true, features = ["derive"] }
 ureq = { version = "3", features = ["platform-verifier", "socks-proxy", "win-system-proxy"] }
 sha2 = "0.10"
 rar-codec = "0.1"
+libarchive-rs = { path = "../libarchive-rs" }
 
 [dev-dependencies]
 serde_json.workspace = true
