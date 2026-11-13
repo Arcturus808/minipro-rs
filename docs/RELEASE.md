@@ -83,7 +83,10 @@ WSL ≥ 2.9.3 ships `wslc.exe` — Microsoft's built-in Linux-container CLI
 
 ```bash
 MSYS_NO_PATHCONV=1 wslc run --rm \
-  -v "C:/path/to/minipro-rs:/src" -w /src rust:1.85 \
+  -v "C:/path/to/minipro-rs:/src" \
+  -v wslc-cargo-registry:/usr/local/cargo/registry \
+  -e CARGO_TARGET_DIR=/cargo-target -e RUSTUP_TOOLCHAIN=1.85 \
+  -w /src rust:1.85 \
   sh -c "cargo check --workspace --exclude minipro-tui --locked && \
          cargo test --workspace --exclude minipro-tui --locked && \
          cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
@@ -95,9 +98,14 @@ Notes:
   `MSYS_NO_PATHCONV=1` is required from Git Bash — without it Git Bash
   mangles the `host:container` spec into a Windows path list. From
   PowerShell/cmd, drop the prefix (it doesn't parse there anyway).
-- Named volumes persist across runs — add
-  `-v wslc-cargo-registry:/usr/local/cargo/registry` to keep the crate
-  cache; otherwise every run re-downloads all dependencies (~1–2 min
+- **`RUSTUP_TOOLCHAIN=1.85` is required** — modern `rust:` images are
+  rustup-based, and the repo's `rust-toolchain.toml` (pinned to the dev
+  toolchain, not the MSRV) overrides the image tag. Without the env var
+  the check silently runs on the dev toolchain and proves nothing about
+  MSRV. `CARGO_TARGET_DIR` keeps Linux build artifacts out of the
+  mounted `target/` dir so they can't mix with Windows ones.
+- The named `wslc-cargo-registry` volume persists the crate cache across
+  runs; otherwise every run re-downloads all dependencies (~1–2 min
   extra on a fast connection).
 - The mount reports as `drvfs` (same bridge as WSL `/mnt`), so file I/O
   is Windows-mount speed — fine for this check's scale.
@@ -105,16 +113,19 @@ Notes:
 ### Docker (any platform with Docker Desktop / Engine)
 
 ```bash
-docker run --rm -v "$PWD:/src" -w /src rust:1.85 \
+docker run --rm -v "$PWD:/src" -w /src \
+  -e CARGO_TARGET_DIR=/cargo-target -e RUSTUP_TOOLCHAIN=1.85 \
+  rust:1.85 \
   sh -c "cargo check --workspace --exclude minipro-tui --locked && \
          cargo test --workspace --exclude minipro-tui --locked && \
          cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
 ```
 
 Uses the same `rust:1.85` image as the GitLab `msrv` job, so results match
-CI closely. (On Windows/macOS the bind mount is slower than a native
-filesystem — for a pure release check, cloning inside the container is
-equally valid.)
+CI closely. `RUSTUP_TOOLCHAIN=1.85` is required for the same reason as in
+the wslc recipe — `rust-toolchain.toml` would otherwise override the image
+tag. (On Windows/macOS the bind mount is slower than a native filesystem —
+for a pure release check, cloning inside the container is equally valid.)
 
 ### GUI workspace check (conditional — evaluate mechanically)
 
