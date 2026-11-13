@@ -1,0 +1,5 @@
+# Static-link the MSVC C runtime on Windows so shipped binaries need no
+# VC++ Redistributable (VCRUNTIME140.dll). Applies repo-wide, including
+# gui/src-tauri (cargo config resolves upward from the package dir).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
