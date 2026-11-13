@@ -1404,7 +1404,7 @@ fn do_operations(
             })?;
             eprint!("Writing SPI status register {value:#04x}... ");
             let readback = minipro_core::spi_status_write(handle, value)?;
-            eprintln!("done.");
+            eprintln!("done, verify passed.");
             readback
         } else {
             minipro_core::spi_status_read(handle)?

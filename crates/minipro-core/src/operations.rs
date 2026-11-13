@@ -1682,6 +1682,7 @@ pub fn spi_status_read(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
 /// Write one byte to the SPI status register (WRSR via WRITE_CFG), then
 /// read it back so the caller can see what actually stuck — the chip owns
 /// the WIP/WEL bits and may refuse writes while a cycle is in progress.
+/// Read back is verified against written value.
 ///
 /// WARNING: the BP/SRP bits are non-volatile on most parts — they survive
 /// power cycles and can leave the chip write-protected. `protect_off`
@@ -1694,7 +1695,20 @@ pub fn spi_status_write(handle: &mut MiniproHandle, value: u8) -> Result<Vec<u8>
     handle
         .protocol
         .write_fuses(&handle.usb, &device, MP_FUSE_CFG, 1, 1, &[value])?;
-    spi_status_read(handle)
+
+    let readback = spi_status_read(handle)?;
+
+    let actual = *readback.first().unwrap_or(&0);
+
+    if actual != value {
+        return Err(MiniproError::VerifyFailed {
+            address: 0,
+            expected: value,
+            actual,
+        });
+    }
+
+    Ok(readback)
 }
 
 /// Read the chip's calibration bytes (OSCCAL word for PIC devices).
