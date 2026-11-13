@@ -192,7 +192,7 @@ impl Protocol for Tl866aProtocol {
         // [3..4]  data_memory_size  (16-bit LE)
         put_le(&mut msg[3..], device.data_memory_size, 2);
         // [5]     vpp << 4
-        msg[5] = device.voltages.vpp << 4;
+        msg[5] = device.voltages.vpp as u8;
         // [6..7]  page_size         (16-bit LE)
         put_le(&mut msg[6..], device.page_size, 2);
         // [8]     (vdd << 4) | vcc
