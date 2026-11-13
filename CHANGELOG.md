@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-12
+
 ### Added
 
 - **GUI enforces a single running instance** — launching a second copy now focuses the existing window instead of spawning a duplicate that can't claim the programmer and races shared state (`favorites.txt`, settings store, algorithm cache). Implemented via `tauri-plugin-single-instance`; the second process exits silently while the first window unminimizes/shows/focuses. CLI and TUI are unchanged — the exclusive USB claim is their natural gate.
