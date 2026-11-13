@@ -83,7 +83,7 @@ WSL ≥ 2.9.3 ships `wslc.exe` — Microsoft's built-in Linux-container CLI
 
 ```bash
 MSYS_NO_PATHCONV=1 wslc run --rm \
-  -v "D:/Coding Projects/minipro-rs/minipro-rs:/src" -w /src rust:1.85 \
+  -v "C:/path/to/minipro-rs:/src" -w /src rust:1.85 \
   sh -c "cargo check --workspace --exclude minipro-tui --locked && \
          cargo test --workspace --exclude minipro-tui --locked && \
          cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
