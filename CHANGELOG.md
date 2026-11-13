@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **TL866A/CS ran 3.3 V chips at 5 V** (upstream minipro issue #387) — `begin_transaction` sent `vpp << 4` in `msg[5]`, but the INFOIC `voltages` low byte is already a packed voltage byte (VPP code in the high nibble, VCC code in the low). The second shift turned `0x02` (VCC 3.3 V) into `0x20` = VCC 5 V + VPP 21 V: every 3.3 V part on a TL866A ran at 5 V (~1,700 INFOIC entries — a user's MX25L8006E was slowly damaged by sustained 5 V), and real VPP codes wrapped too (`0x30`/`0x20` → `0x00` = 12.5 V). The byte is now sent unshifted, matching upstream's fix; `-o vpp=` overrides work correctly for the same reason. Known remaining gap (shared with upstream): `-o vcc=` still writes `msg[8]`, which this firmware path ignores — tracked as follow-up. Contributed via MR !1 (@vocalist), hardware-verified by the reporter.
 - **Device search silently dropped matches past 200** — `search_device_names` truncated results to the first 200 hits in XML document order, so broad queries (e.g. `93c66`, ~300 matches) never surfaced late-file manufacturers (Seiko's `S-93C66` entries were cut while a narrower `s-93c66` query still found them). The cap is removed — every substring match is returned.
 
 ## [0.12.0] - 2026-11-10

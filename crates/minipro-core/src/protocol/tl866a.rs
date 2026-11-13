@@ -191,8 +191,11 @@ impl Protocol for Tl866aProtocol {
         msg[2] = device.variant as u8;
         // [3..4]  data_memory_size  (16-bit LE)
         put_le(&mut msg[3..], device.data_memory_size, 2);
-        // [5]     vpp << 4
-        msg[5] = device.voltages.vpp as u8;
+        // [5]     voltage byte: VPP code (hi nibble) | VCC code (lo nibble).
+        // The INFOIC `voltages` low byte is already packed — send it unshifted
+        // (upstream issue #387; a second <<4 ran 3.3 V parts at 5 V and
+        // mangled real VPP codes).
+        msg[5] = device.voltages.vpp;
         // [6..7]  page_size         (16-bit LE)
         put_le(&mut msg[6..], device.page_size, 2);
         // [8]     (vdd << 4) | vcc
