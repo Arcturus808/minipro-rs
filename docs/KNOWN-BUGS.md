@@ -758,3 +758,25 @@ section on `handle.info.model` — `Tl866a`/`Tl866cs` emit **no**
 caller that touches `MP_FUSE_USER` directly must keep the same gate;
 the binary `-c user` page (`MP_USER = 0x02`, a different command) is
 unaffected and works on all models.
+
+## TL866A update.dat: `ENC_FIRMWARE_SIZE` was 0x25C00, not 0x25D00 (fixed)
+
+`firmware_update_tl866a` sliced the two encrypted firmware images at
+154,624 bytes (`0x25C00`) instead of upstream's 154,880 (`0x25D00`) —
+a hex-literal slip: the adjacent comment said 154,880 and the file is
+exactly `2,588 + 2 × 154,880 = 312,348` bytes. The A image lost its
+last 256 bytes and the CS image started 256 bytes early, so both CRC
+checks failed and every real `update.dat` was rejected with
+`AlgorithmCrc` before the bootloader was ever contacted — the path had
+never completed on real input. Found while reproducing upstream
+`tl866a.c`'s decryption to compare firmware payloads across MiniPro
+installer versions.
+
+**Fix:** `ENC_FIRMWARE_SIZE = 0x25D00`; the parse/decrypt/verify stage
+is extracted into `decrypt_update_dat` (no handle needed) so tests can
+exercise it without hardware; a `const` assert pins
+`UPDATE_DAT_SIZE == 2588 + 2 * ENC_FIRMWARE_SIZE` so a future
+hex/decimal slip fails at compile time; a synthetic roundtrip test
+builds a valid file in memory, and `UPDATE_DAT=<path> cargo test
+update_dat_real` validates decryption+CRC against real vendor blobs
+(03.2.82, 03.2.85, 03.2.86 all verified).
