@@ -532,8 +532,12 @@ const CMD_RESET: u8 = 0xFF;
 /// Size of an update.dat file for TL866A/CS.
 const UPDATE_DAT_SIZE: usize = 312_348;
 
-/// Encrypted firmware size in the update.dat file (0x25C00).
-const ENC_FIRMWARE_SIZE: usize = 0x25C00; // 154_880
+/// Encrypted firmware size in the update.dat file (0x25D00).
+const ENC_FIRMWARE_SIZE: usize = 0x25D00; // 154_880
+
+// The file is a 2,588-byte header followed by the two encrypted images.
+// Guards against hex/decimal slips in the layout constants.
+const _: () = assert!(UPDATE_DAT_SIZE == 2588 + 2 * ENC_FIRMWARE_SIZE);
 
 /// Bootloader offset (where firmware starts in the PIC flash).
 const BOOTLOADER_SIZE: u32 = 0x1800; // 6_144
@@ -541,20 +545,32 @@ const BOOTLOADER_SIZE: u32 = 0x1800; // 6_144
 /// Flash block size for bootloader writes.
 const BLOCK_SIZE: usize = 0x50; // 80
 
-/// Parse, decrypt, verify and flash a TL866A/CS `update.dat` firmware image.
+/// Decrypted contents of a TL866A/CS `update.dat` file.
+struct DecryptedUpdateDat {
+    a_firmware: Vec<u8>,
+    cs_firmware: Vec<u8>,
+    a_erase: u8,
+    cs_erase: u8,
+    version_minor: u8,
+}
+
+/// Parse, decrypt and CRC-verify a TL866A/CS `update.dat` image.
 ///
-/// The file is exactly 312_348 bytes and contains both A and CS firmware
-/// images (encrypted with a simple XOR cipher).
-///
-/// Supported on stock firmware up to 03.2.82; newer firmware versions
-/// (03.2.84+) may block the software reset-to-bootloader mechanism.
-pub fn firmware_update_tl866a(
-    handle: &mut crate::handle::MiniproHandle,
-    dat: &[u8],
-    out: &mut dyn std::io::Write,
-    mut progress: Option<&mut dyn FnMut(usize, usize)>,
-) -> Result<()> {
-    use crate::device::{ProgrammerModel, ProgrammerStatus};
+/// Packed layout:
+/// 0..4      header[4] (byte 0 = firmware version minor, "03.2.NN")
+/// 4..8      a_crc32
+/// 8..12     pad1 + a_erase + pad2 + pad3
+/// 12..16    cs_crc32
+/// 16..20    pad4 + cs_erase + pad5 + pad6
+/// 20..24    a_index
+/// 24..280   a_xortable1[256]
+/// 280..1304 a_xortable2[1024]
+/// 1304..1308 cs_index
+/// 1308..1564 cs_xortable1[256]
+/// 1564..2588 cs_xortable2[1024]
+/// 2588..157468 a_firmware[154880]
+/// 157468..312348 cs_firmware[154880]
+fn decrypt_update_dat(dat: &[u8]) -> Result<DecryptedUpdateDat> {
     use crc::{Crc, CRC_32_ISO_HDLC};
     const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
@@ -566,21 +582,6 @@ pub fn firmware_update_tl866a(
             UPDATE_DAT_SIZE
         )));
     }
-
-    // ── Parse header offsets (packed layout) ─────────────────────────────────
-    // 0..4      header[4]
-    // 4..8      a_crc32
-    // 8..12     pad1 + a_erase + pad2 + pad3
-    // 12..16    cs_crc32
-    // 16..20    pad4 + cs_erase + pad5 + pad6
-    // 20..24    a_index
-    // 24..280   a_xortable1[256]
-    // 280..1304 a_xortable2[1024]
-    // 1304..1308 cs_index
-    // 1308..1564 cs_xortable1[256]
-    // 1564..2588 cs_xortable2[1024]
-    // 2588..157980 a_firmware[154880]
-    // 157980..312348 cs_firmware[154880]
 
     let a_crc32 = u32::from_le_bytes([dat[4], dat[5], dat[6], dat[7]]);
     let a_erase = dat[9];
@@ -615,15 +616,41 @@ pub fn firmware_update_tl866a(
         return Err(MiniproError::AlgorithmCrc);
     }
 
+    Ok(DecryptedUpdateDat {
+        a_firmware,
+        cs_firmware,
+        a_erase,
+        cs_erase,
+        version_minor: dat[0],
+    })
+}
+
+/// Parse, decrypt, verify and flash a TL866A/CS `update.dat` firmware image.
+///
+/// The file is exactly 312_348 bytes and contains both A and CS firmware
+/// images (encrypted with a simple XOR cipher).
+///
+/// Supported on stock firmware up to 03.2.82; newer firmware versions
+/// (03.2.84+) may block the software reset-to-bootloader mechanism.
+pub fn firmware_update_tl866a(
+    handle: &mut crate::handle::MiniproHandle,
+    dat: &[u8],
+    out: &mut dyn std::io::Write,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<()> {
+    use crate::device::{ProgrammerModel, ProgrammerStatus};
+
+    let parsed = decrypt_update_dat(dat)?;
+
     writeln!(out, "Firmware image OK (decrypted A + CS firmware).").ok();
 
     // ── Select firmware matching current device ──────────────────────────────
     let (firmware, erase_byte) = match handle.info.model {
-        ProgrammerModel::Tl866cs => (&cs_firmware[..], cs_erase),
-        _ => (&a_firmware[..], a_erase), // TL866A or unknown -> use A firmware
+        ProgrammerModel::Tl866cs => (&parsed.cs_firmware[..], parsed.cs_erase),
+        _ => (&parsed.a_firmware[..], parsed.a_erase), // TL866A or unknown -> use A firmware
     };
 
-    let file_version_minor = dat[0];
+    let file_version_minor = parsed.version_minor;
     writeln!(
         out,
         "update.dat contains firmware version 03.2.{:02}",
@@ -1353,4 +1380,104 @@ pub fn tl866a_logic_ic_test(usb: &UsbDevice, device: &Device) -> Result<LogicTes
         errors,
         pass,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crc::{Crc, CRC_32_ISO_HDLC};
+
+    const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
+    /// Build a synthetic update.dat: arbitrary XOR tables/indices, known
+    /// plaintext firmware, stored CRCs. Any layout-constant error shows up
+    /// here as a decryption or CRC failure — no hardware needed.
+    fn make_update_dat(a_plain: &[u8], cs_plain: &[u8]) -> Vec<u8> {
+        assert_eq!(a_plain.len(), ENC_FIRMWARE_SIZE);
+        assert_eq!(cs_plain.len(), ENC_FIRMWARE_SIZE);
+        let mut dat = vec![0u8; UPDATE_DAT_SIZE];
+        dat[0] = 0x55; // firmware version minor
+        dat[9] = 0xE0; // a_erase
+        dat[17] = 0x29; // cs_erase
+        dat[4..8].copy_from_slice(&CRC32.checksum(a_plain).to_le_bytes());
+        dat[12..16].copy_from_slice(&CRC32.checksum(cs_plain).to_le_bytes());
+        let a_index = 0x1234u32;
+        let cs_index = 0x5678u32;
+        dat[20..24].copy_from_slice(&a_index.to_le_bytes());
+        dat[1304..1308].copy_from_slice(&cs_index.to_le_bytes());
+        for i in 0..256 {
+            dat[24 + i] = (i * 37 + 11) as u8;
+            dat[1308 + i] = (i * 53 + 7) as u8;
+        }
+        for i in 0..1024 {
+            dat[280 + i] = (i * 97 + 3) as u8;
+            dat[1564 + i] = (i * 61 + 19) as u8;
+        }
+        let a_off = 2588;
+        let cs_off = 2588 + ENC_FIRMWARE_SIZE;
+        for i in 0..ENC_FIRMWARE_SIZE {
+            dat[a_off + i] = a_plain[i]
+                ^ dat[280 + ((i as u32 + a_index) & 0x3FF) as usize]
+                ^ dat[24 + ((i / 80) & 0xFF)];
+            dat[cs_off + i] = cs_plain[i]
+                ^ dat[1564 + ((i as u32 + cs_index) & 0x3FF) as usize]
+                ^ dat[1308 + ((i / 80) & 0xFF)];
+        }
+        dat
+    }
+
+    #[test]
+    fn update_dat_decrypt_roundtrip() {
+        let a_plain: Vec<u8> = (0..ENC_FIRMWARE_SIZE).map(|i| (i * 31 + 5) as u8).collect();
+        let cs_plain: Vec<u8> = (0..ENC_FIRMWARE_SIZE).map(|i| (i * 17 + 9) as u8).collect();
+        let dat = make_update_dat(&a_plain, &cs_plain);
+        let parsed = decrypt_update_dat(&dat).unwrap();
+        assert_eq!(parsed.a_firmware, a_plain);
+        assert_eq!(parsed.cs_firmware, cs_plain);
+        assert_eq!(parsed.a_erase, 0xE0);
+        assert_eq!(parsed.cs_erase, 0x29);
+        assert_eq!(parsed.version_minor, 0x55);
+    }
+
+    #[test]
+    fn update_dat_rejects_wrong_size() {
+        let plain = vec![0u8; ENC_FIRMWARE_SIZE];
+        let dat = make_update_dat(&plain, &plain);
+        assert!(decrypt_update_dat(&dat[..dat.len() - 1]).is_err());
+        assert!(decrypt_update_dat(&[]).is_err());
+    }
+
+    #[test]
+    fn update_dat_rejects_bad_crc() {
+        let a_plain = vec![0xAAu8; ENC_FIRMWARE_SIZE];
+        let cs_plain = vec![0x55u8; ENC_FIRMWARE_SIZE];
+        let mut dat = make_update_dat(&a_plain, &cs_plain);
+        // Corrupt one encrypted byte inside the A image — must fail CRC.
+        dat[2588 + 1000] ^= 1;
+        assert!(matches!(
+            decrypt_update_dat(&dat),
+            Err(MiniproError::AlgorithmCrc)
+        ));
+        // Corrupt the CS image instead.
+        let mut dat = make_update_dat(&a_plain, &cs_plain);
+        dat[2588 + ENC_FIRMWARE_SIZE + 1000] ^= 1;
+        assert!(matches!(
+            decrypt_update_dat(&dat),
+            Err(MiniproError::AlgorithmCrc)
+        ));
+    }
+
+    /// Optional real-file check: `UPDATE_DAT=<path> cargo test update_dat_real`
+    /// validates decryption+CRC against an actual vendor update.dat (not
+    /// committed — copyrighted payload). Skips silently when unset.
+    #[test]
+    fn update_dat_real_file() {
+        let Ok(path) = std::env::var("UPDATE_DAT") else {
+            return;
+        };
+        let dat = std::fs::read(path).expect("UPDATE_DAT file unreadable");
+        let parsed = decrypt_update_dat(&dat).expect("real update.dat rejected");
+        assert_eq!(parsed.a_firmware.len(), ENC_FIRMWARE_SIZE);
+        assert_eq!(parsed.cs_firmware.len(), ENC_FIRMWARE_SIZE);
+    }
 }
