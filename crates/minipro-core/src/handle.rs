@@ -45,17 +45,29 @@ pub struct MiniproHandle {
 impl MiniproHandle {
     /// Open the first connected programmer and read firmware info.
     pub fn open() -> Result<Self> {
+        Self::open_inner(false)
+    }
+
+    /// Like [`open`](Self::open), but accepts a device already in
+    /// bootloader mode. An interrupted firmware update leaves the
+    /// device there, and the update command is the recovery path.
+    pub fn open_allowing_bootloader() -> Result<Self> {
+        Self::open_inner(true)
+    }
+
+    fn open_inner(allow_bootloader: bool) -> Result<Self> {
         let (usb, initial_model) = open_programmer()?;
 
         // Query the firmware for the authoritative model/version.
-        // TL866A/CS uses a 40-byte response layout; all others use 41 bytes.
+        // TL866A/CS uses a 40-byte response layout (39 in bootloader
+        // mode — the hardware_version byte is omitted); others use 41.
         let sys_info = if initial_model == ProgrammerModel::Tl866a {
             tl866a::get_system_info(&usb)?
         } else {
             get_system_info(&usb)?
         };
 
-        if sys_info.status == ProgrammerStatus::Bootloader {
+        if sys_info.status == ProgrammerStatus::Bootloader && !allow_bootloader {
             return Err(MiniproError::BootloaderMode);
         }
 
@@ -70,18 +82,22 @@ impl MiniproHandle {
         };
 
         // Firmware version check — each model has a different minimum.
-        let min_fw = match info.model {
-            ProgrammerModel::T56 => MIN_FIRMWARE_T56,
-            ProgrammerModel::T76 => MIN_FIRMWARE_T76,
-            ProgrammerModel::Tl866iiPlus => MIN_FIRMWARE,
-            ProgrammerModel::T48 => MIN_FIRMWARE_T48,
-            _ => 0,
-        };
-        if min_fw > 0 && info.firmware < min_fw {
-            return Err(MiniproError::FirmwareTooOld {
-                got: info.firmware,
-                need: min_fw,
-            });
+        // Skipped in bootloader mode, where no application firmware is
+        // running to check.
+        if info.status != ProgrammerStatus::Bootloader {
+            let min_fw = match info.model {
+                ProgrammerModel::T56 => MIN_FIRMWARE_T56,
+                ProgrammerModel::T76 => MIN_FIRMWARE_T76,
+                ProgrammerModel::Tl866iiPlus => MIN_FIRMWARE,
+                ProgrammerModel::T48 => MIN_FIRMWARE_T48,
+                _ => 0,
+            };
+            if min_fw > 0 && info.firmware < min_fw {
+                return Err(MiniproError::FirmwareTooOld {
+                    got: info.firmware,
+                    need: min_fw,
+                });
+            }
         }
 
         info!(

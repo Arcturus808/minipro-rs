@@ -443,7 +443,14 @@ fn run() -> Result<()> {
     }
 
     // ── Operations that need USB ──────────────────────────────────────────────
-    let mut handle = MiniproHandle::open().context("failed to open programmer")?;
+    // Firmware update also opens a device left in bootloader mode by an
+    // interrupted update — it is the recovery path, not just the cause.
+    let mut handle = if cli.firmware_update.is_some() {
+        MiniproHandle::open_allowing_bootloader()
+    } else {
+        MiniproHandle::open()
+    }
+    .context("failed to open programmer")?;
     // ICSP mode: -i enables ICSP with VCC, -I enables ICSP without VCC.
     // The bitmask (0x80=enable, 0x01=VCC) is sent in begin_transaction.
     if cli.icsp {

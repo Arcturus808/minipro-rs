@@ -795,3 +795,35 @@ Do not "simplify" the call sites back to `Archive::new(data)` on
 unverified stubs, and keep the alignment constraint in mind when writing
 synthetic fixtures (a stub length that isn't a multiple of 16 exercises
 the tolerant path, not the real-world shape).
+
+## TL866A/CS bootloader `GET_INFO` reply is 39 bytes, not 40 (fixed)
+
+The application firmware's `GET_INFO` response is 40 bytes; the
+**bootloader** answers with **39** — it omits only the trailing
+`hardware_version` byte (an app-firmware field the boot block doesn't
+report). Captured on real hardware after `CMD_RESET` into boot mode:
+`[00, 02, 20, 00, 00, 00, 01, "60110174", <serial…>]` — status byte
+`0x02` = bootloader, everything through `serial_number` present.
+
+Two compounding bugs hid this: `get_system_info` demanded `resp.len()
+>= 40`, so the reconnect inside `firmware_update_tl866a` failed
+immediately after the switch — and **every later open hit the same
+wall**, since a boot-mode device's first reply is always short.
+Upstream `tl866a.c` never length-gates this reply (fixed 64-byte
+buffer; `msg[39]` just stays 0), so the port's added strictness was the
+regression. Second, `MiniproHandle::open` unconditionally rejected
+`status == Bootloader`, so a unit left in boot mode by an interrupted
+update could never be re-flashed — the update command is *supposed* to
+be the recovery path.
+
+**Fix:** parse extracted into `parse_system_info` with a 39-byte floor
+(hardware_version defaults to 0); `MiniproHandle::open_allowing_bootloader`
+skips the boot-mode rejection and the meaningless min-firmware check
+(the bootloader reports firmware 0); the CLI `-F` path uses it.
+Re-running `-F` on a boot-mode device now skips the switch and goes
+straight to erase/write. Verified on hardware: TL866A upgraded
+03.2.72 → 03.2.85 via this exact recovery path. The GUI keeps strict
+opens (`ProgrammerInfoDto` carries no status field), so a boot-mode
+unit there still means "unplug, replug, reconnect, retry" — the
+firmware-update command itself is unaffected since it uses the
+already-open handle plus `reconnect(true)`.

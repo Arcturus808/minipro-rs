@@ -112,16 +112,23 @@ impl Default for Tl866aProtocol {
 /// u8[24]  serial_number
 /// ```
 pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
-    use crate::device::{ProgrammerModel, ProgrammerStatus};
-
     let mut cmd = [0u8; 64];
     cmd[0] = CMD_GET_INFO;
     usb.msg_send(&cmd)?;
     let resp = usb.msg_recv(64)?;
+    parse_system_info(&resp)
+}
 
-    if resp.len() < 40 {
+/// Parse a `GET_INFO` reply. The application firmware answers 40 bytes;
+/// the bootloader answers 39 — it omits the trailing hardware_version
+/// byte (an app-firmware field it doesn't know). Everything through
+/// serial_number is still present in the shorter reply.
+fn parse_system_info(resp: &[u8]) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
+    use crate::device::{ProgrammerModel, ProgrammerStatus};
+
+    if resp.len() < 39 {
         return Err(MiniproError::ResponseTooShort {
-            expected: 40,
+            expected: 39,
             actual: resp.len(),
         });
     }
@@ -140,7 +147,7 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::
     //   msg[15..39] = serial_number (24 bytes)
     //   msg[39]  = hardware version
     let device_type = resp[6];
-    let hardware_version = resp[39];
+    let hardware_version = resp.get(39).copied().unwrap_or(0);
 
     let model = match device_type {
         2 => ProgrammerModel::Tl866cs,
@@ -1495,5 +1502,59 @@ mod tests {
         let parsed = decrypt_update_dat(&dat).expect("real update.dat rejected");
         assert_eq!(parsed.a_firmware.len(), ENC_FIRMWARE_SIZE);
         assert_eq!(parsed.cs_firmware.len(), ENC_FIRMWARE_SIZE);
+    }
+
+    /// Build a GET_INFO reply in the documented 40-byte layout; `len`
+    /// truncates to model the bootloader's 39-byte reply (no trailing
+    /// hardware_version byte).
+    fn make_info_reply(status: u8, device_type: u8, len: usize) -> Vec<u8> {
+        let mut resp = vec![0u8; len];
+        resp[1] = status;
+        resp[4] = 0x55; // fw_minor
+        resp[5] = 0x03; // fw_major
+        resp[6] = device_type;
+        resp[7..15].copy_from_slice(b"60110174");
+        for (i, b) in resp[15..39].iter_mut().enumerate() {
+            *b = b'0' + (i % 10) as u8;
+        }
+        if len > 39 {
+            resp[39] = 0x0A; // hardware_version
+        }
+        resp
+    }
+
+    #[test]
+    fn system_info_normal_mode_40_bytes() {
+        use crate::device::{ProgrammerModel, ProgrammerStatus};
+        let info = parse_system_info(&make_info_reply(1, 1, 40)).unwrap();
+        assert_eq!(info.status, ProgrammerStatus::Normal);
+        assert_eq!(info.model, ProgrammerModel::Tl866a);
+        assert_eq!(info.hardware_version, 0x0A);
+        assert_eq!(info.firmware_str, "10.3.85");
+        assert_eq!(info.device_code, "60110174");
+    }
+
+    /// The bootloader answers GET_INFO with 39 bytes — the trailing
+    /// hardware_version byte is absent. Real capture from a TL866A in
+    /// boot mode: [00 02 20 00 00 00 01 "60110174" <serial>] — must
+    /// still parse (upstream never length-gates this reply), or the
+    /// firmware-update recovery path can't even identify the device.
+    #[test]
+    fn system_info_bootloader_mode_39_bytes() {
+        use crate::device::{ProgrammerModel, ProgrammerStatus};
+        let info = parse_system_info(&make_info_reply(2, 1, 39)).unwrap();
+        assert_eq!(info.status, ProgrammerStatus::Bootloader);
+        assert_eq!(info.model, ProgrammerModel::Tl866a);
+        assert_eq!(info.hardware_version, 0);
+        assert_eq!(info.device_code, "60110174");
+        assert_eq!(info.serial_number.len(), 24);
+        // TL866CS identifier also parses in the short form.
+        let info = parse_system_info(&make_info_reply(2, 2, 39)).unwrap();
+        assert_eq!(info.model, ProgrammerModel::Tl866cs);
+    }
+
+    #[test]
+    fn system_info_rejects_truncated() {
+        assert!(parse_system_info(&[0u8; 38]).is_err());
     }
 }
