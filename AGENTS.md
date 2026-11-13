@@ -23,6 +23,9 @@ history live in `docs/` — see "Feature internals" at the bottom.
   only** — `gui/src-tauri` is `exclude`d (own MSRV/lockfile), so when you
   touch it also run `cd gui/src-tauri && cargo fmt --check` (and
   `cargo clippy` there for good measure).
+- **No local paths in published files** — never commit paths from the
+  maintainer's machine (e.g. `D:/...`, `/home/<user>/...`) into docs,
+  examples, or configs. Use generic placeholders (`C:/path/to/...`).
 - **Keep docs & changelog in sync with the change:**
   - User-facing change (fix, feature, behavior)? Add a `CHANGELOG.md`
     `[Unreleased]` entry under Added/Changed/Fixed.
