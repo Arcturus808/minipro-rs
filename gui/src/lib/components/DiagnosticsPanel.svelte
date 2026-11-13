@@ -62,10 +62,30 @@
   const actionClass =
     "w-full text-left text-sm px-2 py-1 cursor-pointer enabled:hover:bg-surface-200-800 disabled:opacity-40 disabled:cursor-not-allowed";
 
-  // TL866A/CS clones are ubiquitous — firmware >=3.2.85 (MiniPro 6.82+)
-  // detects them and disables boot mode, bricking the unit until boot
-  // mode is forced in hardware. Warn on every firmware-update path.
+  // TL866A/CS clones are ubiquitous — vendor firmware ≥03.2.86
+  // (MiniPro 6.85) is reported to detect them and disable boot mode,
+  // bricking the unit until boot mode is forced in hardware; 03.2.85
+  // (MiniPro 6.82) is widely reported as the last clone-tolerant
+  // release. Warn on every firmware-update path.
   const CLONE_RISK_MODELS = new Set(["TL866A", "TL866CS"]);
+
+  // Confirm-dialog clone warning for TL866A/CS. The generic counterfeit-
+  // unit paragraph applies to every flash on these models; the file-
+  // specific line keys on the *selected file's* version — ≥03.2.86 is
+  // the reported brick vector, 03.2.85 the reported-tolerant release.
+  function cloneNoteFor(model: string, fileVersion: string | null): string {
+    if (!CLONE_RISK_MODELS.has(model)) return "";
+    const base =
+      "\n\nCLONE WARNING: many TL866A/CS units in circulation are clones, often without the owner's knowledge. Proceed only if you know your unit is genuine.";
+    const v = fileVersion ? parseFwVersion(fileVersion) : null;
+    if (v && (v[1] > 2 || (v[1] === 2 && v[2] >= 86))) {
+      return `${base}\n\nThis file is ${fileVersion} (MiniPro 6.85+), reported to contain anti-clone logic that erases the PIC — on a counterfeit unit it bricks the device, recoverable only by forcing boot mode in hardware.`;
+    }
+    if (v && v[1] === 2 && v[2] === 85) {
+      return `${base}\n\nThis file is ${fileVersion} (MiniPro 6.82), widely reported as the last clone-tolerant release — but no vendor payload is certified clone-safe.`;
+    }
+    return `${base}\n\nVendor firmware ≥03.2.86 (MiniPro 6.85) is reported to carry anti-clone logic that bricks counterfeit units; no vendor payload is certified clone-safe.`;
+  }
 
   function parseFwVersion(v: string): number[] | null {
     const m = String(v).match(/(\d+)\.(\d+)\.(\d+)/);
@@ -95,27 +115,56 @@
     return `\n\nFile version: ${file} (installed: ${installed}).`;
   }
 
+  interface DownloadedFw {
+    path: string;
+    model: string;
+    version: string;
+  }
+
+  // Chooser state: multiple downloaded images match the connected model —
+  // show them explicitly instead of silently taking the newest (for
+  // TL866A/CS the newest is the clone-bricking one). `null` = hidden.
+  let fwChooserFiles = $state<DownloadedFw[] | null>(null);
+  let fwChooserPath = $state("");
+
+  // Per-version descriptors for the chooser — only versions with a
+  // meaningful safety distinction get a label.
+  const FW_VERSION_LABELS: Record<string, string> = {
+    "03.2.85": "MiniPro 6.82 — last release widely reported clone-tolerant",
+    "03.2.86": "MiniPro 6.85 — latest; reported to brick counterfeit units",
+  };
+
+  let isDark = $derived(
+    $settings.theme === "dark" ||
+    ($settings.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+  );
+
   async function updateFirmware() {
-    // Prefer a firmware image previously fetched by the algorithm
+    // Prefer firmware images previously fetched by the algorithm
     // downloader — the firmware-<model>-*.dat naming makes the match
-    // model-safe by construction. Fall back to manual file selection
-    // when none exists (e.g. TL866A/CS, not in the pinned archives).
-    let path = null;
-    let fileName = "";
-    let versionNote = "";
+    // model-safe by construction (TL866CS maps to the shared TL866A
+    // image in the backend). Multiple matches are an explicit choice,
+    // never silent newest-first.
     if (!$programmer) return;
+    let path: string | null = null;
+    let fileVersion: string | null = null;
     try {
-      const found = await invoke<{ path: string; model: string; version: string }[]>(
-        "find_downloaded_firmware",
-        {
-          model: $programmer.model,
-          customDir: $settings.customDbDir ?? null,
-        },
-      );
-      if (found.length > 0) {
+      const found = await invoke<DownloadedFw[]>("find_downloaded_firmware", {
+        model: $programmer.model,
+        customDir: $settings.customDbDir ?? null,
+      });
+      if (found.length === 1) {
         path = found[0].path;
-        fileName = path.split(/[\\/]/).pop() ?? path;
-        versionNote = firmwareVersionNote($programmer.firmware, found[0].version);
+        fileVersion = found[0].version;
+      } else if (found.length > 1) {
+        // Clone-risk models preselect the OLDEST image (safer for
+        // counterfeits); other models preselect newest.
+        const pre = CLONE_RISK_MODELS.has($programmer.model)
+          ? found[found.length - 1]
+          : found[0];
+        fwChooserPath = pre.path;
+        fwChooserFiles = found;
+        return; // the chooser modal continues the flow
       }
     } catch {
       // resolution failure is non-fatal — fall through to the picker
@@ -123,11 +172,34 @@
     if (!path) {
       path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
       if (!path) return;
-      fileName = path.split(/[\\/]/).pop() ?? path;
+      // Recover the version from a bundled-name pattern when the user
+      // picked one of the downloaded files by hand.
+      fileVersion = /-(\d+\.\d+\.\d+)\.dat$/i.exec(path)?.[1] ?? null;
     }
-    const cloneNote = CLONE_RISK_MODELS.has($programmer.model)
-      ? "\n\nCLONE WARNING: many TL866A/CS units in circulation are clones, often without the owner's knowledge. Firmware 3.2.85/3.2.86 (MiniPro 6.82+) contains clone detection that disables boot mode — flashing it on a clone bricks the device, recoverable only by forcing boot mode in hardware. Proceed only if you know your unit is genuine."
+    await confirmFirmwareUpdate(path, fileVersion);
+  }
+
+  function chooserConfirm() {
+    const fw = fwChooserFiles?.find((f) => f.path === fwChooserPath);
+    fwChooserFiles = null;
+    if (fw) confirmFirmwareUpdate(fw.path, fw.version);
+  }
+
+  async function chooserBrowse() {
+    fwChooserFiles = null;
+    const path = await pickOpenFile("Select firmware file (update.dat, UpdateII.dat, updateT76.dat)");
+    if (path) {
+      confirmFirmwareUpdate(path, /-(\d+\.\d+\.\d+)\.dat$/i.exec(path)?.[1] ?? null);
+    }
+  }
+
+  async function confirmFirmwareUpdate(path: string, fileVersion: string | null) {
+    if (!$programmer) return;
+    const fileName = path.split(/[\\/]/).pop() ?? path;
+    const versionNote = fileVersion
+      ? firmwareVersionNote($programmer.firmware, fileVersion)
       : "";
+    const cloneNote = cloneNoteFor($programmer.model, fileVersion);
     const confirmed = await confirmDialog(
       "Firmware Update — EXPERIMENTAL",
       `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}${versionNote}${cloneNote}\n\nProceed at your own risk?`,
@@ -385,3 +457,56 @@
     </div>
   </details>
 </div>
+
+{#if fwChooserFiles}
+  <div
+    class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+    onclick={(e) => { if (e.target === e.currentTarget) fwChooserFiles = null; }}
+    onkeydown={(e) => { if (e.key === 'Escape') fwChooserFiles = null; }}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <div class={`rounded-lg shadow-xl w-full max-w-md p-6 border ${isDark ? 'bg-slate-800 text-white border-slate-600' : 'bg-white text-gray-900 border-gray-300'}`}>
+      <h2 class="text-lg font-semibold pb-1">Select firmware image</h2>
+      <p class={`text-xs pb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        Multiple downloaded images match this programmer — choose deliberately.
+        The versions are not interchangeable.
+      </p>
+      <div class="space-y-2 pb-4">
+        {#each fwChooserFiles as fw}
+          <label class="flex items-start gap-2 text-sm cursor-pointer rounded p-1 hover:bg-primary-500/10">
+            <input type="radio" class="mt-1" bind:group={fwChooserPath} value={fw.path} />
+            <span class="min-w-0">
+              <span class="font-mono">{fw.version}</span>
+              {#if FW_VERSION_LABELS[fw.version]}
+                <span class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}> — {FW_VERSION_LABELS[fw.version]}</span>
+              {/if}
+              <div class="text-xs opacity-60 font-mono truncate">{fw.path.split(/[\\/]/).pop()}</div>
+            </span>
+          </label>
+        {/each}
+      </div>
+      <div class="flex justify-end gap-2">
+        <button
+          class="btn preset-tonal text-xs"
+          onclick={() => { fwChooserFiles = null; }}
+        >
+          Cancel
+        </button>
+        <button
+          class="btn preset-tonal text-xs"
+          onclick={chooserBrowse}
+        >
+          Choose different file…
+        </button>
+        <button
+          class="btn preset-filled-primary-500 text-xs"
+          onclick={chooserConfirm}
+        >
+          Use selected
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

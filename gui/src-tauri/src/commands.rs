@@ -4361,7 +4361,9 @@ fn parse_fw_version(v: &str) -> Option<[u32; 3]> {
 /// first (the configured custom database dir, which the GUI downloader
 /// writes to), then the per-user data dir (CLI default). Returns matches
 /// newest-version-first, deduplicated by version — empty vec when none
-/// exist (e.g. TL866A/CS, whose firmware isn't in the pinned archives).
+/// exist. TL866CS maps to the shared TL866A image: one `update.dat`
+/// covers both models and the bundled file is named for the A (the
+/// flasher selects the CS image internally).
 #[tauri::command]
 pub fn find_downloaded_firmware(
     model: String,
@@ -4375,7 +4377,12 @@ pub fn find_downloaded_firmware(
         dirs.push(d);
     }
 
-    let prefix = format!("firmware-{model}-");
+    let file_model = if model == "TL866CS" {
+        "TL866A"
+    } else {
+        model.as_str()
+    };
+    let prefix = format!("firmware-{file_model}-");
     let mut found = Vec::new();
     for dir in dirs {
         let Ok(rd) = std::fs::read_dir(&dir) else {
@@ -4390,7 +4397,7 @@ pub fn find_downloaded_firmware(
             {
                 found.push(FirmwareFileDto {
                     path: entry.path().display().to_string(),
-                    model: model.clone(),
+                    model: file_model.to_string(),
                     version: version.to_string(),
                 });
             }

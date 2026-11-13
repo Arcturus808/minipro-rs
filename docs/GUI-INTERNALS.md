@@ -737,9 +737,20 @@ Diagnostics → Firmware Update first calls `find_downloaded_firmware`
 `firmware-<model>-*.dat`, parses `a.b.c` versions out of filenames,
 sorts newest-first and dedups by version. Match by exact
 `firmware-<model>-` prefix — model-safe by construction, which matters
-because flashing a wrong-model image is the brick path. Empty result
-(TL866A/CS — see below — or a fresh install) falls through to the
-existing file picker.
+because flashing a wrong-model image is the brick path. TL866CS maps
+to the TL866A prefix: one `update.dat` covers both models and the
+bundled file is named for the A (the flasher selects the CS image
+internally).
+
+Exactly one match is used directly. **Multiple matches open a chooser
+modal** — never a silent newest-first pick, because for TL866A/CS the
+newest downloaded image is the clone-bricking one (see below). Each
+row shows version, filename, and a per-version safety label
+(`FW_VERSION_LABELS`); clone-risk models preselect the *oldest* image
+(the reported clone-tolerant one), other models preselect newest. The
+modal also offers "Choose different file…" (the native picker) and
+Cancel. Zero matches falls through to the same picker — the manual
+path always remains reachable.
 
 The confirm dialog appends a version note comparing installed vs
 candidate. Comparison is on `{major}.{minor}` — the low u16 of the file
@@ -753,14 +764,20 @@ block — upstream posture; strictly-lower = explicit DOWNGRADE note;
 equal = "reflash only to recover".
 
 **TL866A/CS clone warning:** `CLONE_RISK_MODELS` in DiagnosticsPanel
-adds an extra paragraph for those models on *every* path (auto-found or
-picked). MiniPro 6.82+ firmware (3.2.85/3.2.86, the final TL866A
-release) detects clones and disables boot mode — a brick recoverable
-only by forcing boot mode with a resistor on the PCB test points. We
-deliberately do **not** auto-download TL866A firmware: the only source
-(`minipro_setup685.rar`) embeds a RAR4 archive `rar-codec` can't read,
-and the image is itself the brick vector. Rejected approach — see
-ROADMAP's downloader entry.
+adds a version-aware paragraph for those models on *every* path
+(auto-found, chooser, or manual pick) via `cloneNoteFor(model,
+fileVersion)`. The generic counterfeit-existence warning always shows;
+the hard "reported brick vector" line keys on the *selected file's*
+version — ≥03.2.86 (MiniPro 6.85) gets the brick warning, 03.2.85
+(MiniPro 6.82) gets "widely reported clone-tolerant, but not
+certified", and unknown/no-version files get a neutral caution. A
+brick is recoverable only by forcing boot mode with a resistor on the
+PCB test points.
+
+Both images download via Settings → Download (vendored `libarchive-rs`
+reads the MiniPro installers' RAR4 layers — see
+`docs/CLI-INTERNALS.md` and `docs/LIBARCHIVE-INTERNALS.md`), so the
+chooser modal is the normal TL866A/CS path once a download has run.
 
 ### Rust format specifiers
 
