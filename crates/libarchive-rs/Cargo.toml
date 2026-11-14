@@ -1,0 +1,9 @@
+[package]
+name    = "libarchive-rs"
+version.workspace = true
+edition = "2024"
+rust-version.workspace = true
+license.workspace = true
+description = "Pure-Rust decoder for RAR4 archives, derived from libarchive's BSD-2-Clause RAR reader"
+
+[dependencies]

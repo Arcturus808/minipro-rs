@@ -3889,42 +3889,51 @@ pub async fn do_firmware_update(
     .map_err(|e| format!("Task panicked: {}", e))??;
 
     let window_clone = window.clone();
-    let updated_info = {
-        let mut guard = state.handle.lock().map_err(|e| e.to_string())?;
-        let handle = guard
-            .as_mut()
-            .ok_or_else(crate::state::no_programmer_error)?;
-        let mut output = Vec::new();
-        let result = firmware_update(
-            handle,
-            &fw_data,
-            &mut output,
-            Some(&mut |done, total| {
-                let _ = window_clone.emit(
-                    "progress",
-                    ProgressPayload {
-                        done,
-                        total,
-                        operation: "firmware_update".to_string(),
-                    },
-                );
-            }),
-        );
-        let text = String::from_utf8_lossy(&output).into_owned();
-        if !text.is_empty() {
-            // Emit each line as a separate log entry
-            for line in text.lines() {
-                if !line.is_empty() {
+    // firmware_update is fully synchronous and can block for a minute or
+    // more (erase + ~1900 block writes + two re-enumeration waits), so it
+    // must not run on a tokio worker thread — that starves the runtime
+    // handling the progress/log emits for its entire duration.
+    let state_task = (*state).clone();
+    let updated_info = tokio::task::spawn_blocking(
+        move || -> Result<minipro_core::device::ProgrammerInfo, String> {
+            let mut guard = state_task.handle.lock().map_err(|e| e.to_string())?;
+            let handle = guard
+                .as_mut()
+                .ok_or_else(crate::state::no_programmer_error)?;
+            let mut output = Vec::new();
+            let result = firmware_update(
+                handle,
+                &fw_data,
+                &mut output,
+                Some(&mut |done, total| {
                     let _ = window_clone.emit(
-                        "app-log",
-                        serde_json::json!({ "level": "info", "message": line }),
+                        "progress",
+                        ProgressPayload {
+                            done,
+                            total,
+                            operation: "firmware_update".to_string(),
+                        },
                     );
+                }),
+            );
+            let text = String::from_utf8_lossy(&output).into_owned();
+            if !text.is_empty() {
+                // Emit each line as a separate log entry
+                for line in text.lines() {
+                    if !line.is_empty() {
+                        let _ = window_clone.emit(
+                            "app-log",
+                            serde_json::json!({ "level": "info", "message": line }),
+                        );
+                    }
                 }
             }
-        }
-        result.map_err(|e| e.to_string())?;
-        handle.info.clone()
-    };
+            result.map_err(|e| e.to_string())?;
+            Ok(handle.info.clone())
+        },
+    )
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))??;
 
     // Programmer reconnects in bootloader then normal mode during update.
     // Refresh our cached info so the UI shows the new firmware version.
@@ -4361,7 +4370,9 @@ fn parse_fw_version(v: &str) -> Option<[u32; 3]> {
 /// first (the configured custom database dir, which the GUI downloader
 /// writes to), then the per-user data dir (CLI default). Returns matches
 /// newest-version-first, deduplicated by version — empty vec when none
-/// exist (e.g. TL866A/CS, whose firmware isn't in the pinned archives).
+/// exist. TL866CS maps to the shared TL866A image: one `update.dat`
+/// covers both models and the bundled file is named for the A (the
+/// flasher selects the CS image internally).
 #[tauri::command]
 pub fn find_downloaded_firmware(
     model: String,
@@ -4375,7 +4386,12 @@ pub fn find_downloaded_firmware(
         dirs.push(d);
     }
 
-    let prefix = format!("firmware-{model}-");
+    let file_model = if model == "TL866CS" {
+        "TL866A"
+    } else {
+        model.as_str()
+    };
+    let prefix = format!("firmware-{file_model}-");
     let mut found = Vec::new();
     for dir in dirs {
         let Ok(rd) = std::fs::read_dir(&dir) else {
@@ -4390,7 +4406,7 @@ pub fn find_downloaded_firmware(
             {
                 found.push(FirmwareFileDto {
                     path: entry.path().display().to_string(),
-                    model: model.clone(),
+                    model: file_model.to_string(),
                     version: version.to_string(),
                 });
             }

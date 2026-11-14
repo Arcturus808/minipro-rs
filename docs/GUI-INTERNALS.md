@@ -737,9 +737,20 @@ Diagnostics → Firmware Update first calls `find_downloaded_firmware`
 `firmware-<model>-*.dat`, parses `a.b.c` versions out of filenames,
 sorts newest-first and dedups by version. Match by exact
 `firmware-<model>-` prefix — model-safe by construction, which matters
-because flashing a wrong-model image is the brick path. Empty result
-(TL866A/CS — see below — or a fresh install) falls through to the
-existing file picker.
+because flashing a wrong-model image is the brick path. TL866CS maps
+to the TL866A prefix: one `update.dat` covers both models and the
+bundled file is named for the A (the flasher selects the CS image
+internally).
+
+Exactly one match is used directly. **Multiple matches open a chooser
+modal** — never a silent newest-first pick, because for TL866A/CS the
+newest downloaded image is the clone-bricking one (see below). Each
+row shows version, filename, and a per-version safety label
+(`FW_VERSION_LABELS`); clone-risk models preselect the *oldest* image
+(the reported clone-tolerant one), other models preselect newest. The
+modal also offers "Choose different file…" (the native picker) and
+Cancel. Zero matches falls through to the same picker — the manual
+path always remains reachable.
 
 The confirm dialog appends a version note comparing installed vs
 candidate. Comparison is on `{major}.{minor}` — the low u16 of the file
@@ -753,14 +764,43 @@ block — upstream posture; strictly-lower = explicit DOWNGRADE note;
 equal = "reflash only to recover".
 
 **TL866A/CS clone warning:** `CLONE_RISK_MODELS` in DiagnosticsPanel
-adds an extra paragraph for those models on *every* path (auto-found or
-picked). MiniPro 6.82+ firmware (3.2.85/3.2.86, the final TL866A
-release) detects clones and disables boot mode — a brick recoverable
-only by forcing boot mode with a resistor on the PCB test points. We
-deliberately do **not** auto-download TL866A firmware: the only source
-(`minipro_setup685.rar`) embeds a RAR4 archive `rar-codec` can't read,
-and the image is itself the brick vector. Rejected approach — see
-ROADMAP's downloader entry.
+adds a version-aware paragraph for those models on *every* path
+(auto-found, chooser, or manual pick) via `cloneNoteFor(model,
+fileVersion)`. The generic counterfeit-existence warning always shows;
+the hard "reported brick vector" line keys on the *selected file's*
+version — ≥03.2.86 (MiniPro 6.85) gets the brick warning, 03.2.85
+(MiniPro 6.82) gets "widely reported clone-tolerant, but not
+certified", and unknown/no-version files get a neutral caution. A
+brick is recoverable only by forcing boot mode with a resistor on the
+PCB test points.
+
+Both images download via Settings → Download (vendored `libarchive-rs`
+reads the MiniPro installers' RAR4 layers — see
+`docs/CLI-INTERNALS.md` and `docs/LIBARCHIVE-INTERNALS.md`), so the
+chooser modal is the normal TL866A/CS path once a download has run.
+
+`do_firmware_update` runs the synchronous `operations::firmware_update`
+inside `tokio::task::spawn_blocking` — the update blocks for a minute
+or more (erase + ~1900 block writes + two re-enumeration waits) and
+would otherwise starve a tokio worker thread for its whole duration.
+Progress still rides `window.emit("progress")` from inside the
+callback; the captured `out` log is emitted only after the call
+returns, so a stall shows as 0% progress until the (bounded) timeout
+fires — a live-streaming log would need the op's output pumped through
+a channel rather than captured.
+
+**TL866A/CS ≥03.2.84 caveat:** the software-entered boot session is
+unreliable (see CLI-INTERNALS "Firmware update" and KNOWN-BUGS); the
+core now warns, probes the session before erase, bounds the erase
+wait, and appends unplug/replug recovery instructions to failures —
+all of which surface in the GUI's log panel and error dialog
+verbatim. Because the core's warning text only reaches the log *after*
+the op returns, the confirm dialog additionally shows
+`unstableSessionNote` up front on TL866A/CS units running ≥03.2.84 —
+the user needs the "replug and retry" instruction *before* clicking
+yes, not post-mortem (all replug advisories carry a ~20 s wait — see
+KNOWN-BUGS for why). A boot-mode unit still can't be *connected* in
+the GUI (strict open), so the recovery path there is replug → CLI `-F`.
 
 ### Rust format specifiers
 

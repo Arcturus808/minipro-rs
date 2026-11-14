@@ -112,16 +112,23 @@ impl Default for Tl866aProtocol {
 /// u8[24]  serial_number
 /// ```
 pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
-    use crate::device::{ProgrammerModel, ProgrammerStatus};
-
     let mut cmd = [0u8; 64];
     cmd[0] = CMD_GET_INFO;
     usb.msg_send(&cmd)?;
     let resp = usb.msg_recv(64)?;
+    parse_system_info(&resp)
+}
 
-    if resp.len() < 40 {
+/// Parse a `GET_INFO` reply. The application firmware answers 40 bytes;
+/// the bootloader answers 39 — it omits the trailing hardware_version
+/// byte (an app-firmware field it doesn't know). Everything through
+/// serial_number is still present in the shorter reply.
+fn parse_system_info(resp: &[u8]) -> Result<crate::protocol::tl866iiplus::SystemInfo> {
+    use crate::device::{ProgrammerModel, ProgrammerStatus};
+
+    if resp.len() < 39 {
         return Err(MiniproError::ResponseTooShort {
-            expected: 40,
+            expected: 39,
             actual: resp.len(),
         });
     }
@@ -140,7 +147,7 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<crate::protocol::tl866iiplus::
     //   msg[15..39] = serial_number (24 bytes)
     //   msg[39]  = hardware version
     let device_type = resp[6];
-    let hardware_version = resp[39];
+    let hardware_version = resp.get(39).copied().unwrap_or(0);
 
     let model = match device_type {
         2 => ProgrammerModel::Tl866cs,
@@ -625,13 +632,28 @@ fn decrypt_update_dat(dat: &[u8]) -> Result<DecryptedUpdateDat> {
     })
 }
 
+/// Append a recovery hint to an error without duplicating the
+/// "Protocol error:" Display prefix — the wrapped errors are already
+/// `MiniproError::Protocol`, whose Display renders the prefix itself.
+fn with_hint(e: MiniproError, hint: &str) -> MiniproError {
+    match e {
+        MiniproError::Protocol(msg) => MiniproError::Protocol(format!("{msg} — {hint}")),
+        other => MiniproError::Protocol(format!("{other} — {hint}")),
+    }
+}
+
 /// Parse, decrypt, verify and flash a TL866A/CS `update.dat` firmware image.
 ///
 /// The file is exactly 312_348 bytes and contains both A and CS firmware
 /// images (encrypted with a simple XOR cipher).
 ///
-/// Supported on stock firmware up to 03.2.82; newer firmware versions
-/// (03.2.84+) may block the software reset-to-bootloader mechanism.
+/// Supported on stock firmware up to 03.2.82; on 03.2.84+ the software
+/// reset-to-bootloader entry is unreliable — the session it produces can
+/// wedge on the first real command or fail to re-enumerate (upstream's
+/// note that newer firmware "may block" the mechanism).  The update is
+/// still attempted since there is no other practical boot-mode entry, but
+/// the session is probed before the erase commits the device and failures
+/// report the unplug/replug recovery path.
 pub fn firmware_update_tl866a(
     handle: &mut crate::handle::MiniproHandle,
     dat: &[u8],
@@ -667,17 +689,79 @@ pub fn firmware_update_tl866a(
         std::cmp::Ordering::Equal => {}
     }
 
+    // Anti-clone warning, printed before the point of no return. MiniPro
+    // 6.85 (firmware 03.2.86) is widely reported to carry serial-number
+    // checks that erase the PIC on counterfeit TL866A/CS units, bricking
+    // them. 03.2.85 (MiniPro 6.82) is the last release reported as
+    // clone-tolerant — but no vendor payload is certified clone-safe.
+    if file_version_minor >= 86 {
+        writeln!(
+            out,
+            "*** WARNING: firmware 03.2.{file_version_minor:02} is reported to contain \
+             anti-clone logic that erases the PIC on counterfeit TL866A/CS \
+             programmers, bricking the device. If you are not certain this \
+             unit is genuine, disconnect it now."
+        )
+        .ok();
+    }
+
     // ── Switch to bootloader ─────────────────────────────────────────────────
     if handle.info.status != ProgrammerStatus::Bootloader {
+        // Firmware 03.2.84+ enters boot mode unreliably: the session can
+        // die on the first command or fail to re-enumerate.  Warn before
+        // the point of no return and leave recovery instructions.
+        let installed_minor = (handle.info.firmware & 0xFF) as u8;
+        if installed_minor >= 84 {
+            writeln!(
+                out,
+                "NOTE: firmware 03.2.{installed_minor:02}+ can produce an unstable \
+                 bootloader session after the software reset. If the update stalls, \
+                 unplug the programmer, wait ~20 seconds, plug it back in, and \
+                 re-run the update — it will resume in bootloader mode."
+            )
+            .ok();
+        }
         write!(out, "Switching to bootloader... ").ok();
         let mut msg = [0u8; 4];
         msg[0] = CMD_RESET;
         handle.usb.msg_send(&msg)?;
-        handle.reconnect(true)?;
+        handle.reconnect(true).map_err(|e| {
+            with_hint(
+                e,
+                "the programmer may be stuck mid-reset; unplug it, \
+                 wait ~20 seconds, plug it back in, and re-run the update \
+                 (the application firmware is still intact)",
+            )
+        })?;
         if handle.info.status != ProgrammerStatus::Bootloader {
             return Err(MiniproError::Protocol("Bootloader switch failed".into()));
         }
         writeln!(out, "OK").ok();
+    }
+
+    // ── Session probe ────────────────────────────────────────────────────────
+    // A software-entered boot session sometimes dies on its own shortly
+    // after enumeration.  Give it a moment to reveal itself, then probe
+    // with GET_INFO before the erase commits the device — a dead session
+    // still has intact application firmware.
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let healthy = {
+        let mut cmd = [0u8; 64];
+        cmd[0] = CMD_GET_INFO;
+        handle.usb.msg_send(&cmd).is_ok()
+            && handle
+                .usb
+                .msg_recv_probe(64, std::time::Duration::from_secs(3))
+                .len()
+                >= 39
+    };
+    if !healthy {
+        return Err(MiniproError::Protocol(
+            "The bootloader session is not responding. Unplug the programmer, \
+             wait ~20 seconds, plug it back in, and re-run the update — the \
+             application firmware is still intact."
+                .into(),
+        ));
     }
 
     // ── Erase ──────────────────────────────────────────────────────────────────
@@ -687,7 +771,21 @@ pub fn firmware_update_tl866a(
         msg[0] = CMD_BTLDR_ERASE;
         msg[7] = erase_byte;
         handle.usb.msg_send(&msg)?;
-        let resp = handle.usb.msg_recv(32)?;
+        // A real erase answers within a few seconds; the usual failure is a
+        // wedged boot session that will never answer — bound the wait so it
+        // fails fast with recovery instructions instead of sitting for the
+        // full transfer timeout.
+        let resp = handle
+            .usb
+            .msg_recv_timeout(32, std::time::Duration::from_secs(60))
+            .map_err(|e| {
+                with_hint(
+                    e,
+                    "the bootloader stopped responding. Unplug the programmer, \
+                     wait ~20 seconds, plug it back in, and re-run the update — \
+                     it will resume in bootloader mode",
+                )
+            })?;
         if resp.first().copied() != Some(CMD_BTLDR_ERASE) {
             return Err(MiniproError::Protocol("Bootloader erase rejected".into()));
         }
@@ -709,7 +807,14 @@ pub fn firmware_update_tl866a(
         msg[5] = ((address >> 8) & 0xFF) as u8;
         msg[6] = ((address >> 16) & 0xFF) as u8;
         msg[7..7 + BLOCK_SIZE].copy_from_slice(blk);
-        handle.usb.msg_send(&msg)?;
+        handle.usb.msg_send(&msg).map_err(|e| {
+            with_hint(
+                e,
+                "write aborted; unplug the programmer, wait ~20 seconds, \
+                 plug it back in, and re-run the update — it will resume in \
+                 bootloader mode",
+            )
+        })?;
         address += 64; // Next block address (64-byte alignment)
         if let Some(ref mut cb) = progress {
             cb(b + 1, n_blocks);
@@ -724,7 +829,13 @@ pub fn firmware_update_tl866a(
         msg[0] = CMD_RESET;
         handle.usb.msg_send(&msg)?;
     }
-    handle.reconnect(false)?;
+    handle.reconnect(false).map_err(|e| {
+        with_hint(
+            e,
+            "the firmware image was fully written; unplug the programmer, \
+             wait ~20 seconds, plug it back in, and check `minipro -k`",
+        )
+    })?;
     if handle.info.status != ProgrammerStatus::Normal {
         return Err(MiniproError::Protocol(
             "Device did not return to normal mode after firmware update".into(),
@@ -1479,5 +1590,59 @@ mod tests {
         let parsed = decrypt_update_dat(&dat).expect("real update.dat rejected");
         assert_eq!(parsed.a_firmware.len(), ENC_FIRMWARE_SIZE);
         assert_eq!(parsed.cs_firmware.len(), ENC_FIRMWARE_SIZE);
+    }
+
+    /// Build a GET_INFO reply in the documented 40-byte layout; `len`
+    /// truncates to model the bootloader's 39-byte reply (no trailing
+    /// hardware_version byte).
+    fn make_info_reply(status: u8, device_type: u8, len: usize) -> Vec<u8> {
+        let mut resp = vec![0u8; len];
+        resp[1] = status;
+        resp[4] = 0x55; // fw_minor
+        resp[5] = 0x03; // fw_major
+        resp[6] = device_type;
+        resp[7..15].copy_from_slice(b"60110174");
+        for (i, b) in resp[15..39].iter_mut().enumerate() {
+            *b = b'0' + (i % 10) as u8;
+        }
+        if len > 39 {
+            resp[39] = 0x0A; // hardware_version
+        }
+        resp
+    }
+
+    #[test]
+    fn system_info_normal_mode_40_bytes() {
+        use crate::device::{ProgrammerModel, ProgrammerStatus};
+        let info = parse_system_info(&make_info_reply(1, 1, 40)).unwrap();
+        assert_eq!(info.status, ProgrammerStatus::Normal);
+        assert_eq!(info.model, ProgrammerModel::Tl866a);
+        assert_eq!(info.hardware_version, 0x0A);
+        assert_eq!(info.firmware_str, "10.3.85");
+        assert_eq!(info.device_code, "60110174");
+    }
+
+    /// The bootloader answers GET_INFO with 39 bytes — the trailing
+    /// hardware_version byte is absent. Real capture from a TL866A in
+    /// boot mode: [00 02 20 00 00 00 01 "60110174" <serial>] — must
+    /// still parse (upstream never length-gates this reply), or the
+    /// firmware-update recovery path can't even identify the device.
+    #[test]
+    fn system_info_bootloader_mode_39_bytes() {
+        use crate::device::{ProgrammerModel, ProgrammerStatus};
+        let info = parse_system_info(&make_info_reply(2, 1, 39)).unwrap();
+        assert_eq!(info.status, ProgrammerStatus::Bootloader);
+        assert_eq!(info.model, ProgrammerModel::Tl866a);
+        assert_eq!(info.hardware_version, 0);
+        assert_eq!(info.device_code, "60110174");
+        assert_eq!(info.serial_number.len(), 24);
+        // TL866CS identifier also parses in the short form.
+        let info = parse_system_info(&make_info_reply(2, 2, 39)).unwrap();
+        assert_eq!(info.model, ProgrammerModel::Tl866cs);
+    }
+
+    #[test]
+    fn system_info_rejects_truncated() {
+        assert!(parse_system_info(&[0u8; 38]).is_err());
     }
 }

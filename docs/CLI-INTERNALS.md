@@ -112,39 +112,86 @@ GUI (`@DIP*` or bare-name non-PLCC), since `package_details.adapter` is
 0 for some adapter packages. Without `-q` a `--programmer` hint is
 printed instead, since placement is model-specific.
 
-## XGPro algorithm/firmware downloader (`--download-algorithms`)
+## XGPro/MiniPro algorithm/firmware downloader (`--download-algorithms`)
 
 `--download-algorithms` is an early-exit action handled before
 `MiniproHandle::open()` — no programmer required. It replaces upstream's
 `dump-alg-minipro.bash` entirely in Rust (`minipro_core::xgpro_fetch`):
 download (`ureq`, env-proxy honored, platform TLS roots) → pinned
-SHA-256 verify → in-memory nested RAR5 unwrap via `rar-codec` →
-`algorithm.xml` generation → full re-decode + CRC verify of every
-emitted bitstream → atomic writes.
+SHA-256 verify → in-memory nested RAR unwrap → `algorithm.xml`
+generation → full re-decode + CRC verify of every emitted bitstream →
+atomic writes.
+
+Four payloads are pinned: the two XGPro setup archives (RAR5, decoded
+via `rar-codec`) and the two MiniPro installers — 6.82 and 6.85 —
+(RAR4, decoded via the vendored `libarchive-rs` crate; see
+`docs/LIBARCHIVE-INTERNALS.md`). Each `ArchiveSpec` carries its own URL
+base (`Xgpro/13` vs `minipro/6` on the Kreeblah mirror), pinned SHA-256,
+inner algorithm directory, and firmware member list
+`(member, model, version)` → output name `firmware-<model>-<ver>.dat`.
+MiniPro payloads carry `update.dat` only (TL866A/CS have no FPGA); both
+versions are always downloaded so the user picks at `-F` time —
+`firmware-TL866A-03.2.85.dat` (6.82, last clone-tolerant release) vs
+`firmware-TL866A-03.2.86.dat` (6.85, reported to brick counterfeits —
+a warning is emitted when it is extracted).
 
 - `--output DIR` — destination for `algorithm.xml` + `firmware-*.dat`;
   default is the per-user data dir (the one `DatabasePaths::resolve`
   searches), so a default run needs no elevation. Errors out with a
   hint when no per-user dir can be determined and no `--output` given.
-- `--from-file FILE` — offline/mirror input; repeatable (one per
-  archive). Auto-detects outer `.rar`, SFX `.exe`, or bare inner RAR,
-  and assigns the T48/T56 vs T76 role by inner-archive layout
-  (`algorithm/` vs `algoT76/`). SHA-256 is computed and a mismatch is a
-  *warning* (local files may be a different XGPro version); for
-  downloads the pinned checksum is a hard error.
-- `--xgpro-url BASE` — mirror URL base (`<base>/<filename>`); pinned
-  checksums still enforced.
+- `--from-file FILE` — offline/mirror input; repeatable, up to four
+  (one per role). Archive format is sniffed from the RAR mark version
+  byte (`Rar!\x1a\x07\x00` = RAR4, `\x01` = RAR5); outer `.rar`, SFX
+  `.exe`, and bare inner RAR are all accepted. Role assignment: XGPro
+  by inner-archive layout (`algorithm/` vs `algoT76/`), MiniPro by the
+  `update.dat` firmware-version byte (`03.2.85` → 6.82, `03.2.86` →
+  6.85; other versions error with a pointer to `-F`). SHA-256 is
+  computed and a mismatch is a *warning* (local files may be a
+  different release); for downloads the pinned checksum is a hard
+  error.
+- `--xgpro-url BASE` — mirror URL base (`<base>/<filename>`); applies
+  to every spec, so a mirror must host both the XGPro and MiniPro
+  files. Pinned checksums still enforced.
 - Downloaded archives are cached under `<per-user-dir>/cache/` keyed by
   filename; a cached file that fails the checksum is re-downloaded.
 - Progress (indicatif) and all status go to stderr; the result summary
   goes to stdout. After completion, if a programmer happens to be
   connected, the bundled `firmware-<MODEL>-<VER>.dat` matching its model
   is printed **informationally only** — no version comparison, no update
-  suggestion (cross-revision flashing is a brick risk).
+  suggestion (cross-revision flashing is a brick risk). TL866A/CS match
+  both bundled images.
 - Expected counts (354 T56 / 370 T76 for the pinned versions) are
   warn-only, so a future XGPro repack doesn't hard-fail.
 - `.gitignore` covers `algorithm.xml`, `firmware-*.dat`, `*.rar` — the
   outputs are XGecu-proprietary and must never be committed.
+
+## Firmware update (`-F` / `--update`)
+
+`-F <file>` flashes a vendor firmware image (`update.dat` TL866A/CS,
+`UpdateII.dat`, `updateT48/T56/T76`). The CLI opens the programmer via
+`MiniproHandle::open_allowing_bootloader` so the same command is also
+the recovery path for a unit already in boot mode — a normal `open()`
+rejects boot-mode devices. Sequence for TL866A/CS (see
+`tl866a.rs::firmware_update_tl866a`): decrypt+CRC → `CMD_RESET` switch
+→ wait disappear/reappear → open + `GET_INFO` → erase → 1936×80-byte
+write blocks → `CMD_RESET` → re-enumerate normal mode.
+
+**Firmware ≥03.2.84 fragility (hardware-verified on 03.2.85):** the
+software-entered boot session is unreliable — the switch reports OK
+but the session can die on the first real command or the device can
+fail to re-enumerate at all (Windows marks it Code 10). There is no
+other practical boot-mode entry on TL866A/CS, so the update still
+attempts it, but on installed firmware ≥03.2.84 it first prints a
+warning, and the session is probed with a bounded `GET_INFO` before
+the erase commits the app image. The erase ACK wait is bounded to
+60 s (the generic read timeout is 360 s and a wedged session never
+answers), and post-switch failures append unplug/replug recovery
+instructions (with a ~20 s wait so residual charge fully discharges
+and Windows finishes the devnode teardown). `MiniproHandle::reconnect`
+releases the old USB handle before waiting for re-enumeration and
+settles ~1 s after the device reappears — see KNOWN-BUGS for the full
+analysis. Recovery: unplug, wait ~20 s, replug, re-run `-F`; a unit
+left in boot mode flashes cleanly from a power-cycle session.
 
 ## SPI status register (`--spi-status` / `--spi-status-write`)
 

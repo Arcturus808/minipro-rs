@@ -42,8 +42,18 @@ use crate::error::MiniproError;
 
 const XGPRO_URL_BASE: &str =
     "https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/Xgpro/13";
+const MINIPRO_URL_BASE: &str =
+    "https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/minipro/6";
 
-const RAR5_SIG: &[u8] = b"Rar!\x1a\x07";
+/// The first 6 bytes of both RAR marks; byte 6 selects the format version
+/// (`0x00` = RAR4, `0x01` = RAR5).
+const RAR_MARK: &[u8] = b"Rar!\x1a\x07";
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ArchiveFormat {
+    Rar4,
+    Rar5,
+}
 
 /// Which upstream payload an archive is.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -52,14 +62,23 @@ enum Role {
     Main,
     /// T76 payload (algoT76/ + one firmware image).
     T76,
+    /// MiniPro 6.82 installer — firmware 03.2.85, the last version widely
+    /// reported as clone-safe for TL866A/CS.
+    Minipro682,
+    /// MiniPro 6.85 installer — firmware 03.2.86, the latest TL866A/CS
+    /// release (reported to detect and disable counterfeit units).
+    Minipro685,
 }
 
 struct ArchiveSpec {
     role: Role,
     /// Download filename (also used for the cache copy).
     file: &'static str,
+    /// Download URL base (used unless `FetchOptions::url_base` overrides).
+    url_base: &'static str,
     sha256: &'static str,
-    /// Inner-RAR directory holding this role's .alg files.
+    /// Inner-RAR directory holding this role's .alg files ("" = none —
+    /// MiniPro payloads carry firmware only, TL866A/CS have no FPGA).
     alg_dir: &'static str,
     /// Firmware members: (lowercase basename, model, version). Output name
     /// is `firmware-<model>-<version>.dat`.
@@ -69,6 +88,7 @@ struct ArchiveSpec {
 const MAIN_SPEC: ArchiveSpec = ArchiveSpec {
     role: Role::Main,
     file: "xgproV1304_T48_T56_T866II_Setup.rar",
+    url_base: XGPRO_URL_BASE,
     sha256: "821db3ef1cc2b335d8a1e50ad37161032f804c8626cd3c1e7d03695d9aa75b1d",
     alg_dir: "algorithm",
     firmware: &[
@@ -81,12 +101,31 @@ const MAIN_SPEC: ArchiveSpec = ArchiveSpec {
 const T76_SPEC: ArchiveSpec = ArchiveSpec {
     role: Role::T76,
     file: "xgpro_T76_V1319.rar",
+    url_base: XGPRO_URL_BASE,
     sha256: "8541d3d0f47a5d7dc1727e7b6dc41db7bf1132a4b6b549f2947a8cd210c40490",
     alg_dir: "algoT76",
     firmware: &[("updatet76.dat", "T76", "00.1.17")],
 };
 
-const SPECS: &[&ArchiveSpec] = &[&MAIN_SPEC, &T76_SPEC];
+const MINIPRO682_SPEC: ArchiveSpec = ArchiveSpec {
+    role: Role::Minipro682,
+    file: "minipro_setup682.rar",
+    url_base: MINIPRO_URL_BASE,
+    sha256: "bf742117aaf2e62faa5383db0440b96ba3e65c1001d5cdb698ae5e5786fe90e3",
+    alg_dir: "",
+    firmware: &[("update.dat", "TL866A", "03.2.85")],
+};
+
+const MINIPRO685_SPEC: ArchiveSpec = ArchiveSpec {
+    role: Role::Minipro685,
+    file: "minipro_setup685.rar",
+    url_base: MINIPRO_URL_BASE,
+    sha256: "2ede2c40229aac497f4f08720e41da914df42e2bf79ed2fc1bf8957958b9f918",
+    alg_dir: "",
+    firmware: &[("update.dat", "TL866A", "03.2.86")],
+};
+
+const SPECS: &[&ArchiveSpec] = &[&MAIN_SPEC, &T76_SPEC, &MINIPRO682_SPEC, &MINIPRO685_SPEC];
 
 /// Expected algorithm counts for the pinned versions — warn-only, so a
 /// future XGPro repack doesn't hard-fail on a count change.
@@ -146,9 +185,10 @@ pub struct FetchOptions<'a> {
     /// `None` → the per-user data directory ([`user_data_dir`]).
     pub output_dir: Option<PathBuf>,
     /// Local archives replacing downloads. Each file is auto-detected as
-    /// the main or T76 payload; accepts the outer `.rar`, the SFX `.exe`,
-    /// or the bare inner RAR. Supply up to two files (one per role).
-    /// Archives without a local file are downloaded normally.
+    /// the main, T76, or a MiniPro payload (by firmware version byte);
+    /// accepts the outer `.rar`, the SFX `.exe`, or the bare inner RAR.
+    /// Supply up to one file per role. Archives without a local file are
+    /// downloaded normally.
     pub input_files: &'a [PathBuf],
     /// Download URL base override for mirrors (`<base>/<filename>`).
     /// The pinned SHA-256 is still enforced.
@@ -216,15 +256,12 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
     // Classify each --from-file input once (reads the file, then drops the
     // buffer — the archive is re-read lazily when its role is needed, which
     // keeps peak memory at one archive at a time).
-    let mut local: [Option<PathBuf>; 2] = [None, None];
+    let mut local: [Option<PathBuf>; SPECS.len()] = [const { None }; SPECS.len()];
     for path in opts.input_files {
         let data = fs::read(path)?;
-        match file_role(&data) {
+        match file_role(&data).map_err(MiniproError::FileFormat)? {
             Some(role) => {
-                let slot = match role {
-                    Role::Main => 0,
-                    Role::T76 => 1,
-                };
+                let slot = role_slot(role);
                 if local[slot].is_some() {
                     return Err(MiniproError::FileFormat(format!(
                         "{}: duplicate {} payload — only one archive per role",
@@ -236,7 +273,8 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
             }
             None => {
                 return Err(MiniproError::FileFormat(format!(
-                    "{}: not a recognized XGPro archive (no algorithm/ or algoT76/ entries)",
+                    "{}: not a recognized XGPro/MiniPro archive \
+                     (no algorithm/, algoT76/, or update.dat entries)",
                     path.display()
                 )))
             }
@@ -249,13 +287,9 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
     let mut firmware: Vec<(String, &'static str, &'static str, Vec<u8>)> = Vec::new();
 
     for spec in SPECS {
-        let slot = match spec.role {
-            Role::Main => 0,
-            Role::T76 => 1,
-        };
         let bytes = acquire_archive(
             spec,
-            local[slot].as_deref(),
+            local[role_slot(spec.role)].as_deref(),
             opts,
             &cache_dir,
             &mut warnings,
@@ -273,6 +307,16 @@ pub fn fetch(opts: &mut FetchOptions) -> Result<FetchOutcome, MiniproError> {
         match spec.role {
             Role::Main => t56_entries = extracted.algorithms,
             Role::T76 => t76_entries = extracted.algorithms,
+            _ => debug_assert!(extracted.algorithms.is_empty()),
+        }
+        if spec.role == Role::Minipro685 && !extracted.firmware.is_empty() {
+            warnings.push(
+                "firmware-TL866A-03.2.86.dat (MiniPro 6.85) is reported to contain \
+                 anti-clone logic that can brick counterfeit TL866A/CS units — \
+                 firmware-TL866A-03.2.85.dat (MiniPro 6.82) is the safer choice \
+                 for suspected clones"
+                    .to_string(),
+            );
         }
         for fw in extracted.firmware {
             if !firmware.iter().any(|(n, ..)| *n == fw.0) {
@@ -348,6 +392,17 @@ fn role_name(role: Role) -> &'static str {
     match role {
         Role::Main => "T48/T56",
         Role::T76 => "T76",
+        Role::Minipro682 => "MiniPro 6.82",
+        Role::Minipro685 => "MiniPro 6.85",
+    }
+}
+
+fn role_slot(role: Role) -> usize {
+    match role {
+        Role::Main => 0,
+        Role::T76 => 1,
+        Role::Minipro682 => 2,
+        Role::Minipro685 => 3,
     }
 }
 
@@ -416,10 +471,7 @@ fn download(
     opts: &mut FetchOptions,
     cache_path: &Path,
 ) -> Result<Vec<u8>, MiniproError> {
-    let base = opts
-        .url_base
-        .unwrap_or(XGPRO_URL_BASE)
-        .trim_end_matches('/');
+    let base = opts.url_base.unwrap_or(spec.url_base).trim_end_matches('/');
     let url = format!("{}/{}", base, spec.file);
 
     let agent = ureq::Agent::config_builder()
@@ -497,44 +549,105 @@ fn download(
 
 /// Identify which role a `--from-file` payload fills, by looking at the
 /// inner archive's directory layout. `None` for unrelated files.
-fn file_role(data: &[u8]) -> Option<Role> {
-    let inner = unwrap_inner(data).ok()?;
-    let arc = Archive::open(&inner).ok()?;
-    let mut has_main = false;
-    for e in arc.entries() {
-        if e.kind != EntryKind::File {
-            continue;
+///
+/// MiniPro payloads are classified by the firmware version byte inside
+/// `Update.dat` — the file must map to a pinned spec, otherwise the output
+/// would be mislabeled (a 6.71 payload is not a 6.82 `firmware-*.dat`).
+fn file_role(data: &[u8]) -> Result<Option<Role>, String> {
+    let inner = unwrap_inner(data)?;
+    match inner {
+        Payload::Rar5(bytes) => {
+            let arc = Archive::open(&bytes).map_err(|e| e.to_string())?;
+            let mut has_main = false;
+            for e in arc.entries() {
+                if e.kind != EntryKind::File {
+                    continue;
+                }
+                let norm = e.name.replace('\\', "/");
+                let norm = norm.trim_start_matches("./").to_lowercase();
+                if norm.starts_with("algot76/") && norm.ends_with(".alg") {
+                    return Ok(Some(Role::T76));
+                }
+                if norm.starts_with("algorithm/") && norm.ends_with(".alg") {
+                    has_main = true;
+                }
+            }
+            Ok(has_main.then_some(Role::Main))
         }
-        let norm = e.name.replace('\\', "/");
-        let norm = norm.trim_start_matches("./").to_lowercase();
-        if norm.starts_with("algot76/") && norm.ends_with(".alg") {
-            return Some(Role::T76);
-        }
-        if norm.starts_with("algorithm/") && norm.ends_with(".alg") {
-            has_main = true;
+        Payload::Rar4(bytes) => {
+            let Some(dat) = find_rar4_member(&bytes, "update.dat")? else {
+                return Ok(None);
+            };
+            if dat.len() != 312_348 {
+                return Err(format!(
+                    "update.dat is {} bytes, expected 312348 — not a TL866A/CS firmware blob",
+                    dat.len()
+                ));
+            }
+            match dat[0] {
+                0x55 => Ok(Some(Role::Minipro682)),
+                0x56 => Ok(Some(Role::Minipro685)),
+                v => Err(format!(
+                    "MiniPro payload contains firmware 03.2.{v:02} — only the \
+                     6.82 (03.2.85) and 6.85 (03.2.86) installers are pinned; \
+                     flash arbitrary update.dat files directly with -F"
+                )),
+            }
         }
     }
-    has_main.then_some(Role::Main)
 }
 
-/// Reduce an input blob to the inner RAR5 archive bytes.
+/// The reduced inner-archive bytes, tagged with the decoder they need.
+enum Payload {
+    /// Bare RAR5 bytes (XGPro payloads, via `rar_codec`).
+    Rar5(Vec<u8>),
+    /// RAR4 bytes — possibly SFX-stubbed (MiniPro payloads, via
+    /// `libarchive_rs`, which locates the signature itself).
+    Rar4(Vec<u8>),
+}
+
+/// The RAR mark version byte, if `data` starts with a RAR signature.
+fn sniff_format(data: &[u8]) -> Option<ArchiveFormat> {
+    if !data.starts_with(RAR_MARK) {
+        return None;
+    }
+    match data.get(6) {
+        Some(0x00) => Some(ArchiveFormat::Rar4),
+        Some(0x01) => Some(ArchiveFormat::Rar5),
+        _ => None,
+    }
+}
+
+/// Locate an embedded RAR signature inside an SFX blob.
+/// Returns `(signature offset, format)`.
+fn find_signature(data: &[u8]) -> Option<(usize, ArchiveFormat)> {
+    data.windows(RAR_MARK.len() + 1)
+        .enumerate()
+        .find_map(|(i, w)| sniff_format(w).map(|f| (i, f)))
+}
+
+/// Reduce an input blob to the tagged inner-archive bytes.
 ///
 /// Accepts:
-///   - the outer `.rar` (extracts the setup `.exe` member, then unwraps it),
-///   - the SFX `.exe` (scans for the embedded RAR5 signature),
-///   - the bare inner RAR.
-fn unwrap_inner(data: &[u8]) -> Result<Vec<u8>, String> {
-    if data.starts_with(RAR5_SIG) {
-        let arc = Archive::open(data).map_err(|e| format!("invalid RAR: {}", e))?;
-        let files: Vec<&rar_codec::Entry> = arc
-            .entries()
-            .iter()
-            .filter(|e| e.kind == EntryKind::File)
-            .collect();
-        let has_algs = files
-            .iter()
-            .any(|e| e.name.replace('\\', "/").to_lowercase().contains(".alg"));
-        if !has_algs {
+///   - an outer `.rar` (RAR4 or RAR5 — extracts the setup `.exe` member),
+///   - an SFX `.exe` (RAR4 handled whole — `rar4_archive` slices at the
+///     mark; RAR5 is sliced at the embedded signature),
+///   - a bare inner RAR of either format.
+fn unwrap_inner(data: &[u8]) -> Result<Payload, String> {
+    match sniff_format(data) {
+        Some(ArchiveFormat::Rar5) => {
+            let arc = Archive::open(data).map_err(|e| format!("invalid RAR: {}", e))?;
+            let files: Vec<&rar_codec::Entry> = arc
+                .entries()
+                .iter()
+                .filter(|e| e.kind == EntryKind::File)
+                .collect();
+            let has_algs = files
+                .iter()
+                .any(|e| e.name.replace('\\', "/").to_lowercase().contains(".alg"));
+            if has_algs {
+                return Ok(Payload::Rar5(data.to_vec()));
+            }
             // Outer archive: find the setup executable member.
             let exe = files
                 .iter()
@@ -545,30 +658,99 @@ fn unwrap_inner(data: &[u8]) -> Result<Vec<u8>, String> {
             let exe_data = arc
                 .extract(exe)
                 .map_err(|e| format!("extracting {}: {}", exe.name, e))?;
-            return unwrap_sfx(&exe_data);
+            unwrap_inner(&exe_data)
         }
-        // Bare inner RAR.
-        return Ok(data.to_vec());
+        Some(ArchiveFormat::Rar4) => unwrap_rar4(data),
+        None => match find_signature(data) {
+            Some((off, ArchiveFormat::Rar5)) => unwrap_sfx5(&data[off..]),
+            // Keep the whole blob — libarchive_rs scans past the stub.
+            Some((_, ArchiveFormat::Rar4)) => unwrap_rar4(data),
+            None => Err("no RAR signature found (not a RAR archive or WinRAR SFX?)".into()),
+        },
     }
-    // Assume SFX executable.
-    unwrap_sfx(data)
 }
 
-/// Locate the embedded RAR5 inside a WinRAR SFX executable and return the
-/// archive bytes from the signature onward.
-fn unwrap_sfx(exe: &[u8]) -> Result<Vec<u8>, String> {
-    for (i, w) in exe.windows(RAR5_SIG.len()).enumerate() {
-        if w == RAR5_SIG {
-            let candidate = &exe[i..];
-            match Archive::open(candidate) {
-                Ok(a) if a.entries().iter().any(|e| e.kind == EntryKind::File) => {
-                    return Ok(candidate.to_vec());
+/// Locate the embedded RAR5 inside a WinRAR SFX executable already sliced at
+/// the signature, and return the archive bytes.
+fn unwrap_sfx5(candidate: &[u8]) -> Result<Payload, String> {
+    match Archive::open(candidate) {
+        Ok(a) if a.entries().iter().any(|e| e.kind == EntryKind::File) => {
+            Ok(Payload::Rar5(candidate.to_vec()))
+        }
+        _ => Err("embedded RAR5 payload failed to open".into()),
+    }
+}
+
+/// Build a libarchive_rs reader over a blob, sliced to the RAR4 mark.
+///
+/// `Archive`'s own `skip_sfx` only scans 16-aligned offsets (upstream
+/// parity); locating the mark byte-precisely first tolerates stubs of
+/// arbitrary alignment.
+fn rar4_archive(data: &[u8]) -> Result<libarchive_rs::Archive<&[u8]>, String> {
+    let Some((off, ArchiveFormat::Rar4)) = find_signature(data) else {
+        return Err("no RAR4 signature found".into());
+    };
+    Ok(libarchive_rs::Archive::new(&data[off..]))
+}
+
+/// Reduce a RAR4 blob (`.rar`, SFX `.exe`, or bare inner) to bytes holding
+/// the inner archive — the blob itself when `update.dat` is already a
+/// member, or the extracted setup executable to descend into. When the
+/// blob can't be descended further it is handed back unclassified;
+/// `find_rar4_member` decides whether it carries the firmware.
+fn unwrap_rar4(data: &[u8]) -> Result<Payload, String> {
+    let mut ar = match rar4_archive(data) {
+        Ok(ar) => ar,
+        // No embedded RAR4 mark (e.g. a plain .exe member) — unclassified.
+        Err(_) => return Ok(Payload::Rar4(data.to_vec())),
+    };
+    let mut exe_data: Option<Vec<u8>> = None;
+    loop {
+        let Some(e) = ar
+            .next_entry()
+            .map_err(|e| format!("invalid RAR4 archive: {e}"))?
+        else {
+            return match exe_data {
+                Some(exe) => unwrap_rar4(&exe),
+                None => Ok(Payload::Rar4(data.to_vec())),
+            };
+        };
+        let base = e.name.rsplit('/').next().unwrap_or(&e.name).to_lowercase();
+        if base == "update.dat" {
+            // This level already carries the firmware blob — hand the
+            // whole input back; rar4_archive re-scans it for the member.
+            return Ok(Payload::Rar4(data.to_vec()));
+        }
+        if !e.is_directory && base.ends_with(".exe") && exe_data.is_none() {
+            exe_data = Some(
+                ar.read_all()
+                    .map_err(|err| format!("extracting {}: {err}", e.name))?,
+            );
+            continue;
+        }
+        ar.skip_data()
+            .map_err(|err| format!("skipping {}: {err}", e.name))?;
+    }
+}
+
+/// Extract a single named member (case-insensitive basename) from RAR4
+/// bytes. `Ok(None)` when absent (including when no RAR4 mark exists).
+fn find_rar4_member(data: &[u8], want: &str) -> Result<Option<Vec<u8>>, String> {
+    let Ok(mut ar) = rar4_archive(data) else {
+        return Ok(None);
+    };
+    loop {
+        match ar.next_entry().map_err(|e| e.to_string())? {
+            Some(e) => {
+                let base = e.name.rsplit('/').next().unwrap_or(&e.name).to_lowercase();
+                if base == want {
+                    return ar.read_all().map(Some).map_err(|e| e.to_string());
                 }
-                _ => continue,
+                ar.skip_data().map_err(|e| e.to_string())?;
             }
+            None => return Ok(None),
         }
     }
-    Err("no embedded RAR5 archive found (not a WinRAR SFX?)".into())
 }
 
 // ── Inner-archive processing ─────────────────────────────────────────────────
@@ -585,6 +767,57 @@ struct Extracted {
 }
 
 fn process_inner(
+    inner: &Payload,
+    spec: &ArchiveSpec,
+    opts: &mut FetchOptions,
+) -> Result<Extracted, MiniproError> {
+    match inner {
+        Payload::Rar5(bytes) => process_inner_rar5(bytes, spec, opts),
+        Payload::Rar4(bytes) => process_inner_rar4(bytes, spec),
+    }
+}
+
+/// MiniPro (RAR4) payloads: firmware members only, no .alg files.
+fn process_inner_rar4(bytes: &[u8], spec: &ArchiveSpec) -> Result<Extracted, MiniproError> {
+    let mut ar = rar4_archive(bytes).map_err(MiniproError::FileFormat)?;
+    let mut firmware = Vec::new();
+    loop {
+        let Some(e) = ar
+            .next_entry()
+            .map_err(|e| MiniproError::FileFormat(format!("inner RAR4 archive: {e}")))?
+        else {
+            break;
+        };
+        if e.is_directory {
+            ar.skip_data()
+                .map_err(|e| MiniproError::FileFormat(format!("skipping entry: {e}")))?;
+            continue;
+        }
+        let base = e.name.rsplit('/').next().unwrap_or(&e.name).to_lowercase();
+        if let Some((_, model, version)) =
+            spec.firmware.iter().find(|(n, _, _)| *n == base.as_str())
+        {
+            let data = ar.read_all().map_err(|err| {
+                MiniproError::FileFormat(format!("extracting {}: {}", e.name, err))
+            })?;
+            firmware.push((
+                format!("firmware-{}-{}.dat", model, version),
+                *model,
+                *version,
+                data,
+            ));
+        } else {
+            ar.skip_data()
+                .map_err(|err| MiniproError::FileFormat(format!("skipping {}: {err}", e.name)))?;
+        }
+    }
+    Ok(Extracted {
+        algorithms: Vec::new(),
+        firmware,
+    })
+}
+
+fn process_inner_rar5(
     inner: &[u8],
     spec: &ArchiveSpec,
     opts: &mut FetchOptions,
@@ -618,6 +851,8 @@ fn process_inner(
         algorithms.push(match spec.role {
             Role::Main => munge_t56(&entry.name, &data),
             Role::T76 => munge_t76(&entry.name, &data),
+            // MiniPro payloads carry no .alg members — this path never runs.
+            Role::Minipro682 | Role::Minipro685 => unreachable!(),
         });
         if done % 32 == 0 || done + 1 == total {
             emit(
@@ -1062,11 +1297,14 @@ mod tests {
         outer_builder.add_stored("Setup.exe", &exe).unwrap();
         let outer = outer_builder.finish();
 
-        assert_eq!(file_role(&outer), Some(Role::Main));
+        assert_eq!(file_role(&outer).unwrap(), Some(Role::Main));
 
         let inner_bytes = unwrap_inner(&outer).unwrap();
+        let Payload::Rar5(inner_bytes) = inner_bytes else {
+            panic!("expected RAR5 payload");
+        };
         let mut opts = FetchOptions::default();
-        let ext = process_inner(&inner_bytes, &MAIN_SPEC, &mut opts).unwrap();
+        let ext = process_inner(&Payload::Rar5(inner_bytes), &MAIN_SPEC, &mut opts).unwrap();
         assert_eq!(ext.algorithms.len(), 1);
         assert_eq!(ext.algorithms[0].name, "SPI25F10");
         assert_eq!(ext.algorithms[0].description, "SPI-18");
@@ -1085,18 +1323,24 @@ mod tests {
         let inner = builder.finish();
 
         // Bare inner rar input.
-        assert_eq!(unwrap_inner(&inner).unwrap(), inner);
-        assert_eq!(file_role(&inner), Some(Role::T76));
+        let Payload::Rar5(bytes) = unwrap_inner(&inner).unwrap() else {
+            panic!("expected RAR5 payload");
+        };
+        assert_eq!(bytes, inner);
+        assert_eq!(file_role(&inner).unwrap(), Some(Role::T76));
 
         // Same bytes behind an SFX stub.
         let mut exe = b"MZ....".to_vec();
         exe.extend_from_slice(&inner);
-        assert_eq!(unwrap_inner(&exe).unwrap(), inner);
-        assert_eq!(file_role(&exe), Some(Role::T76));
+        let Payload::Rar5(bytes) = unwrap_inner(&exe).unwrap() else {
+            panic!("expected RAR5 payload");
+        };
+        assert_eq!(bytes, inner);
+        assert_eq!(file_role(&exe).unwrap(), Some(Role::T76));
     }
 
     #[test]
-    #[ignore = "downloads ~65MB from GitHub"]
+    #[ignore = "downloads ~80MB from GitHub"]
     fn test_real_download() {
         let dir = std::env::temp_dir().join("minipro-xgpro-test");
         let mut opts = FetchOptions {
@@ -1106,7 +1350,154 @@ mod tests {
         let out = fetch(&mut opts).unwrap();
         assert_eq!(out.t56_algorithms, EXPECTED_T56);
         assert_eq!(out.t76_algorithms, EXPECTED_T76);
-        assert_eq!(out.firmware.len(), 4);
+        assert_eq!(out.firmware.len(), 6);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── RAR4 / MiniPro payload handling ─────────────────────────────────────
+
+    /// Hand-rolled stored-mode RAR4 (MARK + MAIN_HEAD + FILE_HEADs) —
+    /// mirrors crates/libarchive-rs/tests/roundtrip.rs's builder.
+    fn rar4_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        fn crc32(crc: u32, data: &[u8]) -> u32 {
+            let mut c = !crc;
+            for &b in data {
+                let mut x = (c ^ b as u32) & 0xFF;
+                for _ in 0..8 {
+                    x = if x & 1 != 0 {
+                        0xEDB8_8320 ^ (x >> 1)
+                    } else {
+                        x >> 1
+                    };
+                }
+                c = x ^ (c >> 8);
+            }
+            !c
+        }
+        let mut out = b"Rar!\x1a\x07\x00".to_vec();
+        // MAIN_HEAD: type 0x73, flags 0, size 13
+        let mut h = vec![0, 0, 0x73, 0, 0, 13, 0, 0, 0, 0, 0, 0, 0];
+        let c = (crc32(0, &h[2..]) & 0xffff) as u16;
+        h[0..2].copy_from_slice(&c.to_le_bytes());
+        out.extend_from_slice(&h);
+        for (name, data) in entries {
+            let name = name.as_bytes();
+            let body = 25 + name.len();
+            let size = 7 + body;
+            let mut f = Vec::with_capacity(size);
+            f.extend_from_slice(&[0, 0]);
+            f.push(0x74);
+            f.extend_from_slice(&0x8000u16.to_le_bytes());
+            f.extend_from_slice(&(size as u16).to_le_bytes());
+            f.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            f.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            f.push(2); // host_os
+            f.extend_from_slice(&crc32(0, data).to_le_bytes());
+            f.extend_from_slice(&0u32.to_le_bytes());
+            f.push(29);
+            f.push(0x30); // store
+            f.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            f.extend_from_slice(&0x20u32.to_le_bytes());
+            f.extend_from_slice(name);
+            let c = (crc32(0, &f[2..]) & 0xffff) as u16;
+            f[0..2].copy_from_slice(&c.to_le_bytes());
+            out.extend_from_slice(&f);
+            out.extend_from_slice(data);
+        }
+        out
+    }
+
+    /// A synthetic update.dat blob (right size, chosen version byte).
+    fn fake_update_dat(version_minor: u8) -> Vec<u8> {
+        let mut d = vec![0xABu8; 312_348];
+        d[0] = version_minor;
+        d
+    }
+
+    #[test]
+    fn test_sniff_format() {
+        assert_eq!(
+            sniff_format(b"Rar!\x1a\x07\x00rest"),
+            Some(ArchiveFormat::Rar4)
+        );
+        assert_eq!(
+            sniff_format(b"Rar!\x1a\x07\x01\x00rest"),
+            Some(ArchiveFormat::Rar5)
+        );
+        assert_eq!(sniff_format(b"Rar!\x1a\x07\x09"), None);
+        assert_eq!(sniff_format(b"MZexe...."), None);
+        assert_eq!(sniff_format(b"Rar!\x1a"), None);
+    }
+
+    #[test]
+    fn test_find_signature() {
+        assert_eq!(find_signature(b"no rar here"), None);
+        let mut exe = b"MZ-stub".to_vec();
+        exe.extend_from_slice(b"Rar!\x1a\x07\x00");
+        assert_eq!(find_signature(&exe), Some((7, ArchiveFormat::Rar4)));
+        let mut exe = b"MZ-stub".to_vec();
+        exe.extend_from_slice(b"Rar!\x1a\x07\x01\x00");
+        assert_eq!(find_signature(&exe), Some((7, ArchiveFormat::Rar5)));
+    }
+
+    #[test]
+    fn test_minipro_rar4_roundtrip() {
+        // Outer RAR4 containing an SFX .exe, which itself embeds an inner
+        // RAR4 carrying update.dat — the real two-layer MiniPro shape.
+        let dat = fake_update_dat(0x55);
+        let inner = rar4_stored(&[("MiniPro.exe", b"MZ-host"), ("Update.dat", &dat)]);
+        // Real SFX stubs pad the archive to a 16-aligned offset; the odd
+        // 11-byte stub here exercises our byte-precise mark location.
+        let mut sfx = b"MZ-sfx-stub".to_vec();
+        sfx.extend_from_slice(&inner);
+        let outer = rar4_stored(&[("MiniPro_SetupV682.exe", &sfx)]);
+
+        assert_eq!(file_role(&outer).unwrap(), Some(Role::Minipro682));
+
+        let inner_bytes = unwrap_inner(&outer).unwrap();
+        let ext =
+            process_inner(&inner_bytes, &MINIPRO682_SPEC, &mut FetchOptions::default()).unwrap();
+        assert!(ext.algorithms.is_empty());
+        assert_eq!(ext.firmware.len(), 1);
+        assert_eq!(ext.firmware[0].0, "firmware-TL866A-03.2.85.dat");
+        assert_eq!(ext.firmware[0].3, dat);
+    }
+
+    #[test]
+    fn test_minipro_version_classification() {
+        let mk = |v: u8| rar4_stored(&[("Update.dat", &fake_update_dat(v))]);
+        assert_eq!(file_role(&mk(0x55)).unwrap(), Some(Role::Minipro682));
+        assert_eq!(file_role(&mk(0x56)).unwrap(), Some(Role::Minipro685));
+        // Unpinned version → informative error, not a wrong label.
+        let err = file_role(&mk(0x52)).unwrap_err();
+        assert!(err.contains("03.2.82"), "{err}");
+        // Wrong size → rejected.
+        let small = rar4_stored(&[("Update.dat", &[0x55; 100])]);
+        assert!(file_role(&small).is_err());
+        // No update.dat → not recognized.
+        let other = rar4_stored(&[("readme.txt", b"hi")]);
+        assert_eq!(file_role(&other).unwrap(), None);
+    }
+
+    /// Real-installer check: `MINIPRO_RAR=<path-to-minipro_setup*.rar>`
+    /// validates the full download-path machinery against a pinned payload.
+    #[test]
+    fn test_minipro_real_installer() {
+        let Ok(path) = std::env::var("MINIPRO_RAR") else {
+            return;
+        };
+        let data = std::fs::read(&path).expect("MINIPRO_RAR unreadable");
+        let role = file_role(&data).unwrap().expect("not recognized");
+        let (spec, minor) = match role {
+            Role::Minipro682 => (&MINIPRO682_SPEC, 0x55u8),
+            Role::Minipro685 => (&MINIPRO685_SPEC, 0x56u8),
+            r => panic!("unexpected role {r:?}"),
+        };
+        let inner = unwrap_inner(&data).unwrap();
+        let ext = process_inner(&inner, spec, &mut FetchOptions::default()).unwrap();
+        assert_eq!(ext.firmware.len(), 1);
+        let dat = &ext.firmware[0].3;
+        assert_eq!(dat.len(), 312_348);
+        assert_eq!(dat[0], minor);
     }
 }
