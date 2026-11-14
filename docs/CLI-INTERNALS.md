@@ -165,6 +165,33 @@ a warning is emitted when it is extracted).
 - `.gitignore` covers `algorithm.xml`, `firmware-*.dat`, `*.rar` — the
   outputs are XGecu-proprietary and must never be committed.
 
+## Firmware update (`-F` / `--update`)
+
+`-F <file>` flashes a vendor firmware image (`update.dat` TL866A/CS,
+`UpdateII.dat`, `updateT48/T56/T76`). The CLI opens the programmer via
+`MiniproHandle::open_allowing_bootloader` so the same command is also
+the recovery path for a unit already in boot mode — a normal `open()`
+rejects boot-mode devices. Sequence for TL866A/CS (see
+`tl866a.rs::firmware_update_tl866a`): decrypt+CRC → `CMD_RESET` switch
+→ wait disappear/reappear → open + `GET_INFO` → erase → 1936×80-byte
+write blocks → `CMD_RESET` → re-enumerate normal mode.
+
+**Firmware ≥03.2.84 fragility (hardware-verified on 03.2.85):** the
+software-entered boot session is unreliable — the switch reports OK
+but the session can die on the first real command or the device can
+fail to re-enumerate at all (Windows marks it Code 10). There is no
+other practical boot-mode entry on TL866A/CS, so the update still
+attempts it, but on installed firmware ≥03.2.84 it first prints a
+warning, and the session is probed with a bounded `GET_INFO` before
+the erase commits the app image. The erase ACK wait is bounded to
+60 s (the generic read timeout is 360 s and a wedged session never
+answers), and post-switch failures append unplug/replug recovery
+instructions. `MiniproHandle::reconnect` releases the old USB handle
+before waiting for re-enumeration and settles ~1 s after the device
+reappears — see KNOWN-BUGS for the full analysis. Recovery: unplug,
+replug, re-run `-F`; a unit left in boot mode flashes cleanly from a
+power-cycle session.
+
 ## SPI status register (`--spi-status` / `--spi-status-write`)
 
 25-series SPI NOR (`protocol_id 0x03`) only — bails with a protocol-id

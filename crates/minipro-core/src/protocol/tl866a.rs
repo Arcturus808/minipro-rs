@@ -632,13 +632,28 @@ fn decrypt_update_dat(dat: &[u8]) -> Result<DecryptedUpdateDat> {
     })
 }
 
+/// Append a recovery hint to an error without duplicating the
+/// "Protocol error:" Display prefix — the wrapped errors are already
+/// `MiniproError::Protocol`, whose Display renders the prefix itself.
+fn with_hint(e: MiniproError, hint: &str) -> MiniproError {
+    match e {
+        MiniproError::Protocol(msg) => MiniproError::Protocol(format!("{msg} — {hint}")),
+        other => MiniproError::Protocol(format!("{other} — {hint}")),
+    }
+}
+
 /// Parse, decrypt, verify and flash a TL866A/CS `update.dat` firmware image.
 ///
 /// The file is exactly 312_348 bytes and contains both A and CS firmware
 /// images (encrypted with a simple XOR cipher).
 ///
-/// Supported on stock firmware up to 03.2.82; newer firmware versions
-/// (03.2.84+) may block the software reset-to-bootloader mechanism.
+/// Supported on stock firmware up to 03.2.82; on 03.2.84+ the software
+/// reset-to-bootloader entry is unreliable — the session it produces can
+/// wedge on the first real command or fail to re-enumerate (upstream's
+/// note that newer firmware "may block" the mechanism).  The update is
+/// still attempted since there is no other practical boot-mode entry, but
+/// the session is probed before the erase commits the device and failures
+/// report the unplug/replug recovery path.
 pub fn firmware_update_tl866a(
     handle: &mut crate::handle::MiniproHandle,
     dat: &[u8],
@@ -692,15 +707,61 @@ pub fn firmware_update_tl866a(
 
     // ── Switch to bootloader ─────────────────────────────────────────────────
     if handle.info.status != ProgrammerStatus::Bootloader {
+        // Firmware 03.2.84+ enters boot mode unreliably: the session can
+        // die on the first command or fail to re-enumerate.  Warn before
+        // the point of no return and leave recovery instructions.
+        let installed_minor = (handle.info.firmware & 0xFF) as u8;
+        if installed_minor >= 84 {
+            writeln!(
+                out,
+                "NOTE: firmware 03.2.{installed_minor:02}+ can produce an unstable \
+                 bootloader session after the software reset. If the update stalls, \
+                 unplug the programmer, plug it back in, and re-run the update — \
+                 it will resume in bootloader mode."
+            )
+            .ok();
+        }
         write!(out, "Switching to bootloader... ").ok();
         let mut msg = [0u8; 4];
         msg[0] = CMD_RESET;
         handle.usb.msg_send(&msg)?;
-        handle.reconnect(true)?;
+        handle.reconnect(true).map_err(|e| {
+            with_hint(
+                e,
+                "the programmer may be stuck mid-reset; unplug it, \
+                 plug it back in, and re-run the update (the application \
+                 firmware is still intact)",
+            )
+        })?;
         if handle.info.status != ProgrammerStatus::Bootloader {
             return Err(MiniproError::Protocol("Bootloader switch failed".into()));
         }
         writeln!(out, "OK").ok();
+    }
+
+    // ── Session probe ────────────────────────────────────────────────────────
+    // A software-entered boot session sometimes dies on its own shortly
+    // after enumeration.  Give it a moment to reveal itself, then probe
+    // with GET_INFO before the erase commits the device — a dead session
+    // still has intact application firmware.
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let healthy = {
+        let mut cmd = [0u8; 64];
+        cmd[0] = CMD_GET_INFO;
+        handle.usb.msg_send(&cmd).is_ok()
+            && handle
+                .usb
+                .msg_recv_probe(64, std::time::Duration::from_secs(3))
+                .len()
+                >= 39
+    };
+    if !healthy {
+        return Err(MiniproError::Protocol(
+            "The bootloader session is not responding. Unplug the programmer, \
+             plug it back in, and re-run the update — the application firmware \
+             is still intact."
+                .into(),
+        ));
     }
 
     // ── Erase ──────────────────────────────────────────────────────────────────
@@ -710,7 +771,21 @@ pub fn firmware_update_tl866a(
         msg[0] = CMD_BTLDR_ERASE;
         msg[7] = erase_byte;
         handle.usb.msg_send(&msg)?;
-        let resp = handle.usb.msg_recv(32)?;
+        // A real erase answers within a few seconds; the usual failure is a
+        // wedged boot session that will never answer — bound the wait so it
+        // fails fast with recovery instructions instead of sitting for the
+        // full transfer timeout.
+        let resp = handle
+            .usb
+            .msg_recv_timeout(32, std::time::Duration::from_secs(60))
+            .map_err(|e| {
+                with_hint(
+                    e,
+                    "the bootloader stopped responding. Unplug the programmer, \
+                     plug it back in, and re-run the update — it will resume \
+                     in bootloader mode",
+                )
+            })?;
         if resp.first().copied() != Some(CMD_BTLDR_ERASE) {
             return Err(MiniproError::Protocol("Bootloader erase rejected".into()));
         }
@@ -732,7 +807,13 @@ pub fn firmware_update_tl866a(
         msg[5] = ((address >> 8) & 0xFF) as u8;
         msg[6] = ((address >> 16) & 0xFF) as u8;
         msg[7..7 + BLOCK_SIZE].copy_from_slice(blk);
-        handle.usb.msg_send(&msg)?;
+        handle.usb.msg_send(&msg).map_err(|e| {
+            with_hint(
+                e,
+                "write aborted; unplug the programmer, plug it back in, \
+                 and re-run the update — it will resume in bootloader mode",
+            )
+        })?;
         address += 64; // Next block address (64-byte alignment)
         if let Some(ref mut cb) = progress {
             cb(b + 1, n_blocks);
@@ -747,7 +828,13 @@ pub fn firmware_update_tl866a(
         msg[0] = CMD_RESET;
         handle.usb.msg_send(&msg)?;
     }
-    handle.reconnect(false)?;
+    handle.reconnect(false).map_err(|e| {
+        with_hint(
+            e,
+            "the firmware image was fully written; unplug the programmer, \
+             plug it back in, and check `minipro -k`",
+        )
+    })?;
     if handle.info.status != ProgrammerStatus::Normal {
         return Err(MiniproError::Protocol(
             "Device did not return to normal mode after firmware update".into(),

@@ -827,3 +827,46 @@ opens (`ProgrammerInfoDto` carries no status field), so a boot-mode
 unit there still means "unplug, replug, reconnect, retry" — the
 firmware-update command itself is unaffected since it uses the
 already-open handle plus `reconnect(true)`.
+
+## TL866A/CS firmware ≥03.2.84: software-entered boot sessions are unstable (documented behavior, defensive UX)
+
+Hardware-verified on a TL866A at firmware 03.2.85 (2026-05): `CMD_RESET`
+into boot mode *appears* to work — the session enumerates and answers
+`GET_INFO` — but the session it produces is fragile. Across repeated
+trials on the same unit and host:
+
+- ~half the re-enumerations after a software reset failed outright —
+  the device arrives as `USB\VID_04D8&PID_E11C` but Windows marks it
+  "cannot start (Code 10)" and nusb never sees it;
+- on the sessions that did enumerate, the first command that does real
+  device-side work (`CMD_BTLDR_ERASE`) wedged the boot block — the
+  erase executes (the app image is gone on the next plug-in) but its
+  ACK never surfaces and the device answers nothing afterward;
+- every boot session entered by **power-cycling** instead of `CMD_RESET`
+  completed erase → 1936-block write → reset cleanly (4/4);
+- a .72-firmware unit produced a healthy software-entered session —
+  the flakiness began only after the .85 upgrade, matching upstream's
+  ported note that "03.2.84+ may block the software reset mechanism".
+
+There is no documented hardware boot-entry on TL866A/CS, so the
+software switch remains the only practical path. Since a wedged
+session cannot be talked back, `firmware_update_tl866a` now treats the
+switch as unreliable-but-recoverable on installed firmware ≥03.2.84:
+
+- prints a warning that the session may be unstable before switching;
+- `MiniproHandle::reconnect` drops the old USB handle **before**
+  waiting for re-enumeration (previously the stale handle stayed open
+  through the new claim — the pending devnode teardown landed on the
+  live session — and there is a 1 s settle after the device reappears
+  before claiming it);
+- probes the boot session with a bounded `GET_INFO` (~1 s settle +
+  3 s read) before the erase commits the app image — a session that
+  died on its own is caught while the device can still boot normally;
+- bounds the erase ACK wait to 60 s instead of the generic 360 s, and
+  every post-switch failure (reconnect, probe, erase, write, final
+  reset) appends the concrete recovery instruction — unplug, replug,
+  re-run `-F` — since the device either reboots its intact app or
+  resumes in bootloader mode where the update completes.
+
+Recovery is reliable: a unit left in boot mode re-enumerates cleanly
+after a physical replug and re-running `minipro -F` flashes it.

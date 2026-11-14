@@ -241,9 +241,22 @@ impl MiniproHandle {
     /// bootloader mode for firmware updates.
     pub fn reconnect(&mut self, allow_bootloader: bool) -> Result<()> {
         let pid = self.usb.pid();
-        let _old = std::mem::take(&mut self.usb);
+        // Release the old handle before the device re-enumerates.  The
+        // TL866A/CS has no USB serial number, so every enumeration reuses
+        // the same port-scoped devnode: while a handle to the previous
+        // instance stays open, PnP cannot finish removing it.  Closing it
+        // only after the new claim exists lands that pending teardown on
+        // the live session mid-update — observed as the bootloader wedging
+        // during erase and as Code 10 enumeration failures.
+        self.usb = UsbDevice::default();
         wait_for_disconnect(pid, 20_000)?;
         wait_for_reconnect(pid, 20_000)?;
+
+        // The devnode being visible in the device list does not mean
+        // Windows has finished starting it — claiming a still-starting
+        // device yields a session where early transfers wedge the
+        // bootloader.  Give PnP a moment before claiming.
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         let (usb, initial_model) = open_programmer()?;
         let sys_info = if initial_model == ProgrammerModel::Tl866a {

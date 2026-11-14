@@ -779,6 +779,24 @@ reads the MiniPro installers' RAR4 layers — see
 `docs/CLI-INTERNALS.md` and `docs/LIBARCHIVE-INTERNALS.md`), so the
 chooser modal is the normal TL866A/CS path once a download has run.
 
+`do_firmware_update` runs the synchronous `operations::firmware_update`
+inside `tokio::task::spawn_blocking` — the update blocks for a minute
+or more (erase + ~1900 block writes + two re-enumeration waits) and
+would otherwise starve a tokio worker thread for its whole duration.
+Progress still rides `window.emit("progress")` from inside the
+callback; the captured `out` log is emitted only after the call
+returns, so a stall shows as 0% progress until the (bounded) timeout
+fires — a live-streaming log would need the op's output pumped through
+a channel rather than captured.
+
+**TL866A/CS ≥03.2.84 caveat:** the software-entered boot session is
+unreliable (see CLI-INTERNALS "Firmware update" and KNOWN-BUGS); the
+core now warns, probes the session before erase, bounds the erase
+wait, and appends unplug/replug recovery instructions to failures —
+all of which surface in the GUI's log panel and error dialog
+verbatim. A boot-mode unit still can't be *connected* in the GUI
+(strict open), so the recovery path there is replug → CLI `-F`.
+
 ### Rust format specifiers
 
 - `{:<3}` = left-align in 3-char field (`"1  "`)

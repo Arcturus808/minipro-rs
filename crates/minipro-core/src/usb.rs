@@ -280,10 +280,18 @@ impl UsbDevice {
     /// Receive a response packet (64 bytes by default; pass a larger size for
     /// commands that return more).
     pub fn msg_recv(&self, size: usize) -> Result<Vec<u8>> {
+        self.msg_recv_timeout(size, USB_RECV_TIMEOUT)
+    }
+
+    /// Receive a response packet with a caller-specified timeout — for
+    /// places where a wedged device should fail faster than the generous
+    /// default (e.g. the TL866A bootloader erase, which either answers
+    /// within seconds or never will).
+    pub fn msg_recv_timeout(&self, size: usize, timeout: Duration) -> Result<Vec<u8>> {
         trace!("msg_recv: waiting for {size} bytes on EP 0x81");
         let completion = block_on_with_timeout(
             self.iface()?.bulk_in(CMD_EP_IN, RequestBuffer::new(size)),
-            USB_RECV_TIMEOUT,
+            timeout,
         )?;
         completion
             .status
