@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SPI status-register write now verifies the read-back** — `spi_status_write` (CLI `-c` config path and TUI Config view `w`) compares the post-write read against the intended byte and fails with `VerifyFailed` (nonzero exit code) when a write doesn't stick. The verify masks the chip-owned volatile bits (WIP bit 0, WEL bit 1 — WEL auto-clears after each write cycle) so restoring a dump captured with WEL set doesn't produce a false failure; the TUI Config view surfaces the actual read-back value on verify errors. Contributed via MR !2 (@vocalist), chip-owned-bit mask added in review follow-up.
 - **GUI enforces a single running instance** — launching a second copy now focuses the existing window instead of spawning a duplicate that can't claim the programmer and races shared state (`favorites.txt`, settings store, algorithm cache). Implemented via `tauri-plugin-single-instance`; the second process exits silently while the first window unminimizes/shows/focuses. CLI and TUI are unchanged — the exclusive USB claim is their natural gate.
 
 ### Fixed
