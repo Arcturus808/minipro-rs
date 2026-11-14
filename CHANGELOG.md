@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-13
+
 ### Added
 
 - **TL866A/CS firmware download via `--download-algorithms`** — the downloader now also fetches the two pinned legacy MiniPro installers (6.82 and 6.85) and extracts `firmware-TL866A-03.2.85.dat` and `firmware-TL866A-03.2.86.dat` for `minipro -F`. Both versions are always provided rather than a "latest": 03.2.86 (MiniPro 6.85) is reported to carry anti-clone serial checks that can brick counterfeit TL866A/CS units, so 03.2.85 (MiniPro 6.82) is offered as the safer-but-older choice — the version is chosen explicitly by the file you pass to `-F`, and a warning is emitted when the 03.2.86 image is extracted and again before it is flashed. `--from-file` accepts the MiniPro outer `.rar`, the setup `.exe`, or the bare inner RAR (roles are auto-detected from the archive mark version byte and the `update.dat` version field; unpinned firmware versions are rejected with a pointer to `-F`), and up to four local archives are now accepted, one per role. No vendor payload is certified as clone-safe.
