@@ -105,7 +105,7 @@ A terminal UI (`minipro-tui`) is included — a ratatui-based three-pane interfa
 - Live progress bar with CRC32 verification
 - Terminal-style log panel with **Copy to clipboard** button and drag-select support
 - Diagnostics panel (programmer info, overcurrent check, hardware check, firmware update)
-- **Firmware update** — flash programmer firmware from an official update file (`update.dat` / `UpdateII.dat` / `updateT76.dat`). CLI: `minipro -F update.dat`; GUI: "Firmware Update" in Diagnostics. Supported on TL866A/CS, TL866II+, T48, and T76. TL866A/CS owners get both bundled images (03.2.85 and 03.2.86) from `--download-algorithms` — 03.2.86 is reported to brick counterfeit units, so pick deliberately
+- **Firmware update** — flash programmer firmware from an official update file (`update.dat` / `UpdateII.dat` / `updateT56.dat` / `updateT76.dat`). CLI: `minipro -F update.dat`; GUI: "Firmware Update" in Diagnostics. Supported on TL866A/CS, TL866II+, T48, T56, and T76. TL866A/CS owners get both bundled images (03.2.85 and 03.2.86) from `--download-algorithms` — 03.2.86 is reported to brick counterfeit units, so pick deliberately
 
 ![MINIPRO-RS GUI — Diagnostics Panel](docs/screenshots/diagnostics_panel.png)
 - Adjustable hex viewer font size (10-16px) with persistence, using the **Hack** open-source monospace font
@@ -367,6 +367,9 @@ minipro -p 74HC00 -T
 minipro --logic-identify --pin-count 14
 minipro --logic-identify --pin-count 14 --vcc 3.3
 
+# Update programmer firmware (file from --download-algorithms or a vendor update file)
+minipro -F ~/.local/share/minipro-rs/firmware-TL866A-03.2.85.dat
+
 # Show connected programmer info
 minipro --info
 ```
@@ -420,6 +423,18 @@ Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs sk
 
 > **TL866A/CS firmware — two versions, deliberate choice.** The downloader fetches *both* pinned MiniPro installers: 6.82 yields `firmware-TL866A-03.2.85.dat` (the last release widely reported as clone-tolerant) and 6.85 yields `firmware-TL866A-03.2.86.dat` (the latest — reported to carry anti-clone serial checks that erase the PIC on counterfeit units, bricking them). Neither is "the latest" by default: choose the file explicitly at `minipro -F` time, and flash 03.2.86 only on hardware you know is genuine. minipro-rs does not certify any vendor payload as clone-safe — it ships them faithfully. If a programmer is connected when the command finishes, the output notes which bundled image(s) correspond to it; this is informational only — the tool never flashes firmware on its own.
 
+### Updating programmer firmware
+
+Point `-F` at a downloaded `firmware-<MODEL>-<VERSION>.dat` or a vendor update file (`update.dat`, `UpdateII.dat`, `updateT56.dat`, `updateT76.dat`):
+
+```bash
+minipro -F ~/.local/share/minipro-rs/firmware-TL866A-03.2.85.dat
+```
+
+The GUI path is **Diagnostics → Firmware Update**: it auto-discovers downloaded images matching the connected model (for TL866A/CS a chooser lists both versions with the clone-risk warning on 03.2.86) and offers a file picker for vendor files. A clean run takes ~15 seconds: the programmer resets into its bootloader, erases, writes, and resets back.
+
+If the update fails or the programmer doesn't come back — on Windows it may re-enumerate as a failed "MiniPro TL-866 Programmer" device — **unplug it, wait ~20 seconds, plug it back in, and re-run the update**: a device stuck in bootloader mode resumes where it left off. Never unplug while an update is actively erasing or writing.
+
 ---
 
 ## Custom database files
@@ -469,7 +484,7 @@ The selected directory persists across restarts. If the directory is later moved
 
 > **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. Validated on real hardware: SPI NOR 8-pin read/erase/write/verify byte-exact against a TL866A ground-truth dump (W25X20CL — 16-pin path still unvalidated), SPI-NAND read/erase/write/verify (GD5F1GQ5UExxG, T76 firmware 00.1.18), SPI JEDEC autodetect (W25X20CL, LE25FS406M), and logic IC test (7408). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
-> **Firmware Update warning:** The firmware update feature (`-F` / GUI Firmware Update button) is **experimental and has not been validated on real hardware**. Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. TL866A/CS firmware 03.2.84+ may block the software reset-to-bootloader mechanism. **Counterfeit TL866A/CS units:** firmware 03.2.86 (MiniPro 6.85) is reported to contain anti-clone logic that bricks clones — flash 03.2.85 (MiniPro 6.82) on suspected counterfeits; a warning is printed before flashing ≥03.2.86.
+> **Firmware Update warning:** Firmware update (`-F` / GUI Firmware Update button) is **experimental** — validated on real hardware for TL866A/CS only; the other models remain untested (✅¹ above). Use at your own risk. Do not disconnect the programmer during the update — the bootloader is preserved, so recovery is usually possible by retrying the update. **TL866A/CS on firmware 03.2.84+:** the software reset-to-bootloader is *unreliable* — the device may fail to re-enumerate (Windows may show a failed/Code 10 device) or the bootloader session may become unresponsive mid-update. The tool warns beforehand and fails fast (~60 s) rather than hanging; on any post-switch error, unplug, wait ~20 seconds, replug, and re-run the update — a device stuck in bootloader mode resumes where it left off. **Counterfeit TL866A/CS units:** firmware 03.2.86 (MiniPro 6.85) is reported to contain anti-clone logic that bricks clones — flash 03.2.85 (MiniPro 6.82) on suspected counterfeits; a warning is printed before flashing ≥03.2.86.
 
 ---
 
