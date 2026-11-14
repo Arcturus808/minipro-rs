@@ -311,12 +311,32 @@ Local CI-equivalent checks (run from repo root):
 
 ### MSRV & cross-distro verification
 
-MSRV: CLI/core **1.85**, GUI **1.88** (`rust-version` in each Cargo.toml).
+**MSRV policy: the CLI/core floor tracks the rustc shipped in current
+Debian stable** (1.85 as of Debian 13/Trixie). It's a policy, not just a
+number — when a new Debian stable lands, the floor rolls forward with it,
+no per-release debate. Rationale: source-builders on conservative distros
+get a guaranteed working floor; everyone else takes release binaries or
+rustup. Declared floors: CLI/core/`libarchive-rs` **1.85** (workspace
+`rust-version`), `minipro-tui` **1.88** (ratatui 0.30's floor — it is
+`--exclude`d from every 1.85 check), `gui/src-tauri` **1.88** (own
+workspace/lockfile).
+
 CI green on `rust:1.93` does NOT prove MSRV compliance — a Debian Stable
 user hit `is_multiple_of()` being unstable on 1.85. When in doubt, use the
 older equivalent (`x % y == 0`). The GitLab `msrv` job runs
-`cargo check --all --locked` on `rust:1.85` (root workspace only — GUI MSRV
-is not CI-enforced).
+`cargo check --workspace --exclude minipro-tui --locked` on `rust:1.85`
+(compile-only; GUI MSRV is not CI-enforced). The `docs/RELEASE.md`
+container recipe additionally runs tests + clippy on 1.85 — deliberately
+stricter than CI so lint-level divergence surfaces at release prep, not
+after tagging.
+
+**`rust-toolchain.toml` shadows MSRV checks:** the repo pins
+`channel = "1.93"` for development, and rustup honors that file *inside*
+`rust:1.85` containers too — any 1.85 check silently upgrades to the dev
+toolchain unless `RUSTUP_TOOLCHAIN=1.85` is set in the environment (env
+beats the file). The GitLab `msrv` job and the `docs/RELEASE.md` container
+recipes already carry the override; any new MSRV check needs it too —
+this has produced a false-pass on a real release run.
 
 Before changing Linux package names/install commands, verify against real
 distro package databases — names drift (e.g. `libappindicator3-dev` became
