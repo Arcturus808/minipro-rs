@@ -305,6 +305,22 @@ cargo tauri build
 
 See [`gui/README.md`](gui/README.md) for development setup and architecture details.
 
+## Using `minipro-core` as a library
+
+The CLI, TUI, and GUI are all frontends over `minipro-core` — the same
+library your own Rust project can depend on. It's not on crates.io yet;
+use a git dependency:
+
+```toml
+[dependencies]
+minipro-core = { git = "https://gitlab.com/arcturus8081/minipro-rs" }
+```
+
+Open a `MiniproHandle`, resolve a `Device` from the XML database, run
+operations — the lib.rs rustdoc has a worked quick-start example.
+Requires Rust 1.85+. Licensed GPL-3.0-or-later, so it's usable from
+GPL-compatible projects.
+
 ---
 
 ## CLI usage

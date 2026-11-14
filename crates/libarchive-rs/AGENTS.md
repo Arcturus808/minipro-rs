@@ -6,6 +6,11 @@ history live in `INTERNALS.md` and `docs/KNOWN-BUGS.md`, and the
 `xgpro_fetch` integration contract is documented in
 `docs/LIBARCHIVE-INTERNALS.md` at the workspace root.
 
+**Sync direction:** canonical development lives in the standalone
+`libarchive-rs` repo (outside this tree); this is a deliberate snapshot.
+Fixes made here must be ported back upstream — the copies have already
+drifted once (the 1.85 clippy parens fix).
+
 ## Critical rules — read first
 
 - The host repo's rules apply (root `AGENTS.md`): branch prefixes,
