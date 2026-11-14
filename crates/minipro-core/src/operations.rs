@@ -1679,10 +1679,20 @@ pub fn spi_status_read(handle: &mut MiniproHandle) -> Result<Vec<u8>> {
         .read_fuses(&handle.usb, &device, MP_FUSE_CFG, 8, 1)
 }
 
+/// Status-register bits owned by the chip, excluded from write-verify:
+/// WIP (bit 0) and WEL (bit 1).
+const SR_CHIP_OWNED_BITS: u8 = 0x03;
+
 /// Write one byte to the SPI status register (WRSR via WRITE_CFG), then
 /// read it back so the caller can see what actually stuck — the chip owns
 /// the WIP/WEL bits and may refuse writes while a cycle is in progress.
 /// Read back is verified against written value.
+///
+/// The verify ignores the chip-owned volatile bits — WIP (bit 0) and WEL
+/// (bit 1) — which can never be written: WEL is set by WREN and auto-clears
+/// after each write cycle, so a target value carrying them (e.g. `0x03`,
+/// or an SR dump captured while WEL was set) would otherwise always fail
+/// verify despite every writable bit landing.
 ///
 /// WARNING: the BP/SRP bits are non-volatile on most parts — they survive
 /// power cycles and can leave the chip write-protected. `protect_off`
@@ -1700,7 +1710,7 @@ pub fn spi_status_write(handle: &mut MiniproHandle, value: u8) -> Result<Vec<u8>
 
     let actual = *readback.first().unwrap_or(&0);
 
-    if actual != value {
+    if actual & !SR_CHIP_OWNED_BITS != value & !SR_CHIP_OWNED_BITS {
         return Err(MiniproError::VerifyFailed {
             address: 0,
             expected: value,
