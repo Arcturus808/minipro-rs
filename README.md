@@ -425,10 +425,10 @@ Downloaded archives are cached under `<per-user-dir>/cache/` so repeated runs sk
 
 ### Updating programmer firmware
 
-Point `-F` at a downloaded `firmware-<MODEL>-<VERSION>.dat` or a vendor update file (`update.dat`, `UpdateII.dat`, `updateT56.dat`, `updateT76.dat`):
+Point `-F` at a downloaded `firmware-<MODEL>-<VERSION>.dat` — the downloader writes them to the per-user data directory (`%LOCALAPPDATA%\minipro-rs\` on Windows, `~/.local/share/minipro-rs/` on Linux, `~/Library/Application Support/minipro-rs/` on macOS) — or a vendor update file (`update.dat`, `UpdateII.dat`, `updateT56.dat`, `updateT76.dat`):
 
 ```bash
-minipro -F ~/.local/share/minipro-rs/firmware-TL866A-03.2.85.dat
+minipro -F <per-user-dir>/firmware-TL866A-03.2.85.dat
 ```
 
 The GUI path is **Diagnostics → Firmware Update**: it auto-discovers downloaded images matching the connected model (for TL866A/CS a chooser lists both versions with the clone-risk warning on 03.2.86) and offers a file picker for vendor files. A clean run takes ~15 seconds: the programmer resets into its bootloader, erases, writes, and resets back.
