@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **udev rules for all supported programmers** — `packaging/udev/60-minipro-rs.rules` grants unprivileged users access to the raw USB device node for every enumerated model (TL866A/CS `04D8:E11C`, TL866II+/T48/T56 `A466:0A53`, T76 `A466:1A86`), via `MODE="0666"` + `TAG+="uaccess"`. The `.deb`/`.rpm` packages (both the GitLab CLI package and the Tauri GUI bundles) install the file and reload udev automatically; AppImage/tarball/source users get a manual `curl | sudo tee` install in the README.
+
 ## [0.13.0] - 2026-11-13
 
 ### Added

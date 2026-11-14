@@ -1,0 +1,28 @@
+# XGecu programmer USB permissions for minipro-rs (CLI, TUI, and GUI).
+#
+# Grants unprivileged users read/write access to the raw USB device node
+# (/dev/bus/usb/...) so they can claim the programmer. Manual install:
+#
+#   sudo cp packaging/udev/60-minipro-rs.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger
+#
+# then replug the programmer. The .deb/.rpm packages install and activate
+# this file automatically.
+#
+# MODE="0666" gives every local user access — deliberate for a chip dev
+# tool, matching upstream minipro's own rules. TAG+="uaccess" also grants
+# the device ACL to locally logged-in users on systemd distros. To
+# restrict access, replace MODE/GROUP to taste, e.g.:
+#   MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# (note: GROUP="plugdev" only exists on Debian-family distros — on
+# Fedora/Arch a nonexistent group means the rule silently grants nothing).
+
+# TL866A / TL866CS
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="04d8", ATTR{idProduct}=="e11c", MODE="0666", TAG+="uaccess"
+
+# TL866II+ / T48 / T56 — these three share one VID/PID; the model is
+# resolved from the device itself after open.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="a466", ATTR{idProduct}=="0a53", MODE="0666", TAG+="uaccess"
+
+# T76
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="a466", ATTR{idProduct}=="1a86", MODE="0666", TAG+="uaccess"

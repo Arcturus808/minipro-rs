@@ -40,6 +40,20 @@
       "resources/infoic.xml": "infoic.xml",
       "resources/logicic.xml": "logicic.xml",
       "resources/bin/": ""
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "../../packaging/udev/60-minipro-rs.rules": "/usr/lib/udev/rules.d/60-minipro-rs.rules"
+        },
+        "postInstallScript": "../../packaging/udev/postinst.sh"
+      },
+      "rpm": {
+        "files": {
+          "../../packaging/udev/60-minipro-rs.rules": "/usr/lib/udev/rules.d/60-minipro-rs.rules"
+        },
+        "postInstallScript": "../../packaging/udev/postinst.sh"
+      }
     }
   },
   "plugins": {}
