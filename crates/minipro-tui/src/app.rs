@@ -1087,7 +1087,7 @@ impl App {
                         cfg.dirty.clear();
                         self.push_log(
                             log::Level::Info,
-                            "✓ status register updated — w writes · r re-reads · Esc closes",
+                            "✓ status register updated (verify passed) — w writes · r re-reads · Esc closes",
                         );
                         return;
                     }
@@ -1130,6 +1130,21 @@ impl App {
             }
             Err(e) => {
                 self.push_log(log::Level::Error, format!("✗ {} failed: {e}", op.name()));
+                // in case of verify error: fetch what was actually read back e.g. "got 0x00" and update the GUI, remove dirty
+                if let Some(cfg) = &mut self.cfg {
+                    if cfg.kind == CfgKind::SpiSr {
+                        if let Some((_, hex)) = e.split_once("got 0x") {
+                            let digits: String =
+                                hex.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                            if let Ok(actual) = u8::from_str_radix(&digits, 16) {
+                                if let Some(row) = cfg.rows.first_mut() {
+                                    row.value = u16::from(actual);
+                                }
+                                cfg.dirty.clear();
+                            }
+                        }
+                    }
+                }
             }
         }
     }
