@@ -324,11 +324,12 @@ workspace/lockfile).
 CI green on `rust:1.93` does NOT prove MSRV compliance — a Debian Stable
 user hit `is_multiple_of()` being unstable on 1.85. When in doubt, use the
 older equivalent (`x % y == 0`). The GitLab `msrv` job runs
-`cargo check --workspace --exclude minipro-tui --locked` on `rust:1.85`
-(compile-only; GUI MSRV is not CI-enforced). The `docs/RELEASE.md`
-container recipe additionally runs tests + clippy on 1.85 — deliberately
-stricter than CI so lint-level divergence surfaces at release prep, not
-after tagging.
+`cargo check --workspace --exclude minipro-tui --locked` on `rust:1.85`,
+and `msrv-tui` runs `cargo check -p minipro-tui --locked` on `rust:1.88`
+(both compile-only; the GUI's 1.88 floor is declared but not CI-enforced).
+The `docs/RELEASE.md` container recipe additionally runs tests + clippy on
+1.85 — deliberately stricter than CI so lint-level divergence surfaces at
+release prep, not after tagging.
 
 **`rust-toolchain.toml` shadows MSRV checks:** the repo pins
 `channel = "1.93"` for development, and rustup honors that file *inside*
@@ -351,7 +352,9 @@ this file, and `.gitlab-ci.yml` (msrv job image tag).
 
 Local Linux verification (WSL/Docker/native recipes, incl. MSRV check):
 see `docs/RELEASE.md` — run it before releases and before merging
-build-affecting changes.
+build-affecting changes. Shortcut: `scripts/msrv-check.sh` runs the full
+1.85 gate in one command (wslc container on Windows, `cargo +1.85` on
+Linux).
 
 ## Feature internals — in docs/
 

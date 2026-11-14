@@ -53,6 +53,18 @@ ratatui 0.30 floors it at Rust 1.88, mirroring the CI `msrv` job.
 
 Pick whichever recipe matches your platform:
 
+### One-command check (recommended)
+
+```bash
+scripts/msrv-check.sh
+```
+
+Runs the full gate — check + test + clippy on 1.85 — via a `wslc`
+`rust:1.85` container on Git Bash/Windows, or `cargo +1.85` (rustup) on
+Linux. Encapsulates `RUSTUP_TOOLCHAIN` and the `minipro-tui` exclusion so
+they can't be forgotten. The manual recipes below cover environments the
+script doesn't (plain WSL distro without `wslc`, non-rustup setups).
+
 ### Native Linux
 
 ```bash
