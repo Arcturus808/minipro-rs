@@ -274,6 +274,28 @@ minipro --generate-completions bash | sudo tee /usr/share/bash-completion/comple
 # also: zsh → /usr/share/zsh/site-functions/_minipro, fish → ~/.config/fish/completions/minipro.fish
 ```
 
+### USB permissions (udev rules)
+
+The programmer is a raw USB device — on most distros its device node is
+root-owned, so unprivileged users get a USB access/permission error on
+open. The `.deb`/`.rpm` packages install `60-minipro-rs.rules` and
+activate it automatically; AppImage, tarball, and source-build users
+install it once by hand:
+
+```sh
+# from a repo checkout:
+sudo cp packaging/udev/60-minipro-rs.rules /etc/udev/rules.d/
+# or downloaded release assets (fetches the file from the repo):
+curl -fsSL https://gitlab.com/arcturus8081/minipro-rs/-/raw/main/packaging/udev/60-minipro-rs.rules | sudo tee /etc/udev/rules.d/60-minipro-rs.rules
+
+sudo udevadm control --reload && sudo udevadm trigger
+# replug the programmer
+```
+
+The rules cover every supported model (TL866A/CS, TL866II+/T48/T56, T76)
+and grant access via `MODE="0666"` + `uaccess` — see the file header for
+a stricter `plugdev` alternative.
+
 ### GUI
 
 **Rust 1.88+ is required** for the GUI due to its Tauri v2 dependency tree. On Debian Stable, install a newer rustc via [rustup](https://rustup.rs/) or distro backports (e.g. `rustc` from Debian Trixie backports).
