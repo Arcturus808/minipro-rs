@@ -103,7 +103,7 @@
     if (!CLONE_RISK_MODELS.has(model)) return "";
     const v = parseFwVersion(installedFw);
     if (!v || !(v[1] > 2 || (v[1] === 2 && v[2] >= 84))) return "";
-    return `\n\nUNSTABLE BOOTLOADER WARNING: firmware ${installedFw} can enter an unstable bootloader session — the update may stall, or the device may fail to reappear afterward and cannot recover by itself. If either happens, unplug the programmer, plug it back in, and run the update again — it will resume in bootloader mode, or the intact application will boot.`;
+    return `\n\nUNSTABLE BOOTLOADER WARNING: firmware ${installedFw} can enter an unstable bootloader session — the update may stall, or the device may fail to reappear afterward and cannot recover by itself. If either happens, unplug the programmer, wait ~20 seconds, plug it back in, and run the update again — it will resume in bootloader mode, or the intact application will boot.`;
   }
 
   // Extra confirm-dialog note comparing installed vs candidate firmware.

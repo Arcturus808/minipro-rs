@@ -186,11 +186,12 @@ warning, and the session is probed with a bounded `GET_INFO` before
 the erase commits the app image. The erase ACK wait is bounded to
 60 s (the generic read timeout is 360 s and a wedged session never
 answers), and post-switch failures append unplug/replug recovery
-instructions. `MiniproHandle::reconnect` releases the old USB handle
-before waiting for re-enumeration and settles ~1 s after the device
-reappears — see KNOWN-BUGS for the full analysis. Recovery: unplug,
-replug, re-run `-F`; a unit left in boot mode flashes cleanly from a
-power-cycle session.
+instructions (with a ~20 s wait so residual charge fully discharges
+and Windows finishes the devnode teardown). `MiniproHandle::reconnect`
+releases the old USB handle before waiting for re-enumeration and
+settles ~1 s after the device reappears — see KNOWN-BUGS for the full
+analysis. Recovery: unplug, wait ~20 s, replug, re-run `-F`; a unit
+left in boot mode flashes cleanly from a power-cycle session.
 
 ## SPI status register (`--spi-status` / `--spi-status-write`)
 

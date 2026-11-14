@@ -864,9 +864,15 @@ switch as unreliable-but-recoverable on installed firmware ≥03.2.84:
   died on its own is caught while the device can still boot normally;
 - bounds the erase ACK wait to 60 s instead of the generic 360 s, and
   every post-switch failure (reconnect, probe, erase, write, final
-  reset) appends the concrete recovery instruction — unplug, replug,
-  re-run `-F` — since the device either reboots its intact app or
-  resumes in bootloader mode where the update completes.
+  reset) appends the concrete recovery instruction — unplug, wait
+  ~20 s, replug, re-run `-F` — since the device either reboots its
+  intact app or resumes in bootloader mode where the update
+  completes.
 
 Recovery is reliable: a unit left in boot mode re-enumerates cleanly
-after a physical replug and re-running `minipro -F` flashes it.
+after a physical replug and re-running `minipro -F` flashes it. The
+~20 s wait in the advisory matters for two reasons: residual rail
+charge can warm-boot the PIC and preserve the wedged USB state the
+replug is meant to clear, and re-arriving while Windows is still
+tearing down the port-scoped devnode is one of the enumeration
+failure modes observed.

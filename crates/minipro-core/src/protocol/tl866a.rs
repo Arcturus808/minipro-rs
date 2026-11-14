@@ -716,8 +716,8 @@ pub fn firmware_update_tl866a(
                 out,
                 "NOTE: firmware 03.2.{installed_minor:02}+ can produce an unstable \
                  bootloader session after the software reset. If the update stalls, \
-                 unplug the programmer, plug it back in, and re-run the update — \
-                 it will resume in bootloader mode."
+                 unplug the programmer, wait ~20 seconds, plug it back in, and \
+                 re-run the update — it will resume in bootloader mode."
             )
             .ok();
         }
@@ -729,8 +729,8 @@ pub fn firmware_update_tl866a(
             with_hint(
                 e,
                 "the programmer may be stuck mid-reset; unplug it, \
-                 plug it back in, and re-run the update (the application \
-                 firmware is still intact)",
+                 wait ~20 seconds, plug it back in, and re-run the update \
+                 (the application firmware is still intact)",
             )
         })?;
         if handle.info.status != ProgrammerStatus::Bootloader {
@@ -758,8 +758,8 @@ pub fn firmware_update_tl866a(
     if !healthy {
         return Err(MiniproError::Protocol(
             "The bootloader session is not responding. Unplug the programmer, \
-             plug it back in, and re-run the update — the application firmware \
-             is still intact."
+             wait ~20 seconds, plug it back in, and re-run the update — the \
+             application firmware is still intact."
                 .into(),
         ));
     }
@@ -782,8 +782,8 @@ pub fn firmware_update_tl866a(
                 with_hint(
                     e,
                     "the bootloader stopped responding. Unplug the programmer, \
-                     plug it back in, and re-run the update — it will resume \
-                     in bootloader mode",
+                     wait ~20 seconds, plug it back in, and re-run the update — \
+                     it will resume in bootloader mode",
                 )
             })?;
         if resp.first().copied() != Some(CMD_BTLDR_ERASE) {
@@ -810,8 +810,9 @@ pub fn firmware_update_tl866a(
         handle.usb.msg_send(&msg).map_err(|e| {
             with_hint(
                 e,
-                "write aborted; unplug the programmer, plug it back in, \
-                 and re-run the update — it will resume in bootloader mode",
+                "write aborted; unplug the programmer, wait ~20 seconds, \
+                 plug it back in, and re-run the update — it will resume in \
+                 bootloader mode",
             )
         })?;
         address += 64; // Next block address (64-byte alignment)
@@ -832,7 +833,7 @@ pub fn firmware_update_tl866a(
         with_hint(
             e,
             "the firmware image was fully written; unplug the programmer, \
-             plug it back in, and check `minipro -k`",
+             wait ~20 seconds, plug it back in, and check `minipro -k`",
         )
     })?;
     if handle.info.status != ProgrammerStatus::Normal {

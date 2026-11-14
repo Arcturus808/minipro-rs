@@ -798,7 +798,8 @@ verbatim. Because the core's warning text only reaches the log *after*
 the op returns, the confirm dialog additionally shows
 `unstableSessionNote` up front on TL866A/CS units running ≥03.2.84 —
 the user needs the "replug and retry" instruction *before* clicking
-yes, not post-mortem. A boot-mode unit still can't be *connected* in
+yes, not post-mortem (all replug advisories carry a ~20 s wait — see
+KNOWN-BUGS for why). A boot-mode unit still can't be *connected* in
 the GUI (strict open), so the recovery path there is replug → CLI `-F`.
 
 ### Rust format specifiers
