@@ -794,8 +794,12 @@ unreliable (see CLI-INTERNALS "Firmware update" and KNOWN-BUGS); the
 core now warns, probes the session before erase, bounds the erase
 wait, and appends unplug/replug recovery instructions to failures —
 all of which surface in the GUI's log panel and error dialog
-verbatim. A boot-mode unit still can't be *connected* in the GUI
-(strict open), so the recovery path there is replug → CLI `-F`.
+verbatim. Because the core's warning text only reaches the log *after*
+the op returns, the confirm dialog additionally shows
+`unstableSessionNote` up front on TL866A/CS units running ≥03.2.84 —
+the user needs the "replug and retry" instruction *before* clicking
+yes, not post-mortem. A boot-mode unit still can't be *connected* in
+the GUI (strict open), so the recovery path there is replug → CLI `-F`.
 
 ### Rust format specifiers
 

@@ -92,6 +92,20 @@
     return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
   }
 
+  // Confirm-dialog warning for TL866A/CS units already running
+  // firmware ≥03.2.84: the software reset produces an unstable
+  // bootloader session — the update may stall, and the device may
+  // fail to reappear and cannot recover by itself. The user needs
+  // the replug instruction *before* starting, not in the post-mortem
+  // log: the core's warning text only reaches the log after the op
+  // returns.
+  function unstableSessionNote(model: string, installedFw: string): string {
+    if (!CLONE_RISK_MODELS.has(model)) return "";
+    const v = parseFwVersion(installedFw);
+    if (!v || !(v[1] > 2 || (v[1] === 2 && v[2] >= 84))) return "";
+    return `\n\nUNSTABLE BOOTLOADER WARNING: firmware ${installedFw} can enter an unstable bootloader session — the update may stall, or the device may fail to reappear afterward and cannot recover by itself. If either happens, unplug the programmer, plug it back in, and run the update again — it will resume in bootloader mode, or the intact application will boot.`;
+  }
+
   // Extra confirm-dialog note comparing installed vs candidate firmware.
   // The first version component is the hardware revision — but only on
   // models that report one: T48/T56/T76 hardcode it to 0, and their file
@@ -200,9 +214,10 @@
       ? firmwareVersionNote($programmer.firmware, fileVersion)
       : "";
     const cloneNote = cloneNoteFor($programmer.model, fileVersion);
+    const unstableNote = unstableSessionNote($programmer.model, $programmer.firmware);
     const confirmed = await confirmDialog(
       "Firmware Update — EXPERIMENTAL",
-      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}${versionNote}${cloneNote}\n\nProceed at your own risk?`,
+      `WARNING: This feature is experimental and has not been fully validated.\n\nThis will erase and reflash your programmer's firmware.\n\nDo NOT disconnect the device during the update, or it may become bricked.\nIf the update fails, leave the device plugged in and try again — the bootloader is preserved and recovery is usually possible.\n\nSelected file: ${fileName}${versionNote}${cloneNote}${unstableNote}\n\nProceed at your own risk?`,
       "warning",
     );
     if (!confirmed) return;
