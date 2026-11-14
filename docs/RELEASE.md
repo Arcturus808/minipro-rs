@@ -185,7 +185,13 @@ release pipeline remains the authority on packaging.
    Release commits are the only commits that drop `[skip ci]` — the point
    is to run a full pipeline verifying fmt, clippy, tests, and builds
    before tagging.
-6. Create the tag `vX.Y.Z`.
+6. Create the tag `vX.Y.Z`. **The tagged commit must not carry
+   `[skip ci]`** — lightweight tags have no message, so both GitLab and
+   GitHub evaluate the marker on the commit the tag points at, and a
+   marked commit silently skips both release pipelines (this happened on
+   v0.13.0's first tag, which sat on a marked merge commit). Whether the
+   tag lands on the bump commit or a merge commit, that commit's message
+   must be marker-free.
 7. Push the commit and tag to `origin` (GitLab). The GitLab push mirror
    replicates branches and tags to GitHub automatically, but with a delay
    (seconds to minutes).

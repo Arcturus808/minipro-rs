@@ -297,6 +297,14 @@ it. Effect: `main` pushes are free (pipelines show as "skipped"), and
 pipelines actually run only on release tags (tag messages lack the
 marker) or manual triggers. Dropping `[skip ci]` from a commit is what
 costs a pipeline run — keep it.
+
+**Exception — the release tag's commit must NOT carry `[skip ci]`.**
+Lightweight tags have no message of their own: GitLab evaluates the
+marker on the *tagged commit*, and GitHub Actions honors it on tag
+pushes too, so a `v*` tag on a marked commit silently skips BOTH release
+pipelines. The release merge commit (or the marker-free release commit
+the tag lands on) is the only commit without it — the v0.13.0 tag was
+skipped this way once when its merge carried the marker.
 GitHub Actions runs on tags only. Branch pushes are free on both.
 
 Local CI-equivalent checks (run from repo root):
