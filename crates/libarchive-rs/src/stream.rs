@@ -459,22 +459,22 @@ impl<B: Deref<Target = [u8]>> Stream<B> {
             7 => {
                 let s = &self.input[base..base + 7];
                 self.cache_buffer = (self.cache_buffer << 56)
-                    | (s[0] as u64) << 48
-                    | (s[1] as u64) << 40
-                    | (s[2] as u64) << 32
-                    | (s[3] as u64) << 24
-                    | (s[4] as u64) << 16
-                    | (s[5] as u64) << 8
+                    | ((s[0] as u64) << 48)
+                    | ((s[1] as u64) << 40)
+                    | ((s[2] as u64) << 32)
+                    | ((s[3] as u64) << 24)
+                    | ((s[4] as u64) << 16)
+                    | ((s[5] as u64) << 8)
                     | s[6] as u64;
             }
             6 => {
                 let s = &self.input[base..base + 6];
                 self.cache_buffer = (self.cache_buffer << 48)
-                    | (s[0] as u64) << 40
-                    | (s[1] as u64) << 32
-                    | (s[2] as u64) << 24
-                    | (s[3] as u64) << 16
-                    | (s[4] as u64) << 8
+                    | ((s[0] as u64) << 40)
+                    | ((s[1] as u64) << 32)
+                    | ((s[2] as u64) << 24)
+                    | ((s[3] as u64) << 16)
+                    | ((s[4] as u64) << 8)
                     | s[5] as u64;
             }
             _ => unreachable!(),

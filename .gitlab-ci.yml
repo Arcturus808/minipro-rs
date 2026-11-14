@@ -86,6 +86,23 @@ msrv:
     # ratatui 0.30 cannot compile on the core/CLI 1.85 floor.
     - cargo check --workspace --exclude minipro-tui --locked
 
+msrv-tui:
+  stage: check
+  image: rust:1.88
+  # Same toolchain-file shadow as the 1.85 job — RUSTUP_TOOLCHAIN is what
+  # actually selects 1.88 inside the image. A dependency update that raises
+  # the TUI's floor past 1.88 fails here, not on a user's machine.
+  variables:
+    RUSTUP_TOOLCHAIN: "1.88"
+  cache:
+    key: "cargo-msrv-1.88-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .cargo/registry/
+      - .cargo/git/
+      - target/
+  script:
+    - cargo check -p minipro-tui --locked
+
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 test:linux:

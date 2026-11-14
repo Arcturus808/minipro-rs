@@ -253,7 +253,7 @@ cargo build --release
 
 ### CLI
 
-**Rust 1.85+ is required** for the CLI (1.88+ to also build `minipro-tui` — its ratatui 0.30 dependency floors it there, same as the GUI). Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
+**Rust 1.85+ is required** for the CLI (1.88+ to also build `minipro-tui` — its ratatui 0.30 dependency floors it there, same as the GUI). Some distros ship older rustc in their package manager (e.g. Debian 12 ships 1.63; Debian 13 ships 1.85 — enough for the CLI alone, not the TUI/GUI). Use [rustup](https://rustup.rs/) to install a current toolchain rather than the distro package.
 
 The CLI builds with no system dependencies beyond glibc:
 

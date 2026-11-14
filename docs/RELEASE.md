@@ -31,6 +31,14 @@ fails immediately with a clear error message.
 
 ## Local Linux verification (run before the checklist)
 
+**MSRV policy:** the CLI/core floor tracks the rustc shipped in current
+Debian stable (1.85 as of Trixie — see AGENTS.md). `minipro-tui` floors at
+1.88 via ratatui 0.30 and is excluded from every 1.85 command below;
+`gui/src-tauri` declares 1.88 in its own workspace. These recipes run
+check + test + clippy on 1.85 — deliberately stricter than the GitLab
+`msrv` job (check only), so lint-level divergence gets fixed at release
+prep rather than rediscovered on the next MSRV bump.
+
 Before tagging, verify the CLI workspace builds and passes tests on Linux.
 This catches MSRV regressions, missing system deps, and `cfg(unix)` issues
 before they burn release-pipeline minutes. This is a maintainer
@@ -44,6 +52,18 @@ excluded from every command (`--workspace --exclude minipro-tui`) —
 ratatui 0.30 floors it at Rust 1.88, mirroring the CI `msrv` job.
 
 Pick whichever recipe matches your platform:
+
+### One-command check (recommended)
+
+```bash
+scripts/msrv-check.sh
+```
+
+Runs the full gate — check + test + clippy on 1.85 — via a `wslc`
+`rust:1.85` container on Git Bash/Windows, or `cargo +1.85` (rustup) on
+Linux. Encapsulates `RUSTUP_TOOLCHAIN` and the `minipro-tui` exclusion so
+they can't be forgotten. The manual recipes below cover environments the
+script doesn't (plain WSL distro without `wslc`, non-rustup setups).
 
 ### Native Linux
 
@@ -83,7 +103,10 @@ WSL ≥ 2.9.3 ships `wslc.exe` — Microsoft's built-in Linux-container CLI
 
 ```bash
 MSYS_NO_PATHCONV=1 wslc run --rm \
-  -v "C:/path/to/minipro-rs:/src" -w /src rust:1.85 \
+  -v "C:/path/to/minipro-rs:/src" \
+  -v wslc-cargo-registry:/usr/local/cargo/registry \
+  -e CARGO_TARGET_DIR=/cargo-target -e RUSTUP_TOOLCHAIN=1.85 \
+  -w /src rust:1.85 \
   sh -c "cargo check --workspace --exclude minipro-tui --locked && \
          cargo test --workspace --exclude minipro-tui --locked && \
          cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
@@ -95,9 +118,14 @@ Notes:
   `MSYS_NO_PATHCONV=1` is required from Git Bash — without it Git Bash
   mangles the `host:container` spec into a Windows path list. From
   PowerShell/cmd, drop the prefix (it doesn't parse there anyway).
-- Named volumes persist across runs — add
-  `-v wslc-cargo-registry:/usr/local/cargo/registry` to keep the crate
-  cache; otherwise every run re-downloads all dependencies (~1–2 min
+- **`RUSTUP_TOOLCHAIN=1.85` is required** — modern `rust:` images are
+  rustup-based, and the repo's `rust-toolchain.toml` (pinned to the dev
+  toolchain, not the MSRV) overrides the image tag. Without the env var
+  the check silently runs on the dev toolchain and proves nothing about
+  MSRV. `CARGO_TARGET_DIR` keeps Linux build artifacts out of the
+  mounted `target/` dir so they can't mix with Windows ones.
+- The named `wslc-cargo-registry` volume persists the crate cache across
+  runs; otherwise every run re-downloads all dependencies (~1–2 min
   extra on a fast connection).
 - The mount reports as `drvfs` (same bridge as WSL `/mnt`), so file I/O
   is Windows-mount speed — fine for this check's scale.
@@ -105,16 +133,19 @@ Notes:
 ### Docker (any platform with Docker Desktop / Engine)
 
 ```bash
-docker run --rm -v "$PWD:/src" -w /src rust:1.85 \
+docker run --rm -v "$PWD:/src" -w /src \
+  -e CARGO_TARGET_DIR=/cargo-target -e RUSTUP_TOOLCHAIN=1.85 \
+  rust:1.85 \
   sh -c "cargo check --workspace --exclude minipro-tui --locked && \
          cargo test --workspace --exclude minipro-tui --locked && \
          cargo clippy --workspace --exclude minipro-tui --all-targets -- -D warnings"
 ```
 
 Uses the same `rust:1.85` image as the GitLab `msrv` job, so results match
-CI closely. (On Windows/macOS the bind mount is slower than a native
-filesystem — for a pure release check, cloning inside the container is
-equally valid.)
+CI closely. `RUSTUP_TOOLCHAIN=1.85` is required for the same reason as in
+the wslc recipe — `rust-toolchain.toml` would otherwise override the image
+tag. (On Windows/macOS the bind mount is slower than a native filesystem —
+for a pure release check, cloning inside the container is equally valid.)
 
 ### GUI workspace check (conditional — evaluate mechanically)
 
@@ -250,8 +281,11 @@ and any `.lnk` targeting the dead path.
 
 ## Bumping the MSRV
 
-MSRV: CLI/core 1.85, GUI 1.88. When bumping either, update ALL of these
-files in the same commit:
+MSRV: CLI/core 1.85, GUI 1.88. Under the Debian-stable policy the natural
+trigger for bumping the CLI/core floor is a new Debian stable release
+shipping a newer rustc — not "a dep wants a newer feature" (raising the
+floor for a dependency is a deliberate policy decision, not a routine
+update). When bumping either, update ALL of these files in the same commit:
 
 1. `Cargo.toml` — root workspace `rust-version` (CLI)
 2. `gui/src-tauri/Cargo.toml` — `rust-version` (GUI)
