@@ -270,11 +270,17 @@ struct Cli {
     #[arg(long = "address", value_name = "HEX")]
     address: Option<String>,
 
-    /// Download T56/T76 FPGA algorithm definitions and firmware images from
-    /// the official XGPro release, plus both pinned TL866A/CS firmware
-    /// images (MiniPro 6.82 and 6.85), and generate algorithm.xml.
-    /// No programmer hardware required.
-    #[arg(long = "download-algorithms", action = ArgAction::SetTrue)]
+    /// Download official XGPro/MiniPro resources: FPGA bitstreams required
+    /// for T56/T76 chip operations (generates algorithm.xml) and firmware
+    /// images for -F update — TL866A/CS (both 03.2.85 and 03.2.86), TL866II+,
+    /// T48, T56, T76. TL866A/CS, TL866II+, and T48 have no FPGA and need
+    /// nothing downloaded for normal chip use. No programmer hardware
+    /// required.
+    #[arg(
+        long = "download-algorithms",
+        visible_alias = "download-resources",
+        action = ArgAction::SetTrue
+    )]
     download_algorithms: bool,
 
     /// Output directory for --download-algorithms

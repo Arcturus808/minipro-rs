@@ -366,6 +366,12 @@
                 </button>
               {/if}
             </div>
+            <p class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              T56/T76 need <span class="font-mono">algorithm.xml</span> for chip
+              operations; the firmware images are optional — used by Firmware
+              Update on any model. TL866A/CS, TL866II+, and T48 have no FPGA
+              and need nothing for normal use.
+            </p>
             {#if dlBusy && $progress}
               <div class={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {$progress.operation}: {$progress.done.toLocaleString()}{$progress.total ? ` / ${$progress.total.toLocaleString()}` : ""}
