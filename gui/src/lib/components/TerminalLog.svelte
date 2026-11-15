@@ -149,7 +149,7 @@
     style="font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:13px;line-height:1.4;"
   >
     {#each $logs as entry, i (i)}
-      <div style="white-space:pre;">{@html renderEntry(entry)}</div>
+      <div style="white-space:pre-wrap;overflow-wrap:anywhere;">{@html renderEntry(entry)}</div>
     {/each}
   </div>
 </div>
