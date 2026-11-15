@@ -1462,8 +1462,9 @@ fn build_device(
 
     let chip_id_bytes_count = id_bytes_count(chip_id);
 
-    // compare_mask from chip_info (PIC families)
-    let (compare_mask, _) = compare_mask_for(chip_info);
+    // compare_mask and chip-ID revision-bits count from chip_info
+    // (PIC families)
+    let (compare_mask, chip_id_rev_bits) = compare_mask_for(chip_info);
 
     // Config lookup
     let config = if let Some(cfg_name) = get_attr_str(e, b"config") {
@@ -1517,6 +1518,7 @@ fn build_device(
         chip_info,
         pin_map: pin_map_raw,
         compare_mask,
+        chip_id_rev_bits,
         blank_value,
         package_details: package,
         config,
@@ -1579,6 +1581,7 @@ fn build_logic_device(e: &BytesStart, name: &str, manufacturer: &str) -> Result<
         chip_info: 0,
         pin_map: 0,
         compare_mask: 0xff,
+        chip_id_rev_bits: 0,
         blank_value: 0xff,
         package_details: package,
         config: None,
@@ -1765,6 +1768,12 @@ mod tests {
       <ic name="NOCHEAP" type="0" protocol_id="3" variant="0" chip_id="0x0"
          package_details="0x08000000" voltages="0x0" />
     </manufacturer>
+    <manufacturer name="Microchip">
+      <!-- PIC12F629: chip_info 0x83 (14-bit core) → compare_mask 0x3fff,
+           5 silicon-revision bits in the devid word's low end. -->
+      <ic name="PIC12F629" type="2" protocol_id="24" variant="0" chip_id="0x00000f80"
+         chip_info="0x0083" package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
   </database>
   <database type="INFOIC">
     <manufacturer name="Winbond">
@@ -1827,6 +1836,20 @@ mod tests {
         let names: Vec<&str> = matches.iter().map(|m| m.name.as_str()).collect();
         assert!(names.contains(&"W25Q128"));
         assert!(names.contains(&"W25Q128JV"));
+    }
+
+    #[test]
+    fn test_pic_chip_info_populates_rev_bits() {
+        // PIC 14-bit core (chip_info 0x83): the devid word carries a
+        // silicon-revision field in bits [4:0] — the count must reach the
+        // Device so chip-ID comparison can mask it (previously discarded).
+        let paths = chipid_fixture_paths();
+        let dev = find_device(&paths, "PIC12F629", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.compare_mask, 0x3fff);
+        assert_eq!(dev.chip_id_rev_bits, 5);
+        // Non-PIC entries have no revision field.
+        let dev = find_device(&paths, "W25Q80", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.chip_id_rev_bits, 0);
     }
 
     #[test]

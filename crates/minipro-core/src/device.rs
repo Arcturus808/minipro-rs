@@ -685,6 +685,10 @@ pub struct Device {
     pub chip_info: u32,
     pub pin_map: u32,
     pub compare_mask: u16,
+    /// Low bits of the chip-ID word that encode silicon revision rather
+    /// than device identity (PIC families; from `chip_info`). 0 = the
+    /// whole ID word is significant.
+    pub chip_id_rev_bits: u8,
     pub blank_value: u16,
     pub package_details: PackageDetails,
     pub config: Option<ChipConfig>,
