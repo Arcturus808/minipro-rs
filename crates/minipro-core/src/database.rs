@@ -261,18 +261,16 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
     if let Some(dev) = search_file(&paths.infoic, name, model, false)? {
         return Ok(dev);
     }
-    // Device not found for this model. Check if it exists for a different model
-    // to give a more actionable error message.
-    if device_name_exists(&paths.infoic, name)? {
-        return Err(MiniproError::DeviceNotFound(format!(
-            "'{}' is not supported by {:?}; use a TL866II+, T48, T56, or T76",
-            name, model
-        )));
+    // Device not found for this model. Look for `{base}@pkg` variants that
+    // *do* resolve for it, or report which models actually carry the name.
+    match unsupported_device_hint(&paths.infoic, name, model)? {
+        Some(hint) => Err(MiniproError::DeviceNotFound(format!(
+            "'{name}' is not supported by {model:?}{hint}"
+        ))),
+        None => Err(MiniproError::DeviceNotFound(format!(
+            "Device '{name}' not found in the chip database",
+        ))),
     }
-    Err(MiniproError::DeviceNotFound(format!(
-        "Device '{}' not found in the chip database",
-        name
-    )))
 }
 
 /// A lightweight device entry for list/search views.
@@ -912,22 +910,101 @@ fn collect_by_chip_id(
 }
 
 /// Return true if `name` appears in `path` under any database section.
-fn device_name_exists(path: &Path, name: &str) -> Result<bool> {
+/// Build an actionable suffix for a "not supported by this model" error.
+///
+/// Single scan over infoic.xml collecting two things:
+/// - `{base}@pkg` names in the model's own database section that pass the
+///   pin_map compatibility flags — the "did you mean …?" list (`base` is the
+///   queried name stripped at the first `@`, so mistyped or foreign-section
+///   variants still suggest the right socketed entries).
+/// - the programmer models that carry the bare `base` name — an honest
+///   "exists for …" list. INFOIC2PLUS hits are discriminated per-model via
+///   `device_matches_model` since the section is shared by TL866II+/T48/T56.
+fn unsupported_device_hint(
+    path: &Path,
+    name: &str,
+    model: ProgrammerModel,
+) -> Result<Option<String>> {
     let xml = read_file(path)?;
+    let base = name.split('@').next().unwrap_or(name).trim();
+    let prefix = format!("{}@", base.to_ascii_uppercase());
+
+    let expected_db = match model {
+        ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => DB_ATTR_INFOIC,
+        ProgrammerModel::T76 => DB_ATTR_INFOICT76,
+        _ => DB_ATTR_INFOIC2,
+    };
+
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
 
+    let mut current_db = String::new();
+    let mut skip_section = false;
+    let mut variants: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut others: Vec<String> = Vec::new();
+
+    let mut push_other = |label: &str| {
+        if !others.iter().any(|o| o == label) {
+            others.push(label.to_string());
+        }
+    };
+
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) if e.name().as_ref() == b"ic" => {
-                if let Some(raw_name) = get_attr_str(e, b"name") {
-                    if raw_name
-                        .split(',')
-                        .any(|s| s.trim().eq_ignore_ascii_case(name))
-                    {
-                        return Ok(true);
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = e.name();
+                if tag.as_ref() == b"database" {
+                    current_db = get_attr_str(e, b"type").unwrap_or_default();
+                    continue;
+                }
+                if tag.as_ref() == b"configurations" {
+                    skip_section = true;
+                    continue;
+                }
+                if skip_section || tag.as_ref() != b"ic" {
+                    continue;
+                }
+                let raw_name = match get_attr_str(e, b"name") {
+                    Some(n) => n,
+                    None => continue,
+                };
+                let in_correct = current_db.eq_ignore_ascii_case(expected_db);
+                if in_correct && device_matches_model(e, model) {
+                    for part in raw_name.split(',') {
+                        let part = part.trim();
+                        if part.to_ascii_uppercase().starts_with(&prefix)
+                            && seen.insert(part.to_ascii_uppercase())
+                        {
+                            variants.push(part.to_string());
+                        }
                     }
+                }
+                if raw_name.split(',').any(|s| {
+                    let s = s.trim();
+                    s.eq_ignore_ascii_case(base) || s.to_ascii_uppercase().starts_with(&prefix)
+                }) {
+                    if current_db.eq_ignore_ascii_case(DB_ATTR_INFOIC) {
+                        push_other("TL866A / TL866CS");
+                    } else if current_db.eq_ignore_ascii_case(DB_ATTR_INFOICT76) {
+                        push_other("T76");
+                    } else if current_db.eq_ignore_ascii_case(DB_ATTR_INFOIC2) {
+                        for (m, label) in [
+                            (ProgrammerModel::Tl866iiPlus, "TL866II+"),
+                            (ProgrammerModel::T48, "T48"),
+                            (ProgrammerModel::T56, "T56"),
+                        ] {
+                            if device_matches_model(e, m) {
+                                push_other(label);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"configurations" {
+                    skip_section = false;
                 }
             }
             Ok(Event::Eof) => break,
@@ -936,7 +1013,14 @@ fn device_name_exists(path: &Path, name: &str) -> Result<bool> {
         }
         buf.clear();
     }
-    Ok(false)
+
+    if !variants.is_empty() {
+        Ok(Some(format!("; did you mean {}?", variants.join(", "))))
+    } else if !others.is_empty() {
+        Ok(Some(format!("; it exists for {}", others.join(", "))))
+    } else {
+        Ok(None)
+    }
 }
 
 // ── Pin-map parser ────────────────────────────────────────────────────────────
@@ -2066,6 +2150,41 @@ mod tests {
         ] {
             assert!(names(m).contains("74HC00"), "74HC00 missing for {m}");
         }
+    }
+
+    #[test]
+    fn test_unsupported_device_hint() {
+        let paths = models_fixture_paths();
+        let err =
+            |name: &str, m: ProgrammerModel| find_device(&paths, name, m).unwrap_err().to_string();
+
+        // Bare name exists for TL866A/CS; T48 resolves the @ variants —
+        // suggest them verbatim.
+        let msg = err("PIC16F628A", ProgrammerModel::T48);
+        assert!(
+            msg.contains("did you mean PIC16F628A@DIP18, PIC16F628A@SOIC18?"),
+            "unexpected: {msg}"
+        );
+
+        // T56 has no resolvable variant (2PLUS flags are II+|T48) — honest
+        // model list: INFOIC section, both 2PLUS supporters, and T76.
+        let msg = err("PIC16F628A", ProgrammerModel::T56);
+        assert!(
+            msg.contains("it exists for TL866A / TL866CS, TL866II+, T48, T76"),
+            "unexpected: {msg}"
+        );
+
+        // Only a II+-flagged variant exists — T48 gets the supporters list,
+        // not the misleading hard-coded model list.
+        let msg = err("PIC16F877A", ProgrammerModel::T48);
+        assert_eq!(
+            msg,
+            "'PIC16F877A' is not supported by T48; it exists for TL866II+"
+        );
+
+        // Unknown name — unchanged fallback.
+        let msg = err("NOSUCHCHIP", ProgrammerModel::T48);
+        assert_eq!(msg, "Device 'NOSUCHCHIP' not found in the chip database");
     }
 
     // ── SPI-NAND geometry fix-up ───────────────────────────────────────
