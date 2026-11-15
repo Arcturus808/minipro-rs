@@ -382,8 +382,7 @@ fn run() -> Result<()> {
             cli.logicic_path.as_deref(),
             cli.algorithms_path.as_deref(),
         )?;
-        let dev = find_device_any(&db_paths, device_name)
-            .with_context(|| format!("unknown device '{device_name}'"))?;
+        let dev = find_device_any(&db_paths, device_name)?;
         let model = cli
             .programmer
             .as_deref()
@@ -592,8 +591,7 @@ fn run() -> Result<()> {
         cli.logicic_path.as_deref(),
         cli.algorithms_path.as_deref(),
     )?;
-    let mut device = find_device(&db_paths, part, handle.info.model)
-        .with_context(|| format!("unknown device '{part}'"))?;
+    let mut device = find_device(&db_paths, part, handle.info.model)?;
 
     // Capture the database-default VCC code so we can warn if the user
     // overrides it to a value that may produce unreliable results.

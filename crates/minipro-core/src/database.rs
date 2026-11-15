@@ -264,9 +264,7 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
     // Device not found for this model. Look for `{base}@pkg` variants that
     // *do* resolve for it, or report which models actually carry the name.
     match unsupported_device_hint(&paths.infoic, name, model)? {
-        Some(hint) => Err(MiniproError::DeviceNotFound(format!(
-            "'{name}' is not supported by {model:?}{hint}"
-        ))),
+        Some(msg) => Err(MiniproError::DeviceNotFound(msg)),
         None => Err(MiniproError::DeviceNotFound(format!(
             "Device '{name}' not found in the chip database",
         ))),
@@ -910,13 +908,14 @@ fn collect_by_chip_id(
 }
 
 /// Return true if `name` appears in `path` under any database section.
-/// Build an actionable suffix for a "not supported by this model" error.
+/// Build an actionable message for a "not supported by this model" lookup.
 ///
 /// Single scan over infoic.xml collecting two things:
 /// - `{base}@pkg` names in the model's own database section that pass the
-///   pin_map compatibility flags — the "did you mean …?" list (`base` is the
-///   queried name stripped at the first `@`, so mistyped or foreign-section
-///   variants still suggest the right socketed entries).
+///   pin_map compatibility flags — the device IS supported, just not by the
+///   bare name (`base` is the queried name stripped at the first `@`, so a
+///   mistyped or foreign-section variant still suggests the right socketed
+///   entries).
 /// - the programmer models that carry the bare `base` name — an honest
 ///   "exists for …" list. INFOIC2PLUS hits are discriminated per-model via
 ///   `device_matches_model` since the section is shared by TL866II+/T48/T56.
@@ -1015,9 +1014,17 @@ fn unsupported_device_hint(
     }
 
     if !variants.is_empty() {
-        Ok(Some(format!("; did you mean {}?", variants.join(", "))))
+        Ok(Some(format!(
+            "'{name}' is supported by {model:?} — select the package variant \
+             matching your chip: {}",
+            variants.join(", ")
+        )))
     } else if !others.is_empty() {
-        Ok(Some(format!("; it exists for {}", others.join(", "))))
+        Ok(Some(format!(
+            "'{name}' is not supported by {model:?}; the {base} device exists \
+             for {}",
+            others.join(", ")
+        )))
     } else {
         Ok(None)
     }
@@ -2159,19 +2166,21 @@ mod tests {
             |name: &str, m: ProgrammerModel| find_device(&paths, name, m).unwrap_err().to_string();
 
         // Bare name exists for TL866A/CS; T48 resolves the @ variants —
-        // suggest them verbatim.
+        // the message must say the chip IS supported, not "not supported".
         let msg = err("PIC16F628A", ProgrammerModel::T48);
-        assert!(
-            msg.contains("did you mean PIC16F628A@DIP18, PIC16F628A@SOIC18?"),
-            "unexpected: {msg}"
+        assert_eq!(
+            msg,
+            "'PIC16F628A' is supported by T48 — select the package variant \
+             matching your chip: PIC16F628A@DIP18, PIC16F628A@SOIC18"
         );
 
         // T56 has no resolvable variant (2PLUS flags are II+|T48) — honest
         // model list: INFOIC section, both 2PLUS supporters, and T76.
         let msg = err("PIC16F628A", ProgrammerModel::T56);
-        assert!(
-            msg.contains("it exists for TL866A / TL866CS, TL866II+, T48, T76"),
-            "unexpected: {msg}"
+        assert_eq!(
+            msg,
+            "'PIC16F628A' is not supported by T56; the PIC16F628A device \
+             exists for TL866A / TL866CS, TL866II+, T48, T76"
         );
 
         // Only a II+-flagged variant exists — T48 gets the supporters list,
@@ -2179,7 +2188,8 @@ mod tests {
         let msg = err("PIC16F877A", ProgrammerModel::T48);
         assert_eq!(
             msg,
-            "'PIC16F877A' is not supported by T48; it exists for TL866II+"
+            "'PIC16F877A' is not supported by T48; the PIC16F877A device \
+             exists for TL866II+"
         );
 
         // Unknown name — unchanged fallback.
