@@ -689,6 +689,11 @@ pub struct Device {
     /// than device identity (PIC families; from `chip_info`). 0 = the
     /// whole ID word is significant.
     pub chip_id_rev_bits: u8,
+    /// Significant bits per code-memory word for word-organised devices.
+    /// PIC baseline/midrange cores store 12/14-bit words in 16-bit cells,
+    /// so reads return 0x0FFF/0x3FFF while files pad to 0xFFFF — verify and
+    /// blank checks mask the padding off. `0xffff` = full-width compare.
+    pub word_compare_mask: u16,
     pub blank_value: u16,
     pub package_details: PackageDetails,
     pub config: Option<ChipConfig>,

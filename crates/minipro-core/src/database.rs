@@ -21,7 +21,8 @@ use quick_xml::{
 use crate::{
     device::ProgrammerModel,
     device::{
-        ChipConfig, Device, DeviceFlags, FuseConfig, FuseField, GalConfig, PackageDetails, Voltages,
+        ChipConfig, DataOrg, Device, DeviceFlags, FuseConfig, FuseField, GalConfig, PackageDetails,
+        Voltages,
     },
     error::{MiniproError, Result},
     outln,
@@ -1466,6 +1467,19 @@ fn build_device(
     // (PIC families)
     let (compare_mask, chip_id_rev_bits) = compare_mask_for(chip_info);
 
+    // Code-word compare width: only PIC baseline (0x84) and midrange
+    // (0x83) cores have code words narrower than the 16-bit storage cell
+    // (12/14 bits); their compare_mask carries the real width. Everything
+    // else compares the full word — including other word-organised devices
+    // whose default compare_mask (0x00ff) is a per-byte fuse mask, not a
+    // word width.
+    let word_compare_mask = if flags.data_org == DataOrg::Words && matches!(chip_info, 0x83 | 0x84)
+    {
+        compare_mask
+    } else {
+        0xffff
+    };
+
     // Config lookup
     let config = if let Some(cfg_name) = get_attr_str(e, b"config") {
         if cfg_name.eq_ignore_ascii_case("null") {
@@ -1519,6 +1533,7 @@ fn build_device(
         pin_map: pin_map_raw,
         compare_mask,
         chip_id_rev_bits,
+        word_compare_mask,
         blank_value,
         package_details: package,
         config,
@@ -1582,6 +1597,7 @@ fn build_logic_device(e: &BytesStart, name: &str, manufacturer: &str) -> Result<
         pin_map: 0,
         compare_mask: 0xff,
         chip_id_rev_bits: 0,
+        word_compare_mask: 0xffff,
         blank_value: 0xff,
         package_details: package,
         config: None,
@@ -1770,9 +1786,12 @@ mod tests {
     </manufacturer>
     <manufacturer name="Microchip">
       <!-- PIC12F629: chip_info 0x83 (14-bit core) → compare_mask 0x3fff,
-           5 silicon-revision bits in the devid word's low end. -->
+           5 silicon-revision bits in the devid word's low end, and
+           word-organised code memory (flags bit 0x2000) so padding bits
+           above the 14-bit word are excluded from verify/blank compares. -->
       <ic name="PIC12F629" type="2" protocol_id="24" variant="0" chip_id="0x00000f80"
-         chip_info="0x0083" package_details="0x08000000" voltages="0x0" />
+         flags="0x01102330" chip_info="0x0083" package_details="0x08000000"
+         voltages="0x0" />
     </manufacturer>
   </database>
   <database type="INFOIC">
@@ -1850,6 +1869,19 @@ mod tests {
         // Non-PIC entries have no revision field.
         let dev = find_device(&paths, "W25Q80", ProgrammerModel::Tl866iiPlus).unwrap();
         assert_eq!(dev.chip_id_rev_bits, 0);
+    }
+
+    #[test]
+    fn test_pic_word_compare_mask() {
+        // Word-organised PIC baseline/midrange (chip_info 0x84/0x83) get a
+        // sub-16-bit code-word mask; everything else compares full-width.
+        let paths = chipid_fixture_paths();
+        let dev = find_device(&paths, "PIC12F629", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.flags.data_org, DataOrg::Words);
+        assert_eq!(dev.word_compare_mask, 0x3fff);
+        // W25Q80 has no word-org flag → full-width compare.
+        let dev = find_device(&paths, "W25Q80", ProgrammerModel::Tl866iiPlus).unwrap();
+        assert_eq!(dev.word_compare_mask, 0xffff);
     }
 
     #[test]

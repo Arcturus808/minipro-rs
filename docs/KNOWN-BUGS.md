@@ -897,3 +897,24 @@ rev bits out of the low positions). Revision-only differences pass
 with an info log carrying the stepping; `ChipIdInfo::revision`
 (Option<u8>) surfaces it to the GUI/TUI. Non-PIC devices keep
 rev_bits = 0, i.e. unchanged strict comparison.
+
+## Verify/blank-check failed on PIC word padding (fixed)
+
+Baseline/midrange PICs keep 12/14-bit code words in 16-bit storage
+cells: reads and erased memory return `0x0FFF`/`0x3FFF`, but file
+loaders pad sparse regions with byte-level `blank_value` (`0xff` →
+`0xFFFF` words). `verify_chip`/`verify_chip_bytes` byte-compared raw,
+so every gap word in a sparse PIC hex mismatched on the high byte —
+and `blank_check` compared each byte to `0xff`, reporting a truly
+blank 14-bit PIC (all `0x3FFF`) as not blank at offset 1. Reported in
+the field as writes only working with "skip verify" enabled.
+
+**Fix:** `Device::word_compare_mask` carries the significant bits per
+code word — `compare_mask` for word-organised PIC baseline/midrange
+cores (chip_info `0x84`/`0x83` → `0x0fff`/`0x3fff`), `0xffff` for
+everything else. The mask must NOT be taken from `compare_mask`
+blindly: non-PIC word devices get the table's default `0x00ff`
+per-byte fuse mask, which is not a word width. `first_verify_mismatch`
+compares byte-wise under a per-byte mask derived from the absolute
+offset parity; `blank_check` tests `b & mask == blank & mask`. Writes
+needed no fix — cells can only store the bits they physically have.
