@@ -2479,6 +2479,7 @@ pub struct ChipIdResultDto {
     id: String,
     expected: String,
     is_match: bool,
+    revision: Option<u8>,
     is_variant: bool,
 }
 
@@ -2527,6 +2528,7 @@ pub async fn do_chip_id(
                 id: format!("0x{:0width$x}", info.id & mask, width = width),
                 expected: format!("0x{:0width$x}", info.expected & mask, width = width),
                 is_match: info.is_match,
+                revision: info.revision,
                 is_variant: info.is_variant,
             })
         })();

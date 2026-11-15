@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **udev rules for all supported programmers** — `packaging/udev/60-minipro-rs.rules` grants unprivileged users access to the raw USB device node for every enumerated model (TL866A/CS `04D8:E11C`, TL866II+/T48/T56 `A466:0A53`, T76 `A466:1A86`), via `MODE="0666"` + `TAG+="uaccess"`. The `.deb`/`.rpm` packages (both the GitLab CLI package and the Tauri GUI bundles) install the file and reload udev automatically; AppImage/tarball/source users get a manual `curl | sudo tee` install in the README.
 
+### Fixed
+
+- **PIC chip-ID check no longer rejects valid chips on silicon revision** — baseline/midrange PIC devid words carry a stepping field in the low bits (e.g. PIC12F629: `DEV[13:5]` + `REV[4:0]`), and the database stores the ID with `REV=0`. The comparison was strict equality, so a genuine rev-0x0B PIC12F629 read as `0x00000f8b` was reported as a hard `Chip ID mismatch` against expected `0x00000f80` — and gated operations refused to run. The family→revision-width table (`chip_info` → `compare_mask_for`) already existed but its rev-bits half was discarded at parse time; it now reaches `Device::chip_id_rev_bits` and both `check_chip_id` and `chip_id_info` mask those bits before comparing. Revision-only differences log `Chip ID OK: … — same device as expected …, silicon revision 0x…` and `ChipIdInfo` carries the stepping as `revision` (GUI and TUI display it alongside the match). Non-PIC devices keep strict comparison — identity bits are never masked outside the documented PIC devid layout (PIC_14 → 5 bits, PIC18F → 4, PIC18J → 5, PIC_12 → 0).
+
 ## [0.13.0] - 2026-11-13
 
 ### Added

@@ -876,3 +876,24 @@ charge can warm-boot the PIC and preserve the wedged USB state the
 replug is meant to clear, and re-arriving while Windows is still
 tearing down the port-scoped devnode is one of the enumeration
 failure modes observed.
+
+## PIC chip-ID compare ignored silicon-revision bits (fixed)
+
+`compare_mask_for` in `database.rs` maps the `chip_info` word to
+`(compare_mask, rev_bits)` — upstream's per-PIC-family split of the
+devid word into device-identity bits and stepping bits (PIC_14 → 5
+rev bits, PIC18F → 4, PIC18J → 5, PIC_12 → 0). Only the fuse mask was
+kept; `rev_bits` was discarded at parse time, so both chip-ID compare
+sites (`check_chip_id` and `chip_id_info`) ran strict normalized
+equality and treated stepping as identity. A genuine PIC12F629
+reporting `0x00000f8b` (dev `0x7c`, rev `0x0b`) errored as a
+`ChipIdMismatch` against the database's REV=0 baseline `0x00000f80` —
+and the gating check blocked otherwise-valid operations.
+
+**Fix:** `rev_bits` is stored on `Device::chip_id_rev_bits` and both
+compare sites mask it off the raw ID before byte-align normalization
+(mask *before* normalize — `normalize_chip_id` top-aligns, moving the
+rev bits out of the low positions). Revision-only differences pass
+with an info log carrying the stepping; `ChipIdInfo::revision`
+(Option<u8>) surfaces it to the GUI/TUI. Non-PIC devices keep
+rev_bits = 0, i.e. unchanged strict comparison.

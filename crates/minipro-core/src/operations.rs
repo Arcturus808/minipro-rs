@@ -920,15 +920,38 @@ pub fn check_chip_id(handle: &mut MiniproHandle) -> Result<()> {
             "Chip ID read returned {:#010x}; database has no expected value for this device",
             actual
         );
-    } else if actual_norm != expected_norm {
+    } else if chip_id_device_match(&device, actual) {
+        if actual_norm != expected_norm {
+            info!(
+                "Chip ID OK: {:#010x} — same device as expected {:#010x}, silicon revision {:#04x}",
+                actual,
+                device.chip_id,
+                actual & chip_id_rev_mask(&device)
+            );
+        } else {
+            info!("Chip ID OK: {:#010x}", actual);
+        }
+    } else {
         return Err(MiniproError::ChipIdMismatch {
             expected: device.chip_id,
             actual,
         });
-    } else {
-        info!("Chip ID OK: {:#010x}", actual);
     }
     Ok(())
+}
+
+/// Mask covering the chip-ID bits that encode silicon revision rather than
+/// device identity (`chip_id_rev_bits`, PIC families; 0 → no masking).
+fn chip_id_rev_mask(device: &Device) -> u32 {
+    (1u32 << device.chip_id_rev_bits.min(31)) - 1
+}
+
+/// Device-identity comparison: true when `actual` equals the database
+/// `chip_id` after masking off silicon-revision bits and normalizing byte
+/// alignment.
+fn chip_id_device_match(device: &Device, actual: u32) -> bool {
+    let rev_mask = chip_id_rev_mask(device);
+    normalize_chip_id(device.chip_id & !rev_mask) == normalize_chip_id(actual & !rev_mask)
 }
 
 /// Structured result of a chip-ID read, for frontends that display the
@@ -943,8 +966,12 @@ pub struct ChipIdInfo {
     /// `chip_id_bytes_count` clamped to 1-4).
     pub bytes: u8,
     /// Normalized comparison result — also true when the database has no
-    /// expected ID (`expected == 0`).
+    /// expected ID (`expected == 0`). Silicon-revision-only differences
+    /// (PIC families) count as a match.
     pub is_match: bool,
+    /// Silicon revision encoded in the ID word's low bits (PIC families
+    /// only; `None` for all other devices).
+    pub revision: Option<u8>,
     /// Device name carries an `@`-package suffix — the stored ID belongs
     /// to the base chip and a real mismatch is informational only.
     pub is_variant: bool,
@@ -979,13 +1006,17 @@ pub fn chip_id_info(handle: &mut MiniproHandle) -> Result<ChipIdInfo> {
     };
     let expected = device.chip_id;
     // Normalized comparison handles byte-position differences across
-    // protocols; expected == 0 means the database can't verify.
-    let is_match = expected == 0 || normalize_chip_id(id) == normalize_chip_id(expected);
+    // protocols; expected == 0 means the database can't verify. PIC-family
+    // devices carry silicon-revision bits in the ID word — those are
+    // masked off for the comparison and reported separately.
+    let is_match = expected == 0 || chip_id_device_match(&device, id);
+    let revision = (device.chip_id_rev_bits > 0).then(|| (id & chip_id_rev_mask(&device)) as u8);
     Ok(ChipIdInfo {
         id,
         expected,
         bytes,
         is_match,
+        revision,
         is_variant,
     })
 }
@@ -1175,6 +1206,61 @@ mod tests {
         device.flags.data_org = data_org;
         device.compare_mask = 0xff;
         device
+    }
+
+    /// PIC12F629-class device: 14-bit devid word = DEV[13:5] + REV[4:0],
+    /// database stores the ID with REV=0 (chip_info 0x83 → 5 rev bits).
+    fn pic_id_test_device(chip_id: u32) -> Device {
+        Device {
+            chip_id,
+            chip_id_rev_bits: 5,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_chip_id_pic_revision_bits_ignored() {
+        let device = pic_id_test_device(0x0f80);
+        // Same device field (0x7c), different silicon stepping.
+        assert!(chip_id_device_match(&device, 0x0f80));
+        assert!(chip_id_device_match(&device, 0x0f8b));
+        assert!(chip_id_device_match(&device, 0x0f9f));
+        assert_eq!(chip_id_rev_mask(&device), 0x1f);
+        assert_eq!(0x0f8b & chip_id_rev_mask(&device), 0x0b);
+    }
+
+    #[test]
+    fn test_chip_id_pic_wrong_device_still_mismatch() {
+        let device = pic_id_test_device(0x0f80);
+        // Device field differs (e.g. PIC12F675 = 0x0fa0 masked compare).
+        assert!(!chip_id_device_match(&device, 0x0fa0));
+        assert!(!chip_id_device_match(&device, 0x0f00));
+        assert!(!chip_id_device_match(&device, 0x0000));
+    }
+
+    #[test]
+    fn test_chip_id_non_pic_stays_strict() {
+        // rev_bits == 0 → every bit of the ID word is identity.
+        let device = Device {
+            chip_id: 0x1e950f,
+            chip_id_rev_bits: 0,
+            ..Default::default()
+        };
+        assert!(chip_id_device_match(&device, 0x1e950f));
+        assert!(!chip_id_device_match(&device, 0x1e950b));
+    }
+
+    #[test]
+    fn test_chip_id_pic18_rev_mask() {
+        // chip_info 0x82 (PIC18F) → 4 rev bits.
+        let device = Device {
+            chip_id: 0x12e0,
+            chip_id_rev_bits: 4,
+            ..Default::default()
+        };
+        assert!(chip_id_device_match(&device, 0x12e0));
+        assert!(chip_id_device_match(&device, 0x12e7));
+        assert!(!chip_id_device_match(&device, 0x12f0));
     }
 
     fn uid_test_config() -> crate::device::FuseConfig {

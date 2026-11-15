@@ -290,6 +290,7 @@ export interface ChipIdResult {
   id: string;
   expected: string;
   is_match: boolean;
+  revision: number | null;
   is_variant: boolean;
 }
 

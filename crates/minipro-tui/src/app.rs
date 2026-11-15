@@ -1010,10 +1010,16 @@ impl App {
                 let mask = info.mask();
                 let width = (info.bytes * 2) as usize;
                 if info.is_match {
+                    let rev_note = match info.revision {
+                        Some(rev) if info.id != info.expected => {
+                            format!(" — silicon rev 0x{rev:02x}")
+                        }
+                        _ => String::new(),
+                    };
                     self.push_log(
                         log::Level::Info,
                         format!(
-                            "✓ chip ID 0x{:0width$X} (expected 0x{:0width$X}) — match",
+                            "✓ chip ID 0x{:0width$X} (expected 0x{:0width$X}) — match{rev_note}",
                             info.id & mask,
                             info.expected & mask,
                             width = width

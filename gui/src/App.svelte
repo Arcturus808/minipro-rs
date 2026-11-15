@@ -746,6 +746,8 @@
           const expectedVal = parseInt(chipResult.expected, 16);
           if (expectedVal === 0) {
             logs.info(`Chip ID: ${chipResult.id} (no expected value in database)`);
+          } else if (chipResult.is_match && chipResult.id !== chipResult.expected && chipResult.revision != null) {
+            logs.info(`Chip ID: ${chipResult.id} (device matches expected ${chipResult.expected}; silicon rev 0x${chipResult.revision.toString(16)})`);
           } else if (chipResult.is_match) {
             logs.info(`Chip ID: ${chipResult.id} (matches expected ID)`);
           } else if (chipResult.is_variant) {
