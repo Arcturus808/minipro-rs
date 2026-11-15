@@ -640,14 +640,18 @@ pub fn verify_chip(
             total_blocks,
         };
         handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
-        for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
-            if got != want {
-                return Err(MiniproError::VerifyFailed {
-                    address: (offset + i) as u32,
-                    expected: want,
-                    actual: got,
-                });
-            }
+        if let Some(i) = first_verify_mismatch(
+            &device,
+            use_word_addr,
+            &ds.data,
+            &expected[offset..],
+            offset,
+        ) {
+            return Err(MiniproError::VerifyFailed {
+                address: (offset + i) as u32,
+                expected: expected[offset + i],
+                actual: ds.data[i],
+            });
         }
         offset += block;
         if let Some(ref mut f) = progress {
@@ -655,6 +659,39 @@ pub fn verify_chip(
         }
     }
     Ok(())
+}
+
+/// Per-byte compare mask for word-organised code memory. Bits above the
+/// device's real word width are physically absent (baseline/midrange PICs
+/// store 12/14-bit words in 16-bit cells — reads return 0x0FFF/0x3FFF
+/// while files and loaders pad to 0xFFFF), so they must not participate in
+/// verify or blank comparisons. `0xff` for byte-organised memory.
+fn code_byte_mask(device: &Device, byte_offset: usize, word_org: bool) -> u8 {
+    if word_org {
+        (device.word_compare_mask >> (8 * (byte_offset & 1))) as u8
+    } else {
+        0xff
+    }
+}
+
+/// First index where `got` differs from `want` in significant bits, or
+/// `None`. With `word_org`, bytes at even/odd absolute positions get the
+/// low/high byte of `device.word_compare_mask` (`base` is the absolute
+/// offset of `got[0]`); padding bits above the real word width are ignored.
+fn first_verify_mismatch(
+    device: &Device,
+    word_org: bool,
+    got: &[u8],
+    want: &[u8],
+    base: usize,
+) -> Option<usize> {
+    got.iter()
+        .zip(want.iter())
+        .enumerate()
+        .find_map(|(i, (&g, &w))| {
+            let m = code_byte_mask(device, base + i, word_org);
+            (g & m != w & m).then_some(i)
+        })
 }
 
 /// Verify chip memory against `expected` (raw bytes).
@@ -707,14 +744,18 @@ pub fn verify_chip_bytes(
             total_blocks,
         };
         handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
-        for (i, (&got, &want)) in ds.data.iter().zip(expected[offset..].iter()).enumerate() {
-            if got != want {
-                return Err(MiniproError::VerifyFailed {
-                    address: (offset + i) as u32,
-                    expected: want,
-                    actual: got,
-                });
-            }
+        if let Some(i) = first_verify_mismatch(
+            &device,
+            use_word_addr,
+            &ds.data,
+            &expected[offset..],
+            offset,
+        ) {
+            return Err(MiniproError::VerifyFailed {
+                address: (offset + i) as u32,
+                expected: expected[offset + i],
+                actual: ds.data[i],
+            });
         }
         offset += block;
         if let Some(ref mut f) = progress {
@@ -729,6 +770,7 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
     let size = handle.protocol.effective_code_size(&device) as usize;
     let blank = device.blank_value as u8;
+    let word_org = device.flags.data_org == DataOrg::Words;
 
     let read_size = if device.read_buffer_size > 0 {
         effective_block_size(&device, device.read_buffer_size)
@@ -763,7 +805,11 @@ pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
         };
         handle.protocol.read_block(&handle.usb, &device, &mut ds)?;
         for (i, &b) in ds.data.iter().enumerate() {
-            if b != blank {
+            // Bits above the real word width are physically absent on
+            // word-org devices (14-bit PIC blank words read 0x3FFF) —
+            // compare only significant bits.
+            let m = code_byte_mask(&device, offset + i, word_org);
+            if b & m != blank & m {
                 return Err(MiniproError::NotBlank {
                     address: (offset + i) as u32,
                 });
@@ -1216,6 +1262,77 @@ mod tests {
             chip_id_rev_bits: 5,
             ..Default::default()
         }
+    }
+
+    /// Word-organised device with a sub-16-bit code word (PIC_14 class):
+    /// cells read back 0x3FFF where files pad to 0xFFFF.
+    fn pic_word_test_device() -> Device {
+        let mut device = Device::default();
+        device.flags.data_org = DataOrg::Words;
+        device.word_compare_mask = 0x3fff;
+        device
+    }
+
+    #[test]
+    fn test_verify_mask_ignores_pic_word_padding() {
+        // The reported case: sparse HEX gap words buffered as 0xFFFF,
+        // chip stores/reads 14-bit 0x3FFF — must verify equal.
+        let device = pic_word_test_device();
+        let got = [0xff, 0x3f, 0x34, 0x12];
+        let want = [0xff, 0xff, 0x34, 0x12];
+        assert_eq!(first_verify_mismatch(&device, true, &got, &want, 0), None);
+    }
+
+    #[test]
+    fn test_verify_mask_catches_real_word_diffs() {
+        let device = pic_word_test_device();
+        // Significant-bit diffs still fail, in either byte of the word.
+        assert_eq!(
+            first_verify_mismatch(&device, true, &[0xfe, 0x3f], &[0xff, 0x3f], 0),
+            Some(0)
+        );
+        assert_eq!(
+            first_verify_mismatch(&device, true, &[0xff, 0x3e], &[0xff, 0x3f], 0),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_verify_mask_honours_base_parity() {
+        let device = pic_word_test_device();
+        // Byte parity follows the absolute offset (base+i), so a block at
+        // an odd base interprets its bytes shifted — defensive check.
+        let got = [0x3f, 0x00]; // abs: odd byte 0x3f (masked to 0x3f), even 0x00
+        let want = [0x3f, 0x00];
+        assert_eq!(first_verify_mismatch(&device, true, &got, &want, 1), None);
+    }
+
+    #[test]
+    fn test_verify_full_width_and_byte_org_unaffected() {
+        // Word-org device with a full-width mask: identical to before.
+        let device = Device {
+            word_compare_mask: 0xffff,
+            ..Default::default()
+        };
+        assert_eq!(
+            first_verify_mismatch(&device, true, &[0x3f], &[0xff], 0),
+            Some(0)
+        );
+        // Byte-organised compare ignores the word mask entirely.
+        let device = pic_word_test_device();
+        assert_eq!(
+            first_verify_mismatch(&device, false, &[0x3f], &[0xff], 1),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn test_code_byte_mask_layout() {
+        let device = pic_word_test_device();
+        assert_eq!(code_byte_mask(&device, 0, true), 0xff); // word low byte
+        assert_eq!(code_byte_mask(&device, 1, true), 0x3f); // word high byte
+        assert_eq!(code_byte_mask(&device, 4, true), 0xff);
+        assert_eq!(code_byte_mask(&device, 1, false), 0xff); // byte-org: no mask
     }
 
     #[test]
