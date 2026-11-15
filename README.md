@@ -509,7 +509,7 @@ The selected directory persists across restarts. If the directory is later moved
 |------------|------|-------|-------|--------|---------|-------|-------|------------|-----------|-----------------|---------------|
 | **TL866A / TL866CS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌² | ✅ | ❌⁵ |
 | **TL866II+** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
-| **T48** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅ | ✅¹ | ✅¹ |
+| **T48** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ | ✅ |
 | **T56** | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ✅¹ | ❌⁵ | ❌³ | ✅¹ | ✅¹ |
 | **T76** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ | ✅ | ✅ | ❌³ | ✅¹ | ✅¹ |
 
@@ -519,6 +519,8 @@ The selected directory persists across restarts. If the directory is later moved
 - ❌² **Hardware limitation** — the TL866A/CS firmware does not support the pull-up/pull-down pin contact check commands.
 - ❌³ **Not applicable** — the T56/T76 use FPGA-based bitstream algorithms that handle pin control internally; the C minipro also does not implement ZIF pin control or voltage setting for these models. Matt Brown's t76-improvements branch discovered that the T76's `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test — the [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
 - ❌⁵ **Unknown** — support status unclear; not yet verified against official XGecu software.
+
+> **T48 note:** Validated on real hardware (firmware 00.1.35): SPI NOR read/erase/write/verify byte-exact (W25X20CL), SPI JEDEC autodetect, chip ID (SPI NOR + AVR signature), logic IC test (7408), fuse read/write (ATMEGA328P), pin contact check, and hardware self-test. Firmware update remains untested.
 
 > **T76 note:** SPI NOR (128-byte `BEGIN_TRANS` with FPGA geometry, 8-pin and 16-pin), NAND (parallel + SPI-NAND, with OVC status), eMMC (with EXT_CSD capacity auto-detection and partition selection via `T76_EMMC_PARTITION` env var: `user`|`boot1`|`boot2`|`rpmb`), and parallel NOR (read and erase; program not yet implemented) are implemented. Validated on real hardware: SPI NOR 8-pin read/erase/write/verify byte-exact against a TL866A ground-truth dump (W25X20CL — 16-pin path still unvalidated), SPI-NAND read/erase/write/verify (GD5F1GQ5UExxG, T76 firmware 00.1.18), SPI JEDEC autodetect (W25X20CL, LE25FS406M), and logic IC test (7408). See [T76 Support Status](docs/T76-SUPPORT-STATUS.md) and [T76 Improvements Plan](docs/T76-IMPROVEMENTS-PLAN.md).
 
