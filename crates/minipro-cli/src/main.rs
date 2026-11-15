@@ -285,18 +285,15 @@ fn run_download_algorithms(cli: &Cli) -> Result<()> {
         eprintln!("warning: {w}");
     }
     println!(
-        "algorithm.xml: {} T56 + {} T76 algorithms (verified) -> {}",
+        "algorithm.xml (required for T56/T76 chip operations): \
+         {} T56 + {} T76 algorithms (verified) -> {}",
         out.t56_algorithms,
         out.t76_algorithms,
         out.xml_path.display()
     );
+    println!("firmware images (for -F firmware update):");
     for fw in &out.firmware {
-        println!(
-            "firmware {} {} -> {}",
-            fw.model,
-            fw.version,
-            fw.path.display()
-        );
+        println!("  {} {} -> {}", fw.model, fw.version, fw.path.display());
     }
 
     // Informational only: if a programmer is connected, say which bundled
