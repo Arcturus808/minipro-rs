@@ -1,9 +1,220 @@
 # GUI Internals — Feature Documentation
 
-Feature-level internals for the Tauri GUI. Extracted from AGENTS.md — read
-this before working on the hex viewer, pin test, logic test/identify,
-config/fuse panel, or terminal rendering. Universal rules (build, stores,
-Tauri gotchas, git/CI) remain in the root AGENTS.md.
+Feature-level internals for the Tauri GUI — read this before working on
+any GUI code: authoring conventions (stores, Tauri gotchas, data
+handling, components), dev workflows, the hex viewer, pin test, logic
+test/identify, config/fuse panel, and terminal rendering. Universal
+workflow rules (build, git/CI, releases) remain in the root AGENTS.md.
+
+## Development workflows
+
+**Fast iteration (UI work with a real backend):** `cd gui && cargo tauri dev`
+— vite dev server + debug Rust backend. Svelte/CSS/TS changes hot-reload
+instantly AND Tauri commands work; `src-tauri` edits rebuild and relaunch.
+**Caveat:** only `gui/src-tauri` is watched — changes in `crates/` (e.g.
+`icsp.rs` wiring tables) require restarting `cargo tauri dev`.
+(`npm run dev` alone serves only the frontend — `invoke()` calls fail.)
+
+**Testing without hardware:** simulated-programmer mode reports a
+connected programmer of a chosen model (`TL866A`, `TL866CS`, `TL866II+`,
+`T48`, `T56`, `T76`) without opening USB —
+`get_programmer_info`/`force_reconnect` skip hardware and synthesize the
+model. Device search, device info, and the ICSP/ZIF diagrams work; chip
+operations fail. Enable it per frontend: **GUI** — Settings → Simulation
+dropdown (persists; status badge shows "simulated"); **TUI** —
+`minipro-tui --simulate T76`; **any** — `MINIPRO_SIMULATE_PROGRAMMER`
+env var (`MINIPRO_FAKE_PROGRAMMER` still works, deprecated).
+
+```powershell
+cd gui
+$env:MINIPRO_SIMULATE_PROGRAMMER = "T76"
+cargo tauri dev
+# Back to real hardware in the same shell:
+Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER
+```
+
+**Pre-commit verification (release exe, no installers):**
+
+```powershell
+# The running .exe locks the output binary on Windows — kill it first.
+Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
+cd gui && cargo tauri build --no-bundle
+Start-Process "gui\src-tauri\target\release\minipro-gui.exe"
+```
+
+**When release-mode testing matters:** dev-vs-prod differences (devUrl vs
+embedded assets, CSP), integer-overflow behavior (debug panics, release
+wraps — relevant to protocol/checksum code), startup/parse performance
+(debug Rust is noticeably slower on the 19 MB database), and
+installer/resource bundling — the last only via full `cargo tauri build`,
+which is required during release prep.
+
+## Store Patterns (CRITICAL)
+
+### Rule 1: All state lives in writable stores
+NEVER use module-level variables for state that components read.
+
+```ts
+// BAD — _hexData is invisible to Svelte reactivity
+let _hexData: Uint8Array | null = null;
+export const hexMeta = writable({ size: 0, path: null });
+
+// GOOD — everything the component needs is in the store
+interface HexState {
+  data: Uint8Array | null;
+  path: string | null;
+  size: number;
+}
+export const hexState = writable<HexState>({ data: null, path: null, size: 0 });
+```
+
+### Rule 2: Read store data directly in templates
+Do NOT extract store values into local variables. Read `$store.field`
+directly in `{#each}` and `{#if}` blocks.
+
+```svelte
+<!-- GOOD -->
+{#each $hexState.data.slice(0, 16) as b}
+  <span>{b.toString(16).padStart(2, '0')}</span>
+{/each}
+
+<!-- BAD — data may not update reactively -->
+<script>
+  let bytes = $derived($hexState.data);  // avoid this pattern
+</script>
+{#each bytes as b}...{/each}
+```
+
+### Rule 3: Loading state is part of the store
+Keep `loading` in the same store as the data, or in a dedicated companion
+store. Never infer loading from "data is null."
+
+```ts
+export const hexLoading = writable(false);
+```
+
+## Tauri / WebView2 Gotchas
+
+### Dialogs freeze the JS event loop
+When a Tauri native file dialog is open, the WebView2 thread is paused.
+**Any reactive update that triggers DOM work during or immediately after
+the dialog can deadlock.**
+
+**Rules:**
+1. Do NOT call `tick()` after a dialog closes.
+2. Do NOT update stores that trigger heavy DOM updates (e.g., 16,000-row
+   `{#each}`) inside the same microtask as the dialog close.
+3. If you must update stores after a dialog, wrap in
+   `requestAnimationFrame(() => { ... })` or `setTimeout(..., 0)`.
+4. Prefer moving `logs.info()` calls **outside** `loadFile()` and into the
+   caller, after the dialog scope has exited.
+
+### DevTools
+DevTools must be enabled in **both** places:
+
+```toml
+# gui/src-tauri/Cargo.toml
+tauri = { version = "2", features = ["devtools"] }
+```
+
+```json
+// gui/src-tauri/tauri.conf.json
+"app": {
+  "windows": [ ... ],
+  "security": { "csp": null },
+  "devtools": true
+}
+```
+
+Right-click → Inspect and F12 will not work otherwise.
+
+### Tauri window permissions (Tauri 2.x)
+Adding `window:default` to capabilities does **not** work. Use specific
+granular permissions:
+
+```json
+"permissions": [
+  "core:window:allow-set-size",
+  "core:window:allow-center"
+]
+```
+
+### Tauri v2 command parameter naming
+Tauri v2 automatically camelCases top-level invoke keys before matching
+them to Rust function parameter names. The Rust parameter names must use
+camelCase to match.
+
+**Rule:** When JS sends `{ snake_case: value }`, Tauri converts it to
+`camelCase`. Rust params must match that camelCase.
+
+```ts
+// JS invoke — Tauri auto-converts keys to camelCase
+await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icsp_mode });
+// Tauri converts: cfg_fuses -> cfgFuses, lock_bits -> lockBits, icsp_mode -> icspMode
+```
+
+```rust
+// Rust handler — parameter names must match camelCase keys
+#[tauri::command]
+pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String) { ... }
+```
+
+**Note:** This only applies to top-level invoke keys. Nested objects (like
+`options`) are serialized directly by serde and are not affected by
+Tauri's key mapping.
+
+**Commands using this convention:**
+| Command | JS sends | Rust expects |
+|---------|----------|--------------|
+| `write_fuses` | `cfg_fuses`, `lock_bits`, `icsp_mode` | `cfgFuses`, `lockBits`, `icspMode` |
+| `save_bytes_to_file` | `base64Data` | `base64Data` |
+| `do_erase`, `do_blank_check`, `do_chip_id`, `do_logic_test`, `read_fuses`, `check_lock_protection` | `icspMode` | `icspMode` (already camelCase in JS) |
+| `do_logic_identify` | `pinCount`, `vcc` | `pinCount`, `vcc` |
+
+## Data Handling
+
+### Large binary files
+- The Rust backend returns file bytes as **base64** strings via
+  `invoke("read_file_bytes")`.
+- Convert to `Uint8Array` with `atob()` in the frontend.
+- **Do NOT fear Svelte reactivity with 256KB Uint8Arrays.** The browser
+  handles 16,384 `<div>` rows natively. Only optimize with virtual
+  scrolling if profiling shows a real problem.
+- When rendering hex rows, use direct array indexing (`data[offset + j]`)
+  instead of `.slice()` inside reactive blocks.
+
+### Base64 encoding large arrays
+`String.fromCharCode(...data)` crashes with "Maximum call stack size
+exceeded" for arrays >65K elements. Chunk the conversion:
+
+```ts
+const CHUNK = 0x8000; // 32KB
+let result = "";
+for (let i = 0; i < data.length; i += CHUNK) {
+  result += String.fromCharCode(...data.subarray(i, i + CHUNK));
+}
+return btoa(result);
+```
+
+## Component Conventions
+
+1. **Use Svelte 5 runes exclusively.** Prefer `$state` for local variables,
+   `$derived` for computed values, and `$effect` for side effects. Do NOT
+   use legacy `$:` syntax.
+2. **No virtual scrolling until needed.** Start with native
+   `overflow: auto` and `{#each}`. Browser scrolling is highly optimized.
+3. **Loading indicators** should be conditional on a dedicated loading
+   store, not inferred from data absence:
+   ```svelte
+   {#if $hexLoading}
+     <Spinner />
+   {:else if $hexState.data}
+     <HexRows data={$hexState.data} />
+   {:else}
+     <EmptyState />
+   {/if}
+   ```
 
 ## Project Structure
 
@@ -428,7 +639,8 @@ name. Text opacity convention: notes and actionable fallbacks at 80%,
 pure placeholders at 50–60%.
 
 **Testing without hardware:** `MINIPRO_SIMULATE_PROGRAMMER=<MODEL>`
-(deprecated alias `MINIPRO_FAKE_PROGRAMMER`; see AGENTS.md) makes
+(deprecated alias `MINIPRO_FAKE_PROGRAMMER`; see "Development
+workflows" above) makes
 `get_programmer_info`/`force_reconnect` return a synthetic programmer —
 device search, device info, and both diagram panels work with no USB
 device attached. The same mode is exposed in-app via Settings →

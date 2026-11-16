@@ -111,7 +111,7 @@ binary.
 ### Frontend (Svelte / TypeScript)
 - **Svelte 5 runes only** — use `$state`, `$derived`, `$effect`. Do NOT use legacy `$:` syntax
 - All reactive state lives in writable stores (see `gui/src/lib/stores/`)
-- See `AGENTS.md` for detailed GUI conventions and gotchas
+- See `docs/GUI-INTERNALS.md` for detailed GUI conventions and gotchas
 
 ### Commits
 - Concise subject line, optional body explaining why (not what)
