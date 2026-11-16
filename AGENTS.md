@@ -55,215 +55,22 @@ file, you **must** run `cargo tauri build` (`--no-bundle` is fine) —
 embedded assets go stale otherwise. This also applies after version
 bumps — the GUI version badge reads `gui/package.json` at Vite build time.
 
-### GUI development workflows
+### GUI development & conventions
 
-**Fast iteration (UI work with a real backend):** `cd gui && cargo tauri dev`
-— vite dev server + debug Rust backend. Svelte/CSS/TS changes hot-reload
-instantly AND Tauri commands work; `src-tauri` edits rebuild and relaunch.
-**Caveat:** only `gui/src-tauri` is watched — changes in `crates/` (e.g.
-`icsp.rs` wiring tables) require restarting `cargo tauri dev`.
-(`npm run dev` alone serves only the frontend — `invoke()` calls fail.)
+`cd gui && cargo tauri dev` — vite dev server + debug backend with hot
+reload (plain `npm run dev` serves only the frontend — `invoke()` fails).
+Simulate hardware without USB: `MINIPRO_SIMULATE_PROGRAMMER=T76` env var,
+`minipro-tui --simulate T76`, or Settings → Simulation.
 
-**Testing without hardware:** simulated-programmer mode reports a
-connected programmer of a chosen model (`TL866A`, `TL866CS`, `TL866II+`,
-`T48`, `T56`, `T76`) without opening USB —
-`get_programmer_info`/`force_reconnect` skip hardware and synthesize the
-model. Device search, device info, and the ICSP/ZIF diagrams work; chip
-operations fail. Enable it per frontend: **GUI** — Settings → Simulation
-dropdown (persists; status badge shows "simulated"); **TUI** —
-`minipro-tui --simulate T76`; **any** — `MINIPRO_SIMULATE_PROGRAMMER`
-env var (`MINIPRO_FAKE_PROGRAMMER` still works, deprecated).
+Authoring conventions live in `docs/GUI-INTERNALS.md`. Always-on summary:
 
-```powershell
-cd gui
-$env:MINIPRO_SIMULATE_PROGRAMMER = "T76"
-cargo tauri dev
-# Back to real hardware in the same shell:
-Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER
-```
-
-**Pre-commit verification (release exe, no installers):**
-
-```powershell
-# The running .exe locks the output binary on Windows — kill it first.
-Get-Process minipro-gui -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Seconds 1
-cd gui && cargo tauri build --no-bundle
-Start-Process "gui\src-tauri\target\release\minipro-gui.exe"
-```
-
-**When release-mode testing matters:** dev-vs-prod differences (devUrl vs
-embedded assets, CSP), integer-overflow behavior (debug panics, release
-wraps — relevant to protocol/checksum code), startup/parse performance
-(debug Rust is noticeably slower on the 19 MB database), and
-installer/resource bundling — the last only via full `cargo tauri build`,
-which is required during release prep.
-
-## Store Patterns (CRITICAL)
-
-### Rule 1: All state lives in writable stores
-NEVER use module-level variables for state that components read.
-
-```ts
-// BAD — _hexData is invisible to Svelte reactivity
-let _hexData: Uint8Array | null = null;
-export const hexMeta = writable({ size: 0, path: null });
-
-// GOOD — everything the component needs is in the store
-interface HexState {
-  data: Uint8Array | null;
-  path: string | null;
-  size: number;
-}
-export const hexState = writable<HexState>({ data: null, path: null, size: 0 });
-```
-
-### Rule 2: Read store data directly in templates
-Do NOT extract store values into local variables. Read `$store.field`
-directly in `{#each}` and `{#if}` blocks.
-
-```svelte
-<!-- GOOD -->
-{#each $hexState.data.slice(0, 16) as b}
-  <span>{b.toString(16).padStart(2, '0')}</span>
-{/each}
-
-<!-- BAD — data may not update reactively -->
-<script>
-  let bytes = $derived($hexState.data);  // avoid this pattern
-</script>
-{#each bytes as b}...{/each}
-```
-
-### Rule 3: Loading state is part of the store
-Keep `loading` in the same store as the data, or in a dedicated companion
-store. Never infer loading from "data is null."
-
-```ts
-export const hexLoading = writable(false);
-```
-
-## Tauri / WebView2 Gotchas
-
-### Dialogs freeze the JS event loop
-When a Tauri native file dialog is open, the WebView2 thread is paused.
-**Any reactive update that triggers DOM work during or immediately after
-the dialog can deadlock.**
-
-**Rules:**
-1. Do NOT call `tick()` after a dialog closes.
-2. Do NOT update stores that trigger heavy DOM updates (e.g., 16,000-row
-   `{#each}`) inside the same microtask as the dialog close.
-3. If you must update stores after a dialog, wrap in
-   `requestAnimationFrame(() => { ... })` or `setTimeout(..., 0)`.
-4. Prefer moving `logs.info()` calls **outside** `loadFile()` and into the
-   caller, after the dialog scope has exited.
-
-### DevTools
-DevTools must be enabled in **both** places:
-
-```toml
-# gui/src-tauri/Cargo.toml
-tauri = { version = "2", features = ["devtools"] }
-```
-
-```json
-// gui/src-tauri/tauri.conf.json
-"app": {
-  "windows": [ ... ],
-  "security": { "csp": null },
-  "devtools": true
-}
-```
-
-Right-click → Inspect and F12 will not work otherwise.
-
-### Tauri window permissions (Tauri 2.x)
-Adding `window:default` to capabilities does **not** work. Use specific
-granular permissions:
-
-```json
-"permissions": [
-  "core:window:allow-set-size",
-  "core:window:allow-center"
-]
-```
-
-### Tauri v2 command parameter naming
-Tauri v2 automatically camelCases top-level invoke keys before matching
-them to Rust function parameter names. The Rust parameter names must use
-camelCase to match.
-
-**Rule:** When JS sends `{ snake_case: value }`, Tauri converts it to
-`camelCase`. Rust params must match that camelCase.
-
-```ts
-// JS invoke — Tauri auto-converts keys to camelCase
-await invoke("write_fuses", { cfg_fuses: cfg, lock_bits: lock, icsp_mode });
-// Tauri converts: cfg_fuses -> cfgFuses, lock_bits -> lockBits, icsp_mode -> icspMode
-```
-
-```rust
-// Rust handler — parameter names must match camelCase keys
-#[tauri::command]
-pub async fn write_fuses(cfgFuses: Vec<FuseValueDto>, lockBits: Vec<FuseValueDto>, icspMode: String) { ... }
-```
-
-**Note:** This only applies to top-level invoke keys. Nested objects (like
-`options`) are serialized directly by serde and are not affected by
-Tauri's key mapping.
-
-**Commands using this convention:**
-| Command | JS sends | Rust expects |
-|---------|----------|--------------|
-| `write_fuses` | `cfg_fuses`, `lock_bits`, `icsp_mode` | `cfgFuses`, `lockBits`, `icspMode` |
-| `save_bytes_to_file` | `base64Data` | `base64Data` |
-| `do_erase`, `do_blank_check`, `do_chip_id`, `do_logic_test`, `read_fuses`, `check_lock_protection` | `icspMode` | `icspMode` (already camelCase in JS) |
-| `do_logic_identify` | `pinCount`, `vcc` | `pinCount`, `vcc` |
-
-## Data Handling
-
-### Large binary files
-- The Rust backend returns file bytes as **base64** strings via
-  `invoke("read_file_bytes")`.
-- Convert to `Uint8Array` with `atob()` in the frontend.
-- **Do NOT fear Svelte reactivity with 256KB Uint8Arrays.** The browser
-  handles 16,384 `<div>` rows natively. Only optimize with virtual
-  scrolling if profiling shows a real problem.
-- When rendering hex rows, use direct array indexing (`data[offset + j]`)
-  instead of `.slice()` inside reactive blocks.
-
-### Base64 encoding large arrays
-`String.fromCharCode(...data)` crashes with "Maximum call stack size
-exceeded" for arrays >65K elements. Chunk the conversion:
-
-```ts
-const CHUNK = 0x8000; // 32KB
-let result = "";
-for (let i = 0; i < data.length; i += CHUNK) {
-  result += String.fromCharCode(...data.subarray(i, i + CHUNK));
-}
-return btoa(result);
-```
-
-## Component Conventions
-
-1. **Use Svelte 5 runes exclusively.** Prefer `$state` for local variables,
-   `$derived` for computed values, and `$effect` for side effects. Do NOT
-   use legacy `$:` syntax.
-2. **No virtual scrolling until needed.** Start with native
-   `overflow: auto` and `{#each}`. Browser scrolling is highly optimized.
-3. **Loading indicators** should be conditional on a dedicated loading
-   store, not inferred from data absence:
-   ```svelte
-   {#if $hexLoading}
-     <Spinner />
-   {:else if $hexState.data}
-     <HexRows data={$hexState.data} />
-   {:else}
-     <EmptyState />
-   {/if}
-   ```
+- **Svelte 5 runes only** (`$state`/`$derived`/`$effect`) — never `$:`.
+- **State lives in writable stores** — module-level vars are invisible
+  to reactivity; read `$store.field` directly in templates; keep
+  `loading` in a store, never infer from null.
+- **Native dialogs freeze the WebView2 event loop** — no `tick()` or
+  heavy store updates right after a dialog closes.
+- Rust command params are camelCase (Tauri auto-converts invoke keys).
 
 ## Git, CI & Release
 
@@ -320,58 +127,43 @@ Local CI-equivalent checks (run from repo root):
 ### MSRV & cross-distro verification
 
 **MSRV policy: the CLI/core floor tracks the rustc shipped in current
-Debian stable** (1.85 as of Debian 13/Trixie). It's a policy, not just a
-number — when a new Debian stable lands, the floor rolls forward with it,
-no per-release debate. Rationale: source-builders on conservative distros
-get a guaranteed working floor; everyone else takes release binaries or
-rustup. Declared floors: CLI/core/`libarchive-rs` **1.85** (workspace
-`rust-version`), `minipro-tui` **1.88** (ratatui 0.30's floor — it is
-`--exclude`d from every 1.85 check), `gui/src-tauri` **1.88** (own
-workspace/lockfile).
+Debian stable** (1.85 as of Debian 13/Trixie) — the floor rolls forward
+with each new Debian stable, no per-release debate. Declared floors:
+CLI/core/`libarchive-rs` **1.85** (workspace `rust-version`),
+`minipro-tui` and `gui/src-tauri` **1.88** (the TUI is `--exclude`d from
+every 1.85 check).
 
 CI green on `rust:1.93` does NOT prove MSRV compliance — a Debian Stable
-user hit `is_multiple_of()` being unstable on 1.85. When in doubt, use the
-older equivalent (`x % y == 0`). The GitLab `msrv` job runs
-`cargo check --workspace --exclude minipro-tui --locked` on `rust:1.85`,
-and `msrv-tui` runs `cargo check -p minipro-tui --locked` on `rust:1.88`
-(both compile-only; the GUI's 1.88 floor is declared but not CI-enforced).
-The `docs/RELEASE.md` container recipe additionally runs tests + clippy on
-1.85 — deliberately stricter than CI so lint-level divergence surfaces at
-release prep, not after tagging.
-
-**`rust-toolchain.toml` shadows MSRV checks:** the repo pins
-`channel = "1.93"` for development, and rustup honors that file *inside*
-`rust:1.85` containers too — any 1.85 check silently upgrades to the dev
-toolchain unless `RUSTUP_TOOLCHAIN=1.85` is set in the environment (env
-beats the file). The GitLab `msrv` job and the `docs/RELEASE.md` container
-recipes already carry the override; any new MSRV check needs it too —
-this has produced a false-pass on a real release run.
-
-Before changing Linux package names/install commands, verify against real
-distro package databases — names drift (e.g. `libappindicator3-dev` became
-`libayatana-appindicator3-dev` in Debian Trixie/Ubuntu 24.04). Cover
-Debian/Ubuntu, Fedora, Arch, openSUSE at minimum. Update BOTH `README.md`
-and `gui/README.md`, plus `.github/workflows/release.yml` if it installs
-system packages.
+user hit `is_multiple_of()` being unstable on 1.85 (use `x % y == 0`).
+Two traps: the GitLab `msrv`/`msrv-tui` jobs are compile-only while the
+`docs/RELEASE.md` container recipe also runs tests + clippy on 1.85 —
+and `rust-toolchain.toml` (channel 1.93) shadows MSRV checks *inside*
+`rust:1.85` containers unless `RUSTUP_TOOLCHAIN=1.85` is set (env beats
+the file; this produced a real false-pass once).
 
 **When bumping MSRV, update ALL of these in one commit:** root
 `Cargo.toml`, `gui/src-tauri/Cargo.toml`, `README.md`, `gui/README.md`,
-this file, and `.gitlab-ci.yml` (msrv job image tag).
+this file, and `.gitlab-ci.yml` (msrv job image tag). When changing Linux
+package names/install commands, verify against real distro package
+databases (names drift — e.g. `libappindicator3-dev` →
+`libayatana-appindicator3-dev` in Trixie/Ubuntu 24.04) and update
+`README.md`, `gui/README.md`, and `.github/workflows/release.yml`.
 
-Local Linux verification (WSL/Docker/native recipes, incl. MSRV check):
-see `docs/RELEASE.md` — run it before releases and before merging
-build-affecting changes. Shortcut: `scripts/msrv-check.sh` runs the full
-1.85 gate in one command (wslc container on Windows, `cargo +1.85` on
-Linux).
+Local check: `scripts/msrv-check.sh` runs the full 1.85 gate in one
+command (wslc container on Windows, `cargo +1.85` on Linux); full
+container recipes in `docs/RELEASE.md`.
 
 ## Feature internals — in docs/
 
 Read the relevant doc before working in that area:
 
-- `docs/GUI-INTERNALS.md` — project structure map, hex viewer (layout,
-  hotkeys, selection model, pending edits/dirty flag, diff), pin-contact
-  test (incl. the T76 `0x3E` hardware caveat), logic IC test/identify,
-  config/fuse panel, favorites store, terminal rendering rules.
+- `docs/GUI-INTERNALS.md` — authoring conventions (store patterns,
+  Tauri/WebView2 gotchas, data handling, component rules), dev workflows
+  (tauri dev, simulation, pre-commit exe), project structure map, hex
+  viewer (layout, hotkeys, selection model, pending edits/dirty flag,
+  diff), pin-contact test (incl. the T76 `0x3E` hardware caveat), logic
+  IC test/identify, config/fuse panel, favorites store, terminal
+  rendering rules.
 - `docs/TUI-INTERNALS.md` — `minipro-tui` crate map, two-thread event
   model, worker op orchestration (pin/ID gates, erase/verify ordering,
   `can_erase` gating), rendering invariants (resize hysteresis,
