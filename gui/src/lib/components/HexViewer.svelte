@@ -195,6 +195,22 @@
     clearFind();
   });
 
+  // Reset the Trim/Pad panel when a different buffer loads — its fields
+  // are buffer-scoped, so a target size typed for one buffer is stale on
+  // the next. `path` is the identity proxy: Clear and chip reads set it
+  // null, file opens set it to the file — and in-place trim/pad keeps it,
+  // so the panel survives its own operations.
+  let lastHexPath: string | null | undefined;
+  $effect(() => {
+    const path = $hexMeta?.path;
+    if (path !== lastHexPath) {
+      lastHexPath = path;
+      showTrimPad = false;
+      padTargetSize = "";
+      eraseValue = 0xFF;
+    }
+  });
+
   function parseOffset(input: string): number | null {
     const trimmed = input.trim();
     if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
