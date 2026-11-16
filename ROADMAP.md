@@ -43,8 +43,8 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Manufacturer column in search results** — each device search result shows the manufacturer name parsed from `infoic.xml`, making it easy to distinguish similar part numbers from different vendors.
 - [x] **Chip ID byte-order normalization** — fixes false mismatch errors on devices (e.g., SPI flash like PM25LV010) where different programmer protocols pack JEDEC ID bytes at different positions in the response word.
 - [x] **Smart firmware diff** — byte-aligned comparison with three-way tail classification (padding vs anomalous). CLI `--diff fileA fileB`, GUI "Compare" button with four-state cell highlighting, next/prev navigation (F3), and anomalous-tail warning banner. Configurable erase value. See detailed spec below in Backlog.
-- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for serial number injection. See detailed spec below in Near-term.
-- [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Near-term.
+- [x] **Batch / queue operations** — CLI `--batch [N]` and GUI "Batch Mode" toggle for programming multiple identical chips. Same device, same file, repeated writes with verify. Architecture includes buffer patching hook for serial number injection. See detailed spec below in Backlog.
+- [x] **Auto-incrementing serial number injection** — CLI `--serial-*` flags and GUI "Serial Number" section for patching unique serials during batch programming. Supports bin/ascii/bcd formats, little/big endian, optional XOR/CRC-8 checksum, configurable step. Verify checks against patched buffer. See detailed spec below in Backlog.
 - [x] **Serial overflow detection** — `patch_serial()` checks if the value exceeds the width's max and returns an error instead of silently truncating. CLI checks before batch start. GUI shows live warning and blocks start.
 - [x] **Manual trim/pad to size** — "Trim/Pad" button in hex viewer toolbar. Trim removes trailing fill bytes; Pad extends to a target size. Fill byte dropdown supports 0xFF (NOR flash) and 0x00 (EEPROM/NAND).
 - [x] **USB transfer timeout** — 5-second timeout on USB transfers in `usb.rs` prevents indefinite hangs when the programmer is unresponsive. Applies to both CLI and GUI.
@@ -59,159 +59,21 @@ This is a living list of features and improvements planned for minipro-rs.
 - [x] **Hex edit blur fix** — clicking outside the hex viewer (e.g., the device search field) now properly commits the active edit and releases keyboard focus.
 - [x] **ICSP wiring diagrams** — scratch-built SVG wiring diagrams: per-model connector layouts (TL866A/II+ 1×6, T56 1×8, T48 2×8, T76 2×14 zigzag) plus per-class signal-labeled tables for all verified ICSP classes; CLI `-d` prints an ASCII table with `-q <model>`. Collapsible scrollable GUI panel. Unverified classes show a safe fallback — see Phase 4 spec in Backlog.
 - [x] **Model-filtered favorites** — favorites whose exact name doesn't exist in the connected programmer's database section are hidden (names differ per family, e.g. `PIC16F628A` vs `PIC16F628A@DIP18`). Stored favorites are untouched and reappear on a compatible model. Backend: `check_favorite_devices` → `list_devices_by_model()`.
-- [x] **Hardware-free GUI testing** — `MINIPRO_FAKE_PROGRAMMER=<MODEL>` env var fakes programmer presence so device search/selection and the ICSP/ZIF diagrams can be exercised with no USB device attached.
+- [x] **Hardware-free testing** — `MINIPRO_SIMULATE_PROGRAMMER=<MODEL>` env var, GUI Settings → Simulation dropdown, or `minipro-tui --simulate <MODEL>` fakes programmer presence so device search/selection and the ICSP/ZIF diagrams can be exercised with no USB attached. (`MINIPRO_FAKE_PROGRAMMER` still works, deprecated.)
 - [x] **ZIF socket placement diagram** — per-model SVG placement panel driven by `minipro_core::zif` rules (socket size, lever position, top- vs bottom-justified insertion — T48 is 40-pin/bottom-lever; T56/T76 bottom-justify at ZIF 24). Pin-test bad pins highlight at mapped ZIF positions; CLI `-d` prints insertion hints and `-z` annotates bad pins with ZIF positions. Adapter-based packages pending (Phase 3).
 - [x] **SPI status register access for 25-series NOR** — CLI `--spi-status` / `--spi-status-write <BYTE>` and a GUI Config-panel editor (hex field + 8 bit toggles, WEL/WIP read-only, help modal, non-volatile-BP warning). Uses the fuse `0x01` path (READ_CFG/WRITE_CFG), which is the physical on-chip SR — verified read/write/persist on T76, TL866A, T48; each model's `protect_off` clears BP bits (`0x18` T76/T48, `0x44` TL866A). Refused cleanly on non-SPI protocols. Upstream issue 389.
+- [x] **Pin contact test** — verify chip seating before operations: CLI `-z`/`--pin-check` pre-operation gate and standalone check, GUI Diagnostics button highlighting bad pins on the ZIF diagram, TUI pin-test strip. Implemented per model — TL866II+/T48 via the `0x3E` contact query; T76 via its DIP-only bitmap format decoded from XGPro captures. Devices with no contact map report "not available" rather than a phantom pass. See detailed spec below in Backlog.
+- [x] **SPI flash autodetect** — CLI `-a`/`--spi-autodetect` and GUI "Auto Detect" button read the JEDEC ID from an inserted 25-series flash and list matching database devices. See detailed spec below in Backlog.
+- [x] **Logic IC identify** — identifies an unknown logic IC by running candidate test vectors and ranking matches; CLI `--logic-identify`, GUI Identify tab with Select/favorite/deselect. See detailed spec below in Backlog.
+- [x] **GUI custom database directory** — Settings → Database directory picker lets users point at their own `infoic.xml`/`logicic.xml` (e.g. newer XGPro exports); invalid dirs warn without breaking the bundled database. See detailed spec below in Backlog.
+- [x] **Chip health check** — repeated reads detect marginal/degrading chips: CLI `--health-check [N]` + `--consensus-out FILE` with verdict exit codes, GUI Diagnostics card (verdict, unstable-byte count, worst regions, save-consensus-dump button). Phase 1 (read-only) shipped. See detailed spec below in Backlog.
+- [x] **Ratatui TUI frontend** — `minipro-tui`: three-pane device browser + operation dashboard, config/fuse + SPI-SR editor, pin-test and logic views, favorites — shares `minipro-core` ops with the CLI and GUI. Design: `docs/TUI-PLAN.md`; internals: `docs/TUI-INTERNALS.md`.
+- [x] **Self-contained CLI/TUI downloads** — release archives bundle `infoic.xml`/`logicic.xml` beside the binaries (new Windows CLI+TUI zip; XMLs added to Unix tarballs), and the missing-database error lists searched paths + remediation. Windows GUI installers also stage `minipro`/`minipro-tui` exes. See detailed spec below in Backlog.
+- [x] **Native XGPro downloader** — `--download-algorithms`/`--download-resources` (`--from-file`/`--output`) and Settings → Database button generate `algorithm.xml` + `firmware-<model>-*.dat` locally: pure-Rust two-layer RAR extraction (RAR5 via `rar-codec`, RAR4 MiniPro installers via vendored `libarchive-rs`) replaces upstream's `dump-alg-minipro.bash` and works on Windows. Includes both pinned TL866A/CS firmware versions (03.2.85 + 03.2.86 with clone-risk warning). See detailed spec below in Backlog.
 
 ## Near-term
 
-- [x] **Batch / queue operations** — program multiple identical chips with the same firmware image
-  - **Scope (initial):** same device, same file, repeated writes with verify. Covers 90%+ of batch use cases (classroom sets, bootloader burning, small production runs).
-  - **Architecture designed for serial injection:** the batch loop includes a "patch buffer before write" hook where auto-incrementing serial numbers will plug in later, without restructuring the core logic.
-  - **Implementation plan:**
-    1. **CLI batch mode** — `minipro -p DEVICE -w file.bin --batch [--count N]`
-       - Writes firmware, verifies, prints "Chip 1/N: PASS", waits for keypress (Enter to continue, Ctrl+C to abort)
-       - If `--count` omitted, runs indefinitely until user aborts
-       - Prints summary at end: total programmed, passes, failures
-       - Core logic in `minipro-core::operations::batch_write` — reusable by GUI
-       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for serial injection)
-    2. **GUI batch mode** — "Batch Mode" toggle in operations panel
-       - When enabled, Start button becomes "Start Batch"
-       - After each successful write+verify, shows "Next Chip" button and progress counter ("3/50 completed")
-       - Batch summary panel: pass/fail count, elapsed time, export log option
-       - Reuses `batch_write` from `minipro-core` via Tauri command
-    3. **Serial number injection (implemented):**
-       - `--serial-start 1 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
-       - Patches buffer at target address before each write, increments after each successful write
-       - GUI: collapsible "Serial Number" section in batch options
-       - Device-specific: user specifies address manually (different chips store serials in different locations)
-       - May include checksum byte option
-       - Implemented as the "patch buffer before write" hook in `batch_write`
-  - **Design decisions:**
-    - Batch without serial numbers first: useful on its own, simpler to validate
-    - Serial injection as optional layer: adds device-specific complexity (address, format, endianness, checksums) — better as a separate iteration
-    - CLI first, then GUI: CLI is a linear loop with no UI paradigm change; GUI needs batch state management and "Next Chip" flow
-    - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
-  - Status: CLI and GUI batch mode implemented. Serial number injection implemented (see below).
-
-- [x] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
-  - **Problem:** Embedded products need unique serial numbers stored at a known address in flash/EEPROM. Without automation, the user must manually edit the firmware file between each chip — tedious and error-prone.
-  - **Use case:** Manufacturer programming 1000 identical boards. Each chip gets the same firmware but a different serial number at a fixed address (e.g., `0x1FF0`).
-  - **Architecture:** Plugs into the existing `on_patch_buffer` hook in `batch_write`. The buffer is re-read from the file before each chip, so the patch is always applied to a fresh copy — no need to undo the previous serial.
-  - **Configuration:**
-    - `--serial-start <VALUE>` — starting serial number (hex or decimal, e.g., `0x0001` or `1`)
-    - `--serial-addr <OFFSET>` — target address in the chip's memory (hex, e.g., `0x1FF0`)
-    - `--serial-width <N>` — byte width: 1, 2, 4, or 8 (default: 4)
-    - `--serial-format <FORMAT>` — `bin` (raw binary), `ascii` (zero-padded decimal string), `bcd` (binary-coded decimal). Default: `bin`
-    - `--serial-endian <ENDIAN>` — `little` or `big` (default: `little`). Only applies to `bin` format.
-    - `--serial-step <N>` — increment per chip (default: 1). Allows skipping numbers (e.g., step=10 for batch-labeled units).
-    - `--serial-checksum <TYPE>` — optional: `crc8`, `xor`, or `none` (default: `none`). Appends a checksum byte after the serial.
-  - **CLI usage:**
-    ```
-    minipro -p AT28C256 -w firmware.bin --batch 50 \
-      --serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 \
-      --serial-format bin --serial-endian little
-    ```
-    Output per chip: `Chip 1/50: PASS (serial 0x0001)`
-  - **GUI usage:**
-    - Collapsible "Serial Number" section in the batch options panel (only visible when Batch Mode is on)
-    - Fields: Start, Address, Width (dropdown), Format (dropdown), Endian (dropdown), Step
-    - Preview: shows "Chip 1: 0x0001 → bytes 01 00 00 00 at 0x1FF0" so user can verify before starting
-    - Per-chip log shows the serial that was written
-  - **Implementation plan:**
-    1. **Core: `SerialConfig` struct and `patch_serial()` function in `minipro-core::batch`**
-       - `SerialConfig` holds start, addr, width, format, endian, step, checksum type
-       - `patch_serial(buf: &mut [u8], config: &SerialConfig, chip_number: usize)` writes the serial bytes at the configured address
-       - Serial value for chip N = `start + (N-1) * step`
-       - Format conversions:
-         - `bin`: write value as N bytes in selected endianness
-         - `ascii`: format as zero-padded decimal string (width = number of digits, not bytes), null-terminated
-         - `bcd`: pack each decimal digit as 4-bit nibble
-       - Checksum (if enabled): compute over serial bytes, append at `addr + width`
-       - Bounds check: error if `addr + width + checksum_len > buf.len()`
-    2. **CLI: add `--serial-*` flags, wire into `on_patch_buffer` callback**
-       - Validate serial config before starting batch
-       - Print serial value in per-chip output
-    3. **GUI: add `serialConfig` parameter to `do_batch_write_chip` Tauri command**
-       - Takes optional `SerialConfigDto` as additional parameter
-       - When present, backend reads file into buffer, patches with `patch_serial()`, then uses `write_chip_bytes` + `verify_chip_bytes` (not file-based versions)
-       - Keeps serial logic in Rust, testable, consistent with CLI
-    4. **GUI: Serial Number section in batch panel**
-       - Collapsible section, only visible when Batch Mode is on
-       - 3-column field layout: Address | Start | Step / Format | Width | Endian / Checksum
-       - Live preview shows serial range: "Chip 1 of 10: serial 1 → 10, 4 bytes at 0x1FF0" (bounded) or "Chip 1 (unlimited): serial 1, 2, 3, ..." (unlimited)
-       - Validation: rejects empty address or invalid start value before starting batch
-    5. **Tests: unit tests for `patch_serial()`**
-       - Binary little-endian, binary big-endian, ASCII, BCD
-       - Checksum types (crc8, xor)
-       - Bounds checking (address out of range)
-       - Multi-chip sequence (verify increment + step)
-  - **Design decisions:**
-    - Serial config is optional — batch works without it (already implemented)
-    - Address is user-specified, not database-driven: different products store serials at different locations, even on the same chip type. No reliable way to auto-detect.
-    - ASCII format uses decimal, not hex: matches typical product labeling (SN00001, not SN0x0001)
-    - Checksum is optional and simple: CRC8 or XOR covers most use cases without over-engineering
-    - Serial increments on chip number, not on success: if a chip fails and is retried, it gets the same serial (not the next one). This prevents serial gaps from failed chips.
-    - GUI defaults: decimal start (1), empty address (required field), to match typical user expectations
-  - **Edge cases handled:**
-    - Address + width beyond buffer: `patch_serial()` validates and errors before writing
-    - ASCII format with width > buffer space at address: caught by bounds validation
-    - Verify after write: uses `verify_chip_bytes` against the patched buffer, not the original file
-    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), `patch_serial()` returns an error. CLI checks via `check_overflow()` before starting the batch. GUI shows a red warning in the serial panel and blocks batch start.
-  - **Edge cases not yet handled:**
-    - None known.
-  - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
-
-- [x] **Native XGPro downloader — replaces `dump-alg-minipro.bash`** — generate `algorithm.xml` + `firmware-*.dat` in pure Rust, no bash/bsdtar/coreutils/wget
-  - **Status (2026-11): COMPLETE.** `minipro-core::xgpro_fetch` + CLI `--download-algorithms`/`--output`/`--from-file`/`--xgpro-url` + Settings → Database "Download algorithm.xml + firmware…" button (progress, cancel, "Open folder" helper) all landed. Verified end-to-end: live download and `--from-file` both produce 354 T56 + 370 T76 CRC-verified algorithms and all 4 firmware images; MSRV 1.85 clean. The GUI firmware-update flow now auto-finds downloaded `firmware-<model>-*.dat` images (custom db dir + per-user dir) with installed-vs-file version notes; TL866A/CS get an explicit clone-brick warning. Per-user resolver dir landed earlier (`de56803`).
-  - **Problem:** T56/T76 chip operations need `algorithm.xml` (FPGA bitstreams) and `minipro -F` needs `update*.dat` firmware images. Today both come only from upstream's `dump-alg-minipro.bash`, which requires bash, bsdtar, sha256sum, strings, base64, and wget/curl — so it **cannot run on Windows at all**, needs sudo for system dirs, and has a latent bug (`[ -n $USE_ROOT ]` is always true → always `sudo cp`s when an install dir is given). This is the biggest remaining gap for Windows users wanting full T56/T76 support.
-  - **Verified approach (prototyped 2026-11):** the XGPro `.rar` downloads are a two-layer RAR5 matryoshka — outer RAR contains a single `*Setup.exe`, which is a WinRAR SFX (inner RAR5 begins at the `Rar!\x1a\x07\x01\x00` signature, e.g. offset 0x4e600). Only RAR5 decompression is needed, applied twice; no NSIS/zip. `rar-codec` 0.1.2 (pure Rust, zero deps, Apache-2.0, `#![forbid(unsafe_code)]`, oracle-tested vs real UnRAR) extracted **both** real archives end-to-end: V1304 → 33.7 MB exe → 584 entries incl. 354 `algorithm/*.alg` + `updateII.dat`/`UpdateT48.dat`/`updateT56.dat`; T76 V1319 → 69.3 MB exe → 624 entries incl. 370 `algoT76/*.alg` (all extracted, 0 failures) + `UpdateT76.Dat`. Naming confirmed: 356/370 T76 files use the `T7_` prefix (stripped → `SPI25F10`, matching lookup names); `T76_*` vga/uart utils and `Test*` pass through unstripped — strip **only** `T7_`, never `T76_`.
-  - **Implementation plan:**
-    1. **Core: `minipro-core::xgpro_fetch` module** — constants (URLs, SHA-256s, firmware name/type/version table, `.alg` layout offsets) + pipeline:
-       - `download(url) -> Vec<u8>` via `ureq` + rustls, with a `Fn(DownloadProgress)` callback; honor `Proxy::try_from_env()`.
-       - `unwrap_sfx_rar(bytes) -> rar members`: `Archive::open`, find `.exe` member, extract, scan for `Rar!\x1a\x07`, `Archive::open` again — all in memory (~65 MB peak; exe never hits disk, which also avoids antivirus scanning of a foreign PE).
-       - `build_xml(t56, t76) -> String`: for each `.alg`, name = stem (T76 additionally strips `T7_` prefix); desc = T56 bytes-to-first-NUL / T76 GNU-strings emulation (printable runs ≥4 over `data[16..4096]`, newline-joined); bitstream = gzip+base64 of `data[544..]` (T56, level 9) or `data[4..12] ++ data[4096..]` (T76, level 6); `String::from_utf8_lossy` + XML-escape on desc (upstream emits raw bytes → can produce invalid XML; deliberate improvement, bitstreams byte-identical after decode).
-       - `verify_xml()`: re-parse generated XML and run every bitstream through the existing `decode_bitstream` + CRC32 — a self-check the bash script lacks.
-       - `write_outputs(dir)`: `algorithm.xml` + `firmware-<type>-<ver>.dat` renames, atomic temp-file-then-rename, sorted deterministic output. Overwrites an existing `algorithm.xml` silently (it's regenerable) and always prints the absolute path written. Firmware name→type→version table + source-archive mapping is version-locked constants (script parity: 3 files from V1304, `UpdateT76.Dat` from V1319); a later iteration could derive the version from inside the `.dat` instead of hardcoding.
-    2. **Resolver: per-user data dir in `resolve_one()`** — insert between `MINIPRO_HOME` and the system dirs: `%LOCALAPPDATA%\minipro-rs` (Windows), `${XDG_DATA_HOME:-~/.local/share}/minipro-rs` (Linux/BSD), `~/Library/Application Support/minipro-rs` (macOS). Hand-rolled `#[cfg]` fn matching existing style (no `dirs` dep). User dir outranks system dirs (XDG convention); search order becomes: override → cwd → exe dir → macOS resources → repo `data/` → `MINIPRO_HOME` → **per-user dir** → system dirs → C-minipro fallback. Benefits `infoic.xml`/`logicic.xml` overrides too; zero regression risk (dir never existed before).
-    3. **CLI:** `--download-algorithms` flag + `--output DIR` override + `--from-file PATH` (process a local `.rar`, SFX `.exe`, or bare inner RAR — auto-detect by scanning for the `Rar!\x1a\x07` signature — offline use, CI, mirrors) + optional `--xgpro-url` (hidden, for mirror/version bumps). Explicit connect/read timeouts on ureq; progress dots like the script; prints resulting paths. Does NOT connect to a programmer.
-    4. **GUI:** Settings → Database "Download algorithm.xml…" button. Tauri command streams progress over the existing `Channel` pattern (download %, extract, verify stages); cancel = drop the channel; `spawn_blocking` for CPU-bound decompression; on success shows path + "reconnect programmer to apply" note (matches documented algorithm-path caching caveat). **Stretch:** also surface a "Download now" action inline where users actually hit the wall — when a T56/T76 connects with `algorithm.xml` missing, or when an op fails on algorithm lookup — rather than only in Settings.
-    5. **Tests:** `rar-codec`'s `ArchiveBuilder` writes store-method RARs → build a nested rar→exe→rar fixture in-test for a fully offline integration test of `unwrap_sfx_rar` + `build_xml`; unit tests for strings emulation, offsets, name munging, XML output vs upstream fixture; one `#[ignore]`d live-network test (95 MB download — CI compute conservation). **All fixtures synthetic** — never commit real `.alg`/bitstream/firmware bytes (same IP constraint that keeps `algorithm.xml` out of releases).
-    6. **Docs:** README T56/T76 section + custom-database section, `gui/README.md` feature table, `CHANGELOG.md` `[Unreleased]`, man page (`--generate-man` source), AGENTS.md feature-internals pointer if a `docs/ALGO-DOWNLOAD-INTERNALS.md` is warranted.
-  - **Cross-platform implications:**
-    - **Windows:** the headline win — script can't run there; native binary makes T56/T76 first-class. Per-user dir avoids UAC entirely (`%PROGRAMDATA%` needs admin). Never writing the foreign `.exe` to disk sidesteps SmartScreen/AV heuristics.
-    - **Linux:** `XDG_DATA_HOME` respected; no more sudo/`libarchive-tools`/`bsdtar` dependency for package users. **sudo footgun:** users habitually `sudo minipro` when udev rules aren't installed — `sudo --download-algorithms` would write to `/root/.local/share` and be invisible to normal runs. Mitigate: detect `SUDO_UID`/`SUDO_USER` and resolve to the invoking user's data dir, or at minimum warn + print the absolute output path.
-    - **macOS:** `~/Library/Application Support` convention; downloaded data files don't get `com.apple.quarantine` (only apps do); no sandbox (not App Store distributed) — and if ever sandboxed, `$HOME` already resolves to the container so the hand-rolled path still lands correctly.
-    - **HOME/XDG unset** (systemd units, cron, minimal envs): resolve the per-user dir via `getpwuid` fallback or skip gracefully — `std::env::home_dir()` is only un-deprecated in Rust 1.86 (> MSRV 1.85), so it can't be used; hand-roll env reading or take the `dirs` dep (handles passwd fallback for us).
-    - **TLS interception:** corporate MITM proxies need the proxy CA — prefer `rustls-native-certs` (reads OS store) or `rustls-platform-verifier` over bundled `webpki-roots` alone; plain `webpki-roots` breaks on intercepted networks.
-    - **TLS:** `ureq` + `rustls` = no OpenSSL anywhere → uniform behavior and easy musl/static builds; env-proxy support via `Proxy::try_from_env()` for corporate networks.
-    - **Network reachability:** GitHub raw can be slow/blocked in some regions (XGecu is Chinese; large user base there) — `--from-file` + `--xgpro-url` cover mirrors/offline.
-    - **Filenames:** inner-RAR members use `/` separators and mixed case (`UpdateT76.Dat` vs `updateT56.dat`) — match case-insensitively, normalize via `Path`; output names are ASCII-safe.
-    - **Encoding:** `.alg` descriptions may contain non-UTF-8 bytes — `from_utf8_lossy` produces *more* valid XML than upstream (documented divergence).
-    - **Line endings:** write `\n` only on all platforms for byte-stable output.
-    - **MSRV:** root workspace is 1.85 (CI `msrv` job); `rar-codec`/`ureq` must compile there — verify with `rustup run 1.85 cargo check` during implementation; fallback is MSRV bump per `docs/RELEASE.md` (heavier, avoid if possible).
-    - **License audit:** all new deps must pass `cargo deny` (deny.toml allow-list) — `rar-codec` Apache-2.0, `ureq` MIT/Apache-2.0, `sha2` MIT/Apache all clean. `unrar-rs` (non-standard license) rejected for this reason.
-    - **Lockfiles:** run `cargo generate-lockfile` and commit `Cargo.lock` + `gui/src-tauri/Cargo.lock` (CI uses `--locked`).
-  - **Design decisions:**
-    - **IP posture (same as upstream script):** `algorithm.xml` + `firmware-*.dat` are XGecu-proprietary — fetched at runtime from the official mirror, never shipped, never committed. `.gitignore` gains `algorithm.xml`, `firmware-*.dat`, `*.rar` (an `--output .` run inside the repo must not leak them into a commit). Test fixtures are fabricated bytes only.
-    - **Land as two commits/PRs:** the `resolve_one()` per-user-dir change is independently useful (custom db dirs, future features) — reviewable on its own before the downloader.
-    - **Connected-programmer awareness (informational only):** if a programmer is connected, after download report its model's *current* firmware vs the bundled `.dat` version and point at the existing `-F` / Diagnostics flow. **Never auto-nag, never auto-flash:** (a) version strings are `{hw}.{major}.{minor}` where T48/T56/T76 hardcode hw to `00` and filenames carry XGecu product-line labels — so prefix comparisons are misleading and the real cross-model guard is the `0xf0xx`/`0x5600` family magic checked before any USB write (see `docs/FIRMWARE-FORMATS.md`); (b) the bundled image can be *older* than installed firmware (XGecu also pushes firmware OTA); (c) firmware update is our one brick-risk operation — explicit opt-in every time, same-model only.
-    - In-memory pipeline: peak RAM ~65 MB (two RARs processed sequentially) — fine for a desktop tool; streaming extraction possible later if needed.
-    - `--from-file` exists from day one: needed for testing AND users who can't reach GitHub.
-    - Firmware `.dat` extraction kept (script parity) — files already in the archive; skipping means re-downloading 95 MB later for `minipro -F`.
-    - Downloaded RARs cached under `<per-user-dir>/cache/` so re-runs skip the network (mirrors the script's "already in workdir" path).
-    - Sort `.alg` entries by name — deterministic output (shell glob order is locale-dependent anyway).
-    - `rar-codec` caveat: published 2026-11-01 (brand new, pre-1.0). Verified against both real archives today (354 + 370 algs, 100% decode), but: (a) doesn't implement "RAR 7.x" compression v1 — current archives are v0; the SHA-256 gate fails loudly if XGecu repacks; (b) pin the version in Cargo.toml/lockfile against API churn; (c) escape hatch if it rots = `compress-tools` (libarchive binding — a C dep, works everywhere, mirrors bsdtar exactly).
-  - **Edge cases:**
-    - Outer RAR contains a `QO` archive-comment service record — ignore non-`.exe` members.
-    - `tail -c +N` is 1-indexed in the script: offsets are `data[544..]`, `data[16..4096]`, `data[4..12]`, `data[4096..]` — verify against upstream `algorithm.xml` golden.
-    - gzip bytes differ from GNU gzip (impl difference, same level) — irrelevant: consumers gunzip + CRC32.
-    - Partial/failed downloads: temp file + SHA-256 check before use; delete on mismatch.
-    - T76 `strings` step: GNU strings default is ≥4 printable chars; replicate exactly or desc text diverges (bitstreams unaffected either way).
-    - T56 `read -d ""` quirks: bash `read` without `-r` eats backslashes and strips leading/trailing IFS whitespace; no-NUL file → desc = entire file. Replicate or document divergence — probably never triggers in practice.
-    - `.alg` count is version-locked (354/370 today) — decode-all + ≥1 presence is the gate; count drift is a warning, never a hard fail (XGecu adds algorithms between releases).
-    - **TL866A/CS firmware — considered and rejected (2026-11):** the only official source is `minipro/6/minipro_setup685.rar` (last TL866A release, firmware 3.2.86); its inner installer is **RAR4**, which `rar-codec` cannot parse — a second archive engine isn't worth it for a discontinued product whose latest firmware is itself the clone-brick vector (MiniPro ≥6.82 firmware disables boot mode on detected clones). The file picker + clone warning covers it; users can extract `update.dat` from the official installer themselves. **If a pure-Rust RAR4 decoder ever lands:** offer *both* pinned versions as an explicit user choice — 3.2.82 from `minipro_setup671.rar` (last pre-6.80-detection firmware, safe on genuine *and* clone units) and 3.2.86 from `minipro_setup685.rar` (latest, genuine-only). Both SHAs are published in the mirror's `sha256_checksums.txt`. Default recommendation for unknown provenance is the safe version; one `update.dat` serves TL866A and TL866CS both (dual A/CS payloads inside).
-  - Status: planned. Prototype verified RAR5 extraction on both real archives — V1304 (T48/T56) and V1319 (T76) — 724/724 `.alg` files decoded (2026-11).
+Nothing currently scheduled — see Backlog for candidate work.
 
 ## Backlog
 
@@ -757,12 +619,12 @@ This is a living list of features and improvements planned for minipro-rs.
     - Eager diff computation over lazy: even 1MB takes <10ms in Rust; virtual scrolling already handles rendering
     - Three-way tail classification over simple trim: catches real errors (truncated reads) instead of silently ignoring them; surfaces forensically interesting leftover data
     - Configurable erase value over hardcoded 0xFF: NOR erases to 0xFF, some EEPROM/NAND erase to 0x00; device database already has `blank_value`
-  - Status: Ready to implement when prioritized.
+  - Status: implemented.
 
 - [x] Auto SN_NUM — production programming with auto-incrementing serial numbers
   - Implemented as `--serial-*` CLI flags and GUI "Serial Number" section in batch mode
   - Supports: start value, step, target address, width (1-8 bytes), format (bin/ascii/bcd), endian (little/big), optional checksum (XOR/CRC-8)
-  - See completed entry above and detailed spec in Near-term section
+  - See completed entry above and detailed spec in Backlog
 
 - [x] **Manual trim/pad to size** — let advanced users resize firmware files before saving
   - Trim trailing fill bytes to reduce a read-back (8192 bytes) to actual code size (1936 bytes)
@@ -1179,7 +1041,7 @@ This is a living list of features and improvements planned for minipro-rs.
     2. **Token-boundary-aware split** — prefer cutting at `_`, `@`, `(`, or space so the ellipsis lands between tokens (`AUTOEMMC(ISP)_…(recommend)`). Still contained to `ellipsize()`; only worth it if plain tail-weighting still reads poorly on the real device list.
   - **Complementary: adaptive devices-pane width.** `main.rs` hardcodes `Length(26)` for DEVICES and `Length(34)` for LOG+ZIF; `Min(0)` hands all spare width to the center pane, so a maximized terminal leaves the results list exactly as starved as an 80-col one. Cheap fix: `dev_w = (area.width / 4).clamp(26, 44)` — 44 covers the 39-char max name + star + breathing room, and the cap keeps the center pane dominant. (Optional: modest bump to the right pane too, though the ZIF art is fixed-width so it benefits less.)
   - **Plan:** tune the split and widen the pane together on one `fix/` branch — they attack the same complaint from both sides. Revisit token-aware splitting only if the result still reads awkwardly.
-  - **Status:** open. Baseline is `ellipsize()` + tests in `crates/minipro-tui/src/main.rs` (`d74be79`).
+  - **Status:** partially shipped — tail-weighted split + quarter-width adaptive pane (clamp 26–44) landed; token-boundary-aware splitting deferred. Baseline was `ellipsize()` + tests in `crates/minipro-tui/src/main.rs` (`d74be79`).
 
 - [ ] **Unify GUI/TUI favorites — shared file vs import/export** — the two frontends keep separate stores: GUI in `localStorage` (opaque to the TUI process), TUI in `favorites.txt` (`name<TAB>mfr` lines, per-user data dir, via `minipro_core::prefs`).
   - **Shared-file analysis (recorded 2026-12, decision deferred):** merging onto one file has real costs —
@@ -1213,3 +1075,151 @@ This is a living list of features and improvements planned for minipro-rs.
 - [ ] **Publish `libarchive-rs` and `minipro-core` to crates.io** — `minipro-core` is already a usable library (git dep works today — the vendored `crates/libarchive-rs` resolves inside the workspace), but `cargo publish` forbids unpublished path/git deps: `libarchive-rs = { path = "../libarchive-rs" }` must gain a `version` and be published first, `minipro-core` second.
   - **Priority: low** — defer until a real external consumer appears; the git-dep path (documented in README) covers GPL-compatible reuse today, and publishing adds an API-stability and per-release-procedure surface ahead of demand.
   - **Notes:** `libarchive-rs` development lives in a separate private repo (vendored here as a snapshot — see its `AGENTS.md`); `cargo publish` uploads only the package tarball, so the repo can stay private — but `include`/`exclude` must keep specimen archives and dev files out of the package. crates.io name availability (`libarchive-rs`, `minipro-core`) unverified. Optional pre-work: feature-gate `minipro-core`'s heavier deps (`ureq`, `nusb`, archive stack) for narrower consumers — only if asked.
+
+- [x] **Batch / queue operations** — program multiple identical chips with the same firmware image
+  - **Scope (initial):** same device, same file, repeated writes with verify. Covers 90%+ of batch use cases (classroom sets, bootloader burning, small production runs).
+  - **Architecture designed for serial injection:** the batch loop includes a "patch buffer before write" hook where auto-incrementing serial numbers will plug in later, without restructuring the core logic.
+  - **Implementation plan:**
+    1. **CLI batch mode** — `minipro -p DEVICE -w file.bin --batch [--count N]`
+       - Writes firmware, verifies, prints "Chip 1/N: PASS", waits for keypress (Enter to continue, Ctrl+C to abort)
+       - If `--count` omitted, runs indefinitely until user aborts
+       - Prints summary at end: total programmed, passes, failures
+       - Core logic in `minipro-core::operations::batch_write` — reusable by GUI
+       - `batch_write` takes a callback for: progress reporting, "ready for next chip" prompt, and buffer patching hook (for serial injection)
+    2. **GUI batch mode** — "Batch Mode" toggle in operations panel
+       - When enabled, Start button becomes "Start Batch"
+       - After each successful write+verify, shows "Next Chip" button and progress counter ("3/50 completed")
+       - Batch summary panel: pass/fail count, elapsed time, export log option
+       - Reuses `batch_write` from `minipro-core` via Tauri command
+    3. **Serial number injection (implemented):**
+       - `--serial-start 1 --serial-addr 0x1FF0 --serial-width 4 [--serial-format bin|ascii|bcd]`
+       - Patches buffer at target address before each write, increments after each successful write
+       - GUI: collapsible "Serial Number" section in batch options
+       - Device-specific: user specifies address manually (different chips store serials in different locations)
+       - May include checksum byte option
+       - Implemented as the "patch buffer before write" hook in `batch_write`
+  - **Design decisions:**
+    - Batch without serial numbers first: useful on its own, simpler to validate
+    - Serial injection as optional layer: adds device-specific complexity (address, format, endianness, checksums) — better as a separate iteration
+    - CLI first, then GUI: CLI is a linear loop with no UI paradigm change; GUI needs batch state management and "Next Chip" flow
+    - Same device + same file only (initial): different devices/files is a production-line scenario, rare for hobbyist users
+  - Status: CLI and GUI batch mode implemented. Serial number injection implemented (see below).
+
+- [x] **Auto-incrementing serial number injection** — patch a unique serial into each chip during batch programming
+  - **Problem:** Embedded products need unique serial numbers stored at a known address in flash/EEPROM. Without automation, the user must manually edit the firmware file between each chip — tedious and error-prone.
+  - **Use case:** Manufacturer programming 1000 identical boards. Each chip gets the same firmware but a different serial number at a fixed address (e.g., `0x1FF0`).
+  - **Architecture:** Plugs into the existing `on_patch_buffer` hook in `batch_write`. The buffer is re-read from the file before each chip, so the patch is always applied to a fresh copy — no need to undo the previous serial.
+  - **Configuration:**
+    - `--serial-start <VALUE>` — starting serial number (hex or decimal, e.g., `0x0001` or `1`)
+    - `--serial-addr <OFFSET>` — target address in the chip's memory (hex, e.g., `0x1FF0`)
+    - `--serial-width <N>` — byte width: 1, 2, 4, or 8 (default: 4)
+    - `--serial-format <FORMAT>` — `bin` (raw binary), `ascii` (zero-padded decimal string), `bcd` (binary-coded decimal). Default: `bin`
+    - `--serial-endian <ENDIAN>` — `little` or `big` (default: `little`). Only applies to `bin` format.
+    - `--serial-step <N>` — increment per chip (default: 1). Allows skipping numbers (e.g., step=10 for batch-labeled units).
+    - `--serial-checksum <TYPE>` — optional: `crc8`, `xor`, or `none` (default: `none`). Appends a checksum byte after the serial.
+  - **CLI usage:**
+    ```
+    minipro -p AT28C256 -w firmware.bin --batch 50 \
+      --serial-start 0x0001 --serial-addr 0x1FF0 --serial-width 4 \
+      --serial-format bin --serial-endian little
+    ```
+    Output per chip: `Chip 1/50: PASS (serial 0x0001)`
+  - **GUI usage:**
+    - Collapsible "Serial Number" section in the batch options panel (only visible when Batch Mode is on)
+    - Fields: Start, Address, Width (dropdown), Format (dropdown), Endian (dropdown), Step
+    - Preview: shows "Chip 1: 0x0001 → bytes 01 00 00 00 at 0x1FF0" so user can verify before starting
+    - Per-chip log shows the serial that was written
+  - **Implementation plan:**
+    1. **Core: `SerialConfig` struct and `patch_serial()` function in `minipro-core::batch`**
+       - `SerialConfig` holds start, addr, width, format, endian, step, checksum type
+       - `patch_serial(buf: &mut [u8], config: &SerialConfig, chip_number: usize)` writes the serial bytes at the configured address
+       - Serial value for chip N = `start + (N-1) * step`
+       - Format conversions:
+         - `bin`: write value as N bytes in selected endianness
+         - `ascii`: format as zero-padded decimal string (width = number of digits, not bytes), null-terminated
+         - `bcd`: pack each decimal digit as 4-bit nibble
+       - Checksum (if enabled): compute over serial bytes, append at `addr + width`
+       - Bounds check: error if `addr + width + checksum_len > buf.len()`
+    2. **CLI: add `--serial-*` flags, wire into `on_patch_buffer` callback**
+       - Validate serial config before starting batch
+       - Print serial value in per-chip output
+    3. **GUI: add `serialConfig` parameter to `do_batch_write_chip` Tauri command**
+       - Takes optional `SerialConfigDto` as additional parameter
+       - When present, backend reads file into buffer, patches with `patch_serial()`, then uses `write_chip_bytes` + `verify_chip_bytes` (not file-based versions)
+       - Keeps serial logic in Rust, testable, consistent with CLI
+    4. **GUI: Serial Number section in batch panel**
+       - Collapsible section, only visible when Batch Mode is on
+       - 3-column field layout: Address | Start | Step / Format | Width | Endian / Checksum
+       - Live preview shows serial range: "Chip 1 of 10: serial 1 → 10, 4 bytes at 0x1FF0" (bounded) or "Chip 1 (unlimited): serial 1, 2, 3, ..." (unlimited)
+       - Validation: rejects empty address or invalid start value before starting batch
+    5. **Tests: unit tests for `patch_serial()`**
+       - Binary little-endian, binary big-endian, ASCII, BCD
+       - Checksum types (crc8, xor)
+       - Bounds checking (address out of range)
+       - Multi-chip sequence (verify increment + step)
+  - **Design decisions:**
+    - Serial config is optional — batch works without it (already implemented)
+    - Address is user-specified, not database-driven: different products store serials at different locations, even on the same chip type. No reliable way to auto-detect.
+    - ASCII format uses decimal, not hex: matches typical product labeling (SN00001, not SN0x0001)
+    - Checksum is optional and simple: CRC8 or XOR covers most use cases without over-engineering
+    - Serial increments on chip number, not on success: if a chip fails and is retried, it gets the same serial (not the next one). This prevents serial gaps from failed chips.
+    - GUI defaults: decimal start (1), empty address (required field), to match typical user expectations
+  - **Edge cases handled:**
+    - Address + width beyond buffer: `patch_serial()` validates and errors before writing
+    - ASCII format with width > buffer space at address: caught by bounds validation
+    - Verify after write: uses `verify_chip_bytes` against the patched buffer, not the original file
+    - Serial overflow: if `start + (N-1) * step` exceeds the width's max value (e.g., 0xFFFF for 2-byte), `patch_serial()` returns an error. CLI checks via `check_overflow()` before starting the batch. GUI shows a red warning in the serial panel and blocks batch start.
+  - **Edge cases not yet handled:**
+    - None known.
+  - Status: Implemented. Core `patch_serial()` with 18 unit tests, CLI `--serial-*` flags, GUI Serial Number section with live preview and validation.
+
+- [x] **Native XGPro downloader — replaces `dump-alg-minipro.bash`** — generate `algorithm.xml` + `firmware-*.dat` in pure Rust, no bash/bsdtar/coreutils/wget
+  - **Status (2026-11): COMPLETE.** `minipro-core::xgpro_fetch` + CLI `--download-algorithms`/`--output`/`--from-file`/`--xgpro-url` + Settings → Database "Download algorithm.xml + firmware…" button (progress, cancel, "Open folder" helper) all landed. Verified end-to-end: live download and `--from-file` both produce 354 T56 + 370 T76 CRC-verified algorithms and all 4 firmware images; MSRV 1.85 clean. The GUI firmware-update flow now auto-finds downloaded `firmware-<model>-*.dat` images (custom db dir + per-user dir) with installed-vs-file version notes; TL866A/CS get an explicit clone-brick warning. Per-user resolver dir landed earlier (`de56803`).
+  - **Problem:** T56/T76 chip operations need `algorithm.xml` (FPGA bitstreams) and `minipro -F` needs `update*.dat` firmware images. Today both come only from upstream's `dump-alg-minipro.bash`, which requires bash, bsdtar, sha256sum, strings, base64, and wget/curl — so it **cannot run on Windows at all**, needs sudo for system dirs, and has a latent bug (`[ -n $USE_ROOT ]` is always true → always `sudo cp`s when an install dir is given). This is the biggest remaining gap for Windows users wanting full T56/T76 support.
+  - **Verified approach (prototyped 2026-11):** the XGPro `.rar` downloads are a two-layer RAR5 matryoshka — outer RAR contains a single `*Setup.exe`, which is a WinRAR SFX (inner RAR5 begins at the `Rar!\x1a\x07\x01\x00` signature, e.g. offset 0x4e600). Only RAR5 decompression is needed, applied twice; no NSIS/zip. `rar-codec` 0.1.2 (pure Rust, zero deps, Apache-2.0, `#![forbid(unsafe_code)]`, oracle-tested vs real UnRAR) extracted **both** real archives end-to-end: V1304 → 33.7 MB exe → 584 entries incl. 354 `algorithm/*.alg` + `updateII.dat`/`UpdateT48.dat`/`updateT56.dat`; T76 V1319 → 69.3 MB exe → 624 entries incl. 370 `algoT76/*.alg` (all extracted, 0 failures) + `UpdateT76.Dat`. Naming confirmed: 356/370 T76 files use the `T7_` prefix (stripped → `SPI25F10`, matching lookup names); `T76_*` vga/uart utils and `Test*` pass through unstripped — strip **only** `T7_`, never `T76_`.
+  - **Implementation plan:**
+    1. **Core: `minipro-core::xgpro_fetch` module** — constants (URLs, SHA-256s, firmware name/type/version table, `.alg` layout offsets) + pipeline:
+       - `download(url) -> Vec<u8>` via `ureq` + rustls, with a `Fn(DownloadProgress)` callback; honor `Proxy::try_from_env()`.
+       - `unwrap_sfx_rar(bytes) -> rar members`: `Archive::open`, find `.exe` member, extract, scan for `Rar!\x1a\x07`, `Archive::open` again — all in memory (~65 MB peak; exe never hits disk, which also avoids antivirus scanning of a foreign PE).
+       - `build_xml(t56, t76) -> String`: for each `.alg`, name = stem (T76 additionally strips `T7_` prefix); desc = T56 bytes-to-first-NUL / T76 GNU-strings emulation (printable runs ≥4 over `data[16..4096]`, newline-joined); bitstream = gzip+base64 of `data[544..]` (T56, level 9) or `data[4..12] ++ data[4096..]` (T76, level 6); `String::from_utf8_lossy` + XML-escape on desc (upstream emits raw bytes → can produce invalid XML; deliberate improvement, bitstreams byte-identical after decode).
+       - `verify_xml()`: re-parse generated XML and run every bitstream through the existing `decode_bitstream` + CRC32 — a self-check the bash script lacks.
+       - `write_outputs(dir)`: `algorithm.xml` + `firmware-<type>-<ver>.dat` renames, atomic temp-file-then-rename, sorted deterministic output. Overwrites an existing `algorithm.xml` silently (it's regenerable) and always prints the absolute path written. Firmware name→type→version table + source-archive mapping is version-locked constants (script parity: 3 files from V1304, `UpdateT76.Dat` from V1319); a later iteration could derive the version from inside the `.dat` instead of hardcoding.
+    2. **Resolver: per-user data dir in `resolve_one()`** — insert between `MINIPRO_HOME` and the system dirs: `%LOCALAPPDATA%\minipro-rs` (Windows), `${XDG_DATA_HOME:-~/.local/share}/minipro-rs` (Linux/BSD), `~/Library/Application Support/minipro-rs` (macOS). Hand-rolled `#[cfg]` fn matching existing style (no `dirs` dep). User dir outranks system dirs (XDG convention); search order becomes: override → cwd → exe dir → macOS resources → repo `data/` → `MINIPRO_HOME` → **per-user dir** → system dirs → C-minipro fallback. Benefits `infoic.xml`/`logicic.xml` overrides too; zero regression risk (dir never existed before).
+    3. **CLI:** `--download-algorithms` flag + `--output DIR` override + `--from-file PATH` (process a local `.rar`, SFX `.exe`, or bare inner RAR — auto-detect by scanning for the `Rar!\x1a\x07` signature — offline use, CI, mirrors) + optional `--xgpro-url` (hidden, for mirror/version bumps). Explicit connect/read timeouts on ureq; progress dots like the script; prints resulting paths. Does NOT connect to a programmer.
+    4. **GUI:** Settings → Database "Download algorithm.xml…" button. Tauri command streams progress over the existing `Channel` pattern (download %, extract, verify stages); cancel = drop the channel; `spawn_blocking` for CPU-bound decompression; on success shows path + "reconnect programmer to apply" note (matches documented algorithm-path caching caveat). **Stretch:** also surface a "Download now" action inline where users actually hit the wall — when a T56/T76 connects with `algorithm.xml` missing, or when an op fails on algorithm lookup — rather than only in Settings.
+    5. **Tests:** `rar-codec`'s `ArchiveBuilder` writes store-method RARs → build a nested rar→exe→rar fixture in-test for a fully offline integration test of `unwrap_sfx_rar` + `build_xml`; unit tests for strings emulation, offsets, name munging, XML output vs upstream fixture; one `#[ignore]`d live-network test (95 MB download — CI compute conservation). **All fixtures synthetic** — never commit real `.alg`/bitstream/firmware bytes (same IP constraint that keeps `algorithm.xml` out of releases).
+    6. **Docs:** README T56/T76 section + custom-database section, `gui/README.md` feature table, `CHANGELOG.md` `[Unreleased]`, man page (`--generate-man` source), AGENTS.md feature-internals pointer if a `docs/ALGO-DOWNLOAD-INTERNALS.md` is warranted.
+  - **Cross-platform implications:**
+    - **Windows:** the headline win — script can't run there; native binary makes T56/T76 first-class. Per-user dir avoids UAC entirely (`%PROGRAMDATA%` needs admin). Never writing the foreign `.exe` to disk sidesteps SmartScreen/AV heuristics.
+    - **Linux:** `XDG_DATA_HOME` respected; no more sudo/`libarchive-tools`/`bsdtar` dependency for package users. **sudo footgun:** users habitually `sudo minipro` when udev rules aren't installed — `sudo --download-algorithms` would write to `/root/.local/share` and be invisible to normal runs. Mitigate: detect `SUDO_UID`/`SUDO_USER` and resolve to the invoking user's data dir, or at minimum warn + print the absolute output path.
+    - **macOS:** `~/Library/Application Support` convention; downloaded data files don't get `com.apple.quarantine` (only apps do); no sandbox (not App Store distributed) — and if ever sandboxed, `$HOME` already resolves to the container so the hand-rolled path still lands correctly.
+    - **HOME/XDG unset** (systemd units, cron, minimal envs): resolve the per-user dir via `getpwuid` fallback or skip gracefully — `std::env::home_dir()` is only un-deprecated in Rust 1.86 (> MSRV 1.85), so it can't be used; hand-roll env reading or take the `dirs` dep (handles passwd fallback for us).
+    - **TLS interception:** corporate MITM proxies need the proxy CA — prefer `rustls-native-certs` (reads OS store) or `rustls-platform-verifier` over bundled `webpki-roots` alone; plain `webpki-roots` breaks on intercepted networks.
+    - **TLS:** `ureq` + `rustls` = no OpenSSL anywhere → uniform behavior and easy musl/static builds; env-proxy support via `Proxy::try_from_env()` for corporate networks.
+    - **Network reachability:** GitHub raw can be slow/blocked in some regions (XGecu is Chinese; large user base there) — `--from-file` + `--xgpro-url` cover mirrors/offline.
+    - **Filenames:** inner-RAR members use `/` separators and mixed case (`UpdateT76.Dat` vs `updateT56.dat`) — match case-insensitively, normalize via `Path`; output names are ASCII-safe.
+    - **Encoding:** `.alg` descriptions may contain non-UTF-8 bytes — `from_utf8_lossy` produces *more* valid XML than upstream (documented divergence).
+    - **Line endings:** write `\n` only on all platforms for byte-stable output.
+    - **MSRV:** root workspace is 1.85 (CI `msrv` job); `rar-codec`/`ureq` must compile there — verify with `rustup run 1.85 cargo check` during implementation; fallback is MSRV bump per `docs/RELEASE.md` (heavier, avoid if possible).
+    - **License audit:** all new deps must pass `cargo deny` (deny.toml allow-list) — `rar-codec` Apache-2.0, `ureq` MIT/Apache-2.0, `sha2` MIT/Apache all clean. `unrar-rs` (non-standard license) rejected for this reason.
+    - **Lockfiles:** run `cargo generate-lockfile` and commit `Cargo.lock` + `gui/src-tauri/Cargo.lock` (CI uses `--locked`).
+  - **Design decisions:**
+    - **IP posture (same as upstream script):** `algorithm.xml` + `firmware-*.dat` are XGecu-proprietary — fetched at runtime from the official mirror, never shipped, never committed. `.gitignore` gains `algorithm.xml`, `firmware-*.dat`, `*.rar` (an `--output .` run inside the repo must not leak them into a commit). Test fixtures are fabricated bytes only.
+    - **Land as two commits/PRs:** the `resolve_one()` per-user-dir change is independently useful (custom db dirs, future features) — reviewable on its own before the downloader.
+    - **Connected-programmer awareness (informational only):** if a programmer is connected, after download report its model's *current* firmware vs the bundled `.dat` version and point at the existing `-F` / Diagnostics flow. **Never auto-nag, never auto-flash:** (a) version strings are `{hw}.{major}.{minor}` where T48/T56/T76 hardcode hw to `00` and filenames carry XGecu product-line labels — so prefix comparisons are misleading and the real cross-model guard is the `0xf0xx`/`0x5600` family magic checked before any USB write (see `docs/FIRMWARE-FORMATS.md`); (b) the bundled image can be *older* than installed firmware (XGecu also pushes firmware OTA); (c) firmware update is our one brick-risk operation — explicit opt-in every time, same-model only.
+    - In-memory pipeline: peak RAM ~65 MB (two RARs processed sequentially) — fine for a desktop tool; streaming extraction possible later if needed.
+    - `--from-file` exists from day one: needed for testing AND users who can't reach GitHub.
+    - Firmware `.dat` extraction kept (script parity) — files already in the archive; skipping means re-downloading 95 MB later for `minipro -F`.
+    - Downloaded RARs cached under `<per-user-dir>/cache/` so re-runs skip the network (mirrors the script's "already in workdir" path).
+    - Sort `.alg` entries by name — deterministic output (shell glob order is locale-dependent anyway).
+    - `rar-codec` caveat: published 2026-11-01 (brand new, pre-1.0). Verified against both real archives today (354 + 370 algs, 100% decode), but: (a) doesn't implement "RAR 7.x" compression v1 — current archives are v0; the SHA-256 gate fails loudly if XGecu repacks; (b) pin the version in Cargo.toml/lockfile against API churn; (c) escape hatch if it rots = `compress-tools` (libarchive binding — a C dep, works everywhere, mirrors bsdtar exactly).
+  - **Edge cases:**
+    - Outer RAR contains a `QO` archive-comment service record — ignore non-`.exe` members.
+    - `tail -c +N` is 1-indexed in the script: offsets are `data[544..]`, `data[16..4096]`, `data[4..12]`, `data[4096..]` — verify against upstream `algorithm.xml` golden.
+    - gzip bytes differ from GNU gzip (impl difference, same level) — irrelevant: consumers gunzip + CRC32.
+    - Partial/failed downloads: temp file + SHA-256 check before use; delete on mismatch.
+    - T76 `strings` step: GNU strings default is ≥4 printable chars; replicate exactly or desc text diverges (bitstreams unaffected either way).
+    - T56 `read -d ""` quirks: bash `read` without `-r` eats backslashes and strips leading/trailing IFS whitespace; no-NUL file → desc = entire file. Replicate or document divergence — probably never triggers in practice.
+    - `.alg` count is version-locked (354/370 today) — decode-all + ≥1 presence is the gate; count drift is a warning, never a hard fail (XGecu adds algorithms between releases).
+    - **TL866A/CS firmware — initially rejected, then shipped:** the only official source is the legacy MiniPro installers; their inner archives are **RAR4**, which `rar-codec` cannot parse. The vendored `libarchive-rs` RAR4 decoder removed that blocker: the downloader now also fetches the two pinned MiniPro installers and produces `firmware-TL866A-03.2.85.dat` (MiniPro 6.82) and `firmware-TL866A-03.2.86.dat` (MiniPro 6.85). Both versions are always provided rather than a "latest" — 03.2.86 carries reported anti-clone serial checks that can brick counterfeit units (MiniPro ≥6.82 firmware disables boot mode on detected clones), so 03.2.85 is the safer choice for unknown provenance and the 03.2.86 image warns at extract and at flash time. No vendor payload is certified as clone-safe; one `update.dat` serves TL866A and TL866CS both (dual A/CS payloads inside).
+  - Status: **implemented** — shipped scope recorded in the status line at the top of this item; additionally the TL866A/CS RAR4 path via vendored `libarchive-rs` (see previous bullet). Prototype-era verification held: 354 T56 + 370 T76 CRC-verified `.alg`s + all firmware images; MSRV 1.85 clean.
