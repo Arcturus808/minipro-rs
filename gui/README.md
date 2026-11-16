@@ -70,6 +70,7 @@ gui/
 │   ├── app.css                       # Tailwind/Skeleton imports + custom scrollbar
 │   ├── lib/
 │   │   ├── file-dialog.ts            # Native open/save wrappers with defaultPath
+│   │   ├── pinTest.ts                # Frontend mirror of core pin-test eligibility checks
 │   │   ├── components/
 │   │   │   ├── DeviceSelector.svelte   # Search + favorites + paginated/scrollable device list
 │   │   │   ├── FuseBitDecoder.svelte   # Bit-level fuse/config decoder with named fields
