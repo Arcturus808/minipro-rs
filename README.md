@@ -16,7 +16,7 @@ A Rust reimplementation of [minipro](https://gitlab.com/DavidGriffith/minipro) �
 
 > **Bug reports & hardware test results:** [open an issue on GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/issues)
 
-> **This is a spare-time project.** Bug reports and hardware test results are welcome. Please be patient with response times (days to weeks, not hours). For urgent issues, consider contributing a PR — the codebase is well-structured and the [architecture is documented](#architecture-plan). The [GitHub repo](https://github.com/Arcturus808/minipro-rs) is a mirror for release builds only; all issues and merge requests should go to [GitLab](https://gitlab.com/arcturus8081/minipro-rs).
+> **This is a spare-time project.** Bug reports and hardware test results are welcome. Please be patient with response times (days to weeks, not hours). For urgent issues, consider contributing a PR — the codebase is well-structured and the [architecture is documented](#architecture). The [GitHub repo](https://github.com/Arcturus808/minipro-rs) is a mirror for release builds only; all issues and merge requests should go to [GitLab](https://gitlab.com/arcturus8081/minipro-rs).
 
 ---
 
@@ -557,7 +557,7 @@ Community contributors with Mac hardware are warmly welcomed — especially for 
 
 ---
 
-## Architecture Plan
+## Architecture
 
 ### Crate layout
 
@@ -585,12 +585,15 @@ minipro-rs/
 │   │   │   │   ├── ihex.rs     # Intel HEX read/write
 │   │   │   │   ├── srec.rs     # Motorola S-Record read/write
 │   │   │   │   └── jedec.rs    # JEDEC fuse-map read/write
-│   │   │   └── operations.rs   # High-level read/write/erase/verify/blank-check
+│   │   │   ├── operations.rs   # High-level read/write/erase/verify/blank-check
+│   │   │   └── (support: algorithm.rs FPGA algorithm loading,
+│   │   │       icsp.rs ICSP wiring tables, xgpro_fetch.rs resource
+│   │   │       download, zif.rs socket maps, batch.rs, diff.rs,
+│   │   │       health.rs, prefs.rs, util.rs)
 │   │   └── Cargo.toml
 │   ├── minipro-cli/      # binary: clap CLI front-end
-│   │   ├── src/
-│   │   │   └── main.rs
-│   │   └── Cargo.toml
+│   ├── minipro-tui/      # binary: ratatui terminal UI front-end
+│   ├── libarchive-rs/    # vendored pure-Rust RAR4 decoder (installer extraction)
 │   └── (gui/ omitted — see gui/README.md)
 ├── data/
 │   ├── infoic.xml        # 30 000+ device definitions (vendored from upstream)
@@ -598,6 +601,9 @@ minipro-rs/
 └── tests/
     └── integration/
 ```
+
+Feature-level internals live in `docs/*-INTERNALS.md` (GUI, TUI, CLI, T76);
+build and verification conventions in `AGENTS.md`.
 
 ---
 
@@ -611,10 +617,13 @@ USB VID/PID targets:
 | Model        | VID    | PID    |
 |--------------|--------|--------|
 | TL866CS/A    | 0x04D8 | 0xE11C |
-| TL866II+     | 0x04D8 | 0xE11C |
-| T48          | 0x04D8 | 0xE11C |
+| TL866II+     | 0xA466 | 0x0A53 |
+| T48          | 0xA466 | 0x0A53 |
 | T56          | 0xA466 | 0x0A53 |
 | T76          | 0xA466 | 0x1A86 |
+
+TL866II+, T48, and T56 share one USB ID — the model is resolved from the
+device's `GET_INFO` reply after connect, not the PID (see `usb.rs`).
 
 #### Protocol abstraction — `trait Protocol`
 Replace the C function-pointer dispatch table in `minipro_handle_t` with a Rust trait:
@@ -633,6 +642,11 @@ pub trait Protocol: Send + Sync {
     fn read_calibration(&self, handle: &UsbHandle) -> Result<Vec<u8>>;
 }
 ```
+
+*(Sketch — the shipped trait is larger: it also covers pin-contact test,
+logic-IC test/identify, SPI status register ops, JEDEC autodetect,
+firmware update, and hardware self-test. See `protocol/mod.rs` for the
+current surface.)*
 
 #### File formats
 Auto-detect based on extension, then parse:
