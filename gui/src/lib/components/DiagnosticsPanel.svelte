@@ -6,7 +6,7 @@
   import { doPinTest, pinTestResult, pinTestRunning, clearPinTestResult } from "../stores/operations";
   import { settings } from "../stores/settings";
   import { pickOpenFile, pickSaveFile, confirmDialog } from "../file-dialog";
-  import { PIN_TEST_SUPPORTED, t76PinTestOk } from "../pinTest";
+  import { PIN_TEST_SUPPORTED, t76PinTestOk, hasPinMap } from "../pinTest";
 
   const HARDWARE_CHECK_SUPPORTED = new Set([
     "TL866II+",
@@ -50,7 +50,7 @@
     pinTestSupported
       && $programmer !== null
       && $selectedDevice !== null
-      && $selectedDevice.pin_map !== 0
+      && hasPinMap($selectedDevice)
       && $settings.icspMode === "zif"
       && ($programmer.model !== "T76" || t76PinTestOk($selectedDevice))
       && !$pinTestRunning,
@@ -369,7 +369,7 @@
           class={actionClass}
           onclick={runPinTest}
           disabled={!pinTestEnabled}
-          title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : $selectedDevice.pin_map === 0 ? "No pin-map data for this device" : $programmer?.model === "T76" && !t76PinTestOk($selectedDevice) ? "T76 pin test supports plain DIP packages only" : "Run ZIF socket pin-contact test"}
+          title={$settings.icspMode !== "zif" ? "Pin test requires ZIF mode" : !$selectedDevice ? "Select a device first" : !hasPinMap($selectedDevice) ? "No pin-map data for this device" : $programmer?.model === "T76" && !t76PinTestOk($selectedDevice) ? "T76 pin test supports plain DIP packages only" : "Run ZIF socket pin-contact test"}
         >
           {#if $pinTestRunning}
             Pin Contact Test (running...)

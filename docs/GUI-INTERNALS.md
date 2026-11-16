@@ -250,18 +250,25 @@ label), tested-good (green), and untested/unoccupied (neutral gray) —
 so untested pins are never implied "good". When every expected pin is
 open (`bad == expected`), the surfaces treat it as an empty socket:
 the log/card say "is a chip seated?" instead of implying N bad
-contacts. The CLI `-z` prints the same hint.
+contacts. The CLI `-z` prints the same hint. A device with no contact
+data yields an all-empty `PinTestResult` — `PinTestResult::ran()`
+(`!expected_pins.is_empty()`) is the single predicate distinguishing
+"tested and passed" from "nothing measured"; grading
+`bad_pins.is_empty()` alone once reported "All pins OK" on an empty
+socket for devices like generic `628512` (see KNOWN-BUGS).
 
 **Button disabled when:** no programmer connected, no device selected,
-device has `pin_map == 0` (no contact-test data in database), ICSP mode
+device has `(pin_map & 0xFF) == 0` (no contact-test data in database —
+mirrored by `hasPinMap()` in `lib/pinTest.ts`; the raw field can be
+nonzero flag-only like `0x8800` while the low-byte index is 0), ICSP mode
 active, unsupported programmer model, a non-DIP package on T76
 (`t76PinTestOk` mirrors the core check), or a test is already running.
 
 **Checkbox disabled when:** no programmer connected, no device selected,
 ICSP mode active, unsupported programmer model, a non-DIP package on
-T76, or device has `pin_map == 0`. Model/package eligibility for both
+T76, or device has `(pin_map & 0xFF) == 0`. Model/package eligibility for both
 the standalone button and this checkbox comes from `lib/pinTest.ts`
-(`PIN_TEST_SUPPORTED`, `t76PinTestOk`, `pinCheckModelOk`) — a single
+(`PIN_TEST_SUPPORTED`, `t76PinTestOk`, `pinCheckModelOk`, `hasPinMap`) — a single
 frontend mirror of the core checks, after the two sites drifted apart. The checkbox is located right of "Chip ID check" for
 read/write/verify/erase, replaces "No options for this operation." for
 blank check and chip ID, and appears in a thin options row above the

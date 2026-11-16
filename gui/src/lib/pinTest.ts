@@ -18,6 +18,17 @@ export function t76PinTestOk(dev: DeviceInfo): boolean {
   return !!m && +m[1] % 2 === 0 && +m[1] <= 40 && +m[1] === dev.pin_count;
 }
 
+/** Whether the device carries pin-contact test data — mirrors the core's
+ *  `device.pin_map & 0xFF != 0` (`pin_check_gate_applies`,
+ *  `pin_contact_check`): only the LOW BYTE is the `<maps>` index and 0
+ *  marks "no data", so a raw `pin_map !== 0` wrongly enables the check
+ *  for flag-only values like 0x8800 (e.g. generic 628512). */
+export function hasPinMap(
+  dev: Pick<DeviceInfo, "pin_map"> | null | undefined,
+): boolean {
+  return !!dev && (dev.pin_map & 0xff) !== 0;
+}
+
 /** Whether the model supports pin contact checks for `dev` at all —
  *  the T76 additionally requires a plain DIP package. pin_map and
  *  ICSP-mode applicability are checked separately by callers. */

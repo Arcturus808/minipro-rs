@@ -35,6 +35,14 @@ impl PinTestResult {
     pub fn all_expected_open(&self) -> bool {
         !self.expected_pins.is_empty() && self.bad_pins.len() == self.expected_pins.len()
     }
+
+    /// True when the check actually measured pins. A device with no
+    /// contact data (pin-map index 0 or an empty mask) yields an
+    /// all-empty result whose `bad_pins.is_empty()` must NOT be read
+    /// as a pass — that would claim "all pins OK" on an empty socket.
+    pub fn ran(&self) -> bool {
+        !self.expected_pins.is_empty()
+    }
 }
 
 /// Structured result of a logic IC test.
@@ -302,3 +310,44 @@ pub mod t56;
 pub mod t76;
 pub mod tl866a;
 pub mod tl866iiplus;
+
+#[cfg(test)]
+mod tests {
+    use super::PinTestResult;
+
+    #[test]
+    fn pin_test_result_ran_distinguishes_measured_from_empty() {
+        // Unavailable check (no contact data): default/empty result — ran()
+        // must be false so callers never grade it as a pass.
+        let unavailable = PinTestResult::default();
+        assert!(!unavailable.ran());
+        assert!(!unavailable.all_expected_open());
+
+        // Real pass: pins measured, none bad.
+        let pass = PinTestResult {
+            bad_pins: vec![],
+            expected_pins: vec![1, 2, 3],
+            untestable_pins: vec![4],
+        };
+        assert!(pass.ran());
+        assert!(!pass.all_expected_open());
+
+        // Real fail: some expected pins open.
+        let fail = PinTestResult {
+            bad_pins: vec![2],
+            expected_pins: vec![1, 2, 3],
+            untestable_pins: vec![],
+        };
+        assert!(fail.ran());
+        assert!(!fail.all_expected_open());
+
+        // All-open: empty socket signature.
+        let all_open = PinTestResult {
+            bad_pins: vec![1, 2, 3],
+            expected_pins: vec![1, 2, 3],
+            untestable_pins: vec![],
+        };
+        assert!(all_open.ran());
+        assert!(all_open.all_expected_open());
+    }
+}

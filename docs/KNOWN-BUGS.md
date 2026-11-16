@@ -918,3 +918,28 @@ per-byte fuse mask, which is not a word width. `first_verify_mismatch`
 compares byte-wise under a per-byte mask derived from the absolute
 offset parity; `blank_check` tests `b & mask == blank & mask`. Writes
 needed no fix — cells can only store the bits they physically have.
+
+## Pin contact test reported "All pins OK" on devices with no contact data (fixed)
+
+`device.pin_map & 0xFF == 0` is the database's "no contact data" marker
+(e.g. generic `628512` → `pin_map=0x8800` → index 0). `get_pin_map`
+returns `None` for it and `pin_contact_check` returned
+`PinTestResult::default()` after printing "not available" via `outln!`
+— which is invisible to the GUI. Every caller then graded
+`bad_pins.is_empty()` as a pass: GUI Diagnostics showed "All pins OK"
+on a literally *empty* ZIF socket, CLI `-z` printed `OK`, and the TUI
+strip rendered a green "all pins OK". The automatic pre-op gate was
+already safe (`pin_check_gate_applies` returns false on index 0), so
+the bug was confined to the standalone/manual paths — plus the narrow
+case of a nonzero index resolving to a `<map>` with `<mask
+count="0"/>`, which the gate does not cover.
+
+**Fix:** `PinTestResult::ran()` (`!expected_pins.is_empty()`) is the
+single predicate for "the check actually measured something" — the
+empty default result is never a pass. `pin_contact_check` treats a
+resolved-but-empty mask identically to a missing map ("not
+available"). The CLI `-z` grader, GUI `do_pin_test` (returns
+`supported:false` + "no contact data"), GUI `run_pin_gate` (logs the
+skip and proceeds — no data must not block the op), TUI worker log,
+and TUI pin-test strip all report the unavailable case explicitly.
+

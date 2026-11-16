@@ -787,7 +787,10 @@ fn do_operations(
             eprint!("Running pin contact check... ");
         }
         let result = pin_contact_check(handle, &db_paths.infoic)?;
-        if result.bad_pins.is_empty() {
+        if !result.ran() {
+            // No contact-test data for this device — pin_contact_check
+            // already reported it unavailable; nothing was measured.
+        } else if result.bad_pins.is_empty() {
             if cli.verbose {
                 eprintln!("Pin test passed.");
             } else {

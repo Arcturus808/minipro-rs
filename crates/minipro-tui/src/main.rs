@@ -943,6 +943,10 @@ fn right_pane(f: &mut Frame, area: Rect, app: &mut App) {
                 ])
             }
         }
+        Some(pt) if pt.tested.is_empty() => Line::from(vec![
+            Span::raw(" "),
+            sp(" Pin test: no contact data for this device", theme::faint()),
+        ]),
         Some(pt) => Line::from(vec![
             Span::raw(" "),
             sp("✓", theme::green()),
