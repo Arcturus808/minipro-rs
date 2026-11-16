@@ -219,6 +219,13 @@ fn run_in_transaction(
     if o.pin_check && pin_check_gate_applies(model, h.icsp != 0, &device) {
         log(tx, log::Level::Info, "Running pin contact check...");
         let res = pin_contact_check(h, &paths.infoic).map_err(|e| e.to_string())?;
+        if !res.ran() {
+            log(
+                tx,
+                log::Level::Info,
+                "Pin contact check not available for this device — no contact data.",
+            );
+        }
         let _ = tx.send(AppEvent::PinTest {
             bad: res.bad_pins.clone(),
             expected: res.expected_pins.clone(),

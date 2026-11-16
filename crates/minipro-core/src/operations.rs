@@ -1977,9 +1977,13 @@ pub fn pin_contact_check(
 ) -> Result<crate::protocol::PinTestResult> {
     let device = handle.device()?.clone();
     let index = device.pin_map & 0xFF;
+    // get_pin_map returns None for index == 0 (the database's "no contact
+    // data" marker) and for missing maps; an empty mask is just as
+    // meaningless. In every case there is nothing to measure — callers
+    // must not grade the empty default result as a pass.
     let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
-        Some(pm) => pm,
-        None => {
+        Some(pm) if !pm.mask.is_empty() => pm,
+        _ => {
             crate::outln!("Pin contact check not available for this device.");
             return Ok(crate::protocol::PinTestResult::default());
         }

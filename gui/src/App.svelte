@@ -9,7 +9,7 @@
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
   import { pickOpenFile, pickSaveFile } from "./lib/file-dialog";
-  import { PIN_TEST_SUPPORTED, pinCheckModelOk, t76PinTestOk } from "./lib/pinTest";
+  import { PIN_TEST_SUPPORTED, pinCheckModelOk, t76PinTestOk, hasPinMap } from "./lib/pinTest";
   import {
     initProgressListener,
     initLogListener,
@@ -296,14 +296,14 @@
     !$selectedDevice ||
     icspMode !== "zif" ||
     !pinCheckModelOk($programmer.model, $selectedDevice) ||
-    !$selectedDevice.pin_map
+    !hasPinMap($selectedDevice)
   );
   let pinCheckTooltip = $derived(
     !$programmer ? "No programmer connected" :
     icspMode !== "zif" ? "Not available in ICSP mode" :
     !PIN_TEST_SUPPORTED.has($programmer?.model ?? "") ? "Not supported on this programmer model" :
     $programmer?.model === "T76" && $selectedDevice && !t76PinTestOk($selectedDevice) ? "T76 pin test supports plain DIP packages only" :
-    !$selectedDevice?.pin_map ? "Device has no pin-map data" :
+    !hasPinMap($selectedDevice) ? "Device has no pin-map data" :
     "Test pin contact before operation"
   );
 

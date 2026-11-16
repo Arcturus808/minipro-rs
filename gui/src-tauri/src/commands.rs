@@ -106,6 +106,16 @@ fn run_pin_check_if_enabled(
 
     emit_log(window, "info", "Running pin contact check...");
     let result = pin_contact_check(handle, infoic_path).map_err(|e| e.to_string())?;
+    if !result.ran() {
+        // pin_contact_check already reported "not available" via outln (not
+        // visible in the GUI log) — nothing was measured, don't grade it.
+        emit_log(
+            window,
+            "info",
+            "Pin contact check not available for this device — no contact data.",
+        );
+        return Ok(());
+    }
     let pass = result.bad_pins.is_empty();
     let count = result.bad_pins.len();
     let all_open = result.all_expected_open();
@@ -3839,6 +3849,19 @@ pub async fn do_pin_test(
 
             let result = test_result.map_err(|e| e.to_string())?;
             let _ = state_task.store_handle(handle);
+
+            // No contact-test data — an empty expected list would otherwise
+            // read as a vacuous pass on an empty socket.
+            if !result.ran() {
+                return Ok(PinTestResultDto {
+                    supported: false,
+                    pass: false,
+                    bad_pins: vec![],
+                    expected_pins: vec![],
+                    untestable_pins: vec![],
+                    message: "Pin test not available for this device (no contact data)".into(),
+                });
+            }
 
             let pass = result.bad_pins.is_empty();
             let count = result.bad_pins.len();
