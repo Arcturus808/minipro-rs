@@ -20,7 +20,7 @@ Open an issue on [GitLab](https://gitlab.com/arcturus8081/minipro-rs/-/issues). 
 
 ### Prerequisites
 
-- **Rust 1.85+** (CLI) / **1.88+** (GUI) — install via [rustup](https://rustup.rs/)
+- **Rust 1.85+** (CLI/core) / **1.88+** (GUI, TUI) — install via [rustup](https://rustup.rs/)
 - **Node.js 18+** and **npm** — for the GUI frontend
 - A USB chip programmer from the supported list (TL866A/CS, TL866II+, T48, T56, T76) for hardware testing
 
@@ -60,10 +60,11 @@ npm install
 cargo tauri dev
 ```
 
-To exercise the GUI without a programmer attached, set
-`MINIPRO_FAKE_PROGRAMMER` to a model name (`TL866A`, `TL866CS`, `TL866II+`,
-`T48`, `T56`, `T76`) before launching — device search, selection, and the
-ICSP/ZIF diagrams work; chip operations fail as expected.
+To exercise the GUI without a programmer attached, use Settings →
+Simulation (persists) or set `MINIPRO_SIMULATE_PROGRAMMER` to a model name
+(`TL866A`, `TL866CS`, `TL866II+`, `T48`, `T56`, `T76`) before launching —
+device search, selection, and the ICSP/ZIF diagrams work; chip operations
+fail as expected. (`MINIPRO_FAKE_PROGRAMMER` still works, deprecated.)
 
 ### Running Tests
 
@@ -83,13 +84,15 @@ cargo clippy --all-targets -- -D warnings  # lint (must pass)
 cargo test --all --locked                # tests with locked lockfile
 cargo deny check                         # supply-chain audit
 
-# GUI (run from gui/src-tauri/)
+# GUI (run from gui/src-tauri/ — a separate workspace the root fmt gate doesn't cover)
+cargo fmt --check                                       # GUI fmt (must pass)
 cargo clippy --all-targets --all-features -- -D warnings  # GUI lint (must pass)
 ```
 
 If you changed any `.svelte`, `.ts`, `.css`, or `.html` file, also run:
 
 ```sh
+cd gui && npm run check       # svelte-check frontend type gate — must report 0 errors
 cd gui && cargo tauri build   # embeds fresh frontend into the Rust binary
 ```
 
@@ -116,6 +119,7 @@ binary.
 ### Commits
 - Concise subject line, optional body explaining why (not what)
 - One logical change per commit
+- Append `[skip ci]` to commit messages — CI pipelines run only during release prep
 - No AI attribution footers or "Co-Authored-By" bot lines
 
 ## Architecture Overview
@@ -131,9 +135,12 @@ minipro-rs/
 │   │   │   ├── handle.rs # MiniproHandle — high-level dispatch
 │   │   │   ├── operations.rs # read/write/erase/verify/blank-check/pin-test
 │   │   │   ├── algorithm.rs # T56/T76 FPGA bitstream loading
-│   │   │   └── format/  # Intel HEX, SREC, JEDEC file parsers
+│   │   │   ├── format/  # Intel HEX, SREC, JEDEC file parsers
+│   │   │   └── …        # icsp, zif, batch, diff, health, prefs, util, xgpro_fetch
 │   │   └── Cargo.toml
-│   └── minipro-cli/      # CLI binary (clap)
+│   ├── minipro-cli/      # CLI binary (clap)
+│   ├── minipro-tui/      # Terminal UI binary (ratatui)
+│   └── libarchive-rs/    # Vendored pure-Rust RAR4 decoder (MiniPro installers)
 ├── gui/                  # Tauri v2 + Svelte 5 GUI
 │   ├── src/              # Svelte frontend
 │   └── src-tauri/        # Rust backend (Tauri commands)
@@ -141,20 +148,24 @@ minipro-rs/
 └── tests/
 ```
 
-The core library (`minipro-core`) is protocol-agnostic and can be embedded in other frontends. The CLI and GUI are thin wrappers around it.
+The core library (`minipro-core`) is protocol-agnostic and can be embedded in other frontends. The CLI, GUI, and TUI are thin wrappers around it.
 
 ## Protocol Implementation Notes
 
 ### Model support
 
 - **TL866A/CS, TL866II+, T48** — well-established, documented in the C `minipro` source. T48 aliases the TL866II+ protocol (`T48Protocol = Tl866iiPlusProtocol`); they share the same USB command set.
-- **T56, T76** — FPGA-based; require `algorithm.xml` bitstream loading. See `crates/minipro-core/src/algorithm.rs`.
+- **T56, T76** — FPGA-based; require `algorithm.xml` bitstream loading (`minipro --download-algorithms` fetches the XGPro archives and builds it). See `crates/minipro-core/src/algorithm.rs`.
 
 ### Pin contact test
 
-Supported on TL866II+ and T48 only. TL866A/CS and T56 are not supported — the C `minipro` source does not implement pin testing for either model, and neither defines the bit-banging commands (0x2D–0x36) that the TL866II+/T48 pin test uses. T76 is intentionally unsupported: Matt Brown's [t76-improvements branch](https://gitlab.com/nmatt0/minipro/-/tree/t76-improvements) discovered that the T76's `0x3E` command is an adapter-init pin-driver configuration step, not a standalone contact test — his `t76_adapter_init()` uses it to configure socket pin drivers before bitstream upload. The upstream C `minipro`'s `t76_pin_test` receives the response but never parses it (`value` is initialized to 0 and never updated from the response buffer, so every pin reports as bad). The [xgecu-pro](https://github.com/jfabienke/xgecu-pro) project confirmed on real hardware that it "measured nothing and corrupted every read."
+Supported on TL866II+, T48, and T76. TL866A/CS has no pin test — the C `minipro` source does not implement one, and its firmware lacks the bit-banging commands (0x2D–0x36) the TL866II+ test uses. T56 is unverified (see below).
 
-**T56 investigation lead:** The T56 defines the same `0x3E` command as the T76 but has no `t56_pin_test` function in the C source. It may share the T76's situation where `0x3E` is an adapter-init step rather than a standalone contact test. This has not been verified on T56 hardware — anyone with a T56 could investigate by checking whether XGPro exposes a "Pin Detect" checkbox for it and whether sending `0x3E` standalone corrupts subsequent reads as it does on the T76.
+- **TL866II+** — bit-banging command sequence (`0x2D`–`0x36`) walks each ZIF pin.
+- **T48** — single `0x3E` command returns a per-pin contact bitmap.
+- **T76** — `0x3E` is a real contact test after all: the 32-byte reply carries a ZIF contact bitmap at bytes 16–21, decoded from XGPro_T76 USB captures (upstream MR !304). Restricted to plain DIP packages — the only verified format. Two caveats: the command also reconfigures the FPGA into pin-detect mode, so the protocol re-uploads the algorithm bitstream afterward or subsequent commands corrupt (earlier "measured nothing and corrupted every read" reports were this effect, not a non-functional command); and upstream's own `t76_pin_test` receives the reply but never parses it — the origin of the "not a contact test" theory this paragraph previously cited.
+
+**T56 investigation lead:** T56 defines `0x3E` too, but there is no `t56_pin_test` in the C source and its FPGA architecture differs from the T76's — the reply layout is unknown and unverified on hardware. Anyone with a T56 could check whether XGPro exposes a "Pin Detect" checkbox for it and capture the `0x3E` exchange.
 
 ### References
 
@@ -168,7 +179,7 @@ Supported on TL866II+ and T48 only. TL866A/CS and T56 are not supported — the 
 
 ## What We Need Help With
 
-- **Hardware testing** — especially T56 and T76 programmers. Most protocol code is implemented but untested on real hardware
+- **Hardware testing** — especially T56 (the least-verified model). T48, T76, and TL866A have real-hardware validation across core operations, but broader chip coverage is always welcome
 - **macOS testing** — USB access, build verification, packaging
 - **Database updates** — extracting newer chip databases from XGPro (see ROADMAP.md)
 - **Bug reports** — any programmer model, any chip, any OS
