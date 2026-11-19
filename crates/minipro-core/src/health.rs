@@ -46,6 +46,7 @@ pub enum HealthVerdict {
 }
 
 impl HealthVerdict {
+    /// Short human-readable label for the verdict (e.g. `"STABLE"`).
     pub fn label(&self) -> &'static str {
         match self {
             Self::Stable => "STABLE",

@@ -29,6 +29,14 @@
 //!
 //! Wrap USB calls in `tokio::task::spawn_blocking` to avoid blocking Tauri's
 //! async executor.  See the project README for a worked example.
+//!
+//! # Diagnostic output
+//!
+//! Protocol code prints progress/diagnostic lines to stderr via [`outln!`],
+//! matching upstream `minipro` CLI behavior.  If your application owns the
+//! terminal (or you simply don't want library output on stderr), set
+//! [`PRINT_TO_LOG`] to route those lines through `log::info!` and let your
+//! logger decide where they go.
 
 pub mod algorithm;
 pub mod batch;

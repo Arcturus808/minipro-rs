@@ -4,6 +4,11 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Core library for talking to XGecu/MiniPro TL866-family USB chip programmers — device database, protocols, and read/write/verify operations"
+readme    = "README.md"
+keywords  = ["minipro", "tl866", "eeprom", "programmer", "chip"]
+categories = ["hardware-support"]
+repository.workspace = true
 
 [dependencies]
 nusb        = "0.1"
@@ -19,7 +24,7 @@ serde       = { workspace = true, features = ["derive"] }
 ureq = { version = "3", features = ["platform-verifier", "socks-proxy", "win-system-proxy"] }
 sha2 = "0.10"
 rar-codec = "0.1"
-libarchive-rs = { path = "../libarchive-rs" }
+libarchive-rs = { path = "../libarchive-rs", version = "0.1" }
 
 [dev-dependencies]
 serde_json.workspace = true

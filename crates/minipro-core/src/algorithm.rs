@@ -138,7 +138,9 @@ const IC2_ALG_AT89C: u8 = 0x21;
 const IC2_ALG_EMMC: u8 = 0x31;
 
 // eMMC voltage options (from cmdopts_t.vopt in minipro.h)
+/// eMMC I/O voltage option: 1.8 V.
 pub const V_1V8: u8 = 0;
+/// eMMC I/O voltage option: 3.3 V.
 pub const V_3V3: u8 = 1;
 
 // ── Public API ───────────────────────────────────────────────────────────────

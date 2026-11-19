@@ -66,7 +66,9 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
 #[derive(Clone)]
 pub struct DatabasePaths {
+    /// Path to the main device database (`infoic.xml`).
     pub infoic: PathBuf,
+    /// Path to the logic-IC database (`logicic.xml`).
     pub logicic: PathBuf,
     /// Path to algorithm.xml for T56/T76 FPGA bitstreams, if found or overridden.
     pub algorithms: Option<PathBuf>,
@@ -274,7 +276,9 @@ pub fn find_device(paths: &DatabasePaths, name: &str, model: ProgrammerModel) ->
 /// A lightweight device entry for list/search views.
 #[derive(Debug, Clone)]
 pub struct DeviceListItem {
+    /// Device part name.
     pub name: String,
+    /// Manufacturer string.
     pub manufacturer: String,
 }
 
@@ -383,11 +387,12 @@ pub fn list_devices_by_model(
     let mut logic_names = Vec::new();
     let mut logic_seen = std::collections::HashSet::new();
     collect_names(&paths.logicic, None, &mut logic_names, &mut logic_seen)?;
-    for m in ALL {
-        let entry = seen.get_mut(&m).unwrap();
-        for item in &logic_names {
-            if entry.insert(item.name.to_ascii_lowercase()) {
-                out.get_mut(&m).unwrap().push(item.clone());
+    for (m, list) in out.iter_mut() {
+        if let Some(entry) = seen.get_mut(m) {
+            for item in &logic_names {
+                if entry.insert(item.name.to_ascii_lowercase()) {
+                    list.push(item.clone());
+                }
             }
         }
     }
@@ -438,14 +443,15 @@ pub fn list_devices_by_model(
                             if !device_matches_model(e, *m) {
                                 continue;
                             }
-                            let entry = seen.get_mut(m).unwrap();
-                            for part in raw_name.split(',') {
-                                let part = part.trim();
-                                if entry.insert(part.to_ascii_lowercase()) {
-                                    out.get_mut(m).unwrap().push(DeviceListItem {
-                                        name: part.to_string(),
-                                        manufacturer: current_manufacturer.clone(),
-                                    });
+                            if let (Some(entry), Some(list)) = (seen.get_mut(m), out.get_mut(m)) {
+                                for part in raw_name.split(',') {
+                                    let part = part.trim();
+                                    if entry.insert(part.to_ascii_lowercase()) {
+                                        list.push(DeviceListItem {
+                                            name: part.to_string(),
+                                            manufacturer: current_manufacturer.clone(),
+                                        });
+                                    }
                                 }
                             }
                         }

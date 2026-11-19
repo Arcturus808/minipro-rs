@@ -73,6 +73,7 @@ const MP_FUSE_USER: u8 = 0x00;
 const MP_FUSE_CFG: u8 = 0x01;
 const MP_FUSE_LOCK: u8 = 0x02;
 
+/// TL866A/TL866CS protocol implementation.
 pub struct Tl866aProtocol {
     /// Cached protocol_id from the last begin_transaction, needed by
     /// read_block and write_block (byte [1] of every command packet).
@@ -83,6 +84,7 @@ pub struct Tl866aProtocol {
 }
 
 impl Tl866aProtocol {
+    /// Create a protocol instance for a TL866A/TL866CS programmer.
     pub fn new() -> Self {
         Self {
             protocol_id: std::sync::atomic::AtomicU8::new(0),

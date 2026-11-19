@@ -42,7 +42,9 @@ impl SerialFormat {
 /// Byte order for binary serial format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SerialEndian {
+    /// Least-significant byte first.
     Little,
+    /// Most-significant byte first.
     Big,
 }
 

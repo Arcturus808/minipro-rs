@@ -8,11 +8,17 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ProgrammerModel {
+    /// MiniPro TL866A
     Tl866a = 1,
+    /// MiniPro TL866CS
     Tl866cs = 2,
+    /// MiniPro TL866II Plus
     Tl866iiPlus = 5,
+    /// XGecu T56
     T56 = 6,
+    /// XGecu T48
     T48 = 7,
+    /// XGecu T76
     T76 = 8,
 }
 
@@ -64,7 +70,9 @@ impl std::str::FromStr for ProgrammerModel {
 /// Programmer status returned in system-info response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgrammerStatus {
+    /// Normal (application) firmware is running.
     Normal,
+    /// Device is in bootloader mode (e.g. awaiting a firmware update).
     Bootloader,
 }
 
@@ -74,13 +82,21 @@ pub enum ProgrammerStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ChipType {
+    /// Parallel EEPROM / flash memories.
     Memory = 0x01,
+    /// Microcontrollers.
     Mcu = 0x02,
+    /// Programmable logic devices (GAL, CPLD).
     Pld = 0x03,
+    /// Static RAM devices.
     Sram = 0x04,
+    /// Standard logic ICs (74xx series etc.).
     Logic = 0x05,
+    /// NAND flash memories.
     Nand = 0x06,
+    /// eMMC devices.
     Emmc = 0x07,
+    /// VGA / display-related devices.
     Vga = 0x08,
 }
 
@@ -101,43 +117,59 @@ impl TryFrom<u32> for ChipType {
     }
 }
 
+/// Data organisation of a memory device (8-bit, 16-bit, or 1-bit).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum DataOrg {
+    /// Byte-wide (×8) organisation.
     #[default]
     Bytes = 0x00,
+    /// Word-wide (×16) organisation.
     Words = 0x01,
+    /// Single-bit organisation.
     Bits = 0x02,
 }
 
+/// Kind of fuse/configuration word on a device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FuseType {
+    /// User-accessible fuses.
     User = 0x00,
+    /// Configuration fuses.
     Config = 0x01,
+    /// Lock/protection fuses.
     Lock = 0x02,
 }
 
+/// Byte order used when interpreting multi-byte data words.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum Endianness {
+    /// Little-endian.
     #[default]
     Little = 0,
+    /// Big-endian.
     Big = 1,
 }
 
 // ── Sub-structures ───────────────────────────────────────────────────────────
 
+/// Operating voltage set for a device, decoded from the packed XML value.
 #[derive(Debug, Clone, Default)]
 pub struct Voltages {
+    /// Core supply voltage index (VCC).
     pub vcc: u8,
+    /// Auxiliary/I-O supply voltage index (VDD).
     pub vdd: u8,
+    /// Programming voltage index (VPP).
     pub vpp: u8,
     /// Raw packed value as stored in the XML `voltages` attribute.
     pub raw: u32,
 }
 
 impl Voltages {
+    /// Decode the packed 32-bit `voltages` attribute into its three fields.
     pub fn from_raw(raw: u32) -> Self {
         Self {
             vdd: ((raw >> 12) & 0x0f) as u8,
@@ -460,8 +492,11 @@ pub fn voltage_name(table: &'static [(&'static str, u8)], code: u8) -> Option<&'
         .map(|(name, _)| *name)
 }
 
+/// Physical package details for a device, decoded from the packed XML
+/// `package_details` attribute.
 #[derive(Debug, Clone, Default)]
 pub struct PackageDetails {
+    /// Number of pins on the device package.
     pub pin_count: u8,
     /// Adapter type index (TSOP48, SOP44, …).
     pub adapter: u8,
@@ -482,6 +517,10 @@ const PLCC32_ADAPTER: u32 = 0x3f;
 const PLCC44_ADAPTER: u32 = 0x3d;
 
 impl PackageDetails {
+    /// Decode the packed 32-bit `package_details` attribute.
+    ///
+    /// PLCC adapters encode the pin count differently; those adapter codes
+    /// are translated to the real pin count here.
     pub fn from_raw(raw: u32) -> Self {
         let adapter = (raw & ADAPTER_MASK) as u8;
         let icsp = ((raw & ICSP_MASK) >> 8) as u8;
@@ -508,27 +547,45 @@ impl PackageDetails {
     }
 }
 
+/// Capability/behaviour flags for a device, decoded from the packed XML
+/// `flags` attribute.
 #[derive(Debug, Clone, Default)]
 pub struct DeviceFlags {
+    /// Device supports an erase operation.
     pub can_erase: bool,
+    /// Device has a manufacturer/chip ID that can be read.
     pub has_chip_id: bool,
+    /// Data area starts at a non-zero offset.
     pub has_data_offset: bool,
+    /// Protection must be cleared before programming.
     pub off_protect_before: bool,
+    /// Protection is re-applied after programming.
     pub protect_after: bool,
+    /// Lock bits can only be written, not read back.
     pub lock_bit_write_only: bool,
+    /// Device carries calibration data.
     pub has_calibration: bool,
     /// Supported programming modes bitmask.
     pub prog_support: u8,
     /// Word size in bytes (1 or 2).
     pub word_size: u8,
+    /// Data organisation (8/16/1-bit).
     pub data_org: DataOrg,
+    /// VPP can be adjusted at runtime.
     pub can_adjust_vpp: bool,
+    /// VCC can be adjusted at runtime.
     pub can_adjust_vcc: bool,
+    /// Clock can be adjusted at runtime.
     pub can_adjust_clock: bool,
+    /// Address bits can be adjusted at runtime.
     pub can_adjust_address: bool,
+    /// Device uses a custom (non-standard) protocol path.
     pub custom_protocol: bool,
+    /// Device supports a power-down state.
     pub has_power_down: bool,
+    /// Power-down mode is disabled for this device.
     pub is_powerdown_disabled: bool,
+    /// Pins are reversed relative to the standard package orientation.
     pub reversed_package: bool,
     /// Raw packed flags value as stored in the XML.
     pub raw: u32,
@@ -548,13 +605,18 @@ const MP_SUPPORTED_PROGRAMMING: u32 = 0x0030_0000;
 const MP_DATA_ORG: u32 = MP_DATA_BUS_WIDTH;
 
 // prog_support values (extracted from flags >> 20)
+/// Device can only be programmed in the ZIF socket.
 pub const MP_ZIF_ONLY: u8 = 0x00;
+/// Device supports both ZIF-socket and ICSP programming.
 pub const MP_ZIF_ICSP: u8 = 0x01;
+/// Device can only be programmed over ICSP.
 pub const MP_ICSP_ONLY: u8 = 0x02;
 
 // ICSP bitmask sent in begin_transaction byte 3 (TL866II+/T56/T76) or
 // byte 11 (TL866A).  Matches upstream C minipro's MP_ICSP_ENABLE / MP_ICSP_VCC.
+/// ICSP mode enable bit in the begin-transaction ICSP byte.
 pub const ICSP_ENABLE: u8 = 0x80;
+/// Power the ICSP target from the programmer's VCC line.
 pub const ICSP_VCC: u8 = 0x01;
 
 // Voltage chip_info values
@@ -568,6 +630,9 @@ const POWERDOWN_MODE_DISABLE: u32 = 0x2000;
 const CUSTOM_PROTOCOL_MASK: u32 = 0x8000_0000;
 
 impl DeviceFlags {
+    /// Decode device flags from the packed XML `flags` value, using
+    /// `chip_info` and the raw `voltages` word for the bits stored there
+    /// (voltage adjustability, power-down flags).
     pub fn from_raw(flags: u32, chip_info: u32, voltages_raw: u32) -> Self {
         let prog_support = ((flags & MP_SUPPORTED_PROGRAMMING) >> 20) as u8;
         let data_org = if flags & MP_DATA_ORG != 0 {
@@ -607,8 +672,11 @@ impl DeviceFlags {
 /// A single named fuse/lock field with mask and default value.
 #[derive(Debug, Clone)]
 pub struct FuseField {
+    /// Field name as shown in the vendor software (e.g. "WDT").
     pub name: String,
+    /// Bitmask selecting the field's bits inside the fuse word.
     pub mask: u16,
+    /// Factory default value of the field.
     pub default: u16,
 }
 
@@ -619,41 +687,65 @@ pub struct FuseConfig {
     /// Used to determine fuse bit convention: AVR configs use bit=0 (programmed),
     /// PIC and other configs use bit=1 (programmed).
     pub name: String,
+    /// Number of calibration bytes stored in the device.
     pub num_calibytes: u32,
+    /// Number of unique-ID bytes the device carries.
     pub num_uids: u32,
+    /// Address of the configuration word in the device memory map.
     pub config_addr: u32,
+    /// Address/flag controlling OSCCAL save behavior.
     pub osccal_save: u32,
+    /// Address of the emulated EEPROM data area.
     pub eep_addr: u32,
+    /// Band-gap calibration mask.
     pub bg_mask: u32,
+    /// Number of low ID bits that encode silicon revision.
     pub rev_bits: u8,
+    /// Named fuse fields (configuration bits).
     pub fuses: Vec<FuseField>,
+    /// Named lock fields (protection bits).
     pub locks: Vec<FuseField>,
 }
 
 /// PLD (GAL) configuration block.
 #[derive(Debug, Clone, Default)]
 pub struct GalConfig {
+    /// Size of the fuse map in bits.
     pub fuses_size: u32,
+    /// Fuse-map row width in bits.
     pub row_width: u32,
+    /// Address of the user electronic signature (UES) area.
     pub ues_address: u32,
+    /// Size of the UES area in bits.
     pub ues_size: u32,
+    /// Row index holding the power-down flag.
     pub powerdown_row: u32,
+    /// Address of the architecture control word (ACW).
     pub acw_address: u32,
+    /// ACW bit positions per named configuration option.
     pub acw_bits: Vec<u16>,
 }
 
 /// Chip-specific configuration data, one variant per chip family.
 #[derive(Debug, Clone)]
 pub enum ChipConfig {
+    /// MCU-style fuse/lock/calibration configuration.
     Mcu(FuseConfig),
+    /// PLD (GAL) fuse-map configuration.
     Pld(GalConfig),
 }
 
 // ── Algorithm (T56 / T76 FPGA bitstream) ────────────────────────────────────
 
+/// FPGA programming algorithm for a device (T56/T76 only).
+///
+/// These models download a per-protocol FPGA bitstream instead of running
+/// a fixed firmware algorithm.
 #[derive(Debug, Clone, Default)]
 pub struct Algorithm {
+    /// Algorithm identifier from `algorithm.xml`.
     pub name: String,
+    /// FPGA bitstream bytes, ready to download.
     pub bitstream: Vec<u8>,
 }
 
@@ -663,27 +755,46 @@ pub struct Algorithm {
 /// logicic.xml.  Mirrors `device_t` in the C implementation.
 #[derive(Debug, Clone, Default)]
 pub struct Device {
+    /// Part name as listed in the database (e.g. "W25Q80BV").
     pub name: String,
+    /// Manufacturer string from the database.
     pub manufacturer: String,
+    /// Chip family code (see [`ChipType`]).
     pub chip_type: u32,
+    /// Programming protocol identifier used to select the firmware/FPGA
+    /// algorithm for this device.
     pub protocol_id: u8,
+    /// Device variant code (distinguishes same-family parts).
     pub variant: u32,
+    /// Bytes the programmer returns per read request.
     pub read_buffer_size: u16,
+    /// Bytes accepted per write request.
     pub write_buffer_size: u16,
+    /// Size of the code/program memory area in addressable words.
     pub code_memory_size: u32,
+    /// Size of the primary data memory area in addressable words.
     pub data_memory_size: u32,
+    /// Size of the secondary data memory area in addressable words.
     pub data_memory2_size: u32,
+    /// Programming page size in bytes/words.
     pub page_size: u32,
     /// NAND flash: pages per erase block.
     pub pages_per_block: u32,
+    /// Expected manufacturer/chip ID read from the device.
     pub chip_id: u32,
+    /// Number of significant bytes in [`Device::chip_id`].
     pub chip_id_bytes_count: u8,
+    /// Operating voltage set decoded from the XML `voltages` attribute.
     pub voltages: Voltages,
+    /// Write-pulse delay used by the programming algorithm.
     pub pulse_delay: u32,
+    /// Capability/behaviour flags decoded from the XML `flags` attribute.
     pub flags: DeviceFlags,
     /// Chip-info word (encodes PIC word width, Atmel arch, voltage caps…).
     pub chip_info: u32,
+    /// ZIF pin arrangement identifier.
     pub pin_map: u32,
+    /// Mask applied when comparing chip data (verify).
     pub compare_mask: u16,
     /// Low bits of the chip-ID word that encode silicon revision rather
     /// than device identity (PIC families; from `chip_info`). 0 = the
@@ -694,20 +805,30 @@ pub struct Device {
     /// so reads return 0x0FFF/0x3FFF while files pad to 0xFFFF — verify and
     /// blank checks mask the padding off. `0xffff` = full-width compare.
     pub word_compare_mask: u16,
+    /// Value an erased/blank memory cell reads as (0xFF or 0x00).
     pub blank_value: u16,
+    /// Physical package details decoded from the XML `package_details` attribute.
     pub package_details: PackageDetails,
+    /// Fuse/lock or PLD configuration block, when the database provides one.
     pub config: Option<ChipConfig>,
     /// Logic-IC test vectors (one row per test step, pin_count bytes wide).
     pub vectors: Option<Vec<u8>>,
+    /// Number of rows in [`Device::vectors`].
     pub vector_count: usize,
+    /// Database marks this entry TL866-family only.
     pub tl866_only: bool,
+    /// Database marks this entry T48-only.
     pub t48_only: bool,
+    /// Database marks this entry T56-only.
     pub t56_only: bool,
+    /// SPI clock divisor/index for SPI protocol devices.
     pub spi_clock: u8,
+    /// Bus address for I²C-addressed devices.
     pub i2c_address: u8,
     /// Over-current trip level for `-o ovc_level` (0 = firmware default,
     /// 1–9 ≈ 120–400 mA nominal; T48/T56/TL866II+/T76 only).
     pub ovc_level: u8,
+    /// FPGA algorithm descriptor for T56/T76 devices, when required.
     pub algorithm: Option<Algorithm>,
 }
 
@@ -743,12 +864,19 @@ impl Device {
 /// Information returned by the "get system info" command.
 #[derive(Debug, Clone)]
 pub struct ProgrammerInfo {
+    /// Detected programmer model.
     pub model: ProgrammerModel,
+    /// Whether the device is running application firmware or in bootloader mode.
     pub status: ProgrammerStatus,
+    /// Packed firmware version code.
     pub firmware: u32,
+    /// Human-readable firmware version string (e.g. "03.2.86").
     pub firmware_str: String,
+    /// Firmware device-code string.
     pub device_code: String,
+    /// Programmer serial number.
     pub serial_number: String,
+    /// Hardware revision byte.
     pub hardware_version: u8,
 }
 
