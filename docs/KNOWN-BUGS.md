@@ -943,3 +943,25 @@ available"). The CLI `-z` grader, GUI `do_pin_test` (returns
 skip and proceeds — no data must not block the op), TUI worker log,
 and TUI pin-test strip all report the unavailable case explicitly.
 
+
+## Volatile SRAM loses data across the write→verify repower (fixed)
+
+Volatile-SRAM devices (XGecu "(TEST)" class, `protocol_id = 0x29`) are
+powered only for the duration of an operation: `end_transaction` drops
+VCC and the next `begin_transaction` re-applies it. The CLI `-w` path
+mirrored upstream `write_page_file`'s `end_transaction` +
+`begin_transaction` between write and verify — a flush/commit boundary
+that flash families may genuinely need — but for SRAM that repower
+erases the very contents verify is about to read. The GUI and TUI never
+had the boundary (their write→verify runs in one powered session for all
+devices, validated on real flash hardware), so the CLI was the lone
+outlier.
+
+**Fix:** the CLI skips the write→verify repower when
+`device.is_volatile_sram()` — SRAM writes latch on the WE pulse and have
+nothing to flush. Do not "restore" the boundary for 0x29 devices to
+match upstream: for volatile memory the repower is the bug, not the
+fix. Detection is `protocol_id == 0x29` only — battery-backed classes
+`0x0e` ("(RW)" NVRAM) and `0x2f` (RAM36) are excluded by construction;
+`0x29` does include `(TEST)` variants of NVRAM parts, where the "(RW)"
+database entry is the right choice when the backup cell is live.
