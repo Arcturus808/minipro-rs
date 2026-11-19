@@ -168,6 +168,13 @@ struct Cli {
     #[arg(long = "reference", alias = "reference", value_name = "FILE")]
     reference: Option<PathBuf>,
 
+    /// Powered SRAM diagnostic for volatile-memory devices (generic SRAM
+    /// like 628512, "(TEST)" entries): writes and verifies several fill
+    /// patterns while the chip stays powered — the meaningful test for
+    /// parts a standalone read can't check. Overwrites the chip.
+    #[arg(long = "sram-test", alias = "sram_test", action = ArgAction::SetTrue)]
+    sram_test: bool,
+
     /// Identify an unknown logic IC by testing all database entries
     /// with the given pin count. Requires --pin-count.
     #[arg(long = "logic-identify", action = ArgAction::SetTrue)]

@@ -337,6 +337,38 @@
     if (v === "TRANSPORT-ERROR") return "text-red-500";
     return "text-amber-500";
   }
+
+  // ── SRAM test (volatile-memory powered write+verify diagnostic) ────────────
+  interface SramTestResult {
+    deviceName: string;
+    bytes: number;
+    passed: number;
+    total: number;
+    results: { name: string; mismatch: [number, number, number] | null }[];
+  }
+
+  let sramRunning = $state(false);
+  let sramResult = $state<SramTestResult | null>(null);
+
+  const sramTestEnabled = $derived(
+    $programmer !== null && ($selectedDevice?.volatile_sram ?? false) && !sramRunning,
+  );
+
+  async function runSramTest() {
+    sramRunning = true;
+    sramResult = null;
+    try {
+      sramResult = await invoke<SramTestResult>("run_sram_test", {
+        icspMode: $settings.icspMode,
+        pinCheck: true,
+      });
+    } catch (e) {
+      logs.error(`SRAM test failed: ${e}`);
+      await refreshProgrammer();
+    } finally {
+      sramRunning = false;
+    }
+  }
 </script>
 
 <div class="border border-surface-200-800 p-2">
@@ -467,6 +499,43 @@
               Save consensus dump (majority-vote reconstruction)
             </button>
           {/if}
+        </div>
+      {/if}
+      <button
+        class={actionClass}
+        onclick={runSramTest}
+        disabled={!sramTestEnabled}
+        title={!$selectedDevice ? "Select a device first" : !$selectedDevice.volatile_sram ? "Only for volatile SRAM (TEST-class) devices" : "Powered SRAM test: writes and verifies several fill patterns while the chip stays powered — overwrites the chip"}
+      >
+        {#if sramRunning}
+          SRAM Test (running...)
+        {:else}
+          SRAM Test
+        {/if}
+      </button>
+      {#if sramResult}
+        <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
+          <div class="flex items-center justify-between gap-2">
+            <span>
+              SRAM test:
+              <span class={"font-semibold " + (sramResult.passed === sramResult.total ? "text-green-500" : "text-amber-500")}>
+                {sramResult.passed}/{sramResult.total} patterns passed
+              </span>
+              — {sramResult.deviceName}
+            </span>
+            <button class="opacity-60 hover:opacity-100 px-1" onclick={() => (sramResult = null)} title="Dismiss result">Clear</button>
+          </div>
+          <div class="opacity-80">{sramResult.bytes} bytes per pattern</div>
+          {#each sramResult.results as r}
+            <div class="opacity-80">
+              {r.name} —
+              {#if r.mismatch}
+                <span class="text-red-500">FAIL at 0x{r.mismatch[0].toString(16).padStart(6, "0")}: expected 0x{r.mismatch[1].toString(16).padStart(2, "0")}, got 0x{r.mismatch[2].toString(16).padStart(2, "0")}</span>
+              {:else}
+                OK
+              {/if}
+            </div>
+          {/each}
         </div>
       {/if}
     </div>

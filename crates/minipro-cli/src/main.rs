@@ -26,8 +26,8 @@ use minipro_core::{
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
-        read_chip_calibration, read_file, read_fuses, spi_autodetect_and_lookup, verify_chip,
-        write_chip_bytes, write_fuses, FuseValue, SizeMismatch,
+        read_chip_calibration, read_file, read_fuses, spi_autodetect_and_lookup, sram_test,
+        verify_chip, write_chip_bytes, write_fuses, FuseValue, SizeMismatch,
     },
     DatabasePaths, MiniproHandle,
 };
@@ -909,6 +909,52 @@ fn do_operations(
             HV::ReferenceMismatch => 5,
             HV::TransportError => 1,
         });
+    }
+
+    // ── SRAM test (powered write+verify for volatile parts) ─────────────────
+    // Standalone like --health-check: volatile SRAM has no chip ID to gate
+    // on, and the test writes the chip — it must not combine with other ops.
+    if cli.sram_test {
+        {
+            let device = handle.device()?;
+            if !device.is_volatile_sram() {
+                anyhow::bail!(
+                    "'{}' is not a volatile-SRAM device — --sram-test would overwrite its contents",
+                    device.name
+                );
+            }
+        }
+        let pb = ProgressBar::new(0);
+        pb.set_style(
+            ProgressStyle::with_template("SRAM test [{bar:40}] {percent}%  {bytes}/{total_bytes}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar()),
+        );
+        let mut cb = |done: usize, total: usize| {
+            pb.set_length(total as u64);
+            pb.set_position(done as u64);
+        };
+        let report = sram_test(handle, Some(&mut cb))?;
+        pb.finish_and_clear();
+        let mut failures = 0usize;
+        for p in &report.patterns {
+            match &p.mismatch {
+                None => eprintln!("  {} — OK", p.name),
+                Some((addr, exp, act)) => {
+                    failures += 1;
+                    eprintln!(
+                        "  {} — FAIL at {:#06x}: expected {:#04x}, got {:#04x}",
+                        p.name, addr, exp, act
+                    );
+                }
+            }
+        }
+        eprintln!(
+            "SRAM test: {}/{} patterns passed ({} bytes each)",
+            report.patterns.len() - failures,
+            report.patterns.len(),
+            report.bytes
+        );
+        std::process::exit(if failures == 0 { 0 } else { 2 });
     }
 
     // ── Chip ID verification (single check before all ops) ───────────────────
