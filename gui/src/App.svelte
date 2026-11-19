@@ -116,6 +116,9 @@
     { bit: 0, name: "WIP", ro: true },
   ];
   let isSpiNor = $derived(($selectedDevice?.protocol_id ?? -1) === 0x03);
+  // Volatile SRAM (protocol 0x29) — standalone read/verify shows the
+  // power-on signature, not stored data; drives the warning banner.
+  let isVolatileSram = $derived($selectedDevice?.volatile_sram ?? false);
   let showBatchHelp = $state(false);
   let showFuseWriteConfirm = $state(false);
   let showLogicHelp = $state(false);
@@ -1139,6 +1142,18 @@
               {#if $selectedDevice && !$selectedDevice.has_chip_id && ($activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify")}
                 <div class="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
                   <p class="text-xs text-amber-700-200 font-medium">Warning: This device does not support chip ID verification. Ensure the correct chip is inserted.</p>
+                </div>
+              {/if}
+              {#if isVolatileSram && ($activeOperation === "read" || $activeOperation === "verify" || $activeOperation === "write")}
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
+                  <p class="text-xs text-amber-700-200 font-medium">
+                    {#if $activeOperation === "write"}
+                      Volatile SRAM — keep "Skip verify" unchecked: verify is the read-back that proves the write.
+                    {:else}
+                      Volatile SRAM — the chip loses its contents on power-off, so a standalone {$activeOperation} returns the power-on signature, not stored data. Use Write + Verify to test it.
+                    {/if}
+                    {#if $selectedDevice?.name.includes("(TEST)")} If the backup cell is live, use the "(RW)" database entry instead.{/if}
+                  </p>
                 </div>
               {/if}
               <!-- Row 1: Format, Page, Size diff -->

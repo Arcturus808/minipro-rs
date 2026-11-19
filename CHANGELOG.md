@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Volatile-SRAM warnings on standalone read/verify** — devices in XGecu's "(TEST)" class (`protocol_id = 0x29`, e.g. generic `628512`) are volatile: the programmer powers the chip only for the duration of an operation, so a standalone read or verify returns the chip's power-on signature rather than previously written data — a recurring source of false "reads return garbage" reports. The CLI (`-r`/`-m`) and TUI (Read/Verify) now emit a warning pointing at write+verify as the meaningful test, and the GUI shows an amber banner in the Read/Verify options panel — plus a Write-panel note to keep "Skip verify" unchecked. `Device::is_volatile_sram()` is the shared predicate; battery-backed classes `0x0e`/`0x2f` are excluded, and `(TEST)` NVRAM variants get a pointer to their "(RW)" database entry.
 - **udev rules for all supported programmers** — `packaging/udev/60-minipro-rs.rules` grants unprivileged users access to the raw USB device node for every enumerated model (TL866A/CS `04D8:E11C`, TL866II+/T48/T56 `A466:0A53`, T76 `A466:1A86`), via `MODE="0666"` + `TAG+="uaccess"`. The `.deb`/`.rpm` packages (both the GitLab CLI package and the Tauri GUI bundles) install the file and reload udev automatically; AppImage/tarball/source users get a manual `curl | sudo tee` install in the README.
 
 ### Fixed
