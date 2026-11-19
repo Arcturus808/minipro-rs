@@ -1,3 +1,5 @@
+//! Error type for archive decoding.
+
 use std::fmt;
 
 /// Errors returned by the RAR reader.
@@ -12,7 +14,12 @@ pub enum Error {
     /// The archive uses a feature this reader does not support.
     Unsupported(&'static str),
     /// Decompressed data failed its file CRC check.
-    FileCrcMismatch { expected: u32, computed: u32 },
+    FileCrcMismatch {
+        /// CRC-32 recorded in the archive header.
+        expected: u32,
+        /// CRC-32 computed over the decompressed data.
+        computed: u32,
+    },
     /// I/O error from the underlying reader.
     Io(std::io::Error),
 }

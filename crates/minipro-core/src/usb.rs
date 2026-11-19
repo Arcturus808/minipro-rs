@@ -327,6 +327,9 @@ impl UsbDevice {
         self.write_payload_limit(data, 64)
     }
 
+    /// Write a payload stream, splitting across endpoints when the data
+    /// exceeds `limit` bytes. `limit == 0` forces single-endpoint writes
+    /// (required by the T48, which never services EP3-OUT).
     pub fn write_payload_limit(&self, data: &[u8], limit: usize) -> Result<()> {
         // T76 uses a single endpoint for writes
         if self.pid == T76_PID {
@@ -391,6 +394,8 @@ impl UsbDevice {
         self.read_payload_limit(length, 64)
     }
 
+    /// Read `length` payload bytes, splitting across endpoints when the
+    /// request exceeds `limit` bytes per transfer.
     pub fn read_payload_limit(&self, length: usize, limit: usize) -> Result<Vec<u8>> {
         trace!("read_payload_limit: length={length} limit={limit}");
         // T76 uses EP 0x82 only for reads

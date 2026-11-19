@@ -153,29 +153,44 @@ const T76_PAYLOAD_OFFSET: usize = 4096;
 pub enum Progress {
     /// Started downloading `archive` (`total` may be unknown).
     DownloadStart {
+        /// Name of the archive being downloaded.
         archive: &'static str,
+        /// Expected total size, when known.
         total: Option<u64>,
     },
     /// Cumulative bytes received so far.
     DownloadBytes {
+        /// Name of the archive being downloaded.
         archive: &'static str,
+        /// Bytes received so far.
         received: u64,
     },
     /// Download body fully read (before checksum verification).
-    DownloadFinished { archive: &'static str },
+    DownloadFinished {
+        /// Name of the archive that finished downloading.
+        archive: &'static str,
+    },
     /// A named pipeline stage began: "verifying", "extracting".
     Stage {
+        /// Name of the archive being processed.
         archive: &'static str,
+        /// Stage name.
         stage: &'static str,
     },
     /// .alg files processed so far for this archive.
     Processed {
+        /// Name of the archive being processed.
         archive: &'static str,
+        /// Files processed so far.
         done: usize,
+        /// Files expected in total.
         total: usize,
     },
     /// An output file was written.
-    Written { path: PathBuf },
+    Written {
+        /// Path of the file just written.
+        path: PathBuf,
+    },
 }
 
 /// Options for [`fetch`].
@@ -199,17 +214,25 @@ pub struct FetchOptions<'a> {
 
 /// A firmware image written to the output directory.
 pub struct FirmwareWritten {
+    /// Programmer model the image targets (e.g. "T56").
     pub model: &'static str,
+    /// Firmware version string.
     pub version: &'static str,
+    /// Destination path of the written image.
     pub path: PathBuf,
 }
 
 /// What [`fetch`] produced.
 pub struct FetchOutcome {
+    /// Directory the extracted files were written to.
     pub output_dir: PathBuf,
+    /// Path of the generated `algorithm.xml`.
     pub xml_path: PathBuf,
+    /// Firmware images written.
     pub firmware: Vec<FirmwareWritten>,
+    /// Number of T56 algorithm entries generated.
     pub t56_algorithms: usize,
+    /// Number of T76 algorithm entries generated.
     pub t76_algorithms: usize,
     /// Non-fatal issues worth showing the user (corrupt cache, count drift,
     /// checksum mismatches on `--from-file` inputs, …).

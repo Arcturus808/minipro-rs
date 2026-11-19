@@ -20,7 +20,9 @@ use crate::{
 /// tested-good from untested instead of implying both are "good".
 #[derive(Debug, Clone, Default)]
 pub struct PinTestResult {
+    /// Device pin numbers (1-based) that failed contact.
     pub bad_pins: Vec<u16>,
+    /// Every device pin the `pin_map` mask actually tested.
     pub expected_pins: Vec<u16>,
     /// Device pins excluded from testing by design — the `<gnd>` table.
     /// A ground pin is held low by the die, so contact to it can't be
@@ -53,19 +55,28 @@ impl PinTestResult {
 /// pass for TL866A).  `errors` is the number of pin mismatches.
 #[derive(Debug, Clone, Default)]
 pub struct LogicTestResult {
+    /// Device pin count.
     pub pin_count: u16,
+    /// Number of test-vector rows applied.
     pub vector_count: u16,
+    /// Expected states from the database (`vector_count` × `pin_count`, row-major).
     pub vectors: Vec<u8>,
+    /// Measured pin states from the first pass (pull-up, or the single pass on TL866A).
     pub step1: Vec<u8>,
+    /// Measured pin states from the second pass (pull-down; empty on TL866A).
     pub step2: Vec<u8>,
+    /// Number of pin mismatches across all vectors.
     pub errors: u32,
+    /// Overall verdict — true when `errors` is zero.
     pub pass: bool,
 }
 
 /// Data buffer + addressing info for a single block read/write.
 #[derive(Debug)]
 pub struct DataSet {
+    /// Payload bytes for this block.
     pub data: Vec<u8>,
+    /// Device address the block targets.
     pub address: u32,
     /// Current block count (size / 64, used per-block).
     pub block_count: u32,
@@ -81,18 +92,26 @@ pub struct DataSet {
 /// JEDEC fuse-map row transfer.
 #[derive(Debug)]
 pub struct JedecSet {
+    /// Fuse row payload bytes.
     pub data: Vec<u8>,
+    /// Fuse-map row index.
     pub row: u8,
+    /// Row flags (user row, electronic signature, etc.).
     pub flags: u8,
+    /// Transfer set type selector.
     pub set_type: u8,
 }
 
 /// Over-current status returned by the programmer.
 #[derive(Debug, Clone)]
 pub struct OvcStatus {
+    /// Over-current error code (0 = no fault).
     pub error: u8,
+    /// Address being accessed when the trip occurred.
     pub address: u32,
+    /// Raw current-sense channel 1 reading.
     pub c1: u32,
+    /// Raw current-sense channel 2 reading.
     pub c2: u32,
 }
 

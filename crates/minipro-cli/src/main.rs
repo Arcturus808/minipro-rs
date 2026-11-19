@@ -457,7 +457,7 @@ fn run() -> Result<()> {
 
     // ── Programmer info ───────────────────────────────────────────────────────
     if cli.info {
-        handle.print_info();
+        println!("{}", handle.info_string());
         return Ok(());
     }
 

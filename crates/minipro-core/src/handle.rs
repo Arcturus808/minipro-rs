@@ -283,13 +283,15 @@ impl MiniproHandle {
         Ok(())
     }
 
-    /// Display programmer info in the format expected by `minipro -I`.
-    pub fn print_info(&self) {
+    /// Programmer info formatted the way upstream `minipro -I` prints it.
+    ///
+    /// Returns the text; the caller decides where to write it (the CLI
+    /// prints it to stdout).
+    pub fn info_string(&self) -> String {
         let m = &self.info;
-        println!("Model: {:?}", m.model);
-        println!("Device code: {}", m.device_code);
-        println!("Serial number: {}", m.serial_number);
-        println!("Firmware: {}", m.firmware_str);
-        println!("Hardware version: {:02x}", m.hardware_version);
+        format!(
+            "Model: {:?}\nDevice code: {}\nSerial number: {}\nFirmware: {}\nHardware version: {:02x}",
+            m.model, m.device_code, m.serial_number, m.firmware_str, m.hardware_version
+        )
     }
 }

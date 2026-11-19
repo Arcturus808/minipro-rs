@@ -1,9 +1,12 @@
 [package]
 name    = "libarchive-rs"
-version.workspace = true
+version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true
 license.workspace = true
 description = "Pure-Rust decoder for RAR4 archives, derived from libarchive's BSD-2-Clause RAR reader"
+keywords  = ["rar", "rar4", "archive", "decompression", "extract"]
+categories = ["compression"]
+repository.workspace = true
 
 [dependencies]

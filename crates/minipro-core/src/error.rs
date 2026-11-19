@@ -1,72 +1,120 @@
+//! Error type and result alias used throughout the crate.
+
 use thiserror::Error;
 
+/// Error type for all `minipro-core` operations.
 #[derive(Debug, Error)]
 pub enum MiniproError {
+    /// Low-level USB transport error from `nusb`.
     #[error("USB error: {0}")]
     Usb(nusb::Error),
 
+    /// No supported programmer was found on the USB bus.
     #[error("No programmer found. If one is connected, this can happen after the computer wakes from sleep — unplug the programmer, wait 20-30 seconds, plug it back in, and try again. On Windows, if this is a new device, you may need to install the WinUSB driver with Zadig (https://zadig.akeo.ie/).")]
     NoProgrammerFound,
 
+    /// More than one programmer is attached.
     #[error("Multiple programmers connected; please connect only one")]
     MultipleProgrammersFound,
 
+    /// The requested chip is not in the device database.
     #[error("{0}")]
     DeviceNotFound(String),
 
+    /// The chip ID read from the device does not match the database entry.
     #[error("Chip ID mismatch: expected {expected:#010x} (from database), got {actual:#010x} (from chip)")]
-    ChipIdMismatch { expected: u32, actual: u32 },
+    ChipIdMismatch {
+        /// Chip ID expected by the database.
+        expected: u32,
+        /// Chip ID actually read from the device.
+        actual: u32,
+    },
 
+    /// The programmer tripped its over-current protection.
     #[error("Overcurrent detected at address {address:#010x}")]
-    Overcurrent { address: u32 },
+    Overcurrent {
+        /// Address the programmer was accessing when the trip occurred.
+        address: u32,
+    },
 
+    /// Verify pass found a mismatching byte/word.
     #[error("Verify failed at {address:#010x}: expected {expected:#04x}, got {actual:#04x}")]
     VerifyFailed {
+        /// Mismatch address.
         address: u32,
+        /// Expected value.
         expected: u8,
+        /// Value actually read back.
         actual: u8,
     },
 
+    /// Blank check found programmed data.
     #[error("Chip is not blank at {address:#010x}")]
-    NotBlank { address: u32 },
+    NotBlank {
+        /// First non-blank address.
+        address: u32,
+    },
 
+    /// `infoic.xml` / `logicic.xml` / `algorithm.xml` failed to parse.
     #[error("XML database parse error: {0}")]
     Xml(String),
 
+    /// Filesystem I/O failure.
     #[error("IO error: {0}")]
     Io(std::io::Error),
 
+    /// Programmer returned fewer bytes than a command requires.
     #[error("Response too short: expected {expected} bytes, got {actual}")]
-    ResponseTooShort { expected: usize, actual: usize },
+    ResponseTooShort {
+        /// Required byte count.
+        expected: usize,
+        /// Byte count actually received.
+        actual: usize,
+    },
 
+    /// Programmer returned an unexpected or malformed response.
     #[error("Protocol error: {0}")]
     Protocol(String),
 
+    /// The connected programmer model does not implement this operation.
     #[error("Operation not supported by this programmer model")]
     UnsupportedOperation,
 
+    /// Input file could not be parsed as a supported format.
     #[error("File format error: {0}")]
     FileFormat(String),
 
+    /// Programmer is running the bootloader; only firmware update is possible.
     #[error("Programmer is in bootloader mode; firmware update required")]
     BootloaderMode,
 
+    /// Programmer firmware is older than the operation requires.
     #[error("Programmer firmware too old: got {got:#06x}, minimum required {need:#06x}")]
-    FirmwareTooOld { got: u32, need: u32 },
+    FirmwareTooOld {
+        /// Firmware version reported by the device.
+        got: u32,
+        /// Minimum firmware version required.
+        need: u32,
+    },
 
+    /// FPGA algorithm bitstream decompression failed.
     #[error("Algorithm decompression error: {0}")]
     AlgorithmDecompress(String),
 
+    /// FPGA algorithm bitstream CRC check failed.
     #[error("Algorithm CRC mismatch")]
     AlgorithmCrc,
 
+    /// Resource download (firmware/database) failed.
     #[error("Download error: {0}")]
     Download(String),
 
+    /// Operation was cancelled by the caller/progress callback.
     #[error("Operation cancelled")]
     Cancelled,
 }
 
+/// Convenience alias for `minipro-core` results.
 pub type Result<T> = std::result::Result<T, MiniproError>;
 
 impl From<nusb::Error> for MiniproError {

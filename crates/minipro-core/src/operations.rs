@@ -1217,7 +1217,9 @@ pub const MP_FUSE_LOCK: u8 = 0x02;
 /// Named fuse value.
 #[derive(Debug, Clone)]
 pub struct FuseValue {
+    /// Fuse name (e.g. "lock_bits", or a named field like "WDT").
     pub name: String,
+    /// Current/programmed value of the fuse field.
     pub value: u16,
 }
 
@@ -2196,9 +2198,13 @@ fn t76_ic_test_pass_with_bitstream(
 /// A single result from the logic IC auto-identify (auto-find) scan.
 #[derive(Debug, Clone)]
 pub struct AutoFindEntry {
+    /// Candidate part name (e.g. "7404").
     pub name: String,
+    /// Candidate manufacturer, when the database provides one.
     pub manufacturer: String,
+    /// Whether all test vectors passed for this candidate.
     pub pass: bool,
+    /// Number of pin mismatches for this candidate.
     pub errors: u32,
 }
 

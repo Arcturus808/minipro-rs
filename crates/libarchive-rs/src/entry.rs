@@ -43,7 +43,9 @@ pub struct Entry {
     pub packed_size: u64,
     /// Expected CRC-32 of the decompressed data.
     pub crc32: u32,
+    /// Entry is a directory (no data follows).
     pub is_directory: bool,
+    /// Entry is a symbolic link; `link_target` holds the target bytes.
     pub is_symlink: bool,
     /// Symlink target bytes, when `is_symlink` is set.
     pub link_target: Option<Vec<u8>>,
@@ -51,9 +53,13 @@ pub struct Entry {
     pub mode: u32,
     /// RAR compression method byte: `0x30` stored, `0x31`–`0x35` compressed.
     pub compression_method: u8,
+    /// Modification time, when stored in the header.
     pub mtime: Option<Timestamp>,
+    /// Creation time, when stored in the header (RAR4 ext-time record).
     pub ctime: Option<Timestamp>,
+    /// Access time, when stored in the header (RAR4 ext-time record).
     pub atime: Option<Timestamp>,
+    /// Archive creation time, when stored in the header.
     pub arctime: Option<Timestamp>,
 }
 

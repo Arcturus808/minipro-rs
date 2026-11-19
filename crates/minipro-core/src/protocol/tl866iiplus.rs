@@ -94,6 +94,7 @@ const MP_DATA: u8 = 0x01;
 const MP_USER: u8 = 0x02;
 
 // Minimum firmware version expected
+/// Minimum supported firmware version (4.2.85); older firmware is rejected.
 pub const MIN_FIRMWARE: u32 = 0x255; // 4.2.85
 
 // ── Hardware-check pin tables ────────────────────────────────────────────────
@@ -579,6 +580,7 @@ fn init_zif(usb: &UsbDevice, pullup: u8) -> Result<()> {
     Ok(())
 }
 
+/// TL866II+ protocol implementation (also drives the T48 — see `is_t48`).
 pub struct Tl866iiPlusProtocol {
     /// True when this instance drives a T48 (re-exported as `T48Protocol`).
     ///
@@ -590,6 +592,7 @@ pub struct Tl866iiPlusProtocol {
 }
 
 impl Tl866iiPlusProtocol {
+    /// Create a protocol instance for a TL866II+ programmer.
     pub fn new() -> Self {
         Self { is_t48: false }
     }
@@ -688,13 +691,21 @@ pub fn get_system_info(usb: &UsbDevice) -> Result<SystemInfo> {
     })
 }
 
+/// Raw system-info reply, parsed from the programmer's response packet.
 pub struct SystemInfo {
+    /// Detected programmer model.
     pub model: crate::device::ProgrammerModel,
+    /// Application vs. bootloader status.
     pub status: crate::device::ProgrammerStatus,
+    /// Packed firmware version code.
     pub firmware: u32,
+    /// Human-readable firmware version string.
     pub firmware_str: String,
+    /// Firmware device-code string.
     pub device_code: String,
+    /// Programmer serial number.
     pub serial_number: String,
+    /// Hardware revision byte.
     pub hardware_version: u8,
 }
 

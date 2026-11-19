@@ -21,7 +21,9 @@ const FAVORITES_FILE: &str = "favorites.txt";
 /// T76's and T48's lists differ).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Favorite {
+    /// Device part name.
     pub name: String,
+    /// Manufacturer string, captured at save time.
     pub manufacturer: String,
 }
 

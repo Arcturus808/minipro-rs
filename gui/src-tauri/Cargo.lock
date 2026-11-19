@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "libarchive-rs"
-version = "0.13.0"
+version = "0.1.0"
 
 [[package]]
 name = "libc"

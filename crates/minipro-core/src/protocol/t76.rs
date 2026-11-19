@@ -125,6 +125,7 @@ const T76_WRITE_LOCK: u8 = CMD_WRITE_LOCK;
 const OVC_RESP_LEN: usize = 32;
 const OVC_FLAG_IDX: usize = 12;
 
+/// XGecu T76 protocol implementation (FPGA-bitstream programmer).
 pub struct T76Protocol {
     bitstream_uploaded: AtomicBool,
     /// Detected eMMC capacity in bytes (from EXT_CSD or T76_EMMC_SIZE_MB).
@@ -133,6 +134,7 @@ pub struct T76Protocol {
 }
 
 impl T76Protocol {
+    /// Create a protocol instance for a T76 programmer.
     pub fn new() -> Self {
         Self {
             bitstream_uploaded: AtomicBool::new(false),
