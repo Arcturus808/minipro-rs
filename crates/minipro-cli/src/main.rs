@@ -1299,6 +1299,7 @@ fn do_operations(
                     .join(" ")
             );
         } else {
+            warn_volatile_sram(handle.device()?, "read");
             let pb = ProgressBar::new(0);
             pb.set_style(
                 ProgressStyle::with_template(
@@ -1341,6 +1342,7 @@ fn do_operations(
                 cli.page
             );
         }
+        warn_volatile_sram(handle.device()?, "verify");
         let pb = ProgressBar::new(0);
         pb.set_style(
             ProgressStyle::with_template("Verifying [{bar:40}] {percent}%  {bytes}/{total_bytes}")
@@ -1445,6 +1447,26 @@ fn fmt_bytes(n: u32) -> String {
         format!("{} KB ({} bytes)", n / 1024, n)
     } else {
         format!("{} bytes", n)
+    }
+}
+
+/// Standalone reads/verifies on volatile SRAM (protocol 0x29) return the
+/// chip's power-on signature, not stored data — the chip is unpowered
+/// before the op begins.  `(TEST)` entries are the test-profile variant
+/// of battery-backed parts and get the "(RW)" pointer.
+fn warn_volatile_sram(dev: &minipro_core::Device, op: &str) {
+    if !dev.is_volatile_sram() {
+        return;
+    }
+    eprintln!(
+        "Warning: {} is volatile SRAM — a standalone {op} returns the chip's \
+         power-on signature, not stored data. Use write+verify to test.",
+        dev.name
+    );
+    if dev.name.contains("(TEST)") {
+        eprintln!(
+            "Note: battery-backed part — if its backup cell is live, the \"(RW)\" entry is the better choice."
+        );
     }
 }
 

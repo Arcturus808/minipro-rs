@@ -279,12 +279,28 @@ fn run_in_transaction(
 
     match op {
         OpKind::Read => {
+            if device.is_volatile_sram() {
+                log(
+                    tx,
+                    log::Level::Warn,
+                    "Volatile SRAM — a standalone read returns the chip's \
+                     power-on signature, not stored data; use write+verify to test",
+                );
+            }
             let data =
                 read_chip_buffer(h, o.page, Some(&mut progress)).map_err(|e| e.to_string())?;
             let stats = minipro_core::operations::OpStats::from_buffer(&data);
             Ok(OpOutcome::Read { stats, data })
         }
         OpKind::Verify => {
+            if device.is_volatile_sram() {
+                log(
+                    tx,
+                    log::Level::Warn,
+                    "Volatile SRAM — a standalone verify compares against the \
+                     power-on signature, not stored data; use write+verify to test",
+                );
+            }
             match input {
                 OpInput::Buffer(buf) => verify_chip_bytes(h, buf, o.page, Some(&mut progress))
                     .map_err(|e| e.to_string())?,

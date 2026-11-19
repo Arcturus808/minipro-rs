@@ -285,6 +285,9 @@ pub struct DeviceInfoDto {
     /// Raw `protocol_id` from the database — `0x03` selects the SPI status
     /// register panel (25-series NOR).
     protocol_id: u8,
+    /// Volatile SRAM (protocol 0x29): contents don't survive power-off —
+    /// standalone read/verify shows the power-on signature, not stored data.
+    volatile_sram: bool,
 }
 
 #[derive(Serialize)]
@@ -4165,6 +4168,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         icsp: dev.package_details.icsp,
         icsp_only: dev.flags.prog_support == minipro_core::device::MP_ICSP_ONLY,
         protocol_id: dev.protocol_id,
+        volatile_sram: dev.is_volatile_sram(),
     }
 }
 
