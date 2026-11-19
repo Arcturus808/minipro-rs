@@ -14,7 +14,7 @@ use minipro_core::{
     operations::{
         blank_check, check_chip_id, chip_id_info, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_check_gate_applies, pin_contact_check,
-        read_chip, read_chip_stable, read_file, spi_autodetect_and_lookup, verify_chip,
+        read_chip, read_chip_stable, read_file, spi_autodetect_and_lookup, sram_test, verify_chip,
         verify_chip_bytes, write_chip, write_chip_bytes, write_file, OpStats, SizeMismatch,
     },
     MiniproHandle,
@@ -2722,6 +2722,149 @@ pub async fn run_health_check(
                 emit_log(&window_inner, "info", &format!("  {}", n));
             }
             Ok::<HealthCheckResultDto, String>(dto)
+        })();
+
+        let _ = handle.end_transaction();
+        let _ = state_task.store_handle(handle);
+        if let Err(ref e) = result {
+            handle_usb_error(&state_task, e);
+        }
+        result
+    })
+    .await;
+
+    state_clone.release();
+
+    match result {
+        Ok(Ok(dto)) => Ok(dto),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Task panicked: {}", e)),
+    }
+}
+
+#[derive(Serialize)]
+pub struct SramPatternDto {
+    name: String,
+    /// `(address, expected, actual)` of the first verify mismatch, when
+    /// the pattern failed.
+    mismatch: Option<(u32, u8, u8)>,
+}
+
+/// Structured SRAM test result for the GUI.
+#[derive(Serialize)]
+pub struct SramTestResultDto {
+    deviceName: String,
+    /// Bytes written+verified per pattern.
+    bytes: usize,
+    passed: usize,
+    total: usize,
+    results: Vec<SramPatternDto>,
+}
+
+/// Powered SRAM diagnostic (Diagnostics panel). Volatile-SRAM devices only
+/// (`protocol_id = 0x29`) — the test overwrites the whole chip.
+#[tauri::command]
+pub async fn run_sram_test(
+    icspMode: String,
+    pinCheck: bool,
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SramTestResultDto, String> {
+    let state_clone = (*state).clone();
+    if !state_clone.try_acquire() {
+        return Err("Another operation is already running".into());
+    }
+
+    let state_task = state_clone.clone();
+    let window_clone = window.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut handle = state_task.take_handle()?;
+        let device = state_task.get_device()?;
+        let window_inner = window_clone.clone();
+
+        let result = (|| {
+            if !device.is_volatile_sram() {
+                return Err(format!(
+                    "'{}' is not a volatile-SRAM device — the test would overwrite its contents",
+                    device.name
+                ));
+            }
+            set_icsp_from_mode(&mut handle, &icspMode, &device);
+            handle
+                .begin_transaction(device.clone())
+                .map_err(|e| e.to_string())?;
+
+            // Pin contact check (pre-operation gate)
+            let db_paths = get_db_paths(&state_task)?;
+            run_pin_check_if_enabled(
+                &mut handle,
+                pinCheck,
+                &icspMode,
+                &window_clone,
+                &db_paths.infoic,
+            )?;
+
+            emit_log(
+                &window_inner,
+                "info",
+                &format!(
+                    "SRAM test on {} — powered write+verify per pattern",
+                    device.name
+                ),
+            );
+            let mut cb = |done: usize, total: usize| {
+                let _ = window_inner.emit(
+                    "progress",
+                    ProgressPayload {
+                        done,
+                        total,
+                        operation: "SRAM test".to_string(),
+                    },
+                );
+            };
+            let report = sram_test(&mut handle, Some(&mut cb)).map_err(|e| e.to_string())?;
+
+            let mut failures = 0usize;
+            for p in &report.patterns {
+                match &p.mismatch {
+                    None => emit_log(&window_inner, "info", &format!("  {} — OK", p.name)),
+                    Some((addr, exp, act)) => {
+                        failures += 1;
+                        emit_log(
+                            &window_inner,
+                            "warn",
+                            &format!(
+                                "  {} — FAIL at {:#06x}: expected {:#04x}, got {:#04x}",
+                                p.name, addr, exp, act
+                            ),
+                        );
+                    }
+                }
+            }
+            emit_log(
+                &window_inner,
+                if failures == 0 { "info" } else { "warn" },
+                &format!(
+                    "SRAM test: {}/{} patterns passed ({} bytes each)",
+                    report.patterns.len() - failures,
+                    report.patterns.len(),
+                    report.bytes
+                ),
+            );
+            Ok::<SramTestResultDto, String>(SramTestResultDto {
+                deviceName: device.name.clone(),
+                bytes: report.bytes,
+                passed: report.patterns.len() - failures,
+                total: report.patterns.len(),
+                results: report
+                    .patterns
+                    .into_iter()
+                    .map(|p| SramPatternDto {
+                        name: p.name,
+                        mismatch: p.mismatch,
+                    })
+                    .collect(),
+            })
         })();
 
         let _ = handle.end_transaction();

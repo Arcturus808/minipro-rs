@@ -765,6 +765,128 @@ pub fn verify_chip_bytes(
     Ok(())
 }
 
+/// One fill pattern exercised by [`sram_test`].
+enum SramPattern {
+    Fill(u8),
+    AddressAsData,
+}
+
+impl SramPattern {
+    const ALL: &[Self] = &[
+        Self::Fill(0x00),
+        Self::Fill(0xFF),
+        Self::Fill(0x55),
+        Self::Fill(0xAA),
+        Self::AddressAsData,
+    ];
+
+    fn name(&self) -> String {
+        match self {
+            Self::Fill(v) => format!("0x{v:02x}"),
+            Self::AddressAsData => "address-as-data".to_string(),
+        }
+    }
+
+    fn buffer(&self, size: usize) -> Vec<u8> {
+        match self {
+            Self::Fill(v) => vec![*v; size],
+            Self::AddressAsData => (0..size).map(|i| (i & 0xff) as u8).collect(),
+        }
+    }
+}
+
+/// Outcome for one [`sram_test`] pattern.
+#[derive(Debug)]
+pub struct SramPatternResult {
+    /// Pattern label, e.g. `"0x55"` or `"address-as-data"`.
+    pub name: String,
+    /// First verify mismatch `(address, expected, actual)` when the
+    /// pattern failed; `None` when it verified cleanly.
+    pub mismatch: Option<(u32, u8, u8)>,
+}
+
+/// Result of [`sram_test`].
+#[derive(Debug)]
+pub struct SramTestReport {
+    /// Bytes written+verified per pattern (effective code-memory size).
+    pub bytes: usize,
+    /// One entry per pattern, in test order.
+    pub patterns: Vec<SramPatternResult>,
+}
+
+/// Powered SRAM diagnostic for volatile-memory (`protocol_id = 0x29`,
+/// "(TEST)") devices — writes each pattern to the whole code memory and
+/// verifies it back **within the caller's transaction**, so the chip stays
+/// powered between write and verify and volatile contents are actually
+/// exercised. Unlike a file-based write+verify, the march-style pattern set
+/// (all-`0x00`, all-`0xFF`, `0x55`/`0xAA` checkerboards, address-as-data)
+/// also catches stuck cells, shorted data lines and address-decode faults.
+///
+/// Refuses non-`0x29` devices — the test overwrites the whole chip, so it
+/// must not run on parts whose contents the user may want to keep.
+///
+/// `progress` reports `(bytes_done, total_bytes)` across the whole test:
+/// each pattern contributes `size` write bytes plus `size` verify bytes.
+pub fn sram_test(
+    handle: &mut MiniproHandle,
+    mut progress: Option<&mut dyn FnMut(usize, usize)>,
+) -> Result<SramTestReport> {
+    let device = handle.device()?.clone();
+    if !device.is_volatile_sram() {
+        return Err(MiniproError::UnsupportedOperation);
+    }
+    let size = handle.protocol.effective_code_size(&device) as usize;
+    let total_steps = 2 * size * SramPattern::ALL.len();
+    let mut patterns = Vec::with_capacity(SramPattern::ALL.len());
+    for (i, pat) in SramPattern::ALL.iter().enumerate() {
+        let buf = pat.buffer(size);
+        let base = 2 * i * size;
+        {
+            let mut cb = |done: usize, _total: usize| {
+                if let Some(f) = progress.as_deref_mut() {
+                    f(base + done, total_steps);
+                }
+            };
+            write_chip_bytes(
+                handle,
+                buf.clone(),
+                0x00,
+                SizeMismatch::Error,
+                false,
+                Some(&mut cb),
+            )?;
+        }
+        let result = {
+            let mut cb = |done: usize, _total: usize| {
+                if let Some(f) = progress.as_deref_mut() {
+                    f(base + size + done, total_steps);
+                }
+            };
+            verify_chip_bytes(handle, buf, 0x00, Some(&mut cb))
+        };
+        match result {
+            Ok(()) => patterns.push(SramPatternResult {
+                name: pat.name(),
+                mismatch: None,
+            }),
+            Err(MiniproError::VerifyFailed {
+                address,
+                expected,
+                actual,
+            }) => patterns.push(SramPatternResult {
+                name: pat.name(),
+                mismatch: Some((address, expected, actual)),
+            }),
+            Err(e) => return Err(e),
+        }
+        info!("SRAM test {}: {}", i + 1, pat.name());
+    }
+    Ok(SramTestReport {
+        bytes: size,
+        patterns,
+    })
+}
+
 /// Blank-check the chip.
 pub fn blank_check(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
