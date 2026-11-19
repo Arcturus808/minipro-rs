@@ -1222,10 +1222,16 @@ fn do_operations(
 
             // C write_page_file does end_transaction + begin_transaction between
             // write and verify so the firmware flushes/commits written data.
+            // Volatile SRAM (0x29) has no flush semantics — writes latch on the
+            // WE pulse — and the repower would drop the data verify is about to
+            // read, so the boundary is skipped for it (the GUI and TUI already
+            // run write→verify in one powered session for all devices).
             {
                 let device_arc = handle.device.clone().expect("device set");
-                handle.end_transaction()?;
-                handle.begin_transaction(device_arc)?;
+                if !device_arc.is_volatile_sram() {
+                    handle.end_transaction()?;
+                    handle.begin_transaction(device_arc)?;
+                }
             }
 
             // Auto-verify after write (unless suppressed)
