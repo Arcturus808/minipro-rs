@@ -944,6 +944,23 @@ skip and proceeds — no data must not block the op), TUI worker log,
 and TUI pin-test strip all report the unavailable case explicitly.
 
 
+## Write-failure errors reported current-sense readings as expected/got bytes (fixed)
+
+`OvcStatus.c1`/`c2` are raw current-sense channel readings, but the
+per-block write-status check in `write_chip`/`write_chip_bytes` mapped a
+nonzero `wstatus.error` to `VerifyFailed { expected: c2, actual: c1 }` —
+fabricating byte detail the firmware status word does not carry. On an
+empty socket the programmer flags a write error with both sense channels
+idle-high, producing the nonsense `expected 0xff, got 0xff`. The firmware
+status word carries only an error flag + failing address (upstream C
+minipro treats it the same way — no byte detail exists to report).
+
+**Fix:** new `MiniproError::WriteFailed { address, code }` — honest
+`Write failed at 0x… (programmer status 0xNN)`. Do not "restore"
+expected/actual fields on write errors: there is no byte data in the
+status response on any model. Read-path verify mismatches still use
+`VerifyFailed` — those bytes are genuinely compared locally.
+
 ## Volatile SRAM loses data across the write→verify repower (fixed)
 
 Volatile-SRAM devices (XGecu "(TEST)" class) are powered only for the
