@@ -57,8 +57,9 @@ export interface DeviceInfo {
   icsp_only: boolean;
   /** Raw protocol_id — 0x03 selects the SPI status register panel (25-series NOR). */
   protocol_id: number;
-  /** Volatile SRAM (protocol 0x29): contents don't survive power-off —
-   *  standalone read/verify shows the power-on signature, not stored data. */
+  /** Volatile SRAM ("(TEST)" protocol class): contents don't survive
+   *  power-off — standalone read/verify shows the power-on signature,
+   *  not stored data. */
   volatile_sram: boolean;
 }
 

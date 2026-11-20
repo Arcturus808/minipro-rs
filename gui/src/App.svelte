@@ -116,8 +116,8 @@
     { bit: 0, name: "WIP", ro: true },
   ];
   let isSpiNor = $derived(($selectedDevice?.protocol_id ?? -1) === 0x03);
-  // Volatile SRAM (protocol 0x29) — standalone read/verify shows the
-  // power-on signature, not stored data; drives the warning banner.
+  // Volatile SRAM ("(TEST)" protocol class) — standalone read/verify
+  // shows the power-on signature, not stored data; drives the warning banner.
   let isVolatileSram = $derived($selectedDevice?.volatile_sram ?? false);
   let showBatchHelp = $state(false);
   let showFuseWriteConfirm = $state(false);
