@@ -60,6 +60,43 @@
     localStorage.setItem(FAV_COLLAPSED_KEY, String(favoritesCollapsed));
   });
 
+  // (RW) ↔ (TEST) sibling hint: battery-backed NVRAM entries have a
+  // powered-test twin and vice versa, but the convention is opaque —
+  // users pick whichever matches the pinout and get the wrong access
+  // profile. Derive the sibling name by swapping the qualifier token
+  // inside every parenthesized group (covers comma-alias rows and
+  // voltage-suffixed qualifiers like (RW3.3V)/(TEST3.3V)), then offer a
+  // one-click switch when the sibling resolves on this programmer.
+  const QUALIFIER_RE = /\((RW|TEST)/g;
+
+  function deriveSibling(name: string): string | null {
+    if (!/\((RW|TEST)/.test(name)) return null;
+    return name.replace(QUALIFIER_RE, (_m, q) => `(${q === "RW" ? "TEST" : "RW"}`);
+  }
+
+  // Which access profile the selected name carries (first qualifier wins —
+  // database rows never mix families within one name string).
+  let qualifierKind = $derived.by((): "rw" | "test" | null => {
+    const m = selectedInfo?.name.match(/\((RW|TEST)/);
+    return m ? (m[1] === "RW" ? "rw" : "test") : null;
+  });
+
+  // Resolved sibling entry name, null when it doesn't exist on this model.
+  let siblingName = $state<string | null>(null);
+  $effect(() => {
+    const info = selectedInfo;
+    siblingName = null;
+    const candidate = info ? deriveSibling(info.name) : null;
+    if (!candidate) return;
+    let cancelled = false;
+    invoke<FavoriteStatus[]>("check_favorite_devices", { names: [candidate] })
+      .then((list) => {
+        if (!cancelled && list[0]?.available) siblingName = candidate;
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  });
+
   // Favorite devices (sorted by name) for the pinned favorites section.
   // Favorites whose exact name doesn't exist in the connected programmer's
   // device list are hidden — database sections use different naming (e.g.
@@ -414,6 +451,27 @@
         {#if selectedInfo.can_erase}<span class="ml-1 opacity-60">· Erasable</span>{/if}
         {#if selectedInfo.has_chip_id}<span class="ml-1 opacity-60">· Chip ID</span>{/if}
       </div>
+      {#if qualifierKind}
+        <div class="text-xs opacity-80 pt-1 border-t border-surface-200-800">
+          {#if qualifierKind === "rw"}
+            Battery-backed NVRAM profile — needs a live backup cell.
+            Dead or removed cell? Test the raw SRAM array via the (TEST) entry.
+          {:else}
+            Powered test profile — the chip loses its contents when power
+            drops, so a standalone read shows only the power-on signature.
+            Live backup cell? The (RW) entry is the better choice.
+          {/if}
+          {#if siblingName}
+            <button
+              class="btn preset-tonal text-xs px-2 py-0.5 mt-1 hover:bg-primary-500/20 hover:border-primary-500/40 transition-colors"
+              title={siblingName}
+              onclick={() => onSelect(siblingName!)}
+            >
+              Switch to ({qualifierKind === "rw" ? "TEST" : "RW"}) entry
+            </button>
+          {/if}
+        </div>
+      {/if}
     </footer>
   {/if}
 </div>
