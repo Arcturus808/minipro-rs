@@ -918,6 +918,14 @@ fn do_operations(
         {
             let device = handle.device()?;
             if !device.is_volatile_sram() {
+                if device.name.contains("(RW)") {
+                    anyhow::bail!(
+                        "'{}' is the battery-backed entry for an NVRAM part — if its backup \
+                         cell is dead or removed, select the \"(TEST)\" entry to test the raw \
+                         SRAM array. Otherwise --sram-test would overwrite stored data.",
+                        device.name
+                    );
+                }
                 anyhow::bail!(
                     "'{}' is not a volatile-SRAM device — --sram-test would overwrite its contents",
                     device.name
@@ -1268,7 +1276,7 @@ fn do_operations(
 
             // C write_page_file does end_transaction + begin_transaction between
             // write and verify so the firmware flushes/commits written data.
-            // Volatile SRAM (0x29) has no flush semantics — writes latch on the
+            // Volatile SRAM has no flush semantics — writes latch on the
             // WE pulse — and the repower would drop the data verify is about to
             // read, so the boundary is skipped for it (the GUI and TUI already
             // run write→verify in one powered session for all devices).
@@ -1502,10 +1510,10 @@ fn fmt_bytes(n: u32) -> String {
     }
 }
 
-/// Standalone reads/verifies on volatile SRAM (protocol 0x29) return the
-/// chip's power-on signature, not stored data — the chip is unpowered
-/// before the op begins.  `(TEST)` entries are the test-profile variant
-/// of battery-backed parts and get the "(RW)" pointer.
+/// Standalone reads/verifies on volatile SRAM ("(TEST)" protocol class)
+/// return the chip's power-on signature, not stored data — the chip is
+/// unpowered before the op begins.  `(TEST)` entries are the test-profile
+/// variant of battery-backed parts and get the "(RW)" pointer.
 fn warn_volatile_sram(dev: &minipro_core::Device, op: &str) {
     if !dev.is_volatile_sram() {
         return;

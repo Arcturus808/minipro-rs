@@ -814,16 +814,16 @@ pub struct SramTestReport {
     pub patterns: Vec<SramPatternResult>,
 }
 
-/// Powered SRAM diagnostic for volatile-memory (`protocol_id = 0x29`,
-/// "(TEST)") devices — writes each pattern to the whole code memory and
-/// verifies it back **within the caller's transaction**, so the chip stays
-/// powered between write and verify and volatile contents are actually
-/// exercised. Unlike a file-based write+verify, the march-style pattern set
+/// Powered SRAM diagnostic for volatile-memory ("(TEST)" protocol-class)
+/// devices — writes each pattern to the whole code memory and verifies it
+/// back **within the caller's transaction**, so the chip stays powered
+/// between write and verify and volatile contents are actually exercised.
+/// Unlike a file-based write+verify, the march-style pattern set
 /// (all-`0x00`, all-`0xFF`, `0x55`/`0xAA` checkerboards, address-as-data)
 /// also catches stuck cells, shorted data lines and address-decode faults.
 ///
-/// Refuses non-`0x29` devices — the test overwrites the whole chip, so it
-/// must not run on parts whose contents the user may want to keep.
+/// Refuses non-volatile devices — the test overwrites the whole chip, so
+/// it must not run on parts whose contents the user may want to keep.
 ///
 /// `progress` reports `(bytes_done, total_bytes)` across the whole test:
 /// each pattern contributes `size` write bytes plus `size` verify bytes.

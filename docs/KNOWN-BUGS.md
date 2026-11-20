@@ -946,22 +946,29 @@ and TUI pin-test strip all report the unavailable case explicitly.
 
 ## Volatile SRAM loses data across the write→verify repower (fixed)
 
-Volatile-SRAM devices (XGecu "(TEST)" class, `protocol_id = 0x29`) are
-powered only for the duration of an operation: `end_transaction` drops
-VCC and the next `begin_transaction` re-applies it. The CLI `-w` path
-mirrored upstream `write_page_file`'s `end_transaction` +
-`begin_transaction` between write and verify — a flush/commit boundary
-that flash families may genuinely need — but for SRAM that repower
-erases the very contents verify is about to read. The GUI and TUI never
-had the boundary (their write→verify runs in one powered session for all
-devices, validated on real flash hardware), so the CLI was the lone
-outlier.
+Volatile-SRAM devices (XGecu "(TEST)" class) are powered only for the
+duration of an operation: `end_transaction` drops VCC and the next
+`begin_transaction` re-applies it. The CLI `-w` path mirrored upstream
+`write_page_file`'s `end_transaction` + `begin_transaction` between
+write and verify — a flush/commit boundary that flash families may
+genuinely need — but for SRAM that repower erases the very contents
+verify is about to read. The GUI and TUI never had the boundary (their
+write→verify runs in one powered session for all devices, validated on
+real flash hardware), so the CLI was the lone outlier.
 
 **Fix:** the CLI skips the write→verify repower when
 `device.is_volatile_sram()` — SRAM writes latch on the WE pulse and have
-nothing to flush. Do not "restore" the boundary for 0x29 devices to
-match upstream: for volatile memory the repower is the bug, not the
-fix. Detection is `protocol_id == 0x29` only — battery-backed classes
-`0x0e` ("(RW)" NVRAM) and `0x2f` (RAM36) are excluded by construction;
-`0x29` does include `(TEST)` variants of NVRAM parts, where the "(RW)"
-database entry is the right choice when the backup cell is live.
+nothing to flush. Do not "restore" the boundary for TEST-class devices
+to match upstream: for volatile memory the repower is the bug, not the
+fix.
+
+**Protocol family:** the "(TEST)" class is **six** protocol IDs, not one —
+the same three capacity tiers encoded twice, once per database section:
+`0xd0`/`0xd1`/`0xd2` in `INFOIC` (TL866A/CS), `0x27`/`0x28`/`0x29` in
+`INFOIC2PLUS`/`INFOICT76`. `VOLATILE_SRAM_PROTOCOL_IDS` holds the set;
+checking only `0x29` (the original implementation) silently missed every
+TL866A/CS SRAM and the smaller-capacity TEST tiers on newer programmers.
+Battery-backed classes `0x0e` ("(RW)" NVRAM) and `0x2f` (RAM36) are
+excluded by construction; the TEST protocols do include `(TEST)`
+variants of NVRAM parts, where the "(RW)" entry is the right choice
+when the backup cell is live.

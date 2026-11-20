@@ -285,8 +285,9 @@ pub struct DeviceInfoDto {
     /// Raw `protocol_id` from the database — `0x03` selects the SPI status
     /// register panel (25-series NOR).
     protocol_id: u8,
-    /// Volatile SRAM (protocol 0x29): contents don't survive power-off —
-    /// standalone read/verify shows the power-on signature, not stored data.
+    /// Volatile SRAM ("(TEST)" protocol class): contents don't survive
+    /// power-off — standalone read/verify shows the power-on signature,
+    /// not stored data.
     volatile_sram: bool,
 }
 
@@ -2761,8 +2762,8 @@ pub struct SramTestResultDto {
     results: Vec<SramPatternDto>,
 }
 
-/// Powered SRAM diagnostic (Diagnostics panel). Volatile-SRAM devices only
-/// (`protocol_id = 0x29`) — the test overwrites the whole chip.
+/// Powered SRAM diagnostic (Diagnostics panel). Volatile-SRAM ("(TEST)"
+/// protocol-class) devices only — the test overwrites the whole chip.
 #[tauri::command]
 pub async fn run_sram_test(
     icspMode: String,
@@ -2784,6 +2785,14 @@ pub async fn run_sram_test(
 
         let result = (|| {
             if !device.is_volatile_sram() {
+                if device.name.contains("(RW)") {
+                    return Err(format!(
+                        "'{}' is the battery-backed entry for an NVRAM part — if its backup \
+                         cell is dead or removed, select the \"(TEST)\" entry to test the raw \
+                         SRAM array. Otherwise the test would overwrite stored data.",
+                        device.name
+                    ));
+                }
                 return Err(format!(
                     "'{}' is not a volatile-SRAM device — the test would overwrite its contents",
                     device.name

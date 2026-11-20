@@ -832,9 +832,13 @@ pub struct Device {
     pub algorithm: Option<Algorithm>,
 }
 
-/// `protocol_id` of XGecu's volatile-SRAM "(TEST)" device class — see
+/// `protocol_id`s of XGecu's volatile-SRAM "(TEST)" device class — see
 /// [`Device::is_volatile_sram`].
-pub const VOLATILE_SRAM_PROTOCOL_ID: u8 = 0x29;
+///
+/// The class is split by database section and capacity tier: `0xd0`–`0xd2`
+/// are the legacy `INFOIC` (TL866A/CS) encodings for the same tiers that
+/// `INFOIC2PLUS`/`INFOICT76` express as `0x27`–`0x29`.
+pub const VOLATILE_SRAM_PROTOCOL_IDS: [u8; 6] = [0x27, 0x28, 0x29, 0xd0, 0xd1, 0xd2];
 
 impl Device {
     /// Helper: bytes per addressable word (1 or 2).
@@ -847,15 +851,15 @@ impl Device {
         self.code_memory_size as usize * self.word_size()
     }
 
-    /// Volatile SRAM (XGecu "(TEST)" class, `protocol_id = 0x29`): the chip
-    /// is powered only for the duration of an operation, so a standalone
-    /// read/verify returns the power-on signature rather than previously
-    /// written data — write+verify is the meaningful test.  Battery-backed
-    /// classes `0x0e` ("(RW)" NVRAM) and `0x2f` (RAM36) are excluded by
-    /// construction; `0x29` also covers `(TEST)` variants of NVRAM parts,
-    /// where the "(RW)" entry is right when the backup cell is live.
+    /// Volatile SRAM (XGecu "(TEST)" class): the chip is powered only for
+    /// the duration of an operation, so a standalone read/verify returns
+    /// the power-on signature rather than previously written data —
+    /// write+verify is the meaningful test.  Battery-backed classes `0x0e`
+    /// ("(RW)" NVRAM) and `0x2f` (RAM36) are excluded by construction; the
+    /// TEST protocols also cover `(TEST)` variants of NVRAM parts, where
+    /// the "(RW)" entry is right when the backup cell is live.
     pub fn is_volatile_sram(&self) -> bool {
-        self.protocol_id == VOLATILE_SRAM_PROTOCOL_ID
+        VOLATILE_SRAM_PROTOCOL_IDS.contains(&self.protocol_id)
     }
 }
 
