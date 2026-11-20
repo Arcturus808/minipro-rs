@@ -206,6 +206,55 @@ standalone `.exe`s on Windows (see `.github/workflows/release.yml` and
 so there is no fifth version field to bump; it requires Rust 1.88 (ratatui
 0.30) and is excluded from the 1.85 MSRV job.
 
+## crates.io publishing — `publish:crates` job
+
+Every release tag also publishes the library crates (`libarchive-rs`,
+`minipro-core`) to crates.io via **Trusted Publishing**: the job exchanges
+a GitLab OIDC JWT for a short-lived token — no API token is stored
+anywhere. The job is `publish:crates` (deploy stage,
+`scripts/crates-publish.sh`), runs only on tags, and is **idempotent** —
+a version already on crates.io is skipped, so `libarchive-rs` (whose
+version is deliberately decoupled from the app) doesn't break releases it
+doesn't change in, and a failed run can simply be retried.
+
+Publish order is forced: `libarchive-rs` → wait for it to appear in the
+crates.io *sparse index* → `minipro-core` (`cargo publish` resolves the
+`libarchive-rs` dep through crates.io; the API can see a fresh version
+before the index can, hence the poll).
+
+### One-time setup (per crate)
+
+crates.io → crate page → **Settings → Trusted Publishing → Add → GitLab**:
+
+- **Namespace**: `arcturus8081`
+- **Project**: `minipro-rs`
+- **Workflow filepath**: `.gitlab-ci.yml`
+- **Environment**: `release` (must match the job's `environment:` key)
+
+The crate must exist first — trusted-publishing config lives on the crate
+page, so the very first publish of each crate is manual (see below).
+Once the auto-publish has shipped a version end-to-end, optionally enable
+**Trusted Publishing only** in the same settings page — it disables
+API-token publishes entirely, so only this pipeline can publish.
+
+### First publish (manual, one-time)
+
+Both crates need one manual `cargo publish` with a short-lived API token
+(crates.io → Account Settings → API Tokens → New Token; scopes
+`publish-new` + `publish-update`; shortest expiry offered). Keep the token
+out of files and shell history:
+
+```bash
+read -s CARGO_REGISTRY_TOKEN && export CARGO_REGISTRY_TOKEN
+(cd crates/libarchive-rs && cargo publish)
+# wait ~1–2 min for the sparse index to see libarchive-rs, then:
+(cd crates/minipro-core && cargo publish)
+unset CARGO_REGISTRY_TOKEN   # then revoke the token in crates.io settings
+```
+
+Run from a clean checkout of the tagged commit — the published tarball
+must match the tag, not an arbitrary working tree.
+
 ## Supply-chain audit (cargo-deny)
 
 Run `cargo deny check` during release prep to scan for known
