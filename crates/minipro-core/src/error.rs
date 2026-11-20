@@ -37,6 +37,17 @@ pub enum MiniproError {
         address: u32,
     },
 
+    /// The programmer reported a write failure at the given address.
+    /// The firmware status word carries no byte detail — `code` is the
+    /// raw firmware status/error byte.
+    #[error("Write failed at {address:#010x} (programmer status {code:#04x})")]
+    WriteFailed {
+        /// Failing address reported by the programmer.
+        address: u32,
+        /// Raw firmware status/error byte.
+        code: u8,
+    },
+
     /// Verify pass found a mismatching byte/word.
     #[error("Verify failed at {address:#010x}: expected {expected:#04x}, got {actual:#04x}")]
     VerifyFailed {

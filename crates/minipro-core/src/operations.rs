@@ -437,10 +437,11 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                     });
                 }
                 if wstatus.error != 0 {
-                    return Err(MiniproError::VerifyFailed {
+                    // The status word carries no byte detail — c1/c2 are
+                    // current-sense readings, not expected/actual data.
+                    return Err(MiniproError::WriteFailed {
                         address: wstatus.address,
-                        expected: wstatus.c2 as u8,
-                        actual: wstatus.c1 as u8,
+                        code: wstatus.error,
                     });
                 }
             }
@@ -556,10 +557,11 @@ Set Size Diff to 'Warn' or 'Ignore' to proceed.",
                     });
                 }
                 if wstatus.error != 0 {
-                    return Err(MiniproError::VerifyFailed {
+                    // See write_chip: c1/c2 are current-sense readings,
+                    // not expected/actual data.
+                    return Err(MiniproError::WriteFailed {
                         address: wstatus.address,
-                        expected: wstatus.c2 as u8,
-                        actual: wstatus.c1 as u8,
+                        code: wstatus.error,
                     });
                 }
             }
