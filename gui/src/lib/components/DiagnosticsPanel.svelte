@@ -412,22 +412,24 @@
       {:else}
         <button class={actionClass} disabled title="Not supported on this programmer model">Pin Contact Test</button>
       {/if}
-      <button
-        class={actionClass}
-        onclick={runHealthCheck}
-        disabled={!healthCheckEnabled}
-        title={!$selectedDevice ? "Select a device first" : healthRefCompare && !healthRefPath ? "Choose a reference file or uncheck the option" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
-      >
-        {#if healthRunning}
-          Chip Health Check (running...)
-        {:else}
-          Chip Health Check
-        {/if}
-      </button>
-      <label class="flex items-center gap-1.5 px-1 text-xs cursor-pointer" title="After the read passes, compare the image against a known-good file — catches consistent corruption that repeated reads can't">
-        <input type="checkbox" bind:checked={healthRefCompare} disabled={healthRunning} />
-        Compare reads against file
-      </label>
+      <div class="flex items-center gap-x-2 flex-wrap">
+        <button
+          class={actionClass + " flex-1 min-w-0"}
+          onclick={runHealthCheck}
+          disabled={!healthCheckEnabled}
+          title={!$selectedDevice ? "Select a device first" : healthRefCompare && !healthRefPath ? "Choose a reference file or uncheck the option" : "Read-only check: repeated chip-ID and full reads to flag marginal chips"}
+        >
+          {#if healthRunning}
+            Chip Health Check (running...)
+          {:else}
+            Chip Health Check
+          {/if}
+        </button>
+        <label class="flex items-center gap-1.5 pr-1 text-xs cursor-pointer whitespace-nowrap flex-shrink-0" title="After the read passes, compare the image against a known-good file — catches consistent corruption that repeated reads can't">
+          <input type="checkbox" bind:checked={healthRefCompare} disabled={healthRunning} />
+          Compare reads against file
+        </label>
+      </div>
       {#if healthRefCompare}
         <div class="flex items-center gap-1 px-1 pl-5 text-xs">
           <button
