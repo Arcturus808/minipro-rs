@@ -144,6 +144,21 @@ Nothing currently scheduled — see Backlog for candidate work.
       safe) and marked unverified pending hardware.
   - eMMC io_init hardcoded constants (need hardware to test fixes)
   - eMMC bring-up query response lengths (need hardware to validate)
+  - **Volatile-SRAM test kit + protocol-matrix validation** — exercise all
+    six TEST-class encodings on real parts (one chip per package tier ×
+    three programmers; the class splits by pin count, not capacity):
+    - `AS6C4008-55PCN` (DIP32) → `628512`: `0x29` on T48/T76, `0xd2` on
+      TL866A — **on order**, and T48 reproduces the MarkS AS6C4008
+      report that motivated the feature
+    - `6116` or any 2K×8 DIP24: `0x27`/`0xd0` — fastest run, smallest chip
+    - `6264` or `62256` (DIP28 — 8K and 32K share the tier): `0x28`/`0xd1`
+    - Per cell: SRAM Test should pass 5/5 patterns; standalone read/verify
+      warnings should fire on every model (TL866A got these only after
+      the `0xd0`–`0xd2` fix); GUI picker `(RW)`↔`(TEST)` hint sanity-check
+      on a `DS1245(RW)`/`(TEST)` pair needs no chip.
+    - Empty-socket behavior verified 2026-11: honest `WriteFailed
+      (programmer status 0x10)` on TL866A instead of the old fabricated
+      `expected 0xff, got 0xff`.
 
   **Compute cost conservation:**
   - Feature branch pushes: free on both GitLab and GitHub
