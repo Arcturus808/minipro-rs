@@ -175,7 +175,9 @@ release pipeline remains the authority on packaging.
 
 ## Release checklist
 
-1. Update all four version fields above.
+1. Update all four version fields above, plus the `minipro-core = "X.Y"`
+   example in `README.md` ("Third-party GUIs" + "Using `minipro-core` as a
+   library" — it drifts silently otherwise).
 2. Add a `## [X.Y.Z]` section to `CHANGELOG.md` (CI extracts this for
    release notes).
 3. Run `cargo generate-lockfile` and stage `Cargo.lock` +
