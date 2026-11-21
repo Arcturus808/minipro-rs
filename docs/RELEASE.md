@@ -200,6 +200,11 @@ release pipeline remains the authority on packaging.
 8. If GitHub Actions doesn't trigger within a few minutes, push the tag
    directly: `git push github vX.Y.Z`.
 9. Let CI build and release everything consistently.
+10. Post-release: update the EEVblog thread's first post (version header +
+    any new features/screenshots). The BBCode source is kept locally, not
+    in the repo — layout convention: screenshots arranged in `[table]`
+    grids with explicit `width=` sizing and italic captions, not the
+    README's inline arrangement.
 
 **Release artifact set** (both pipelines): `minipro` CLI + `minipro-tui`
 terminal UI — bundled together in the Unix `.tar.gz` and shipped as two
