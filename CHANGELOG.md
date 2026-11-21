@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **Serial-number masking for screenshots** — `MINIPRO_SERIAL_OVERRIDE=<text>` replaces the serial shown in `ProgrammerInfo` across CLI, TUI, and GUI (the real value is still read from the device; only the displayed string changes). Intended for doc/README screenshots on real hardware, where everything else — firmware version, badge, diagnostics — stays authentic.
+
 ### Fixed
 
 - **Uppercase file extensions bypassed format autodetection** — `effective_format` matched extensions case-sensitively (`"hex"`/`"srec"`/`"mot"`/`"jed"` only), so a file like `MM3usa12f629.HEX` fell through to raw binary: reads/writes treated the file's ASCII text as chip data (a PIC12F629 write reported `buffer size 2896` = the file's byte length, then failed verify with `expected 0x3a` — ASCII `':'`, the Intel HEX record start code) and `-r dump.HEX` wrote binary output to a `.HEX`-named file. Extension matching is now case-insensitive across read, write, verify, and reference-file paths.
