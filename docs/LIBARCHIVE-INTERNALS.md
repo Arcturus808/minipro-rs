@@ -10,7 +10,7 @@ and `crates/libarchive-rs/docs/KNOWN-BUGS.md`; this file covers how
 
 ## Provenance & licensing
 
-The code is a cleanroom port of libarchive's
+The code is a port of libarchive's cleanroom RAR4 reader —
 `archive_read_support_format_rar.c` (BSD-2-Clause) and
 `archive_ppmd7.c` (public domain), relicensed `GPL-3.0-or-later` — same
 as the rest of the workspace, so `cargo deny` stays clean. **Unrar
