@@ -8,7 +8,7 @@ archive signature is located by scanning, not assumed to sit at offset 0.
 
 ## Provenance and licensing
 
-This crate is a clean-room Rust derivation of libarchive's RAR4 reader
+This crate is a Rust port of libarchive's clean-room RAR4 reader
 (`libarchive/archive_read_support_format_rar.c`, BSD-2-Clause) together with
 its bundled PPMd variant-H decoder (`libarchive/archive_ppmd7.c`, public
 domain by Igor Pavlov, based on work by Dmitry Shkarin). No code from the
