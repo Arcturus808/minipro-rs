@@ -989,3 +989,23 @@ Battery-backed classes `0x0e` ("(RW)" NVRAM) and `0x2f` (RAM36) are
 excluded by construction; the TEST protocols do include `(TEST)`
 variants of NVRAM parts, where the "(RW)" entry is the right choice
 when the backup cell is live.
+
+## Uppercase file extensions skipped format autodetection (fixed)
+
+`effective_format` matched `path.extension()` case-sensitively —
+`"hex"`/`"srec"`/`"mot"`/`"jed"` only — so `MM3usa12f629.HEX` resolved
+to `"bin"` and `read_file` returned the file's raw bytes. For a text
+format that means the ASCII source itself became the image: a real
+PIC12F629 report showed `buffer size 2896` (the .HEX file's byte
+length) and verify failing at offset 0 with `expected 0x3a` — ASCII
+`':'`, the Intel HEX record start code. The same miss on the output
+side wrote binary data to `dump.HEX`. The GUI's `read_file_bytes`
+preview check *did* lowercase the extension, so the file loaded
+"successfully" while the actual format stayed binary — two layers
+disagreeing on the same filename.
+
+**Fix:** lowercase the extension before matching in
+`effective_format`. Keep it that way — every new extension arm must
+match against the lowercased value, and any new call site that
+classifies files by extension should go through `effective_format`
+rather than re-checking extensions itself.
