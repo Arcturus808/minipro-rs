@@ -1246,3 +1246,19 @@ Nothing currently scheduled — see Backlog for candidate work.
     - `.alg` count is version-locked (354/370 today) — decode-all + ≥1 presence is the gate; count drift is a warning, never a hard fail (XGecu adds algorithms between releases).
     - **TL866A/CS firmware — initially rejected, then shipped:** the only official source is the legacy MiniPro installers; their inner archives are **RAR4**, which `rar-codec` cannot parse. The vendored `rar4` RAR4 decoder removed that blocker: the downloader now also fetches the two pinned MiniPro installers and produces `firmware-TL866A-03.2.85.dat` (MiniPro 6.82) and `firmware-TL866A-03.2.86.dat` (MiniPro 6.85). Both versions are always provided rather than a "latest" — 03.2.86 carries reported anti-clone serial checks that can brick counterfeit units (MiniPro ≥6.82 firmware disables boot mode on detected clones), so 03.2.85 is the safer choice for unknown provenance and the 03.2.86 image warns at extract and at flash time. No vendor payload is certified as clone-safe; one `update.dat` serves TL866A and TL866CS both (dual A/CS payloads inside).
   - Status: **implemented** — shipped scope recorded in the status line at the top of this item; additionally the TL866A/CS RAR4 path via vendored `rar4` (see previous bullet). Prototype-era verification held: 354 T56 + 370 T76 CRC-verified `.alg`s + all firmware images; MSRV 1.85 clean.
+- [ ] **Fuzz/property-test the file-input surface** — the app ingests user-supplied
+  files at several points (firmware images, reference files, `.dat` updates,
+  fetched XGecu archives), and `rar4` is a published decoder crate where fuzz
+  coverage is expected practice. Scoped in three tiers:
+  1. `cargo-fuzz` coverage-guided harness on `rar4` decompression — the deep
+     target: complex bit-manipulation state machine, arbitrary input bytes,
+     external consumers.
+  2. Cheap no-panic property tests (`arbitrary` bytes → parser must return
+     `Result`, never panic) for `ihex`/`srec`/`jedec`, the `update.dat` family
+     parsers, and `xgpro_fetch` inner-archive unwrapping. A panic mid-write
+     leaves an erased chip — worse than a normal app crash.
+  3. Committed fuzz corpus replayed in CI as a regression gate (bounded runs,
+     not long fuzz sessions).
+  Honest caveat recorded so expectations stay calibrated: fuzzing catches
+  crashes/OOB/timeouts — it would not have caught the `.HEX` case-sensitivity
+  bug (a logic error, not a crash). Complements tests; doesn't replace them.
