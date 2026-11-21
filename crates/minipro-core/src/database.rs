@@ -18,6 +18,8 @@ use quick_xml::{
     Reader, XmlVersion,
 };
 
+#[cfg(not(feature = "bundled-db"))]
+use crate::outln;
 use crate::{
     device::ProgrammerModel,
     device::{
@@ -25,7 +27,6 @@ use crate::{
         Voltages,
     },
     error::{MiniproError, Result},
-    outln,
 };
 
 // ── Database type tags (from database.c) ────────────────────────────────────
@@ -64,14 +65,55 @@ const DEVICE_MASK: u32 = T56_FLAG | T48_FLAG | TL866II_FLAG;
 ///     - Linux: `/usr/share/minipro-rs/` then `/usr/share/minipro/`
 ///     - macOS: `/Library/Application Support/minipro-rs/` then `/Library/Application Support/minipro/`
 ///     - Windows: `%PROGRAMDATA%\minipro-rs\` then `%PROGRAMDATA%\minipro\`
+///  9. Embedded copy compiled into the binary (`bundled-db` feature, default
+///     on): gzipped snapshots of the repo `data/` files, so a bare exe works
+///     from any directory. Any on-disk hit above still wins — the embedded
+///     copy is a floor, not an override. Disable the feature for packaging
+///     that ships the XMLs separately (e.g. `/usr/share` data dirs).
 #[derive(Clone)]
 pub struct DatabasePaths {
-    /// Path to the main device database (`infoic.xml`).
-    pub infoic: PathBuf,
-    /// Path to the logic-IC database (`logicic.xml`).
-    pub logicic: PathBuf,
+    /// Source of the main device database (`infoic.xml`).
+    pub infoic: DbSource,
+    /// Source of the logic-IC database (`logicic.xml`).
+    pub logicic: DbSource,
     /// Path to algorithm.xml for T56/T76 FPGA bitstreams, if found or overridden.
     pub algorithms: Option<PathBuf>,
+}
+
+/// Where a database file's content comes from.
+///
+/// Every on-disk search candidate is tried before the build-time embedded
+/// copy is used, so a fresher database dropped into any search directory
+/// always wins over the version the binary was built with.
+#[derive(Clone)]
+pub enum DbSource {
+    /// Content read from a file on disk.
+    Path(PathBuf),
+    /// Content embedded in the binary at build time (`bundled-db` feature,
+    /// gzipped). `Embedded` holds the compressed bytes; [`DbSource::load`]
+    /// decompresses on demand.
+    #[cfg(feature = "bundled-db")]
+    Embedded(&'static [u8]),
+}
+
+impl DbSource {
+    /// Load the full XML text — from disk for `Path`, or gunzipped from the
+    /// embedded copy for `Embedded`.
+    pub fn load(&self) -> Result<String> {
+        match self {
+            Self::Path(p) => read_file(p),
+            #[cfg(feature = "bundled-db")]
+            Self::Embedded(gz) => {
+                let mut s = String::new();
+                flate2::read::GzDecoder::new(*gz)
+                    .read_to_string(&mut s)
+                    .map_err(|e| {
+                        MiniproError::Protocol(format!("embedded database corrupt: {e}"))
+                    })?;
+                Ok(s)
+            }
+        }
+    }
 }
 
 impl DatabasePaths {
@@ -92,40 +134,54 @@ impl DatabasePaths {
     }
 }
 
-fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<PathBuf> {
+fn resolve_one(filename: &str, override_path: Option<&Path>) -> Result<DbSource> {
     if let Some(p) = override_path {
-        return Ok(p.to_path_buf());
+        return Ok(DbSource::Path(p.to_path_buf()));
     }
     let candidates = candidate_paths(filename);
     if let Some(p) = candidates.iter().find(|p| p.exists()) {
-        return Ok(p.clone());
+        return Ok(DbSource::Path(p.clone()));
     }
 
-    // Show exactly where we looked on stderr, then keep the error itself a
-    // single line — the CLI top level prints it via `{:?}`, which escapes
-    // embedded newlines.
-    let mut seen = std::collections::HashSet::new();
-    let listing = candidates
-        .iter()
-        .map(|p| display_candidate(filename, p))
-        .filter(|s| seen.insert(s.clone()))
-        .map(|s| format!("  {s}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    outln!("cannot find database file '{filename}'; searched:\n{listing}");
+    // Last resort: the copy embedded at build time.
+    #[cfg(feature = "bundled-db")]
+    {
+        let embedded: &'static [u8] = match filename {
+            INFOIC_FILENAME => include_bytes!("../embedded/infoic.xml.gz"),
+            _ => include_bytes!("../embedded/logicic.xml.gz"),
+        };
+        Ok(DbSource::Embedded(embedded))
+    }
 
-    let flag = if filename == LOGICIC_FILENAME {
-        "--logicic"
-    } else {
-        "--infoic"
-    };
-    let hint = match user_data_dir() {
-        Some(d) => format!("place a copy next to the executable or in {}", d.display()),
-        None => "place a copy next to the executable".to_string(),
-    };
-    Err(MiniproError::DeviceNotFound(format!(
-        "cannot find database file '{filename}' ({hint}, or pass {flag} / set MINIPRO_HOME)"
-    )))
+    // Without the embedded copy (bundled-db feature off — e.g. distro
+    // packaging), a missing file is an error: show exactly where we looked
+    // on stderr, then keep the error itself a single line — the CLI top
+    // level prints it via `{:?}`, which escapes embedded newlines.
+    #[cfg(not(feature = "bundled-db"))]
+    {
+        let mut seen = std::collections::HashSet::new();
+        let listing = candidates
+            .iter()
+            .map(|p| display_candidate(filename, p))
+            .filter(|s| seen.insert(s.clone()))
+            .map(|s| format!("  {s}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        outln!("cannot find database file '{filename}'; searched:\n{listing}");
+
+        let flag = if filename == LOGICIC_FILENAME {
+            "--logicic"
+        } else {
+            "--infoic"
+        };
+        let hint = match user_data_dir() {
+            Some(d) => format!("place a copy next to the executable or in {}", d.display()),
+            None => "place a copy next to the executable".to_string(),
+        };
+        Err(MiniproError::DeviceNotFound(format!(
+            "cannot find database file '{filename}' ({hint}, or pass {flag} / set MINIPRO_HOME)"
+        )))
+    }
 }
 
 /// Like `resolve_one` but returns `None` instead of an error when the file
@@ -141,6 +197,7 @@ fn resolve_optional(filename: &str, override_path: Option<&Path>) -> Option<Path
 /// Render a search candidate for the "searched:" listing. The cwd entry is
 /// stored relative (just `infoic.xml`), which reads poorly in a list of
 /// absolute paths — show it joined to the real cwd there.
+#[cfg(not(feature = "bundled-db"))]
 fn display_candidate(filename: &str, p: &Path) -> String {
     if p == Path::new(filename) {
         if let Ok(cwd) = std::env::current_dir() {
@@ -303,7 +360,7 @@ pub fn list_logic_ics_by_pin_count(
     paths: &DatabasePaths,
     pin_count: u8,
 ) -> Result<Vec<DeviceListItem>> {
-    let xml = read_file(&paths.logicic)?;
+    let xml = paths.logicic.load()?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -397,7 +454,7 @@ pub fn list_devices_by_model(
         }
     }
 
-    let xml = read_file(&paths.infoic)?;
+    let xml = paths.infoic.load()?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -538,11 +595,11 @@ pub struct PinMap {
 ///
 /// `index` is the lower byte of `device.pin_map` from the database.
 /// Returns `None` if `index == 0` or if no matching `<map>` entry is found.
-pub fn get_pin_map(infoic_path: &Path, index: u32) -> Result<Option<PinMap>> {
+pub fn get_pin_map(infoic_src: &DbSource, index: u32) -> Result<Option<PinMap>> {
     if index == 0 {
         return Ok(None);
     }
-    let xml = read_file(infoic_path)?;
+    let xml = infoic_src.load()?;
     parse_pin_map(&xml, index)
 }
 
@@ -640,14 +697,14 @@ fn parse_logic_vectors(xml: &str, name: &str, pin_count: u8) -> Result<(Option<V
     ))
 }
 
-/// Search `path` for a device with the given name. Returns `None` if not found.
+/// Search `src` for a device with the given name. Returns `None` if not found.
 fn search_file(
-    path: &Path,
+    src: &DbSource,
     name: &str,
     model: ProgrammerModel,
     is_logic: bool,
 ) -> Result<Option<Device>> {
-    let xml = read_file(path)?;
+    let xml = src.load()?;
     // Pass 1: collect all <config> entries
     let configs = parse_configs(&xml)?;
     // Pass 2: find the <ic> entry
@@ -665,12 +722,12 @@ fn search_file(
 }
 
 fn collect_names(
-    path: &Path,
+    src: &DbSource,
     filter: Option<&str>,
     out: &mut Vec<DeviceListItem>,
     seen: &mut std::collections::HashSet<String>,
 ) -> Result<()> {
-    let xml = read_file(path)?;
+    let xml = src.load()?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -713,13 +770,13 @@ fn collect_names(
 
 /// Like `collect_names`, but only includes devices compatible with `model`.
 fn collect_names_for_model(
-    path: &Path,
+    src: &DbSource,
     filter: Option<&str>,
     model: ProgrammerModel,
     out: &mut Vec<DeviceListItem>,
     seen: &mut std::collections::HashSet<String>,
 ) -> Result<()> {
-    let xml = read_file(path)?;
+    let xml = src.load()?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -811,7 +868,7 @@ fn collect_names_for_model(
 /// - Does NOT filter by `pin_map` model flags (upstream doesn't either).
 /// - Splits comma-separated names into separate entries.
 fn collect_by_chip_id(
-    path: &Path,
+    src: &DbSource,
     target_chip_id: u32,
     target_pin_count: u8,
     model: ProgrammerModel,
@@ -822,7 +879,7 @@ fn collect_by_chip_id(
         return Ok(()); // No valid chip ID to search for
     }
 
-    let xml = read_file(path)?;
+    let xml = src.load()?;
     let mut reader = Reader::from_str(&xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -913,7 +970,7 @@ fn collect_by_chip_id(
     Ok(())
 }
 
-/// Return true if `name` appears in `path` under any database section.
+/// Return true if `name` appears in `src` under any database section.
 /// Build an actionable message for a "not supported by this model" lookup.
 ///
 /// Single scan over infoic.xml collecting two things:
@@ -926,11 +983,11 @@ fn collect_by_chip_id(
 ///   "exists for …" list. INFOIC2PLUS hits are discriminated per-model via
 ///   `device_matches_model` since the section is shared by TL866II+/T48/T56.
 fn unsupported_device_hint(
-    path: &Path,
+    src: &DbSource,
     name: &str,
     model: ProgrammerModel,
 ) -> Result<Option<String>> {
-    let xml = read_file(path)?;
+    let xml = src.load()?;
     let base = name.split('@').next().unwrap_or(name).trim();
     let prefix = format!("{}@", base.to_ascii_uppercase());
 
@@ -1783,6 +1840,40 @@ fn compare_mask_for(chip_info: u32) -> (u16, u8) {
 mod tests {
     use super::*;
 
+    /// The embedded .gz copies must match the authoritative data/*.xml.
+    /// Skips silently when the repo `data/` dir isn't present (published
+    /// package).
+    #[cfg(feature = "bundled-db")]
+    #[test]
+    fn embedded_matches_data_xml() {
+        for (gz, name) in [
+            (
+                include_bytes!("../embedded/infoic.xml.gz") as &[u8],
+                "infoic.xml",
+            ),
+            (
+                include_bytes!("../embedded/logicic.xml.gz") as &[u8],
+                "logicic.xml",
+            ),
+        ] {
+            let disk = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../data")
+                .join(name);
+            if !disk.exists() {
+                continue;
+            }
+            let mut unpacked = String::new();
+            flate2::read::GzDecoder::new(gz)
+                .read_to_string(&mut unpacked)
+                .unwrap();
+            assert_eq!(
+                unpacked,
+                std::fs::read_to_string(&disk).unwrap(),
+                "embedded {name}.gz is stale — regenerate crates/minipro-core/embedded/"
+            );
+        }
+    }
+
     const LOGICIC_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <logicic>
   <database type="LOGIC">
@@ -1824,8 +1915,8 @@ mod tests {
         )
         .unwrap();
         DatabasePaths {
-            infoic,
-            logicic,
+            infoic: DbSource::Path(infoic),
+            logicic: DbSource::Path(logicic),
             algorithms: None,
         }
     }
@@ -1921,8 +2012,8 @@ mod tests {
         let logicic = dir.join("logicic.xml");
         std::fs::write(&logicic, r#"<logicic></logicic>"#).unwrap();
         DatabasePaths {
-            infoic,
-            logicic,
+            infoic: DbSource::Path(infoic),
+            logicic: DbSource::Path(logicic),
             algorithms: None,
         }
     }
@@ -2114,8 +2205,8 @@ mod tests {
         let logicic = dir.join("logicic.xml");
         std::fs::write(&logicic, LOGICIC_FIXTURE).unwrap();
         DatabasePaths {
-            infoic,
-            logicic,
+            infoic: DbSource::Path(infoic),
+            logicic: DbSource::Path(logicic),
             algorithms: None,
         }
     }

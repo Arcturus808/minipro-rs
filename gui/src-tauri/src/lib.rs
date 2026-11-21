@@ -99,8 +99,8 @@ pub fn run() {
                     ) {
                         if infoic_res.exists() && logicic_res.exists() {
                             db_paths = Some(minipro_core::database::DatabasePaths {
-                                infoic: infoic_res,
-                                logicic: logicic_res,
+                                infoic: minipro_core::database::DbSource::Path(infoic_res),
+                                logicic: minipro_core::database::DbSource::Path(logicic_res),
                                 algorithms: None,
                             });
                         }

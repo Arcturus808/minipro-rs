@@ -684,8 +684,8 @@ impl App {
         let mut a = Self::from_devices(
             Vec::new(),
             DatabasePaths {
-                infoic: "n".into(),
-                logicic: "n".into(),
+                infoic: minipro_core::database::DbSource::Path("n".into()),
+                logicic: minipro_core::database::DbSource::Path("n".into()),
                 algorithms: None,
             },
             ProgrammerModel::Tl866iiPlus,
@@ -2393,8 +2393,8 @@ mod tests {
             dev("AT28C256"),
         ];
         let paths = DatabasePaths {
-            infoic: "n".into(),
-            logicic: "n".into(),
+            infoic: minipro_core::database::DbSource::Path("n".into()),
+            logicic: minipro_core::database::DbSource::Path("n".into()),
             algorithms: None,
         };
         App::from_devices(devices, paths, ProgrammerModel::Tl866iiPlus)

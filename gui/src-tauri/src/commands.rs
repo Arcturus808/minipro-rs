@@ -94,7 +94,7 @@ fn run_pin_check_if_enabled(
     enabled: bool,
     icsp_mode: &str,
     window: &Window,
-    infoic_path: &std::path::Path,
+    infoic_path: &minipro_core::database::DbSource,
 ) -> Result<(), String> {
     if !enabled {
         return Ok(());
