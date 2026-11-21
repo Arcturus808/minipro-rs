@@ -1,6 +1,13 @@
 import { writable, derived, get } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { logs } from "./logs";
+import { settings } from "./settings";
+
+/** Serial mask from Settings, or null when masking is off. */
+function serialMask(): string | null {
+  const s = get(settings);
+  return s.maskSerial && s.maskSerialValue.trim() ? s.maskSerialValue : null;
+}
 
 export interface ProgrammerInfo {
   model: string;
@@ -126,7 +133,7 @@ export const fuseBitDefs = writable<FuseConfigDef | null>(null);
 
 export async function refreshProgrammer() {
   try {
-    const info = await invoke<ProgrammerInfo>("get_programmer_info");
+    const info = await invoke<ProgrammerInfo>("get_programmer_info", { serialMask: serialMask() });
     programmer.set(info);
   } catch (e) {
     programmer.set(null);
@@ -136,7 +143,7 @@ export async function refreshProgrammer() {
 
 export async function forceReconnect() {
   try {
-    const info = await invoke<ProgrammerInfo>("force_reconnect");
+    const info = await invoke<ProgrammerInfo>("force_reconnect", { serialMask: serialMask() });
     programmer.set(info);
   } catch (e) {
     programmer.set(null);
@@ -150,7 +157,7 @@ export async function forceReconnect() {
 /// wins over real hardware while enabled.
 export async function setSimulatedProgrammer(model: string | null) {
   try {
-    const info = await invoke<ProgrammerInfo>("set_simulated_programmer", { model });
+    const info = await invoke<ProgrammerInfo>("set_simulated_programmer", { model, serialMask: serialMask() });
     programmer.set(info);
     // Log the transition explicitly — without it the log's last line can
     // name a simulated model while the badge already shows real hardware.

@@ -715,6 +715,17 @@ fn parse_size_mismatch(s: &str) -> Result<SizeMismatch, String> {
 /// If MINIPRO_SIMULATE_PROGRAMMER is set (e.g. "T48"), install a synthetic
 /// programmer of that model so the GUI can be exercised without hardware.
 /// No USB handle is opened — operations that need the device will fail.
+/// Settings "mask serial" counterpart to core's `MINIPRO_SERIAL_OVERRIDE` —
+/// the frontend passes its persisted fake value so every serial shown in the
+/// UI is masked while the real one is still read from the device.
+/// `None`/blank leaves the real serial unchanged.
+fn masked_serial(real: &str, mask: Option<&str>) -> String {
+    match mask.map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => m.to_string(),
+        None => real.to_string(),
+    }
+}
+
 fn simulated_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerInfoDto>, String> {
     let Some(info) =
         minipro_core::device::ProgrammerInfo::simulated_from_env().map_err(|e| e.to_string())?
@@ -745,6 +756,7 @@ fn simulated_programmer_from_env(state: &AppState) -> Result<Option<ProgrammerIn
 pub async fn set_simulated_programmer(
     state: State<'_, Arc<AppState>>,
     model: Option<String>,
+    serial_mask: Option<String>,
 ) -> Result<ProgrammerInfoDto, String> {
     match model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
         Some(m) => {
@@ -765,7 +777,7 @@ pub async fn set_simulated_programmer(
         let mut guard = state.programmer_info.lock().map_err(|e| e.to_string())?;
         *guard = None;
     }
-    get_programmer_info(state).await
+    get_programmer_info(state, serial_mask).await
 }
 
 /// Open the programmer and return its info.
@@ -775,6 +787,7 @@ pub async fn set_simulated_programmer(
 #[tauri::command]
 pub async fn get_programmer_info(
     state: State<'_, Arc<AppState>>,
+    serial_mask: Option<String>,
 ) -> Result<ProgrammerInfoDto, String> {
     if let Some(dto) = simulated_programmer_from_env(&state)? {
         return Ok(dto);
@@ -785,7 +798,7 @@ pub async fn get_programmer_info(
             return Ok(ProgrammerInfoDto {
                 model: info.model.to_string(),
                 firmware: info.firmware_str.clone(),
-                serial_number: info.serial_number.clone(),
+                serial_number: masked_serial(&info.serial_number, serial_mask.as_deref()),
                 hardware_version: format!("{:02x}", info.hardware_version),
                 simulated: false,
             });
@@ -866,7 +879,7 @@ pub async fn get_programmer_info(
         return Ok(ProgrammerInfoDto {
             model: info.model.to_string(),
             firmware: info.firmware_str,
-            serial_number: info.serial_number,
+            serial_number: masked_serial(&info.serial_number, serial_mask.as_deref()),
             hardware_version: format!("{:02x}", info.hardware_version),
             simulated: false,
         });
@@ -883,7 +896,10 @@ pub async fn get_programmer_info(
 /// the device may need time to re-initialise after a sleep/wake cycle or
 /// hot-plug event.
 #[tauri::command]
-pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<ProgrammerInfoDto, String> {
+pub async fn force_reconnect(
+    state: State<'_, Arc<AppState>>,
+    serial_mask: Option<String>,
+) -> Result<ProgrammerInfoDto, String> {
     // Explicitly drop any stale handle so the USB device can be re-claimed
     {
         let mut handle_guard = state.handle.lock().map_err(|e| e.to_string())?;
@@ -963,7 +979,7 @@ pub async fn force_reconnect(state: State<'_, Arc<AppState>>) -> Result<Programm
                 return Ok(ProgrammerInfoDto {
                     model: info.model.to_string(),
                     firmware: info.firmware_str,
-                    serial_number: info.serial_number,
+                    serial_number: masked_serial(&info.serial_number, serial_mask.as_deref()),
                     hardware_version: format!("{:02x}", info.hardware_version),
                     simulated: false,
                 });

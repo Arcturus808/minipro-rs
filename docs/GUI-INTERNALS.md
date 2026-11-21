@@ -40,6 +40,16 @@ changes. Use for doc/README screenshots on real hardware (everything else
 — firmware version, badge, diagnostics — stays authentic). Empty/unset
 means pass-through.
 
+The GUI has a no-shell equivalent: **Settings → Privacy → Mask serial
+number** (persisted `maskSerial` + `maskSerialValue` settings; the default
+fake is a realistic T48-format string). The frontend passes the mask as
+`serialMask` on `get_programmer_info`/`force_reconnect`/`set_simulated_programmer`
+and the backend applies it in `masked_serial()` at every
+`ProgrammerInfoDto` construction site — the real serial never reaches a
+frontend store while masking is on, and toggling re-fetches the cached
+info so the display updates without a USB reconnect. `serial_number` in
+the DTO is already the *masked* value by the time Svelte sees it.
+
 **Pre-commit verification (release exe, no installers):**
 
 ```powershell

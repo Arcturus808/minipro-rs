@@ -2,7 +2,7 @@
 
 ### Added
 
-- **Serial-number masking for screenshots** — `MINIPRO_SERIAL_OVERRIDE=<text>` replaces the serial shown in `ProgrammerInfo` across CLI, TUI, and GUI (the real value is still read from the device; only the displayed string changes). Intended for doc/README screenshots on real hardware, where everything else — firmware version, badge, diagnostics — stays authentic.
+- **Serial-number masking for screenshots** — `MINIPRO_SERIAL_OVERRIDE=<text>` replaces the serial shown in `ProgrammerInfo` across CLI, TUI, and GUI (the real value is still read from the device; only the displayed string changes). Intended for doc/README screenshots on real hardware, where everything else — firmware version, badge, diagnostics — stays authentic. The GUI also has a persistent Settings → Privacy → "Mask serial number" toggle with an editable fake value (default is a realistic T48-format string) that applies to every serial display surface via the `get_programmer_info`/`force_reconnect` DTO layer — the real serial never enters frontend state while masking is on.
 
 ### Fixed
 

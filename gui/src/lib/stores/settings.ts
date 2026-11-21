@@ -20,6 +20,8 @@ export interface AppSettings {
   windowHeight: number | null;
   customDbDir: string | null;
   simulatedModel: string | null;
+  maskSerial: boolean;
+  maskSerialValue: string;
 }
 
 // Panel widths as fractions of window width (0.0–1.0)
@@ -43,6 +45,9 @@ const DEFAULTS: AppSettings = {
   windowHeight: null,
   customDbDir: null,
   simulatedModel: null,
+  maskSerial: false,
+  // Authentic-looking fake (real T48-format: 24 uppercase alnum chars)
+  maskSerialValue: "K7M4Q9X2T6V8P3R5W1Z0HABC",
 };
 
 let store: Store | null = null;

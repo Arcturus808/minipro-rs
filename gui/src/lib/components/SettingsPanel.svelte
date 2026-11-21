@@ -5,7 +5,7 @@
   import { LogicalSize } from "@tauri-apps/api/dpi";
   import { invoke } from "@tauri-apps/api/core";
   import { pickDirectory } from "../file-dialog";
-  import { getDbStatus, setCustomDbDir, reloadDatabase, setSimulatedProgrammer, type DbDirStatus } from "../stores/device";
+  import { getDbStatus, setCustomDbDir, reloadDatabase, setSimulatedProgrammer, refreshProgrammer, type DbDirStatus } from "../stores/device";
   import { progress } from "../stores/operations";
 
   interface AlgoDownloadOutcome {
@@ -393,6 +393,44 @@
               <span class="font-mono">algorithm.xml</span> plus firmware images.
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Privacy -->
+      <div class="space-y-3">
+        <h3 class={`text-sm font-semibold border-b pb-1 ${isDark ? 'text-gray-200 border-slate-600' : 'text-gray-700 border-gray-300'}`}>Privacy</h3>
+        <div class="text-sm space-y-2">
+          <label class="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox"
+              checked={$settings.maskSerial}
+              onchange={async (e) => {
+                await update("maskSerial", e.currentTarget.checked);
+                await refreshProgrammer().catch(() => {});
+              }}
+            />
+            Mask serial number
+          </label>
+          {#if $settings.maskSerial}
+            <div class="flex items-center gap-2 text-sm">
+              <span class={`w-24 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Fake serial:</span>
+              <input
+                type="text"
+                class="input text-sm flex-1 font-mono"
+                value={$settings.maskSerialValue}
+                onchange={async (e) => {
+                  await update("maskSerialValue", e.currentTarget.value);
+                  await refreshProgrammer().catch(() => {});
+                }}
+              />
+            </div>
+          {/if}
+          <p class={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+            Shows the fake serial everywhere the real one would appear (e.g. Diagnostics) —
+            for screenshots and screen-sharing. The real serial is still read from the device.
+            CLI/TUI equivalent: <span class="font-mono">MINIPRO_SERIAL_OVERRIDE</span> env var.
+          </p>
         </div>
       </div>
 
