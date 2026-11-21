@@ -2093,13 +2093,13 @@ pub fn pin_check_gate_applies(model: ProgrammerModel, icsp_active: bool, device:
 
 /// Perform a pin-contact test on the device currently loaded in the ZIF socket.
 ///
-/// `infoic_path` must point to `infoic.xml` so that the programmer-independent
+/// `infoic_src` resolves to `infoic.xml` content so that the programmer-independent
 /// pin-map table (`<maps>`) can be located.  If the device has `pin_map == 0`
 /// (no contact-test data in the database) this returns `Ok(PinTestResult { bad_pins: vec![] })`
 /// immediately.
 pub fn pin_contact_check(
     handle: &mut MiniproHandle,
-    infoic_path: &std::path::Path,
+    infoic_src: &crate::database::DbSource,
 ) -> Result<crate::protocol::PinTestResult> {
     let device = handle.device()?.clone();
     let index = device.pin_map & 0xFF;
@@ -2107,7 +2107,7 @@ pub fn pin_contact_check(
     // data" marker) and for missing maps; an empty mask is just as
     // meaningless. In every case there is nothing to measure — callers
     // must not grade the empty default result as a pass.
-    let pin_map = match crate::database::get_pin_map(infoic_path, index)? {
+    let pin_map = match crate::database::get_pin_map(infoic_src, index)? {
         Some(pm) if !pm.mask.is_empty() => pm,
         _ => {
             crate::outln!("Pin contact check not available for this device.");

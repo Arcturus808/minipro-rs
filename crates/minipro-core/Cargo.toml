@@ -10,6 +10,13 @@ keywords  = ["minipro", "tl866", "eeprom", "programmer", "chip"]
 categories = ["hardware-support"]
 repository.workspace = true
 
+[features]
+default      = ["bundled-db"]
+# Embed gzipped copies of infoic.xml/logicic.xml in the binary so the CLI/TUI
+# work from a bare exe. Distro packaging can disable this and rely on the
+# on-disk search paths instead.
+bundled-db   = []
+
 [dependencies]
 nusb        = "0.1"
 quick-xml   = "0.41"

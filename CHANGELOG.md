@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Vendored RAR4 decoder renamed `libarchive-rs` → `rar4`** — `crates/libarchive-rs` is now `crates/rar4`; the crate name, `minipro-core`'s dependency, and all imports/docs follow. The old name overpromised scope on crates.io (it reads as a full libarchive binding; the crate is a RAR4-format decoder). `rar4 0.1.1` continues the version sequence; the two `libarchive-rs` publishes are yanked. `minipro-core` bumps to `0.13.1` with the renamed dep — `0.13.0` is yanked since its dep chain no longer resolves for fresh installs.
 
+### Added
+
+- **Chip database embedded in CLI/TUI binaries** — gzipped `infoic.xml` + `logicic.xml` (~0.6 MB total) are compiled into `minipro-core` behind a default-on `bundled-db` feature and used as the last-resort source in `DatabasePaths::resolve` — a bare `minipro.exe`/`minipro-tui.exe` now works from any directory even when separated from the release archive's data files (the "copy just the exe" pattern). Every on-disk search path still wins over the embedded copy, so custom databases and `--infoic`/`--logicic`/`MINIPRO_HOME` overrides behave exactly as before. Distro packaging can disable the feature (`--no-default-features`) to keep the missing-file error + `/usr/share` search behavior. `DatabasePaths.infoic`/`.logicic` fields change from `PathBuf` to the new `DbSource` enum (`Path`/`Embedded`); `pin_contact_check` and `get_pin_map` take `&DbSource`. A unit test fails if the committed `.gz` snapshots drift from `data/*.xml` — regenerate `crates/minipro-core/embedded/` on every database update.
+
 ### Fixed
 
 - **`rar4` README provenance wording corrected** — the "clean-room Rust derivation" claim conflated the port with the method: clean-room describes *libarchive's* development of its RAR4 reader; this crate is a port of it. Now reads "a Rust port of libarchive's clean-room RAR4 reader". Published as `libarchive-rs 0.1.1` (since yanked); the fix carries forward in `rar4 0.1.1`.

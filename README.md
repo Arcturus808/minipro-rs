@@ -479,7 +479,7 @@ If the update fails or the programmer doesn't come back — on Windows it may re
 
 ## Custom database files
 
-The chip database (`infoic.xml`) and logic IC test vectors (`logicic.xml`) are bundled with the GUI installer and vendored in the repo's `data/` directory for CLI/TUI builds. You can override these with custom files — useful for community logic IC vector packs or custom chip definitions.
+The chip database (`infoic.xml`) and logic IC test vectors (`logicic.xml`) are bundled with the GUI installer, embedded into the CLI/TUI binaries (gzipped, ~0.6 MB — a bare `minipro.exe` works from any directory), and shipped beside the binaries in release archives. The vendored copies live in the repo's `data/` directory. You can override these with custom files — useful for community logic IC vector packs or custom chip definitions — since on-disk files take precedence over the embedded copy.
 
 ### CLI
 
