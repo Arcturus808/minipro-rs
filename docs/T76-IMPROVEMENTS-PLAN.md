@@ -29,7 +29,7 @@ Additionally, the branch adds support for:
 | Parallel NOR (0x12/0x14) | ✅ Implemented | `protocol/t76.rs` | x16 family (family=0x0b, geom>=8) BEGIN extension only. READ + ERASE verified in C source; PROGRAM non-functional. **Pending hardware validation.** |
 | Firmware check (0x111 / 0.1.17) | ✅ Updated | `protocol/t76.rs` | |
 | SPI-NAND database unpacking | ❌ Not implemented | `database.rs` | |
-| 2,028 new T76 chips | ❌ Missing | `infoic.xml` | |
+| 2,028 new T76 chips | ✅ Present | `infoic.xml` | Refreshed to XGPro V13.19 via upstream — `caa67ce`, +2,036 devices |
 
 ## Implementation phases
 
@@ -124,10 +124,10 @@ Additionally, the branch adds support for:
 **Changes**:
 1. ✅ **`protocol/t76.rs`**: `MIN_FIRMWARE_T76` already at `0x111` (0.1.17)
 2. ✅ **`database.rs`**: SPI-NAND geometry is handled correctly in the NAND prelude (`page_size` stores block count for SPI-NAND, real page derived from `write_buffer_size`)
-3. ⏳ **`infoic.xml`**: 2,028 new T76 chips require the upstream XGPro_T76 V13.19 database. Current file has T76 section (INFOICT76) from V12.91. Refresh procedure documented below.
+3. ✅ **`infoic.xml`**: refreshed to XGPro V13.19 via upstream — `caa67ce`, +2,036 devices (≈ the expected 2,028 new T76 chips; INFOICT76 now carries 13,462 entries).
 4. ⏳ **`operations.rs`**: `--partition` CLI flag for eMMC (USER/BOOT1/BOOT2/RPMB) deferred to post-hardware-validation.
 
-**Database refresh procedure** (when upstream V13.19 XML is available):
+**Database refresh procedure** (executed — `caa67ce` pulled upstream's V13.19 refresh, +2,036 devices; kept for future refreshes):
 ```bash
 # 1. Obtain infoic.xml from XGPro_T76 V13.19 installation
 # 2. Replace data/infoic.xml

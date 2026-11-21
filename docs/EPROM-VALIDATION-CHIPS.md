@@ -5,9 +5,11 @@ parallel-memory read/write/erase path across all supported programmer
 models. Companion to `PIC-VALIDATION-CHIPS.md` (which covers the
 config-word/fuse path).
 
-Data source: bundled `data/infoic.xml` (XGPro V12.90 for
-INFOIC/INFOIC2PLUS, XGPro_T76 V12.91 for INFOICT76). If the database is
-regenerated, re-verify before relying on this document.
+Data source: bundled `data/infoic.xml` (XGPro V13.19 for all three
+sections — refreshed via upstream, `caa67ce`). This document was written
+against V12.90/V12.91-era data; the affected chip claims were not
+re-verified after the refresh. If the database is regenerated again,
+re-verify before relying on this document.
 
 ---
 

@@ -191,10 +191,10 @@ hasn't been reverse-engineered.
 
 ## Database
 
-The `infoic.xml` is from XGPro V12.91. The T76 section (INFOICT76)
-has ~95 eMMC entries and various SPI/NAND/NOR entries. XGPro V13.19
-adds 2,028 new T76 chips. A database refresh requires the upstream
-XML data.
+The `infoic.xml` is from XGPro V13.19 (refreshed via upstream,
+`caa67ce` — +2,036 devices). The T76 section (INFOICT76) carries
+~13,400 entries including the ~2,028 chips V13.19 added over V12.91 —
+eMMC, SPI, NAND, and NOR entries.
 
 eMMC entries all have `code_memory_size="0x200"` — this is a
 placeholder. Real capacity is detected at runtime (see above).
@@ -217,10 +217,9 @@ placeholder. Real capacity is detected at runtime (see above).
    `algorithm.xml`, `begin_transaction` now fails hard (matching
    upstream); generate it from the XGPro installer with upstream
    `dump-alg-minipro.bash`
-3. **Database is outdated** — V12.91 vs V13.19 (2,028 missing chips)
-4. **`eprintln!` logging** — protocol layer doesn't integrate with GUI
+3. **`eprintln!` logging** — protocol layer doesn't integrate with GUI
    log system (cross-cutting issue, not T76-specific)
-5. **`thread_local` eMMC block tracking** — fragile in theory, works in
+4. **`thread_local` eMMC block tracking** — fragile in theory, works in
    practice. Counter resets on `ds.init=true`
 6. **Parallel NOR program** — non-functional (upstream limitation)
 7. **eMMC partition selection** — only USER partition accessible;
