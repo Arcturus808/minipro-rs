@@ -110,7 +110,7 @@ Nothing currently scheduled — see Backlog for candidate work.
   | 4 | eMMC partition selection | Medium | Pending |
   | 5 | T76 adapter ID validation | Medium | Pending |
   | 6 | T76 OVC for NAND/eMMC | Low-Medium | Pending |
-  | 7 | Database refresh (V12.91 → V13.19) | Low | Pending |
+  | 7 | Database refresh (V12.91 → V13.19) | Low | Done — `caa67ce` (+2,036 devices) |
   | 8 | Parallel NOR programming | Unknown | Pending |
   | 9 | VGA/HDMI investigation | Low | Pending |
 
