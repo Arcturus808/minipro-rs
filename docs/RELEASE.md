@@ -234,8 +234,32 @@ crates.io → crate page → **Settings → Trusted Publishing → Add → GitLa
 The crate must exist first — trusted-publishing config lives on the crate
 page, so the very first publish of each crate is manual (see below).
 Once the auto-publish has shipped a version end-to-end, optionally enable
-**Trusted Publishing only** in the same settings page — it disables
-API-token publishes entirely, so only this pipeline can publish.
+**"Require trusted publishing for all new versions"** (the checkbox labeled
+"Trusted Publishing only" in crates.io docs) — it disables API-token
+publishes entirely, so only this pipeline can publish. Enabled for both
+`rar4` and `minipro-core` after v0.14.1 proved the OIDC path.
+
+### What the OIDC trust is bound to
+
+The trusted-publisher entry matches an exact identity: GitLab issuer +
+repository `arcturus8081/minipro-rs` + workflow filepath `.gitlab-ci.yml`
++ environment `release`. `publish:crates` fails (token exchange rejected)
+if it stops running under that identity:
+
+- the project moves to a different GitLab namespace/repo
+- the project's CI/CD configuration file changes away from
+  `.gitlab-ci.yml` (Settings → CI/CD) — `include:` splits are fine, the
+  claim tracks the entry-point file, not included fragments
+- the publish job moves into a child/different pipeline file
+- the publish moves to another forge entirely (e.g. GitHub Actions —
+  a separate GitHub trusted-publisher entry would be needed; crates.io
+  supports multiple publishers per crate)
+
+Fix before tagging, not after: update the settings page (crate owners can
+always edit it — the "require" checkbox only removes the token *fallback*,
+not the ability to change the config) or register the new identity as a
+second publisher first. Worst case is a failed publish job — the job is
+idempotent, so retrying after the fix just works.
 
 ### First publish (manual, one-time)
 
