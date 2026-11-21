@@ -2169,7 +2169,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "libarchive-rs"
+name = "rar4"
 version = "0.1.1"
 
 [[package]]
@@ -2299,13 +2299,13 @@ checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
 
 [[package]]
 name = "minipro-core"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "base64 0.22.1",
  "crc",
  "flate2",
  "futures",
- "libarchive-rs",
+ "rar4",
  "log",
  "nusb",
  "pollster",

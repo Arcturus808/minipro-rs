@@ -1,11 +1,11 @@
-# libarchive-rs — vendored RAR4 decoder
+# rar4 — vendored RAR4 decoder
 
-`crates/libarchive-rs` is a vendored, zero-dependency, pure-Rust decoder
-for **RAR4** archives, vendored from the standalone `libarchive-rs`
+`crates/rar4` is a vendored, zero-dependency, pure-Rust decoder
+for **RAR4** archives, vendored from the standalone `rar4`
 project. It exists to extract `update.dat` (the TL866A/CS firmware blob)
 out of the legacy MiniPro installers — the only pinned payloads that are
-not RAR5. Decoder internals live in `crates/libarchive-rs/INTERNALS.md`
-and `crates/libarchive-rs/docs/KNOWN-BUGS.md`; this file covers how
+not RAR5. Decoder internals live in `crates/rar4/INTERNALS.md`
+and `crates/rar4/docs/KNOWN-BUGS.md`; this file covers how
 `xgpro_fetch` integrates it.
 
 ## Provenance & licensing
@@ -16,7 +16,7 @@ The code is a port of libarchive's cleanroom RAR4 reader —
 as the rest of the workspace, so `cargo deny` stays clean. **Unrar
 sources were not consulted** (its license is GPL-incompatible); do not
 port from them. RAR5 payloads remain handled by `rar-codec` —
-libarchive-rs is RAR4 only, same scope as libarchive's own reader
+rar4 is RAR4 only, same scope as libarchive's own reader
 (solid archives and encrypted entries report `Unsupported`).
 
 ## Archive formats in the wild
@@ -25,7 +25,7 @@ libarchive-rs is RAR4 only, same scope as libarchive's own reader
 |---------|----------------|-----------------|---------|
 | XGPro (T48/T56/TL866II+) | `.rar` RAR5 | RAR5 inside SFX `.exe` | `rar-codec` |
 | XGPro (T76) | `.rar` RAR5 | RAR5 inside SFX `.exe` | `rar-codec` |
-| MiniPro 6.82 / 6.85 | `.rar` RAR4 | RAR4 inside SFX `.exe` | `libarchive-rs` |
+| MiniPro 6.82 / 6.85 | `.rar` RAR4 | RAR4 inside SFX `.exe` | `rar4` |
 
 Format is sniffed from the mark version byte: `Rar!\x1a\x07` + `0x00` =
 RAR4, `0x01` = RAR5 (`sniff_format`). `find_signature` additionally
@@ -33,7 +33,7 @@ scans a blob byte-precisely for embedded marks (SFX stubs).
 
 ## Integration points (`xgpro_fetch.rs`)
 
-- `rar4_archive(data)` — builds `libarchive_rs::Archive` over the input
+- `rar4_archive(data)` — builds `rar4::Archive` over the input
   **sliced at the mark found by `find_signature`**. This matters:
   `Archive`'s own `skip_sfx` (faithful to upstream) only scans
   **16-byte-aligned offsets**, so a mark at an unaligned offset inside
@@ -69,6 +69,6 @@ then constructs a new `Archive` over the extracted bytes.
 - `MINIPRO_RAR=<path> cargo test test_minipro_real_installer` runs the
   full classification+extraction path against a real installer (verified
   on both pinned payloads).
-- `crates/libarchive-rs`'s own suite includes a specimen-gated test over
+- `crates/rar4`'s own suite includes a specimen-gated test over
   `MiniPro_setup671.exe` (gitignored — never commit it or anything
   extracted from it).

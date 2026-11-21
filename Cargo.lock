@@ -1015,10 +1015,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
-name = "libarchive-rs"
-version = "0.1.1"
-
-[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1142,18 +1138,18 @@ dependencies = [
 
 [[package]]
 name = "minipro-core"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "base64 0.22.1",
  "crc",
  "flate2",
  "futures",
- "libarchive-rs",
  "log",
  "nusb",
  "pollster",
  "quick-xml",
  "rar-codec",
+ "rar4",
  "serde",
  "serde_json",
  "sha2",
@@ -1593,6 +1589,10 @@ name = "rar-codec"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48d550c2baee6a4dd60fb1a54ed7e58cb15efd96ac206321a56be36687c03c77"
+
+[[package]]
+name = "rar4"
+version = "0.1.1"
 
 [[package]]
 name = "ratatui"

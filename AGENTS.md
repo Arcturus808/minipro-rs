@@ -129,7 +129,7 @@ Local CI-equivalent checks (run from repo root):
 **MSRV policy: the CLI/core floor tracks the rustc shipped in current
 Debian stable** (1.85 as of Debian 13/Trixie) — the floor rolls forward
 with each new Debian stable, no per-release debate. Declared floors:
-CLI/core/`libarchive-rs` **1.85** (workspace `rust-version`),
+CLI/core/`rar4` **1.85** (workspace `rust-version`),
 `minipro-tui` and `gui/src-tauri` **1.88** (the TUI is `--exclude`d from
 every 1.85 check).
 

@@ -11,7 +11,7 @@
 //!
 //! ```no_run
 //! let data = std::fs::read("setup.exe")?;
-//! let mut ar = libarchive_rs::Archive::new(&data[..]);
+//! let mut ar = rar4::Archive::new(&data[..]);
 //! while let Some(entry) = ar.next_entry()? {
 //!     if entry.is_directory {
 //!         continue;

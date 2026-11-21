@@ -781,7 +781,7 @@ builds a valid file in memory, and `UPDATE_DAT=<path> cargo test
 update_dat_real` validates decryption+CRC against real vendor blobs
 (03.2.82, 03.2.85, 03.2.86 all verified).
 
-## libarchive-rs `skip_sfx` only scans 16-aligned offsets (upstream parity, constraint)
+## rar4 `skip_sfx` only scans 16-aligned offsets (upstream parity, constraint)
 
 The vendored RAR4 decoder locates the archive mark inside SFX stubs via
 `skip_sfx`, which — like libarchive's original — checks only 16-byte-

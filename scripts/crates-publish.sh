@@ -83,10 +83,10 @@ publish_if_new() {  # crate-dir crate-name
 export CARGO_REGISTRY_TOKEN
 CARGO_REGISTRY_TOKEN=$(exchange_token)
 
-# libarchive-rs first: minipro-core depends on it and `cargo publish`
+# rar4 first: minipro-core depends on it and `cargo publish`
 # resolves the dep through crates.io, so it must exist and be
 # index-visible before core publishes.
-publish_if_new crates/libarchive-rs libarchive-rs
+publish_if_new crates/rar4 rar4
 publish_if_new crates/minipro-core minipro-core
 
 echo "crates.io publish step complete."

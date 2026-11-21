@@ -1,4 +1,4 @@
-# libarchive-rs
+# rar4
 
 A pure-Rust crate that decodes RAR4 archives and extracts contained files.
 
@@ -17,7 +17,7 @@ restriction that is GPL-incompatible.
 
 The crate is licensed under `GPL-3.0-or-later`. See `LICENSE`.
 
-Copyright (C) 2026 libarchive-rs contributors. Portions derived from
+Copyright (C) 2026 rar4 contributors. Portions derived from
 libarchive remain under their original BSD-2-Clause and public-domain
 terms — see the provenance note above.
 
@@ -33,7 +33,7 @@ terms — see the provenance note above.
 ## Example
 
 ```rust
-use libarchive_rs::Archive;
+use rar4::Archive;
 
 let data = std::fs::read("setup.exe")?;
 let mut archive = Archive::new(&data[..]);
@@ -45,7 +45,7 @@ while let Some(entry) = archive.next_entry()? {
         assert_eq!(out.len() as u64, entry.size);
     }
 }
-# Ok::<(), libarchive_rs::Error>(())
+# Ok::<(), rar4::Error>(())
 ```
 
 ## Status
