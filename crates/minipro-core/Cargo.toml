@@ -1,6 +1,6 @@
 [package]
 name    = "minipro-core"
-version.workspace = true
+version = "0.13.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -24,7 +24,7 @@ serde       = { workspace = true, features = ["derive"] }
 ureq = { version = "3", features = ["platform-verifier", "socks-proxy", "win-system-proxy"] }
 sha2 = "0.10"
 rar-codec = "0.1"
-libarchive-rs = { path = "../libarchive-rs", version = "0.1" }
+rar4 = { path = "../rar4", version = "0.1" }
 
 [dev-dependencies]
 serde_json.workspace = true

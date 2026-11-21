@@ -208,18 +208,18 @@ so there is no fifth version field to bump; it requires Rust 1.88 (ratatui
 
 ## crates.io publishing — `publish:crates` job
 
-Every release tag also publishes the library crates (`libarchive-rs`,
+Every release tag also publishes the library crates (`rar4`,
 `minipro-core`) to crates.io via **Trusted Publishing**: the job exchanges
 a GitLab OIDC JWT for a short-lived token — no API token is stored
 anywhere. The job is `publish:crates` (deploy stage,
 `scripts/crates-publish.sh`), runs only on tags, and is **idempotent** —
-a version already on crates.io is skipped, so `libarchive-rs` (whose
+a version already on crates.io is skipped, so `rar4` (whose
 version is deliberately decoupled from the app) doesn't break releases it
 doesn't change in, and a failed run can simply be retried.
 
-Publish order is forced: `libarchive-rs` → wait for it to appear in the
+Publish order is forced: `rar4` → wait for it to appear in the
 crates.io *sparse index* → `minipro-core` (`cargo publish` resolves the
-`libarchive-rs` dep through crates.io; the API can see a fresh version
+`rar4` dep through crates.io; the API can see a fresh version
 before the index can, hence the poll).
 
 ### One-time setup (per crate)
@@ -246,8 +246,8 @@ out of files and shell history:
 
 ```bash
 read -s CARGO_REGISTRY_TOKEN && export CARGO_REGISTRY_TOKEN
-(cd crates/libarchive-rs && cargo publish)
-# wait ~1–2 min for the sparse index to see libarchive-rs, then:
+(cd crates/rar4 && cargo publish)
+# wait ~1–2 min for the sparse index to see rar4, then:
 (cd crates/minipro-core && cargo publish)
 unset CARGO_REGISTRY_TOKEN   # then revoke the token in crates.io settings
 ```

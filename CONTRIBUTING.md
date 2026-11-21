@@ -140,7 +140,7 @@ minipro-rs/
 │   │   └── Cargo.toml
 │   ├── minipro-cli/      # CLI binary (clap)
 │   ├── minipro-tui/      # Terminal UI binary (ratatui)
-│   └── libarchive-rs/    # Vendored pure-Rust RAR4 decoder (MiniPro installers)
+│   └── rar4/    # Vendored pure-Rust RAR4 decoder (MiniPro installers)
 ├── gui/                  # Tauri v2 + Svelte 5 GUI
 │   ├── src/              # Svelte frontend
 │   └── src-tauri/        # Rust backend (Tauri commands)

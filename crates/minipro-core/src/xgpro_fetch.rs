@@ -625,7 +625,7 @@ enum Payload {
     /// Bare RAR5 bytes (XGPro payloads, via `rar_codec`).
     Rar5(Vec<u8>),
     /// RAR4 bytes — possibly SFX-stubbed (MiniPro payloads, via
-    /// `libarchive_rs`, which locates the signature itself).
+    /// `rar4`, which locates the signature itself).
     Rar4(Vec<u8>),
 }
 
@@ -686,7 +686,7 @@ fn unwrap_inner(data: &[u8]) -> Result<Payload, String> {
         Some(ArchiveFormat::Rar4) => unwrap_rar4(data),
         None => match find_signature(data) {
             Some((off, ArchiveFormat::Rar5)) => unwrap_sfx5(&data[off..]),
-            // Keep the whole blob — libarchive_rs scans past the stub.
+            // Keep the whole blob — rar4 scans past the stub.
             Some((_, ArchiveFormat::Rar4)) => unwrap_rar4(data),
             None => Err("no RAR signature found (not a RAR archive or WinRAR SFX?)".into()),
         },
@@ -704,16 +704,16 @@ fn unwrap_sfx5(candidate: &[u8]) -> Result<Payload, String> {
     }
 }
 
-/// Build a libarchive_rs reader over a blob, sliced to the RAR4 mark.
+/// Build a rar4 reader over a blob, sliced to the RAR4 mark.
 ///
 /// `Archive`'s own `skip_sfx` only scans 16-aligned offsets (upstream
 /// parity); locating the mark byte-precisely first tolerates stubs of
 /// arbitrary alignment.
-fn rar4_archive(data: &[u8]) -> Result<libarchive_rs::Archive<&[u8]>, String> {
+fn rar4_archive(data: &[u8]) -> Result<rar4::Archive<&[u8]>, String> {
     let Some((off, ArchiveFormat::Rar4)) = find_signature(data) else {
         return Err("no RAR4 signature found".into());
     };
-    Ok(libarchive_rs::Archive::new(&data[off..]))
+    Ok(rar4::Archive::new(&data[off..]))
 }
 
 /// Reduce a RAR4 blob (`.rar`, SFX `.exe`, or bare inner) to bytes holding
@@ -1380,7 +1380,7 @@ mod tests {
     // ── RAR4 / MiniPro payload handling ─────────────────────────────────────
 
     /// Hand-rolled stored-mode RAR4 (MARK + MAIN_HEAD + FILE_HEADs) —
-    /// mirrors crates/libarchive-rs/tests/roundtrip.rs's builder.
+    /// mirrors crates/rar4/tests/roundtrip.rs's builder.
     fn rar4_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
         fn crc32(crc: u32, data: &[u8]) -> u32 {
             let mut c = !crc;

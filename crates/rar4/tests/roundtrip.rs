@@ -1,7 +1,7 @@
 //! Roundtrip tests: synthetic stored archives, SFX scanning, and the
 //! `MiniPro_setup671.exe` specimen (gated on its presence; it is gitignored).
 
-use libarchive_rs::{Archive, Error};
+use rar4::{Archive, Error};
 
 const RAR_SIG: [u8; 7] = *b"Rar!\x1a\x07\x00";
 

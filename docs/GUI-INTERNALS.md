@@ -993,9 +993,9 @@ certified", and unknown/no-version files get a neutral caution. A
 brick is recoverable only by forcing boot mode with a resistor on the
 PCB test points.
 
-Both images download via Settings → Download (vendored `libarchive-rs`
+Both images download via Settings → Download (vendored `rar4`
 reads the MiniPro installers' RAR4 layers — see
-`docs/CLI-INTERNALS.md` and `docs/LIBARCHIVE-INTERNALS.md`), so the
+`docs/CLI-INTERNALS.md` and `docs/RAR4-INTERNALS.md`), so the
 chooser modal is the normal TL866A/CS path once a download has run.
 
 `do_firmware_update` runs the synchronous `operations::firmware_update`

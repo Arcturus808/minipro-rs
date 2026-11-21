@@ -593,7 +593,7 @@ minipro-rs/
 │   │   └── Cargo.toml
 │   ├── minipro-cli/      # binary: clap CLI front-end
 │   ├── minipro-tui/      # binary: ratatui terminal UI front-end
-│   ├── libarchive-rs/    # vendored pure-Rust RAR4 decoder (installer extraction)
+│   ├── rar4/    # vendored pure-Rust RAR4 decoder (installer extraction)
 │   └── (gui/ omitted — see gui/README.md)
 ├── data/
 │   ├── infoic.xml        # 30 000+ device definitions (vendored from upstream)

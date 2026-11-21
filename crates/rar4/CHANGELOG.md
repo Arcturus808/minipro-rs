@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Renamed `libarchive-rs` → `rar4`** — same code, same version sequence
+  (`0.1.1` continues under the new name). The old name overpromised scope:
+  this crate is a RAR4-format decoder, not a libarchive binding. The
+  `libarchive-rs` versions (`0.1.0`, `0.1.1`) are yanked; the name remains
+  owned and dormant — crates.io names cannot be released, only transferred.
+- README provenance wording corrected: "a Rust port of libarchive's
+  clean-room RAR4 reader" (published as `libarchive-rs 0.1.1`).
+
 ### Added
 
 - Initial crate scaffold.
@@ -26,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Entry`/`Timestamp`/`Error` public types.
 - `examples/rarex.rs` — lists an archive's entries and optionally extracts
   them (`cargo run --example rarex -- <archive> [outdir]`).
-- Copyright notice (`libarchive-rs contributors`) in README and
+- Copyright notice (`rar4 contributors`) in README and
   `Cargo.toml` `authors`, so downstream derivatives have a notice to
   preserve under GPL §4.
 

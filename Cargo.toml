@@ -3,7 +3,7 @@ members = [
     "crates/minipro-core",
     "crates/minipro-cli",
     "crates/minipro-tui",
-    "crates/libarchive-rs",
+    "crates/rar4",
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"

@@ -1,13 +1,13 @@
-# Developer Guide — libarchive-rs (vendored)
+# Developer Guide — rar4 (vendored)
 
-Rules for working inside `crates/libarchive-rs`. The crate is vendored
-from the standalone `libarchive-rs` project; decoder internals and bug
+Rules for working inside `crates/rar4`. The crate is vendored
+from the standalone `rar4` project; decoder internals and bug
 history live in `INTERNALS.md` and `docs/KNOWN-BUGS.md`, and the
 `xgpro_fetch` integration contract is documented in
-`docs/LIBARCHIVE-INTERNALS.md` at the workspace root.
+`docs/RAR4-INTERNALS.md` at the workspace root.
 
 **Sync direction:** canonical development lives in the standalone
-`libarchive-rs` repo (outside this tree); this is a deliberate snapshot.
+`rar4` repo (outside this tree); this is a deliberate snapshot.
 Fixes made here must be ported back upstream — the copies have already
 drifted once (the 1.85 clippy parens fix).
 
@@ -17,14 +17,14 @@ drifted once (the 1.85 clippy parens fix).
   `[skip ci]` on every commit, no AI attribution, doc/changelog sync.
 - Code changed? Verify locally before committing:
   `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
-  `cargo test -p libarchive-rs`, `cargo deny check` (workspace `deny.toml`).
+  `cargo test -p rar4`, `cargo deny check` (workspace `deny.toml`).
 - MSRV is **1.85** (workspace `rust-version`) even though the crate uses
   edition 2024 — edition 2024 stabilized in 1.85, so this is valid; do
   not add language features newer than the 1.85 toolchain supports.
 
 ## Project
 
-`libarchive-rs` is a pure-Rust, zero-dependency crate that decodes RAR4
+`rar4` is a pure-Rust, zero-dependency crate that decodes RAR4
 archives and extracts contained files. It must remain strictly derived
 from libarchive's cleanroom RAR4 implementation (BSD-2-Clause), which
 permits forward licensing under GPL-3.0 — see Licensing below.

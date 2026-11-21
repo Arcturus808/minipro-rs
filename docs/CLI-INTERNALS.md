@@ -124,8 +124,8 @@ atomic writes.
 
 Four payloads are pinned: the two XGPro setup archives (RAR5, decoded
 via `rar-codec`) and the two MiniPro installers — 6.82 and 6.85 —
-(RAR4, decoded via the vendored `libarchive-rs` crate; see
-`docs/LIBARCHIVE-INTERNALS.md`). Each `ArchiveSpec` carries its own URL
+(RAR4, decoded via the vendored `rar4` crate; see
+`docs/RAR4-INTERNALS.md`). Each `ArchiveSpec` carries its own URL
 base (`Xgpro/13` vs `minipro/6` on the Kreeblah mirror), pinned SHA-256,
 inner algorithm directory, and firmware member list
 `(member, model, version)` → output name `firmware-<model>-<ver>.dat`.

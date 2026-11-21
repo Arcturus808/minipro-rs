@@ -6,7 +6,7 @@
 //! writes each file's decompressed contents beneath it (directories are
 //! created; symlinks are reported but not written).
 
-use libarchive_rs::{Archive, Entry};
+use rar4::{Archive, Entry};
 use std::fs;
 use std::path::Path;
 

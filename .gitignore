@@ -7,6 +7,6 @@ firmware-*.dat
 *.rar
 *.part
 
-# libarchive-rs dev specimens — proprietary installer payloads, never commit
+# rar4 dev specimens — proprietary installer payloads, never commit
 MiniPro_setup*.exe
 /extracted/
