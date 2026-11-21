@@ -1110,7 +1110,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "minipro"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "minipro-core"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "base64 0.22.1",
  "crc",
@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "minipro-tui"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "crossterm",
  "log",
