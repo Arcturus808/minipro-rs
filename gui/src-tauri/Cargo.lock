@@ -2169,10 +2169,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rar4"
-version = "0.1.1"
-
-[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2299,18 +2295,18 @@ checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
 
 [[package]]
 name = "minipro-core"
-version = "0.13.1"
+version = "0.13.0"
 dependencies = [
  "base64 0.22.1",
  "crc",
  "flate2",
  "futures",
- "rar4",
  "log",
  "nusb",
  "pollster",
  "quick-xml 0.41.0",
  "rar-codec",
+ "rar4",
  "serde",
  "sha2",
  "thiserror 2.0.21",
@@ -3147,6 +3143,10 @@ name = "rar-codec"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48d550c2baee6a4dd60fb1a54ed7e58cb15efd96ac206321a56be36687c03c77"
+
+[[package]]
+name = "rar4"
+version = "0.1.1"
 
 [[package]]
 name = "raw-window-handle"
