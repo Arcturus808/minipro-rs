@@ -144,11 +144,11 @@ See [`gui/README.md`](gui/README.md) for full documentation including architectu
 
 ### Third-party GUIs
 
-`minipro-core` is a plain Rust library crate, so you can also build your own GUI front-end:
+`minipro-core` is a plain Rust library crate [published on crates.io](https://crates.io/crates/minipro-core), so you can also build your own GUI front-end:
 
 ```toml
 [dependencies]
-minipro-core = { path = "../minipro-rs/crates/minipro-core" }
+minipro-core = "0.13"
 ```
 
 Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_done, total_bytes)` progress callback to drive your UI.
@@ -330,18 +330,20 @@ See [`gui/README.md`](gui/README.md) for development setup and architecture deta
 ## Using `minipro-core` as a library
 
 The CLI, TUI, and GUI are all frontends over `minipro-core` — the same
-library your own Rust project can depend on. It's not on crates.io yet;
-use a git dependency:
+library your own Rust project can depend on, published on crates.io:
 
 ```toml
 [dependencies]
-minipro-core = { git = "https://gitlab.com/arcturus8081/minipro-rs" }
+minipro-core = "0.13"
 ```
 
 Open a `MiniproHandle`, resolve a `Device` from the XML database, run
 operations — the lib.rs rustdoc has a worked quick-start example.
 Requires Rust 1.85+. Licensed GPL-3.0-or-later, so it's usable from
 GPL-compatible projects.
+
+Its RAR4 decoder is also published separately as [`rar4`](https://crates.io/crates/rar4)
+— a zero-dependency pure-Rust port of libarchive's clean-room RAR4 reader.
 
 ---
 
