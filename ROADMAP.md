@@ -1262,3 +1262,10 @@ Nothing currently scheduled — see Backlog for candidate work.
   Honest caveat recorded so expectations stay calibrated: fuzzing catches
   crashes/OOB/timeouts — it would not have caught the `.HEX` case-sensitivity
   bug (a logic error, not a crash). Complements tests; doesn't replace them.
+- [ ] **Snapshot/prerelease builds for early testers** — releases today are
+  tag-triggered only, so forum users and early adopters can only test `main`
+  by building from source. A scheduled or manually-triggered CI job
+  publishing a marked GitHub *prerelease* (nightly/weekly cadence) would
+  give "soak" real coverage — exercised paths instead of elapsed time —
+  at small CI cost. Pairs naturally with hardware-risky changes: ship a
+  snapshot, ask reporters to validate before tagging.
