@@ -22,6 +22,16 @@ use crate::{
     usb::{open_programmer, wait_for_disconnect, wait_for_reconnect, UsbDevice},
 };
 
+/// Screenshot/documentation helper: `MINIPRO_SERIAL_OVERRIDE` masks the
+/// serial number displayed by all frontends. The real value is still read
+/// from the device — only the `ProgrammerInfo` shown to users is replaced.
+fn display_serial(real: String) -> String {
+    match std::env::var("MINIPRO_SERIAL_OVERRIDE") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => real,
+    }
+}
+
 /// Top-level programmer session.
 ///
 /// Obtained via [`MiniproHandle::open`].  Holds the USB connection, detected
@@ -77,7 +87,7 @@ impl MiniproHandle {
             firmware: sys_info.firmware,
             firmware_str: sys_info.firmware_str,
             device_code: sys_info.device_code,
-            serial_number: sys_info.serial_number,
+            serial_number: display_serial(sys_info.serial_number),
             hardware_version: sys_info.hardware_version,
         };
 
@@ -275,7 +285,7 @@ impl MiniproHandle {
             firmware: sys_info.firmware,
             firmware_str: sys_info.firmware_str,
             device_code: sys_info.device_code,
-            serial_number: sys_info.serial_number,
+            serial_number: display_serial(sys_info.serial_number),
             hardware_version: sys_info.hardware_version,
         };
         self.usb = usb;
@@ -293,5 +303,21 @@ impl MiniproHandle {
             "Model: {:?}\nDevice code: {}\nSerial number: {}\nFirmware: {}\nHardware version: {:02x}",
             m.model, m.device_code, m.serial_number, m.firmware_str, m.hardware_version
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_serial_override() {
+        // The only test touching MINIPRO_SERIAL_OVERRIDE — safe to set here.
+        std::env::set_var("MINIPRO_SERIAL_OVERRIDE", "FAKE1234");
+        assert_eq!(display_serial("REAL-SN".into()), "FAKE1234");
+        std::env::set_var("MINIPRO_SERIAL_OVERRIDE", "  ");
+        assert_eq!(display_serial("REAL-SN".into()), "REAL-SN");
+        std::env::remove_var("MINIPRO_SERIAL_OVERRIDE");
+        assert_eq!(display_serial("REAL-SN".into()), "REAL-SN");
     }
 }

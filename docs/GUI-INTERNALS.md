@@ -33,6 +33,13 @@ cargo tauri dev
 Remove-Item Env:MINIPRO_SIMULATE_PROGRAMMER
 ```
 
+**Masking the real serial in screenshots:** `MINIPRO_SERIAL_OVERRIDE=<text>`
+replaces the serial shown in `ProgrammerInfo` across CLI, TUI, and GUI —
+the real value is still read from the device; only the displayed string
+changes. Use for doc/README screenshots on real hardware (everything else
+— firmware version, badge, diagnostics — stays authentic). Empty/unset
+means pass-through.
+
 **Pre-commit verification (release exe, no installers):**
 
 ```powershell
