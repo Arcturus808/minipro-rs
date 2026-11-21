@@ -93,7 +93,12 @@ fn effective_format<'a>(fmt: &'a str, path: &Path) -> &'a str {
     if fmt != "auto" {
         return fmt;
     }
-    match path.extension().and_then(|e| e.to_str()) {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
         Some("hex") => "ihex",
         Some("srec") | Some("mot") => "srec",
         Some("jed") => "jedec",
@@ -1765,6 +1770,49 @@ mod tests {
         for (i, &expected) in values.iter().enumerate() {
             assert_eq!(parse_fuse_element(&buf, i, element_size), expected);
         }
+    }
+
+    #[test]
+    fn test_effective_format_extension_case_insensitive() {
+        // Uppercase extensions must still detect text formats — a `.HEX`
+        // file previously fell through to "bin", loading the raw ASCII
+        // hex text into the write buffer (verify then reported
+        // "expected 0x3a" — ASCII ':' — at offset 0).
+        for (name, want) in [
+            ("f.hex", "ihex"),
+            ("f.HEX", "ihex"),
+            ("f.Hex", "ihex"),
+            ("f.srec", "srec"),
+            ("f.SREC", "srec"),
+            ("f.mot", "srec"),
+            ("f.MOT", "srec"),
+            ("f.jed", "jedec"),
+            ("f.JED", "jedec"),
+            ("f.bin", "bin"),
+            ("f.BIN", "bin"),
+            ("f", "bin"),
+        ] {
+            assert_eq!(effective_format("auto", Path::new(name)), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn test_effective_format_explicit_format_wins() {
+        // An explicit format never consults the extension.
+        assert_eq!(effective_format("ihex", Path::new("f.bin")), "ihex");
+        assert_eq!(effective_format("bin", Path::new("f.HEX")), "bin");
+    }
+
+    #[test]
+    fn test_read_file_parses_uppercase_hex() {
+        // End-to-end: *.HEX must decode as Intel HEX — records land as
+        // bytes, not the file's ASCII text.
+        let path =
+            std::env::temp_dir().join(format!("minipro-fmt-test-{}.HEX", std::process::id()));
+        std::fs::write(&path, ":020000000C28CA\n:00000001FF\n").unwrap();
+        let buf = read_file(&path, "auto", 4, 0xff).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(buf, vec![0x0c, 0x28, 0xff, 0xff]);
     }
 }
 
