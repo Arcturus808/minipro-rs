@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- **Health check now warns on volatile-SRAM devices** — `--health-check` and the GUI's Chip Health Check run repeated reads, which on `(TEST)`-class volatile SRAM (e.g. generic `628512`) characterize the power-on signature rather than stored data: a "Stable" verdict was a false clean bill, "Marginal" flagged normal SRAM physics. The CLI emits the same volatile-SRAM warning standalone reads already get, and the GUI shows an amber banner in the health-check section pointing at SRAM Test.
 - **Uppercase file extensions bypassed format autodetection** — `effective_format` matched extensions case-sensitively (`"hex"`/`"srec"`/`"mot"`/`"jed"` only), so a file like `MM3usa12f629.HEX` fell through to raw binary: reads/writes treated the file's ASCII text as chip data (a PIC12F629 write reported `buffer size 2896` = the file's byte length, then failed verify with `expected 0x3a` — ASCII `':'`, the Intel HEX record start code) and `-r dump.HEX` wrote binary output to a `.HEX`-named file. Extension matching is now case-insensitive across read, write, verify, and reference-file paths.
 
 ## [0.14.1] - 2026-11-20
