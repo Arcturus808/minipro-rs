@@ -865,6 +865,7 @@ fn do_operations(
 
     // ── Health check (read-only stability test) ──────────────────────────────
     if let Some(passes) = cli.health_check {
+        warn_volatile_sram(handle.device()?, "health check");
         let passes = (passes as usize).clamp(2, 64);
         const ID_RUNS: usize = 20;
         let pb = ProgressBar::new((ID_RUNS + passes) as u64);
@@ -1510,10 +1511,10 @@ fn fmt_bytes(n: u32) -> String {
     }
 }
 
-/// Standalone reads/verifies on volatile SRAM ("(TEST)" protocol class)
-/// return the chip's power-on signature, not stored data — the chip is
-/// unpowered before the op begins.  `(TEST)` entries are the test-profile
-/// variant of battery-backed parts and get the "(RW)" pointer.
+/// Standalone reads/verifies/health-checks on volatile SRAM ("(TEST)"
+/// protocol class) return the chip's power-on signature, not stored data —
+/// the chip is unpowered before the op begins.  `(TEST)` entries are the
+/// test-profile variant of battery-backed parts and get the "(RW)" pointer.
 fn warn_volatile_sram(dev: &minipro_core::Device, op: &str) {
     if !dev.is_volatile_sram() {
         return;

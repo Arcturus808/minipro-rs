@@ -445,6 +445,13 @@
           {/if}
         </div>
       {/if}
+      {#if $selectedDevice?.volatile_sram}
+        <div class="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
+          <p class="text-xs text-amber-700-200 font-medium">
+            Volatile SRAM — every read pass is a fresh power-on, so the report characterizes the power-on signature, not stored data. Use the SRAM Test below for the meaningful powered test.
+          </p>
+        </div>
+      {/if}
       {#if healthResult}
         <div class="text-xs border border-surface-200-800 p-2 mt-1 space-y-1">
           <div class="flex items-center justify-between gap-2">
