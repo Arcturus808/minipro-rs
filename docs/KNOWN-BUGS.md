@@ -1009,3 +1009,40 @@ disagreeing on the same filename.
 match against the lowercased value, and any new call site that
 classifies files by extension should go through `effective_format`
 rather than re-checking extensions itself.
+
+## `TMS2716@DIP24` is a wrong-pinout clone — never use with real silicon (upstream data)
+
+The real TI TMS2716 is a three-rail NMOS EPROM (+5V VCC, −5V VBB on
+pin 21, +12V VDD on pin 19) with a **different pinout** from the Intel
+2716 family. The `TMS2716@DIP24` entry in `infoic.xml` — present in all
+three database sections — was cloned from a conventional 2716 entry and
+carries the same `pin_map`. Selecting it with a real TMS2716 in the
+socket applies +5V VPP to the chip's −5V substrate-bias pin and drives
+address logic into the +12V supply pin: wrong on every axis and
+potentially destructive to a hard-to-replace part. Treat the entry as
+unusable; it is upstream XGecu data, so a database refresh will not fix
+it. If a read/ID path is ever added for it, gate it behind an explicit
+override or drop the entry at parse time.
+
+## Bit-bang `custom_protocol` devices: support matrix is narrower than the database suggests
+
+The 82Sxxx/74Sxxx PROM entries and `D2364C@DIP24` use `custom_protocol`
+(protocol_id `0x80000001`) — a host-side bit-bang where `prom.c` toggles
+ZIF pins through `minipro_set_zif_direction`/`set_zif_state`/
+`set_pin_drivers`/`set_voltages`. Upstream `minipro.c` wires those
+primitives for **TL866A/CS, TL866II+ and T48 only**:
+
+- **T56** has the `bb_*` routing in `t56.c` and the PROM entries in
+  INFOIC2PLUS, but no zif primitives registered — a PROM op fails in
+  `prom_init`'s first `minipro_set_zif_direction` call with
+  "not implemented".
+- **T76** likewise routes `custom_protocol` to `bb_*` in `t76.c`, has no
+  primitives, and additionally has **no** custom-protocol entries in
+  INFOICT76 — the parts aren't even selectable.
+
+minipro-rs currently implements **no** PROM/bit-bang path on any model:
+`set_zif_*` exists in `tl866iiplus.rs` only for the pin-contact test,
+and the read path does not branch on `flags.custom_protocol`. The
+`vcc`/`vpp_voltage_table` custom-protocol branches (T48 bit-bang tables,
+`None` for T56/T76) are correct as-is — they describe the tables that
+would apply *if* the path were implemented.
