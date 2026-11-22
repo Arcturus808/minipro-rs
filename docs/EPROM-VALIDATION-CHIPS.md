@@ -53,7 +53,7 @@ still useful as negative tests (clean "not supported" error paths).
 | Part | Capacity | TL866A/CS | TL866II+ | T48 | T56 | T76 | Notes |
 |---|---|---|---|---|---|---|---|
 | 2708 | 1K×8 | – | – | – | – | – | Not in DB on any model. Negative-test candidate. |
-| TMS2716 | 2K×8 | ✓ @21V | ✓ @18V | ✓ | ✓ | ✓ | `TMS2716@DIP24` everywhere. TI three-rail part — verify on hardware. |
+| TMS2716 | 2K×8 | ⚠ broken | ⚠ | ⚠ | ⚠ | ⚠ | `TMS2716@DIP24` exists everywhere but is a **wrong-pinout clone** of the Intel-2716 entry — the real TMS2716 is a three-rail part (+5/−5/+12V) with a different pinout (pin 21 = −5V VBB where the entry drives VPP, pin 19 = +12V VDD where it drives A10). Selecting it on real silicon applies +5V to the −5V bias pin — **do not use**; negative-test only. |
 | 2716 (M2716, AM2716…) | 2K×8 | ✓ @21V | ✓ @18V | ✓ | ✓ | ✓ | NMOS parts spec'd to 25V are programmed at 18V on newer models — marginal for stubborn silicon. |
 | 2532 / TMS2532 | 4K×8 | – | – | – | – | – | Absent (TI non-JEDEC pinout). Negative-test candidate. |
 | 2732 / 2732A | 4K×8 | ✓ @12.5–21V | ✓ @12–18V | ✓ | ✓ | ✓ | ~35 vendor entries. |
@@ -65,8 +65,8 @@ still useful as negative tests (clean "not supported" error paths).
 | 27C040 / M27C4001 | 512K×8 | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | 27C080 / M27C801 | 1M×8 | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | 27C800 / M27C160 / M27C322 | 1–2M×16 (DIP42) | – | – | ✓ | ✓ | ✓ | `pin_map` flags T48/T56 only; absent for II+ and A/CS. Exercises the >40-pin path. |
-| D2364C (mask ROM) | 8K×8 | ✓ read-only | ✓ | ✓ | ✓ | – | Bit-bang protocol; for dumping C64 KERNAL ROMs. Read-only — no write path. |
-| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | – | All use `custom_protocol`. **None exist in INFOICT76.** |
+| D2364C (mask ROM) | 8K×8 | ✓ bit-bang | ✓ | ✓ | ⚠ entry only | – | `custom_protocol` bit-bang; for dumping C64 KERNAL ROMs. Read-only — no write path. See bit-bang caveat below. |
+| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ⚠ entry only | – | All use `custom_protocol`. **None exist in INFOICT76.** Upstream bit-bang is wired for TL866A/CS, TL866II+ and T48 only — T56 has the entries but no working path; not yet implemented in minipro-rs on any model. |
 
 ## Modern replacement-part coverage
 
@@ -107,9 +107,16 @@ for UV EPROMs; all are ordinary memory devices in the DB.
    error path.
 
 3. **Bit-bang / `custom_protocol` devices.** All 82Sxxx/74Sxxx PROMs and
-   the D2364C mask ROM use it. None exist in INFOICT76 — a T76 should
-   report them as unsupported. On T56/T76 custom-protocol devices have
-   no voltage-override table; verify overrides are rejected.
+   the D2364C mask ROM use host-side bit-bang: upstream `prom.c` toggles
+   ZIF pins through `minipro_set_zif_direction`/`set_zif_state`/
+   `set_pin_drivers`/`set_voltages`. Those vtable primitives are wired
+   only for **TL866A/CS, TL866II+ and T48** — on T56 (PROM entries exist
+   in INFOIC2PLUS) and T76 (no `custom_protocol` entries in INFOICT76 at
+   all) the calls hit NULL and fail with "not implemented". minipro-rs
+   does not implement the PROM path on any model yet — the `set_zif_*`
+   primitives exist only for the pin-contact test on II+/T48. On T56/T76
+   custom-protocol devices have no voltage-override table; verify
+   overrides are rejected.
 
 4. **Absent devices.** 2708, 2532, W27C080, AM29F020 are nowhere in the
    DB — good cases for the `DeviceNotFound` error path (and for
@@ -134,9 +141,9 @@ Cheap, common parts that together exercise every branch above:
 | AT28C256 | EEPROM path; byte-write, no Vpp needed | $5–15 |
 | W27C512 | EPROM-pinout EEPROM; the community's adapter part | $2–3 |
 | SST39SF040 or AM29F040 | JEDEC flash command set | $2–4 |
-| M2716 or TMS2716 | Vpp ceiling edge case (18V vs 21V) | $3–8 |
+| M2716 (not TMS2716 — its entry is a broken pinout clone) | Vpp ceiling edge case (18V vs 21V) | $3–8 |
 | M27C322 or M27C160 (DIP42) | >40-pin handling, T48/T56/T76 only | $5–10 |
-| 82S123 or 82S129 | Bit-bang/custom protocol path | $2–5 |
+| 82S123 or 82S129 | Bit-bang/custom protocol path — A/CS, II+, T48 only (see edge case 3) | $2–5 |
 
 Negative tests (no purchase needed): 2708, TMS2532, W27C080, AM29F020.
 
