@@ -5,6 +5,16 @@ AGENTS.md. For flag-semantics history (`-x`/`-y`, `--vcc`/`--vdd`/`--vpp`
 override tables, VCC override warning, `can_erase` handling) see
 `docs/KNOWN-BUGS.md` — those fixes encode behavior that must be preserved.
 
+## Verbosity & logging
+
+The default `env_logger` filter is `warn`; `--verbose` raises it to `info`
+(the `info!`-level narrative in `minipro-core` — "Writing N bytes…", chip-ID
+results, per-pattern SRAM-test progress). It is long-form only: **`-v` is
+`--skip-verify`**, matching upstream minipro's `-v`/`--skip_verify` — a
+`-v`-for-verbose habit silently disables post-write verification. Operation
+results and errors always reach the terminal via `eprintln!`/stdout
+regardless of verbosity; nothing is written to a log file.
+
 ## Logic IC identify
 
 `--logic-identify --pin-count N` tests an unknown logic IC against all
