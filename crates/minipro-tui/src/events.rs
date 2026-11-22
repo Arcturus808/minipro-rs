@@ -131,7 +131,10 @@ pub enum OpOutcome {
     NotBlank {
         address: u32,
     },
-    ChipId(Box<ChipIdInfo>),
+    /// Chip ID read — the `Option<String>` is a database-name suggestion
+    /// when the read ID doesn't match the selected device (or identifies
+    /// an unexpected part when the device has no expected ID).
+    ChipId(Box<ChipIdInfo>, Option<String>),
     /// Config read — MCU fuse/lock rows in upstream fuses-file order:
     /// fuses, `user_idN` entries, then locks (`n_fuses`/`n_uids` mark the
     /// boundaries) with per-field masks, or the SPI status register bytes.

@@ -334,7 +334,19 @@ fn run_in_transaction(
         },
         OpKind::ChipId => {
             let info = chip_id_info(h).map_err(|e| e.to_string())?;
-            Ok(OpOutcome::ChipId(Box::new(info)))
+            // On a mismatch — or a read with no expected value — name which
+            // database devices carry the ID that was actually read.
+            let suggestion = if !info.is_match || (info.expected == 0 && info.id != 0) {
+                chip_id_mismatch_note(
+                    paths,
+                    info.id,
+                    h.device().map(|d| d.package_details.pin_count).unwrap_or(0),
+                    h.info.model,
+                )
+            } else {
+                None
+            };
+            Ok(OpOutcome::ChipId(Box::new(info), suggestion))
         }
         OpKind::Config => {
             // SPI 25-series NOR carries the status register, not MCU

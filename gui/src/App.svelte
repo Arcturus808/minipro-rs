@@ -758,6 +758,9 @@
           } else {
             logs.warn(`Chip ID mismatch: read ${chipResult.id}, expected ${chipResult.expected}`);
           }
+          if (chipResult.suggestion) {
+            logs.warn(chipResult.suggestion);
+          }
         }
         break;
       }
