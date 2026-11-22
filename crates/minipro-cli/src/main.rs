@@ -20,6 +20,7 @@ use clap_complete::{generate, shells};
 use clap_mangen::Man;
 use indicatif::{ProgressBar, ProgressStyle};
 use minipro_core::{
+    chip_id_mismatch_note,
     device::ProgrammerModel,
     error::MiniproError,
     find_device, find_device_any, list_devices, list_devices_for_model,
@@ -975,11 +976,22 @@ fn do_operations(
     {
         match check_chip_id(handle) {
             Ok(()) => {}
-            Err(MiniproError::ChipIdMismatch { expected, actual }) if cli.continue_id => {
-                eprintln!(
-                    "WARNING: chip ID mismatch — expected {:#010x}, got {:#010x} — continuing",
-                    expected, actual
-                );
+            Err(e @ MiniproError::ChipIdMismatch { actual, .. }) => {
+                let pin_count = handle
+                    .device()
+                    .map(|d| d.package_details.pin_count)
+                    .unwrap_or(0);
+                let note = chip_id_mismatch_note(db_paths, actual, pin_count, handle.info.model);
+                if cli.continue_id {
+                    eprintln!("WARNING: {e} — continuing");
+                    if let Some(ref n) = note {
+                        eprintln!("{n}");
+                    }
+                } else if let Some(n) = note {
+                    return Err(anyhow::anyhow!("{e}\n{n}"));
+                } else {
+                    return Err(e.into());
+                }
             }
             Err(e) => return Err(e.into()),
         }

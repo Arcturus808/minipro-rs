@@ -9,7 +9,10 @@ use std::sync::Arc;
 
 use minipro_core::{
     batch::{patch_serial, SerialChecksum, SerialConfig, SerialEndian, SerialFormat},
-    database::{find_device, find_device_any, get_pin_map, list_devices_by_model, DatabasePaths},
+    database::{
+        chip_id_mismatch_note, find_device, find_device_any, get_pin_map, list_devices_by_model,
+        DatabasePaths,
+    },
     device::{ChipType, Device, PackageDetails, ProgrammerModel, Voltages},
     operations::{
         blank_check, check_chip_id, chip_id_info, erase_chip, firmware_update, hardware_check,
@@ -60,6 +63,28 @@ fn emit_log(window: &Window, level: &str, message: &str) {
             "message": message,
         }),
     );
+}
+
+/// After a chip-ID mismatch, log which database devices carry the ID that
+/// was actually read (or why the read ID itself is uninformative), so the
+/// log names what is actually in the socket.
+fn emit_chip_id_note(
+    window: &Window,
+    state: &Arc<AppState>,
+    model: ProgrammerModel,
+    err: &minipro_core::error::MiniproError,
+) {
+    let minipro_core::error::MiniproError::ChipIdMismatch { actual, .. } = err else {
+        return;
+    };
+    let (Ok(db_paths), Ok(device)) = (get_db_paths(state), state.get_device()) else {
+        return;
+    };
+    if let Some(note) =
+        chip_id_mismatch_note(&db_paths, *actual, device.package_details.pin_count, model)
+    {
+        emit_log(window, "warn", &note);
+    }
 }
 
 /// Emit pin-test results to the frontend for ZIF diagram highlighting.
@@ -1338,6 +1363,7 @@ pub async fn do_read(
                     }
                     Err(e) => {
                         emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -1463,6 +1489,7 @@ pub async fn read_chip_to_bytes(
                     }
                     Err(e) => {
                         emit_log(&window_clone, "error", &format!("Chip ID check failed: {}", e));
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -1694,6 +1721,7 @@ pub async fn do_write(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -1877,6 +1905,7 @@ pub async fn do_batch_write_chip(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -2159,6 +2188,7 @@ pub async fn do_write_bytes(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -2311,6 +2341,7 @@ pub async fn do_verify(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }
@@ -2402,6 +2433,7 @@ pub async fn do_erase(
                             "error",
                             &format!("Chip ID check failed: {}", e),
                         );
+                        emit_chip_id_note(&window_clone, &state_task, handle.info.model, &e);
                         return Err("aborted (chip ID check)".to_string());
                     }
                 }

@@ -580,6 +580,58 @@ pub fn find_devices_by_chip_id(
     Ok(items)
 }
 
+/// Build a "Note: ..." line for a chip-ID mismatch, naming which database
+/// devices carry the ID that was actually read.
+///
+/// Three cases: an unresponsive read (`0` or all-ones — the chip isn't
+/// answering; seating/contact, not an unknown part), no database match
+/// (unsupported part or corrupt ID), or a capped list of matching device
+/// names with a "+N more" suffix. `pin_count` filters to the selected
+/// device's package first; a wildcard retry widens the net when nothing
+/// matches — the same die ships in multiple packages under one chip ID.
+pub fn chip_id_mismatch_note(
+    paths: &DatabasePaths,
+    actual: u32,
+    pin_count: u8,
+    model: ProgrammerModel,
+) -> Option<String> {
+    // Unresponsive reads: 0x0 and any-width all-ones (0xFF, 0xFFFF, …) —
+    // MISO held low / floating high, not a real identifier.
+    if actual == 0 || actual.checked_add(1).is_none_or(|v| v.is_power_of_two()) {
+        return Some(format!(
+            "Note: chip ID {actual:#010x} means the chip did not answer the ID \
+             command — check seating and pin contact (or the chip may be dead)"
+        ));
+    }
+    let mut matches = find_devices_by_chip_id(paths, actual, pin_count, model).unwrap_or_default();
+    if matches.is_empty() {
+        matches = find_devices_by_chip_id(paths, actual, 0, model).unwrap_or_default();
+    }
+    if matches.is_empty() {
+        return Some(format!(
+            "Note: no database device matches chip ID {actual:#010x} — \
+             unsupported part, or a bad contact produced a wrong ID"
+        ));
+    }
+    const MAX_SHOWN: usize = 6;
+    let names: Vec<&str> = matches
+        .iter()
+        .take(MAX_SHOWN)
+        .map(|m| m.name.as_str())
+        .collect();
+    let more = matches.len() - names.len();
+    let suffix = if more > 0 {
+        format!(" +{more} more")
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "Note: read ID {actual:#010x} matches: {}{suffix} — \
+         select the matching device and retry",
+        names.join(", ")
+    ))
+}
+
 /// Pin-contact test configuration for a chip, parsed from the `<maps>` section
 /// of `infoic.xml`.
 ///
@@ -2159,6 +2211,91 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "PM25LV010");
         assert_eq!(matches[0].manufacturer, "ISSI");
+    }
+
+    // ── chip_id_mismatch_note tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_mismatch_note_names_matching_devices() {
+        let paths = chipid_fixture_paths();
+        let note = chip_id_mismatch_note(&paths, 0xef4014, 8, ProgrammerModel::Tl866iiPlus)
+            .expect("note for a real ID");
+        assert!(note.contains("0x00ef4014"), "note shows read ID: {note}");
+        assert!(note.contains("W25Q80"), "note names the match: {note}");
+        assert!(
+            note.contains("select the matching device"),
+            "note is actionable: {note}"
+        );
+    }
+
+    #[test]
+    fn test_mismatch_note_wildcard_pin_fallback() {
+        let paths = chipid_fixture_paths();
+        // PIC12F629 fixture is 8-pin; asking for pin_count=40 misses it under
+        // the exact filter, so the wildcard retry must find it — same die
+        // ships in multiple packages under one chip ID.
+        let note = chip_id_mismatch_note(&paths, 0x00000f80, 40, ProgrammerModel::Tl866iiPlus)
+            .expect("note for a real ID");
+        assert!(
+            note.contains("PIC12F629"),
+            "wildcard retry found the part: {note}"
+        );
+    }
+
+    #[test]
+    fn test_mismatch_note_no_database_match() {
+        let paths = chipid_fixture_paths();
+        let note = chip_id_mismatch_note(&paths, 0xdeadbe, 8, ProgrammerModel::Tl866iiPlus)
+            .expect("note for an unknown ID");
+        assert!(note.contains("no database device matches"), "{note}");
+    }
+
+    #[test]
+    fn test_mismatch_note_unresponsive_ids() {
+        let paths = chipid_fixture_paths();
+        for id in [0x0, 0xff, 0xffff, 0xffffff, 0xffffffff] {
+            let note = chip_id_mismatch_note(&paths, id, 8, ProgrammerModel::Tl866iiPlus)
+                .expect("note for stuck ID");
+            assert!(note.contains("did not answer"), "id {id:#x}: {note}");
+        }
+    }
+
+    #[test]
+    fn test_mismatch_note_caps_long_lists() {
+        // Eight same-ID entries in INFOIC2PLUS — the note must cap at 6
+        // shown names and report the remainder as "+2 more".
+        const MANY_FIXTURE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<infoic>
+  <database type="INFOIC2PLUS">
+    <manufacturer name="M">
+      <ic name="A1" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A2" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A3" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A4" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A5" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A6" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A7" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+      <ic name="A8" type="0" protocol_id="1" variant="0" chip_id="0xaabb"
+         package_details="0x08000000" voltages="0x0" />
+    </manufacturer>
+  </database>
+</infoic>
+"#;
+        let paths = infoic_fixture_paths(MANY_FIXTURE);
+        let note = chip_id_mismatch_note(&paths, 0xaabb, 8, ProgrammerModel::Tl866iiPlus)
+            .expect("note for matching ID");
+        assert!(
+            note.contains("+2 more"),
+            "cap reports the remainder: {note}"
+        );
+        assert!(!note.contains("A7"), "only 6 names are listed: {note}");
     }
 
     // ── list_devices_by_model tests ────────────────────────────────────────

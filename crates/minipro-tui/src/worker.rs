@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use minipro_core::database::{find_device, DatabasePaths};
+use minipro_core::database::{chip_id_mismatch_note, find_device, DatabasePaths};
 use minipro_core::device::{ChipType, ProgrammerInfo, ProgrammerModel};
 use minipro_core::error::MiniproError;
 use minipro_core::handle::MiniproHandle;
@@ -266,6 +266,16 @@ fn run_in_transaction(
             Ok(()) => log(tx, log::Level::Info, "Chip ID check passed"),
             Err(e) => {
                 log(tx, log::Level::Error, format!("Chip ID check failed: {e}"));
+                if let MiniproError::ChipIdMismatch { actual, .. } = e {
+                    if let Some(note) = chip_id_mismatch_note(
+                        paths,
+                        actual,
+                        h.device().map(|d| d.package_details.pin_count).unwrap_or(0),
+                        h.info.model,
+                    ) {
+                        log(tx, log::Level::Warn, note);
+                    }
+                }
                 return Ok(OpOutcome::Aborted {
                     gate: "chip ID check",
                 });
