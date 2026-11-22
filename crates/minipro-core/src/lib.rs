@@ -96,8 +96,8 @@ pub use batch::{
     SerialChecksum, SerialConfig, SerialEndian, SerialFormat,
 };
 pub use database::{
-    find_device, find_device_any, find_devices_by_chip_id, list_devices, list_devices_for_model,
-    list_logic_ics_by_pin_count, user_data_dir, DatabasePaths,
+    chip_id_mismatch_note, find_device, find_device_any, find_devices_by_chip_id, list_devices,
+    list_devices_for_model, list_logic_ics_by_pin_count, user_data_dir, DatabasePaths,
 };
 pub use device::{
     Algorithm, ChipConfig, ChipType, DataOrg, Device, DeviceFlags, Endianness, FuseConfig,
