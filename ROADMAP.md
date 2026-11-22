@@ -1278,6 +1278,14 @@ Nothing currently scheduled — see Backlog for candidate work.
   ROM are read-only by design (`write_buffer_size="0x00"` in the DB —
   fuse-blowing needs high-current pulses no programmer in the family
   can source).
+  - **Status: core port landed on `feat/prom-read-path`, unverified on
+    hardware** — `minipro_core::prom` carries both tables plus the
+    init/read/terminate flow, dispatched through the protocol trait on
+    II+/T48 (with T48-native 56-driver pin control — its pull-resistor /
+    SET_OUT / bit-packed protocol is not II+-shaped). PROM entries are
+    `MP_READ_ONLY` at parse; unsupported models and non-PROM
+    `custom_protocol` devices fail cleanly at `begin_transaction`.
+    Remaining: real-part validation below, then the TL866A/CS follow-on.
   - **Scope is model-capped by upstream itself:** the path needs the
     `set_zif_direction`/`set_zif_state`/`set_pin_drivers`/`set_voltages`
     vtable primitives, which upstream wires only for TL866A/CS,

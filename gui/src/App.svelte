@@ -1159,6 +1159,11 @@
                   </p>
                 </div>
               {/if}
+              {#each $selectedDevice?.warnings ?? [] as warning}
+                <div class="bg-red-500/10 border border-red-500/30 rounded-md px-3 py-1.5">
+                  <p class="text-xs text-red-300 font-medium">⚠ {warning}</p>
+                </div>
+              {/each}
               <!-- Row 1: Format, Page, Size diff -->
               {#if $activeOperation === "read" || $activeOperation === "write" || $activeOperation === "verify"}
                 <div class="flex flex-wrap items-center gap-6 text-sm">

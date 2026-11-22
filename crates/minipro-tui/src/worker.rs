@@ -283,6 +283,12 @@ fn run_in_transaction(
         }
     }
 
+    // Database-entry selection warnings (e.g. the TMS2716 wrong-pinout
+    // clone) — shown once per operation, ahead of the op-specific notes.
+    for w in device.warnings() {
+        log(tx, log::Level::Warn, w);
+    }
+
     let mut progress = |done: usize, total: usize| {
         let _ = tx.send(AppEvent::Progress { done, total });
     };

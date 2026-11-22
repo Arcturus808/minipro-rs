@@ -592,6 +592,13 @@ fn run() -> Result<()> {
     )?;
     let mut device = find_device(&db_paths, part, handle.info.model)?;
 
+    // Database-entry selection warnings (e.g. the TMS2716 wrong-pinout
+    // clone) — before overrides, so they fire even when an early return
+    // path is taken below.
+    for w in device.warnings() {
+        eprintln!("Warning: {w}");
+    }
+
     // Capture the database-default VCC code so we can warn if the user
     // overrides it to a value that may produce unreliable results.
     let default_vcc = device.voltages.vcc;
@@ -643,6 +650,17 @@ fn run() -> Result<()> {
     // Populate db_paths on the handle so begin_transaction can look up
     // T56/T76 FPGA algorithm bitstreams from algorithm.xml.
     handle.db_paths = Some(db_paths.clone());
+
+    // Fail write-side ops on read-only devices before the chip is powered —
+    // the bit-bang PROM path has no program/erase capability by design.
+    if device.flags.prog_support == minipro_core::device::MP_READ_ONLY
+        && (cli.write.is_some() || cli.erase)
+    {
+        anyhow::bail!(
+            "{} is a read-only device — write and erase are not supported",
+            device.name
+        );
+    }
 
     handle
         .begin_transaction(device.clone())

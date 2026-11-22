@@ -66,7 +66,7 @@ still useful as negative tests (clean "not supported" error paths).
 | 27C080 / M27C801 | 1M×8 | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | 27C800 / M27C160 / M27C322 | 1–2M×16 (DIP42) | – | – | ✓ | ✓ | ✓ | `pin_map` flags T48/T56 only; absent for II+ and A/CS. Exercises the >40-pin path. |
 | D2364C (mask ROM) | 8K×8 | ✓ bit-bang | ✓ | ✓ | ⚠ entry only | – | `custom_protocol` bit-bang; for dumping C64 KERNAL ROMs. Read-only — no write path. See bit-bang caveat below. |
-| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ⚠ entry only | – | All use `custom_protocol`. **None exist in INFOICT76.** Upstream bit-bang is wired for TL866A/CS, TL866II+ and T48 only — T56 has the entries but no working path; not yet implemented in minipro-rs on any model. |
+| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ⚠ entry only | – | All use `custom_protocol`. **None exist in INFOICT76.** The bit-bang path exists only where the host-side primitives do: TL866A/CS, TL866II+ and T48 — T56 has the entries but no working path. minipro-rs now implements it for II+/T48 (unverified on real parts); A/CS is a follow-on. |
 
 ## Modern replacement-part coverage
 
@@ -113,10 +113,10 @@ for UV EPROMs; all are ordinary memory devices in the DB.
    only for **TL866A/CS, TL866II+ and T48** — on T56 (PROM entries exist
    in INFOIC2PLUS) and T76 (no `custom_protocol` entries in INFOICT76 at
    all) the calls hit NULL and fail with "not implemented". minipro-rs
-   does not implement the PROM path on any model yet — the `set_zif_*`
-   primitives exist only for the pin-contact test on II+/T48. On T56/T76
-   custom-protocol devices have no voltage-override table; verify
-   overrides are rejected.
+   has now ported the path (`minipro_core::prom`) for **II+/T48** —
+   pending real-part validation; TL866A/CS remains a follow-on. On
+   T56/T76 custom-protocol devices have no voltage-override table and
+   `begin_transaction` fails cleanly; verify overrides are rejected.
 
 4. **Absent devices.** 2708, 2532, W27C080, AM29F020 are nowhere in the
    DB — good cases for the `DeviceNotFound` error path (and for
