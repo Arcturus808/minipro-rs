@@ -1006,7 +1006,7 @@ impl App {
                     format!("✗ chip is NOT blank — first non-blank byte at 0x{address:04x}"),
                 );
             }
-            Ok(OpOutcome::ChipId(info)) => {
+            Ok(OpOutcome::ChipId(info, suggestion)) => {
                 let mask = info.mask();
                 let width = (info.bytes * 2) as usize;
                 if info.is_match {
@@ -1045,6 +1045,9 @@ impl App {
                             width = width
                         ),
                     );
+                }
+                if let Some(note) = suggestion {
+                    self.push_log(log::Level::Warn, note);
                 }
                 self.chip_id = Some(*info);
             }

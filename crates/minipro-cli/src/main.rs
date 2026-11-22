@@ -24,6 +24,7 @@ use minipro_core::{
     device::ProgrammerModel,
     error::MiniproError,
     find_device, find_device_any, list_devices, list_devices_for_model,
+    operations::normalize_chip_id,
     operations::{
         blank_check, check_chip_id, check_ovc, erase_chip, firmware_update, hardware_check,
         health_check, logic_auto_find, logic_ic_test, pin_contact_check, read_chip,
@@ -756,6 +757,21 @@ fn do_operations(
         let (_, chip_id) = handle.protocol.get_chip_id(&handle.usb, &device)?;
         handle.protocol.end_transaction(&handle.usb)?;
         println!("Chip ID: {:#010x}", chip_id);
+        // Same suggestion as the check gate: on a mismatch against a
+        // nonzero expected ID — or an unexpected nonzero ID on a device
+        // with no expected value — name what the read ID matches.
+        let is_mismatch =
+            device.chip_id != 0 && normalize_chip_id(chip_id) != normalize_chip_id(device.chip_id);
+        if is_mismatch || (device.chip_id == 0 && chip_id != 0) {
+            if let Some(note) = chip_id_mismatch_note(
+                db_paths,
+                chip_id,
+                device.package_details.pin_count,
+                handle.info.model,
+            ) {
+                eprintln!("{note}");
+            }
+        }
         return Ok(());
     }
 

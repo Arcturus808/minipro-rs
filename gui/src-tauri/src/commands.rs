@@ -2543,6 +2543,7 @@ pub struct ChipIdResultDto {
     is_match: bool,
     revision: Option<u8>,
     is_variant: bool,
+    suggestion: Option<String>,
 }
 
 /// Read the chip ID.
@@ -2586,12 +2587,24 @@ pub async fn do_chip_id(
             let info = chip_id_info(&mut handle).map_err(|e| e.to_string())?;
             let mask = info.mask();
             let width = (info.bytes * 2) as usize;
+            // Surface the lookup on a real mismatch — and on a read with no
+            // expected value, where it doubles as "what did the ID match".
+            let suggestion = if !info.is_match || (info.expected == 0 && info.id != 0) {
+                let pin_count = handle
+                    .device()
+                    .map(|d| d.package_details.pin_count)
+                    .unwrap_or(0);
+                chip_id_mismatch_note(&db_paths, info.id, pin_count, handle.info.model)
+            } else {
+                None
+            };
             Ok::<ChipIdResultDto, String>(ChipIdResultDto {
                 id: format!("0x{:0width$x}", info.id & mask, width = width),
                 expected: format!("0x{:0width$x}", info.expected & mask, width = width),
                 is_match: info.is_match,
                 revision: info.revision,
                 is_variant: info.is_variant,
+                suggestion,
             })
         })();
 
