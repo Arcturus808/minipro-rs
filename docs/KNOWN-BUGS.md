@@ -1040,9 +1040,12 @@ primitives for **TL866A/CS, TL866II+ and T48 only**:
   primitives, and additionally has **no** custom-protocol entries in
   INFOICT76 — the parts aren't even selectable.
 
-minipro-rs currently implements **no** PROM/bit-bang path on any model:
-`set_zif_*` exists in `tl866iiplus.rs` only for the pin-contact test,
-and the read path does not branch on `flags.custom_protocol`. The
-`vcc`/`vpp_voltage_table` custom-protocol branches (T48 bit-bang tables,
-`None` for T56/T76) are correct as-is — they describe the tables that
-would apply *if* the path were implemented.
+minipro-rs now implements the PROM path for **TL866II+ and T48**
+(`minipro_core::prom` + the `custom_protocol` dispatch in
+`tl866iiplus.rs` — including T48-native 56-driver pin control, which is
+*not* II+-compatible). TL866A/CS remains unimplemented (upstream has
+primitives; `tl866a.rs` doesn't). On T56/T76 — and for any non-PROM
+`custom_protocol` device — `begin_transaction` fails cleanly with a
+"not implemented on this model" error. The `vcc`/`vpp_voltage_table`
+custom-protocol branches (T48 bit-bang tables, `None` for T56/T76) are
+correct as-is — they describe the tables that apply on each model.

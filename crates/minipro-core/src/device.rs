@@ -611,6 +611,9 @@ pub const MP_ZIF_ONLY: u8 = 0x00;
 pub const MP_ZIF_ICSP: u8 = 0x01;
 /// Device can only be programmed over ICSP.
 pub const MP_ICSP_ONLY: u8 = 0x02;
+/// Device is read-only — assigned at database load for bit-bang PROMs
+/// (upstream `MP_READ_ONLY`; not a value the XML flags can encode).
+pub const MP_READ_ONLY: u8 = 0x80;
 
 // ICSP bitmask sent in begin_transaction byte 3 (TL866II+/T56/T76) or
 // byte 11 (TL866A).  Matches upstream C minipro's MP_ICSP_ENABLE / MP_ICSP_VCC.
@@ -861,6 +864,30 @@ impl Device {
     pub fn is_volatile_sram(&self) -> bool {
         VOLATILE_SRAM_PROTOCOL_IDS.contains(&self.protocol_id)
     }
+
+    /// Selection-time warnings for database entries that are dangerous or
+    /// misleading — surfaced by every frontend so a bad pick can't quietly
+    /// reach the hardware.  Keep messages actionable: say what breaks and
+    /// what to do instead.
+    pub fn warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        // The real TMS2716 is a three-rail part: −5 V on pin 21 and +12 V
+        // on pin 19.  The database entry clones the Intel 2716 pin map —
+        // pin 21 gets VPP and pin 19 gets VCC — which applies damaging
+        // voltages to a genuine TMS part.  (Intel 2716 and pin-compatible
+        // clones like TMS2516 are fine.)
+        if self.name.starts_with("TMS2716") {
+            warnings.push(format!(
+                "{} uses a cloned Intel 2716 pinout, but a real TMS2716 is a \
+                 three-rail part (−5 V on pin 21, +12 V on pin 19) — this entry \
+                 drives the wrong voltages and can kill the chip. Do not use it \
+                 with a genuine TMS2716; single-rail 2716-compatible parts are \
+                 unaffected.",
+                self.name
+            ));
+        }
+        warnings
+    }
 }
 
 // ── System info returned from programmer ─────────────────────────────────────
@@ -1026,5 +1053,22 @@ mod tests {
     #[test]
     fn test_voltage_table_names() {
         assert_eq!(voltage_table_names(LOGIC_VCC_VOLTAGES), "1.8, 2.5, 3.3, 5");
+    }
+
+    #[test]
+    fn test_warnings_flag_tms2716_only() {
+        let named = |n: &str| Device {
+            name: n.into(),
+            ..Default::default()
+        };
+        let w = named("TMS2716@DIP24").warnings();
+        assert_eq!(w.len(), 1);
+        assert!(w[0].contains("three-rail"));
+
+        // Same-shape adapters warn too, single-rail lookalikes don't.
+        assert_eq!(named("TMS2716@DIP24(ADP-088)").warnings().len(), 1);
+        for name in ["M2716@DIP24", "TMS2516@DIP24", "TMS27C256@DIP28", "2716"] {
+            assert!(named(name).warnings().is_empty(), "{name} should not warn");
+        }
     }
 }

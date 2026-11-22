@@ -45,6 +45,12 @@ fn effective_transfer_size(file_len: usize, device_size: usize, read_buffer_size
 /// `pages_per_block`).  For eMMC it is the fixed 64 KiB firmware block.
 /// For all other chip types it falls back to the database `buffer_size` field.
 fn effective_block_size(device: &Device, buffer_size: u16) -> usize {
+    if device.flags.custom_protocol {
+        // Bit-bang PROM reads re-run the data-pin/CE setup per block, and
+        // mask-ROM CE/CS probing (`is_empty`) must see the whole image —
+        // force a single block via the callers' `.min(size - offset)`.
+        return usize::MAX;
+    }
     if device.chip_type == ChipType::Nand as u32 && device.pages_per_block > 0 {
         (buffer_size as usize) * (device.pages_per_block as usize)
     } else if device.chip_type == ChipType::Emmc as u32 {
@@ -482,6 +488,15 @@ pub fn write_chip_bytes(
     mut progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<OpStats> {
     let device = handle.device()?.clone();
+    if device.flags.custom_protocol {
+        // Bit-bang PROMs are read-only — fuse blowing needs current pulses
+        // the hardware can't generate (upstream bb_write_block is
+        // "Unimplemented" the same way).
+        return Err(MiniproError::Protocol(format!(
+            "{} is a read-only bit-bang device — writing is not supported",
+            device.name
+        )));
+    }
     let code_size = handle.protocol.effective_code_size(&device) as usize;
     let size = match page {
         0x00 => code_size,
@@ -672,12 +687,22 @@ pub fn verify_chip(
 /// device's real word width are physically absent (baseline/midrange PICs
 /// store 12/14-bit words in 16-bit cells — reads return 0x0FFF/0x3FFF
 /// while files and loaders pad to 0xFFFF), so they must not participate in
-/// verify or blank comparisons. `0xff` for byte-organised memory.
+/// verify or blank comparisons. Byte-organised memory masks with
+/// `device.compare_mask` (upstream `compare_memory` behaviour — 0x0f on
+/// 4-bit PROMs so the un-driven upper nibble can't false-fail; 0xff on
+/// everything else, which is a no-op).
 fn code_byte_mask(device: &Device, byte_offset: usize, word_org: bool) -> u8 {
     if word_org {
         (device.word_compare_mask >> (8 * (byte_offset & 1))) as u8
     } else {
-        0xff
+        // Upstream `compare_memory` masks byte memory with compare_mask
+        // (0x0f on 4-bit PROMs so the un-driven upper nibble can't
+        // false-fail); a zero mask means full width, as in
+        // `compare_word_memory`'s `if (compare_mask == 0)` fallback.
+        match device.compare_mask {
+            0 => 0xff,
+            m => m.min(0xff) as u8,
+        }
     }
 }
 
@@ -1021,6 +1046,13 @@ fn write_osccal(handle: &mut MiniproHandle, data: &[u8]) -> Result<()> {
 /// `erase_device()` which checks `device->flags.can_erase` before erasing.
 pub fn erase_chip(handle: &mut MiniproHandle) -> Result<()> {
     let device = handle.device()?.clone();
+
+    if device.flags.custom_protocol {
+        return Err(MiniproError::Protocol(format!(
+            "{} is a read-only bit-bang device — erase is not supported",
+            device.name
+        )));
+    }
 
     // Not all chips can be erased (e.g. UV EPROMs require UV light, not
     // electrical erase).  Skip silently — matches upstream behavior.
@@ -1464,6 +1496,28 @@ mod tests {
         assert_eq!(code_byte_mask(&device, 1, true), 0x3f); // word high byte
         assert_eq!(code_byte_mask(&device, 4, true), 0xff);
         assert_eq!(code_byte_mask(&device, 1, false), 0xff); // byte-org: no mask
+    }
+
+    #[test]
+    fn test_code_byte_mask_prom_nibble() {
+        // 4-bit PROM (compare_mask patched to 0x0f at begin_transaction):
+        // the un-driven upper nibble can't false-fail verify, and a file
+        // with garbage there still matches the chip's real low nibble.
+        let device = Device {
+            compare_mask: 0x0f,
+            ..Default::default()
+        };
+        assert_eq!(code_byte_mask(&device, 0, false), 0x0f);
+        assert_eq!(
+            first_verify_mismatch(&device, false, &[0x0b], &[0xfb], 0),
+            None
+        );
+        assert_eq!(
+            first_verify_mismatch(&device, false, &[0x0b], &[0x0c], 0),
+            Some(0)
+        );
+        // Zero mask = full width (Device::default / unparsed fixtures).
+        assert_eq!(code_byte_mask(&Device::default(), 0, false), 0xff);
     }
 
     #[test]

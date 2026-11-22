@@ -71,6 +71,19 @@ pub struct LogicTestResult {
     pub pass: bool,
 }
 
+/// Power-rail routing request for one ZIF socket pin (upstream
+/// `pin_driver_t`).  Used by the bit-bang PROM path — each flag switches
+/// the pin's driver to that rail when [`Protocol::set_pin_drivers`] runs.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PinDriver {
+    /// Connect the pin to GND.
+    pub gnd: bool,
+    /// Connect the pin to VCC.
+    pub vcc: bool,
+    /// Connect the pin to VPP.
+    pub vpp: bool,
+}
+
 /// Data buffer + addressing info for a single block read/write.
 #[derive(Debug)]
 pub struct DataSet {
@@ -292,6 +305,13 @@ pub trait Protocol: Send + Sync {
     /// Set VCC / VPP voltages.
     fn set_voltages(&self, usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
         let _ = (usb, vcc, vpp);
+        Err(crate::error::MiniproError::UnsupportedOperation)
+    }
+
+    /// Route GND/VCC/VPP drivers to ZIF pins (upstream
+    /// `minipro_set_pin_drivers` — the bit-bang power-on step).
+    fn set_pin_drivers(&self, usb: &UsbDevice, pins: &[PinDriver]) -> Result<()> {
+        let _ = (usb, pins);
         Err(crate::error::MiniproError::UnsupportedOperation)
     }
 }

@@ -1621,6 +1621,13 @@ fn build_device(
         flags.custom_protocol = true;
     }
 
+    // Bit-bang PROMs are read-only by design — fuse blowing needs current
+    // pulses this hardware family can't generate (upstream database.c sets
+    // MP_READ_ONLY for custom_protocol + CP_PROM the same way).
+    if flags.custom_protocol && protocol_id == crate::prom::CP_PROM {
+        flags.prog_support = crate::device::MP_READ_ONLY;
+    }
+
     // XGecu SPI-NAND geometry fix-up (ported from upstream database.c):
     // packed entries leave code_memory_size == 0 and stash the block
     // count in page_size, vendor flags in the top byte of

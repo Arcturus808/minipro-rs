@@ -68,6 +68,9 @@ export interface DeviceInfo {
    *  power-off — standalone read/verify shows the power-on signature,
    *  not stored data. */
   volatile_sram: boolean;
+  /** Selection-time warnings for dangerous/misleading database entries
+   *  (Device::warnings — e.g. the TMS2716 wrong-pinout clone). */
+  warnings: string[];
 }
 
 export interface IcspWire {

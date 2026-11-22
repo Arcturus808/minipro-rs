@@ -26,12 +26,13 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Bootloader erase             |
 
-use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol, OVC_IMAX};
+use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, PinDriver, Protocol, OVC_IMAX};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
 };
 use log::trace;
+use std::sync::Mutex;
 
 // Command bytes
 const CMD_GET_INFO: u8 = 0x00;
@@ -75,8 +76,22 @@ const CMD_BTLDR_WRITE: u8 = 0x3B;
 const CMD_BTLDR_ERASE: u8 = 0x3C;
 const CMD_SWITCH: u8 = 0x3D;
 
+// T48-only command semantics (upstream t48.c): the pull-resistor opcodes
+// are swapped relative to the TL866II+.
+const T48_CMD_SET_PULLUPS: u8 = 0x31;
+const T48_CMD_SET_PULLDOWNS: u8 = 0x32;
+
 // ZIF bus width (max 40 pins)
 const ZIF_PINS: usize = 40;
+
+/// T48 pin-driver domain width (upstream `T48_NPINS`) — 40 socket pins
+/// plus 16 internal drivers (J1/J6/J8/J13/J14/J16 rails).
+const T48_NPINS: usize = 56;
+
+// Pin direction/pull-up encodings inside zif direction bytes.
+const PIN_DIR_IN: u8 = 0x01;
+const PIN_DIR_OUT: u8 = 0x00;
+const PIN_PULLUP_BIT: u8 = 0x80;
 
 // Firmware update constants
 const BTLDR_MAGIC: u32 = 0xA578_B986;
@@ -560,6 +575,505 @@ const VPP1: usize = 0; // VPP pin 1
 const VCC1: usize = 0; // VCC pin 1
 const GND1: usize = 0; // GND pin 1
 
+// ── T48 pin-driver tables ─────────────────────────────────────────────────────
+//
+// The T48 routes rails through a 56-driver domain (40 socket pins + internal
+// J-pin drivers) with different byte/mask encodings than the TL866II+ tables
+// above — note the descending mask runs.  Verbatim port of `vpp_pins`,
+// `vcc_pins`, `gnd_pins` from upstream t48.c.
+
+const T48_VPP_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 31,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 1,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 9,
+        mask: 0x80,
+    },
+    // J1
+    ZifPin {
+        pin: 41,
+        byte: 12,
+        mask: 0x01,
+    },
+];
+
+const T48_VCC_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 1,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 5,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 6,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 7,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 8,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 9,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 11,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 12,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 13,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 14,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 15,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 16,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 25,
+        byte: 10,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 26,
+        byte: 10,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 27,
+        byte: 10,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 28,
+        byte: 10,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 29,
+        byte: 10,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 10,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 31,
+        byte: 10,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 10,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 11,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 11,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 35,
+        byte: 11,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 11,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 11,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 11,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 11,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 11,
+        mask: 0x80,
+    },
+    // J13 / J14
+    ZifPin {
+        pin: 53,
+        byte: 16,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 54,
+        byte: 16,
+        mask: 0x02,
+    },
+];
+
+const T48_GND_PINS: &[ZifPin] = &[
+    ZifPin {
+        pin: 1,
+        byte: 8,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 2,
+        byte: 8,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 3,
+        byte: 8,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 4,
+        byte: 8,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 5,
+        byte: 8,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 6,
+        byte: 8,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 7,
+        byte: 8,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 8,
+        byte: 8,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 9,
+        byte: 9,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 10,
+        byte: 9,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 11,
+        byte: 9,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 12,
+        byte: 9,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 13,
+        byte: 9,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 14,
+        byte: 9,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 15,
+        byte: 9,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 16,
+        byte: 9,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 18,
+        byte: 10,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 20,
+        byte: 10,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 25,
+        byte: 10,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 27,
+        byte: 10,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 29,
+        byte: 10,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 30,
+        byte: 10,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 31,
+        byte: 10,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 32,
+        byte: 10,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 33,
+        byte: 11,
+        mask: 0x80,
+    },
+    ZifPin {
+        pin: 34,
+        byte: 11,
+        mask: 0x40,
+    },
+    ZifPin {
+        pin: 35,
+        byte: 11,
+        mask: 0x20,
+    },
+    ZifPin {
+        pin: 36,
+        byte: 11,
+        mask: 0x10,
+    },
+    ZifPin {
+        pin: 37,
+        byte: 11,
+        mask: 0x08,
+    },
+    ZifPin {
+        pin: 38,
+        byte: 11,
+        mask: 0x04,
+    },
+    ZifPin {
+        pin: 39,
+        byte: 11,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 40,
+        byte: 11,
+        mask: 0x01,
+    },
+    // J6 / J8 / J16
+    ZifPin {
+        pin: 46,
+        byte: 16,
+        mask: 0x01,
+    },
+    ZifPin {
+        pin: 48,
+        byte: 16,
+        mask: 0x02,
+    },
+    ZifPin {
+        pin: 56,
+        byte: 16,
+        mask: 0x04,
+    },
+];
+
+// T48 firmware-native voltage codes for the 0-15 database voltage index
+// (upstream `vcc_t`/`vpp_t` inside t48_set_voltages).
+const T48_VCC_T: [u8; 16] = [
+    3, 13, 16, 19, 23, 27, 29, 34, 38, 40, 44, 47, 52, 56, 59, 62,
+];
+const T48_VPP_T: [u8; 16] = [0, 1, 3, 6, 9, 10, 13, 14, 17, 18, 20, 24, 26, 28, 30, 35];
+
+/// Host-side mirror of the T48 pin-driver state (upstream t48.c statics
+/// `last_direction`, `last_output`, `last_pinstate`, `last_j1vcc`,
+/// `last_vcc`).  The T48 has no "set direction" command — a pin becomes an
+/// output the first time SET_OUT drives it — so this cache is what keeps
+/// SET_OUT away from input-configured pins (driving an input would flip
+/// its direction and could short against the chip).
+struct T48PinCache {
+    /// Per-pin direction: 0 = output, 1 = input (input is the safe default).
+    direction: [u8; T48_NPINS],
+    /// Last driven level per pin; 0xFF sentinel forces the first SET_OUT.
+    output: [u8; T48_NPINS],
+    /// Last routed power drivers per pin — re-sent when VCC voltage is set
+    /// (voltage and routing share command 0x2E).
+    pinstate: [PinDriver; T48_NPINS],
+    /// J13/J14 VCC-enable flag last sent.
+    j1vcc: u8,
+    /// Firmware-native VCC code last sent (0 = never set).
+    #[allow(dead_code)]
+    vcc: u8,
+}
+
+impl Default for T48PinCache {
+    fn default() -> Self {
+        Self {
+            direction: [PIN_DIR_IN; T48_NPINS],
+            output: [0xff; T48_NPINS],
+            pinstate: [PinDriver::default(); T48_NPINS],
+            j1vcc: 1,
+            vcc: 0,
+        }
+    }
+}
+
+/// Error for operations a `custom_protocol` (bit-bang) device can't
+/// perform — the PROM path is read-only by design (upstream `bb_*`
+/// stubs return "Unimplemented" the same way).
+fn custom_protocol_err(device: &Device) -> MiniproError {
+    MiniproError::Protocol(format!(
+        "{} uses a custom bit-bang protocol — this operation is not supported (PROM devices are read-only)",
+        device.name
+    ))
+}
+
 /// Reset pin drivers, set all ZIF pins to input, and configure pull-up
 /// resistors (`pullup` = 0 enables, 1 disables). Matches the C `init_zif`.
 fn init_zif(usb: &UsbDevice, pullup: u8) -> Result<()> {
@@ -587,20 +1101,28 @@ pub struct Tl866iiPlusProtocol {
     /// The T48 shares the TL866II+ command set for chip operations but has
     /// its own pin-driver domain — 56 drivers, bit-packed pin-state reads,
     /// and different pin tables (upstream `t48.c`).  Operations that
-    /// diverge branch on this flag; currently only `hardware_check`.
+    /// diverge branch on this flag.
     is_t48: bool,
+    /// T48 bit-bang host-side pin state (only touched when `is_t48`).
+    t48_bb: Mutex<T48PinCache>,
 }
 
 impl Tl866iiPlusProtocol {
     /// Create a protocol instance for a TL866II+ programmer.
     pub fn new() -> Self {
-        Self { is_t48: false }
+        Self {
+            is_t48: false,
+            t48_bb: Mutex::new(T48PinCache::default()),
+        }
     }
 
     /// Constructor for the T48 (`protocol/t48.rs` re-exports this type as
     /// `T48Protocol`; `handle.rs` constructs it via this method).
     pub fn new_t48() -> Self {
-        Self { is_t48: true }
+        Self {
+            is_t48: true,
+            t48_bb: Mutex::new(T48PinCache::default()),
+        }
     }
 }
 
@@ -713,6 +1235,12 @@ pub struct SystemInfo {
 
 impl Protocol for Tl866iiPlusProtocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: u8) -> Result<()> {
+        // Custom-protocol (bit-bang PROM) devices take the host-side
+        // pin-control path — no BEGIN_TRANS packet is sent
+        // (upstream: tl866iiplus/t48_begin_transaction → bb_begin_transaction).
+        if device.flags.custom_protocol {
+            return crate::prom::begin(usb, self, device);
+        }
         // 64-byte begin_transaction packet (matches upstream C tl866iiplus.c):
         // [0]     cmd = 0x03
         // [1]     protocol_id
@@ -782,7 +1310,10 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)
     }
 
-    fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
+    fn read_block(&self, usb: &UsbDevice, device: &Device, ds: &mut DataSet) -> Result<()> {
+        if device.flags.custom_protocol {
+            return crate::prom::read_block(usb, self, device, ds);
+        }
         // 8-byte read command: [cmd, 0, length_lo, length_hi, addr x4]
         // msg[1] is left 0 (C code zero-initialises msg[64] and never sets [1]).
         let cmd = read_cmd(ds);
@@ -818,6 +1349,9 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn write_block(&self, usb: &UsbDevice, device: &Device, ds: &DataSet) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let cmd = write_cmd(ds);
         if self.is_t48 {
             // T48 (upstream t48_write_block): always an 8-byte header on EP1,
@@ -871,6 +1405,9 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn get_chip_id(&self, usb: &UsbDevice, device: &Device) -> Result<(u8, u32)> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_READ_CHIP_ID;
         usb.msg_send(&pkt)?;
@@ -911,6 +1448,9 @@ impl Protocol for Tl866iiPlusProtocol {
         length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let cmd_byte = match fuse_type {
             0x00 => CMD_READ_USER,  // MP_FUSE_USER
             0x01 => CMD_READ_FUSES, // MP_FUSE_CFG
@@ -940,6 +1480,9 @@ impl Protocol for Tl866iiPlusProtocol {
         items_count: u8,
         data: &[u8],
     ) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let cmd_byte = match fuse_type {
             0x00 => CMD_WRITE_USER,
             0x01 => CMD_WRITE_FUSES,
@@ -975,7 +1518,10 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_recv(size)
     }
 
-    fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
+    fn erase(&self, usb: &UsbDevice, device: &Device, num_fuses: u8, is_pld: bool) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         // Upstream tl866iiplus_erase / t48_erase (identical): num_fuses at
         // msg[2], pld flag at msg[4], 15-byte command packet.
         let mut pkt = [0u8; 15];
@@ -988,6 +1534,9 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn read_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &mut JedecSet) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         // Upstream tl866iiplus_read_jedec_row / t48_read_jedec_row
         // (identical): msg[1]=protocol_id, msg[2]=row size in bits,
         // msg[4]=row, msg[5]=flags; the response carries the packed row
@@ -1006,6 +1555,9 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn write_jedec_row(&self, usb: &UsbDevice, device: &Device, js: &JedecSet) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         // Upstream tl866iiplus_write_jedec_row / t48_write_jedec_row
         // (identical): same header as read, row data at msg[8], 64-byte
         // packet, no response read.
@@ -1033,7 +1585,7 @@ impl Protocol for Tl866iiPlusProtocol {
         usb.msg_send(&pkt)
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice, _device: &Device) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, device: &Device) -> Result<(OvcStatus, u8)> {
         // Upstream tl866iiplus_get_ovc_status / t48_get_ovc_status
         // (identical): 32-byte response; error=msg[0], c1=LE16@2,
         // c2=LE16@4, address=LE32@8, ovc flag=msg[12].
@@ -1047,11 +1599,22 @@ impl Protocol for Tl866iiPlusProtocol {
         let le16_at = |i: usize| u32::from(u16::from_le_bytes([byte(i), byte(i + 1)]));
         let le32_at =
             |i: usize| u32::from_le_bytes([byte(i), byte(i + 1), byte(i + 2), byte(i + 3)]);
-        let status = OvcStatus {
-            error: byte(0),
-            c1: le16_at(2),
-            c2: le16_at(4),
-            address: le32_at(8),
+        // Custom-protocol sessions still report OVC, but the status fields
+        // are not filled upstream (no firmware-side verify is running).
+        let status = if device.flags.custom_protocol {
+            OvcStatus {
+                error: 0,
+                c1: 0,
+                c2: 0,
+                address: 0,
+            }
+        } else {
+            OvcStatus {
+                error: byte(0),
+                c1: le16_at(2),
+                c2: le16_at(4),
+                address: le32_at(8),
+            }
         };
         Ok((status, byte(12)))
     }
@@ -1342,6 +1905,14 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn reset_state(&self, usb: &UsbDevice) -> Result<()> {
+        if self.is_t48 {
+            // Upstream t48_reset_state: clears the cached pin state and
+            // sends a 48-byte packet (not 8).
+            *self.t48_bb.lock().unwrap() = T48PinCache::default();
+            let mut pkt = [0u8; 48];
+            pkt[0] = CMD_RESET_PIN_DRV;
+            return usb.msg_send(&pkt);
+        }
         let mut pkt = [0u8; 8];
         pkt[0] = CMD_RESET_PIN_DRV;
         usb.msg_send(&pkt)?;
@@ -1349,10 +1920,16 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn set_zif_direction(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        if self.is_t48 {
+            return self.t48_set_zif_direction(usb, zif);
+        }
         set_zif_direction_tl866(usb, zif)
     }
 
     fn set_zif_state(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        if self.is_t48 {
+            return self.t48_set_zif_state(usb, zif);
+        }
         let mut msg = [0u8; 48];
         msg[0] = CMD_SET_OUT;
         let n = zif.len().min(ZIF_PINS);
@@ -1365,6 +1942,21 @@ impl Protocol for Tl866iiPlusProtocol {
         pkt[0] = CMD_READ_PINS;
         usb.msg_send(&pkt)?;
         let resp = usb.msg_recv(48)?;
+        if self.is_t48 {
+            // T48 replies bit-packed: 56 driver bits in bytes 8-14, pin 1
+            // in the LSB of byte 8 (upstream t48_get_zif_state) — the
+            // reply is 16 bytes, not the II+'s 48. Drivers 41..56 are
+            // dropped — callers see the 40 socket pins like on the II+.
+            if resp.len() < 15 {
+                return Err(MiniproError::ResponseTooShort {
+                    expected: 15,
+                    actual: resp.len(),
+                });
+            }
+            return Ok((0..ZIF_PINS)
+                .map(|i| (resp[8 + (i >> 3)] >> (i & 7)) & 1)
+                .collect());
+        }
         if resp.len() < 48 {
             return Err(MiniproError::ResponseTooShort {
                 expected: 48,
@@ -1375,7 +1967,45 @@ impl Protocol for Tl866iiPlusProtocol {
     }
 
     fn set_voltages(&self, usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
+        if self.is_t48 {
+            return self.t48_set_voltages(usb, vcc, vpp);
+        }
         set_voltages_tl866(usb, vcc, vpp)
+    }
+
+    fn set_pin_drivers(&self, usb: &UsbDevice, pins: &[PinDriver]) -> Result<()> {
+        if self.is_t48 {
+            return self.t48_set_pin_drivers(usb, pins);
+        }
+        // TL866II+ (upstream tl866iiplus_set_pin_drivers): three 48-byte
+        // packets — GND, VCC, then VPP — pin numbers translated through
+        // the routing tables.
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_GND_PIN;
+        for (i, p) in pins.iter().enumerate() {
+            if p.gnd {
+                set_pin(GND_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        usb.msg_send(&msg)?;
+
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_VCC_PIN;
+        for (i, p) in pins.iter().enumerate() {
+            if p.vcc {
+                set_pin(VCC_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        usb.msg_send(&msg)?;
+
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_VPP_PIN;
+        for (i, p) in pins.iter().enumerate() {
+            if p.vpp {
+                set_pin(VPP_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        usb.msg_send(&msg)
     }
 }
 
@@ -1488,6 +2118,154 @@ fn set_voltages_tl866(usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
     msg2[11] = (vpp_enc << 4) & 0x80;
     usb.msg_send(&msg2)?;
     Ok(())
+}
+
+// ── T48 bit-bang pin control ──────────────────────────────────────────────────
+//
+// Upstream t48.c: the T48 speaks a different bit-bang dialect than the
+// TL866II+ even though the opcodes overlap — a 56-driver domain, no
+// direction command (pins are inputs until SET_OUT drives them), per-pin
+// SET_OUT packets, bit-packed READ_PINS replies, J-pin enable flags in the
+// pin-driver packets, and voltage set through the pin-driver commands.
+// The `T48PinCache` mirrors the firmware-side state host-side, as upstream
+// does with its file-static `last_*` arrays.
+
+/// Set the bit for `pin` in a pin-driver packet via a routing table
+/// (upstream `set_pin`).
+fn set_pin(table: &[ZifPin], out: &mut [u8; 48], pin: u8) {
+    for e in table {
+        if e.pin == pin {
+            out[e.byte] |= e.mask;
+        }
+    }
+}
+
+impl Tl866iiPlusProtocol {
+    /// T48 `t48_set_zif_direction`: pick pull resistors from the pull-up
+    /// flag, then record directions in the cache — there is no direction
+    /// packet; pins stay inputs until SET_OUT drives them.
+    fn t48_set_zif_direction(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        let pullup = zif.iter().any(|d| d & PIN_PULLUP_BIT != 0);
+        let mut msg = [0u8; 48];
+        msg[0] = if pullup {
+            T48_CMD_SET_PULLUPS
+        } else {
+            T48_CMD_SET_PULLDOWNS
+        };
+        usb.msg_send(&msg)?;
+
+        // The pull command returns all pins to input (and resets the
+        // upstream last_* caches the same way); then directions for the
+        // pins we were given are recorded.
+        let mut cache = self.t48_bb.lock().unwrap();
+        cache.direction = [PIN_DIR_IN; T48_NPINS];
+        cache.output = [0xff; T48_NPINS];
+        for (i, &d) in zif.iter().take(T48_NPINS).enumerate() {
+            cache.direction[i] = d & 0x01;
+        }
+        Ok(())
+    }
+
+    /// T48 `t48_set_zif_state`: one 8-byte SET_OUT per changed output pin.
+    /// SET_OUT on an input would flip it to output — pins cached as inputs
+    /// are never driven.
+    fn t48_set_zif_state(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        let mut cache = self.t48_bb.lock().unwrap();
+        for (i, &s) in zif.iter().take(T48_NPINS).enumerate() {
+            if cache.direction[i] == PIN_DIR_OUT && cache.output[i] != s {
+                let mut msg = [0u8; 8];
+                msg[0] = CMD_SET_OUT;
+                msg[1] = s;
+                msg[4] = i as u8;
+                usb.msg_send(&msg)?;
+                cache.output[i] = s;
+            }
+        }
+        Ok(())
+    }
+
+    /// T48 `t48_set_vcc_voltage_and_pins`: SET_VCC_PIN carries both the pin
+    /// routing (from the cached driver state) and the DAC voltage — the two
+    /// can't be sent separately.
+    fn t48_set_vcc_voltage_and_pins(
+        &self,
+        usb: &UsbDevice,
+        vcc_native: u8,
+        cache: &mut T48PinCache,
+    ) -> Result<()> {
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_VCC_PIN;
+        // Upstream iterates socket pins 1..40 only — J13/J14 VCC is
+        // governed by the j1vcc enable flag instead of per-pin bits.
+        for i in 0..ZIF_PINS {
+            if cache.pinstate[i].vcc {
+                set_pin(T48_VCC_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        msg[0x14] = 0; // DAC hold register
+        msg[0x10] = cache.j1vcc;
+        if vcc_native != 0 {
+            cache.vcc = vcc_native;
+        }
+        // 0 means "leave the voltage unchanged" upstream.
+        msg[0x16] = vcc_native;
+        msg[0x17] = 0;
+        usb.msg_send(&msg)
+    }
+
+    /// T48 `t48_set_voltages`: database 0-15 indices → firmware-native
+    /// codes via the `vcc_t`/`vpp_t` maps, sent through the pin-driver
+    /// commands (VCC rides the cached routing; VPP uses subcommand 1).
+    fn t48_set_voltages(&self, usb: &UsbDevice, vcc: u8, vpp: u8) -> Result<()> {
+        {
+            let mut cache = self.t48_bb.lock().unwrap();
+            let vcc_native = T48_VCC_T[(vcc as usize).min(15)];
+            self.t48_set_vcc_voltage_and_pins(usb, vcc_native, &mut cache)?;
+        }
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_VPP_PIN;
+        msg[1] = 1; // subcommand: set VPP voltage
+        msg[8] = T48_VPP_T[(vpp as usize).min(15)];
+        usb.msg_send(&msg)
+    }
+
+    /// T48 `t48_set_pin_drivers`: GND pins, then VCC pins (voltage
+    /// unchanged), then VPP pins — all with J-enable flags set upstream.
+    fn t48_set_pin_drivers(&self, usb: &UsbDevice, pins: &[PinDriver]) -> Result<()> {
+        let mut cache = self.t48_bb.lock().unwrap();
+
+        // GND — SET_GND_PIN, msg[0x10] = J6/J8/J16 EGND enable.
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_GND_PIN;
+        for i in 0..T48_NPINS {
+            cache.pinstate[i].gnd = pins.get(i).map(|p| p.gnd).unwrap_or(false);
+            if cache.pinstate[i].gnd {
+                set_pin(T48_GND_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        msg[0x10] = 1;
+        usb.msg_send(&msg)?;
+
+        // VCC — pins only; voltage stays (0), J13/J14 enable = 1.
+        for i in 0..ZIF_PINS {
+            cache.pinstate[i].vcc = pins.get(i).map(|p| p.vcc).unwrap_or(false);
+        }
+        cache.j1vcc = 1;
+        self.t48_set_vcc_voltage_and_pins(usb, 0, &mut cache)?;
+
+        // VPP — SET_VPP_PIN subcommand 0, msg[0x0c] = PC5 J1 VPP-enable.
+        let mut msg = [0u8; 48];
+        msg[0] = CMD_SET_VPP_PIN;
+        msg[1] = 0;
+        for i in 0..T48_NPINS {
+            cache.pinstate[i].vpp = pins.get(i).map(|p| p.vpp).unwrap_or(false);
+            if cache.pinstate[i].vpp {
+                set_pin(T48_VPP_PINS, &mut msg, (i + 1) as u8);
+            }
+        }
+        msg[0x0c] = 1;
+        usb.msg_send(&msg)
+    }
 }
 
 // ── Logic IC test ─────────────────────────────────────────────────────────────

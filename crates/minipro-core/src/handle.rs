@@ -166,6 +166,24 @@ impl MiniproHandle {
     pub fn begin_transaction(&mut self, device: Arc<Device>) -> Result<()> {
         info!("Device: {}", device.name);
 
+        // Custom-protocol (bit-bang PROM) devices run the host-side pin
+        // driver path.  Only TL866II+/T48 implement the required
+        // primitives — upstream likewise leaves them unimplemented on
+        // TL866A/CS (minipro-rs hasn't ported them yet), T56, and T76.
+        // Reject here, before the algorithm lookup or any packet is sent.
+        if device.flags.custom_protocol
+            && !matches!(
+                self.info.model,
+                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+            )
+        {
+            return Err(MiniproError::Protocol(format!(
+                "{:?} does not support custom bit-bang protocols (device {}). \
+                 PROM/bit-bang reads are implemented on TL866II+ and T48 only.",
+                self.info.model, device.name
+            )));
+        }
+
         // T56/T76: look up the FPGA algorithm bitstream if not already
         // populated.  The FPGA ships blank — without the uploaded bitstream
         // every operation returns garbage.  Upstream C minipro fails
@@ -204,10 +222,19 @@ impl MiniproHandle {
         let mut device = device;
         if let Some(matched) = Arc::get_mut(&mut device) {
             matched.voltages.pack();
+            if matched.flags.custom_protocol {
+                matched.compare_mask = crate::prom::compare_mask_for(matched)?;
+            }
         } else {
             // Arc has multiple references — clone, pack, and replace.
             let mut d = (*device).clone();
             d.voltages.pack();
+            if d.flags.custom_protocol {
+                // Upstream prom_init assigns the PROM table's compare mask
+                // to the device; resolve it now so a bad variant fails
+                // before any USB traffic.
+                d.compare_mask = crate::prom::compare_mask_for(&d)?;
+            }
             device = Arc::new(d);
         }
 
@@ -232,7 +259,18 @@ impl MiniproHandle {
 
     /// Send `end_transaction` and clear the active device.
     pub fn end_transaction(&mut self) -> Result<()> {
-        self.protocol.end_transaction(&self.usb)?;
+        if self
+            .device
+            .as_deref()
+            .map(|d| d.flags.custom_protocol)
+            .unwrap_or(false)
+        {
+            // Upstream bb_end_transaction → prom_terminate → reset_state:
+            // no END_TRANS packet exists for the bit-bang session.
+            self.protocol.reset_state(&self.usb)?;
+        } else {
+            self.protocol.end_transaction(&self.usb)?;
+        }
         self.device = None;
         Ok(())
     }

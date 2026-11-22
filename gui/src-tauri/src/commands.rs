@@ -314,6 +314,9 @@ pub struct DeviceInfoDto {
     /// power-off — standalone read/verify shows the power-on signature,
     /// not stored data.
     volatile_sram: bool,
+    /// Selection-time warnings for dangerous/misleading database entries
+    /// (from `Device::warnings` — e.g. the TMS2716 wrong-pinout clone).
+    warnings: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1198,6 +1201,7 @@ pub struct PinMapDto {
 #[tauri::command]
 pub async fn select_device(
     name: String,
+    window: Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<DeviceInfoDto, String> {
     let db = get_db_paths(&state)?;
@@ -1218,6 +1222,10 @@ pub async fn select_device(
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))??;
+
+    for w in &dto.warnings {
+        emit_log(&window, "warn", w);
+    }
 
     state.set_device(Some(std::sync::Arc::new(device)))?;
 
@@ -4382,6 +4390,7 @@ fn device_to_dto(dev: &Device, model: Option<ProgrammerModel>) -> DeviceInfoDto 
         icsp_only: dev.flags.prog_support == minipro_core::device::MP_ICSP_ONLY,
         protocol_id: dev.protocol_id,
         volatile_sram: dev.is_volatile_sram(),
+        warnings: dev.warnings(),
     }
 }
 
