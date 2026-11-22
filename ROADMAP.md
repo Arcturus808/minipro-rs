@@ -1269,3 +1269,34 @@ Nothing currently scheduled — see Backlog for candidate work.
   give "soak" real coverage — exercised paths instead of elapsed time —
   at small CI cost. Pairs naturally with hardware-risky changes: ship a
   snapshot, ask reporters to validate before tagging.
+- [ ] **Bipolar PROM / mask-ROM read path (`custom_protocol`)** — port
+  upstream `prom.c` + `bitbang.c`: a 13-entry `prom_table` (plus the
+  2-entry `mask_prom_table` for HN43128P/2316) describing GND/VCC/data/
+  address/CE pin lists per PROM `variant` type, `prom_init` /
+  `prom_read` / `prom_terminate`, and a `flags.custom_protocol` branch
+  in `read_chip_buffer`. All 82Sxxx/74Sxxx PROMs and the D2364C mask
+  ROM are read-only by design (`write_buffer_size="0x00"` in the DB —
+  fuse-blowing needs high-current pulses no programmer in the family
+  can source).
+  - **Scope is model-capped by upstream itself:** the path needs the
+    `set_zif_direction`/`set_zif_state`/`set_pin_drivers`/`set_voltages`
+    vtable primitives, which upstream wires only for TL866A/CS,
+    TL866II+, and T48. T56 routes `custom_protocol` to `bb_*` but
+    registers no primitives ("not implemented" if reached); T76 has
+    neither primitives nor any `custom_protocol` entries in INFOICT76.
+    See `docs/KNOWN-BUGS.md` for the full matrix.
+  - **Effective initial scope: TL866II+ and T48** — our `set_zif_*`
+    implementations already exist in `tl866iiplus.rs` (shared II+/T48
+    protocol) for the pin-contact test, so the lift is the prom.c
+    table/port plus the dispatch hook, not protocol RE. TL866A/CS is a
+    follow-on: upstream has the primitives but `tl866a.rs` doesn't yet.
+  - **Independent of the "T56/T76 ZIF pin control" parity item** — that
+    one covers the models PROMs can't support; PROM's models already
+    have their primitives.
+  - **Validation:** 82S123/82S129 class parts (~$2–5, already in the
+    `docs/EPROM-VALIDATION-CHIPS.md` shopping list) on a real T48;
+    D2364C read on a socketed C64 KERNAL or equivalent. Negative tests:
+    T56 selection should report the model as unsupported, T76 should
+    report the device as absent — matching upstream behavior exactly.
+  - Rank below the eMMC/NAND parity items: genuine gap but read-only,
+    niche vintage use.
