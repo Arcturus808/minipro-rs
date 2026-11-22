@@ -2104,14 +2104,24 @@ Test a 74xx04 hex inverter and save the result table to a file.
 Read an ATmega48 using ICSP without supplying VCC \(em the target board
 provides its own power.
 .TP
-.B minipro \-\-info
-Show programmer model, device code, serial number, firmware version, and hardware version.
-.TP
 .B minipro \-l AT89
 List all devices whose name contains "AT89".
+
+.SH ENVIRONMENT
 .TP
-.B minipro \-\-info
-Show programmer model, device code, serial number, firmware version, and hardware version.
+.B MINIPRO_HOME
+Directory searched for the chip database files; see
+.B DATABASE FILES
+above for the full search order.
+.TP
+.B MINIPRO_SERIAL_OVERRIDE
+When set to a non\-empty value, replaces the programmer serial number
+shown in
+.B \-\-info
+output and the TUI/GUI info displays. The real serial is still read from
+the device; only the displayed string changes. Intended for screenshots
+and shared diagnostics where the unit's serial should not appear. The
+GUI offers the same via Settings \(-> Privacy \(-> "Mask serial number".
 
 .SH CAVEATS
 The TL866A and TL866CS programmers appear to have a firmware bug such that
