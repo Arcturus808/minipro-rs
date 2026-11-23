@@ -26,7 +26,10 @@
 //! | 0x39 | Request status / OVC check   |
 //! | 0x3C | Bootloader erase             |
 
-use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, PinDriver, Protocol, OVC_IMAX};
+use super::{
+    custom_protocol_err, DataSet, Device, JedecSet, LogicTestResult, OvcStatus, PinDriver,
+    Protocol, OVC_IMAX,
+};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -1062,16 +1065,6 @@ impl Default for T48PinCache {
             vcc: 0,
         }
     }
-}
-
-/// Error for operations a `custom_protocol` (bit-bang) device can't
-/// perform — the PROM path is read-only by design (upstream `bb_*`
-/// stubs return "Unimplemented" the same way).
-fn custom_protocol_err(device: &Device) -> MiniproError {
-    MiniproError::Protocol(format!(
-        "{} uses a custom bit-bang protocol — this operation is not supported (PROM devices are read-only)",
-        device.name
-    ))
 }
 
 /// Reset pin drivers, set all ZIF pins to input, and configure pull-up
