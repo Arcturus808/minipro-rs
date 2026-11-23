@@ -316,6 +316,16 @@ pub trait Protocol: Send + Sync {
     }
 }
 
+/// Error for operations a `custom_protocol` (bit-bang) device can't
+/// perform — the PROM path is read-only by design (upstream `bb_*`
+/// stubs return "Unimplemented" the same way).
+pub(crate) fn custom_protocol_err(device: &Device) -> MiniproError {
+    MiniproError::Protocol(format!(
+        "{} uses a custom bit-bang protocol — this operation is not supported (PROM devices are read-only)",
+        device.name
+    ))
+}
+
 /// Whether the T76 `0x3E` contact test applies to this device/package.
 ///
 /// The reply format is only verified for plain DIP parts seated in the

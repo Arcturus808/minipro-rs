@@ -167,19 +167,21 @@ impl MiniproHandle {
         info!("Device: {}", device.name);
 
         // Custom-protocol (bit-bang PROM) devices run the host-side pin
-        // driver path.  Only TL866II+/T48 implement the required
-        // primitives — upstream likewise leaves them unimplemented on
-        // TL866A/CS (minipro-rs hasn't ported them yet), T56, and T76.
+        // driver path.  TL866A/CS, TL866II+ and T48 implement the required
+        // primitives (matching upstream's vtable); T56 and T76 do not.
         // Reject here, before the algorithm lookup or any packet is sent.
         if device.flags.custom_protocol
             && !matches!(
                 self.info.model,
-                ProgrammerModel::Tl866iiPlus | ProgrammerModel::T48
+                ProgrammerModel::Tl866a
+                    | ProgrammerModel::Tl866cs
+                    | ProgrammerModel::Tl866iiPlus
+                    | ProgrammerModel::T48
             )
         {
             return Err(MiniproError::Protocol(format!(
                 "{:?} does not support custom bit-bang protocols (device {}). \
-                 PROM/bit-bang reads are implemented on TL866II+ and T48 only.",
+                 PROM/bit-bang reads are implemented on TL866A/CS, TL866II+ and T48 only.",
                 self.info.model, device.name
             )));
         }

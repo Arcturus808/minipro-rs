@@ -28,7 +28,9 @@
 //! | 0xFD | Unlock TSOP48          |
 //! | 0xFE | Get OVC status         |
 
-use super::{DataSet, Device, JedecSet, LogicTestResult, OvcStatus, Protocol};
+use super::{
+    custom_protocol_err, DataSet, Device, JedecSet, LogicTestResult, OvcStatus, PinDriver, Protocol,
+};
 use crate::{
     error::{MiniproError, Result},
     usb::UsbDevice,
@@ -185,10 +187,16 @@ fn put_le(buf: &mut [u8], val: u32, len: usize) {
 
 impl Protocol for Tl866aProtocol {
     fn begin_transaction(&self, usb: &UsbDevice, device: &Device, icsp: u8) -> Result<()> {
+        // Stored before the custom_protocol early-return so get_ovc_status
+        // (called by the handle right after any begin) sees this device's
+        // protocol_id/variant rather than the previous transaction's.
         self.protocol_id
             .store(device.protocol_id, std::sync::atomic::Ordering::Relaxed);
         self.variant_lo
             .store(device.variant as u8, std::sync::atomic::Ordering::Relaxed);
+        if device.flags.custom_protocol {
+            return crate::prom::begin(usb, self, device);
+        }
         let mut msg = [0u8; 64];
         // Matches C tl866a_begin_transaction packet layout.
         // msg_init() sets [0]=cmd, [1]=protocol_id, [2]=variant_lo.
@@ -248,6 +256,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn read_block(&self, usb: &UsbDevice, _device: &Device, ds: &mut DataSet) -> Result<()> {
+        if _device.flags.custom_protocol {
+            return crate::prom::read_block(usb, self, _device, ds);
+        }
         let cmd = match ds.page_type {
             MP_DATA => CMD_READ_DATA,
             MP_USER => CMD_READ_USER_DATA,
@@ -286,6 +297,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn write_block(&self, usb: &UsbDevice, _device: &Device, ds: &DataSet) -> Result<()> {
+        if _device.flags.custom_protocol {
+            return Err(custom_protocol_err(_device));
+        }
         let cmd = match ds.page_type {
             MP_DATA => CMD_WRITE_DATA,
             MP_USER => CMD_WRITE_USER_DATA,
@@ -304,6 +318,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn get_chip_id(&self, usb: &UsbDevice, device: &Device) -> Result<(u8, u32)> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let mut msg = [0u8; 8];
         msg[0] = CMD_GET_CHIP_ID;
         usb.msg_send(&msg)?;
@@ -354,6 +371,9 @@ impl Protocol for Tl866aProtocol {
         _length: usize,
         items_count: u8,
     ) -> Result<Vec<u8>> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let cmd = match fuse_type {
             MP_FUSE_USER => CMD_READ_USER,
             MP_FUSE_CFG => CMD_READ_CFG,
@@ -380,6 +400,9 @@ impl Protocol for Tl866aProtocol {
         items_count: u8,
         data: &[u8],
     ) -> Result<()> {
+        if device.flags.custom_protocol {
+            return Err(custom_protocol_err(device));
+        }
         let cmd = match fuse_type {
             MP_FUSE_USER => CMD_WRITE_USER,
             MP_FUSE_CFG => CMD_WRITE_CFG,
@@ -414,6 +437,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn erase(&self, usb: &UsbDevice, _device: &Device, num_fuses: u8, _is_pld: bool) -> Result<()> {
+        if _device.flags.custom_protocol {
+            return Err(custom_protocol_err(_device));
+        }
         let mut msg = [0u8; 15];
         msg[0] = CMD_ERASE;
         msg[1] = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
@@ -424,6 +450,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn read_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &mut JedecSet) -> Result<()> {
+        if _device.flags.custom_protocol {
+            return Err(custom_protocol_err(_device));
+        }
         let mut msg = [0u8; 18];
         msg[0] = CMD_READ_CODE;
         msg[4] = js.row;
@@ -436,6 +465,9 @@ impl Protocol for Tl866aProtocol {
     }
 
     fn write_jedec_row(&self, usb: &UsbDevice, _device: &Device, js: &JedecSet) -> Result<()> {
+        if _device.flags.custom_protocol {
+            return Err(custom_protocol_err(_device));
+        }
         let mut msg = [0u8; 64];
         msg[0] = CMD_WRITE_CODE;
         msg[4] = js.row;
@@ -460,7 +492,7 @@ impl Protocol for Tl866aProtocol {
         Ok(())
     }
 
-    fn get_ovc_status(&self, usb: &UsbDevice, _device: &Device) -> Result<(OvcStatus, u8)> {
+    fn get_ovc_status(&self, usb: &UsbDevice, device: &Device) -> Result<(OvcStatus, u8)> {
         let pid = self.protocol_id.load(std::sync::atomic::Ordering::Relaxed);
         let var = self.variant_lo.load(std::sync::atomic::Ordering::Relaxed);
         usb.msg_send(&[CMD_GET_STATUS, pid, var, 0, 0])?;
@@ -471,11 +503,22 @@ impl Protocol for Tl866aProtocol {
                 actual: resp.len(),
             });
         }
-        let status = OvcStatus {
-            error: resp[0],
-            address: u32::from_le_bytes([resp[6], resp[7], resp[8], 0]),
-            c1: u32::from_le_bytes([resp[2], resp[3], 0, 0]),
-            c2: u32::from_le_bytes([resp[4], resp[5], 0, 0]),
+        // Custom-protocol sessions still report OVC (safety-relevant on a
+        // bit-banged chip), but the status fields are not filled upstream.
+        let status = if device.flags.custom_protocol {
+            OvcStatus {
+                error: 0,
+                c1: 0,
+                c2: 0,
+                address: 0,
+            }
+        } else {
+            OvcStatus {
+                error: resp[0],
+                address: u32::from_le_bytes([resp[6], resp[7], resp[8], 0]),
+                c1: u32::from_le_bytes([resp[2], resp[3], 0, 0]),
+                c2: u32::from_le_bytes([resp[4], resp[5], 0, 0]),
+            }
         };
         Ok((status, resp[9]))
     }
@@ -529,6 +572,106 @@ impl Protocol for Tl866aProtocol {
         usb.msg_send(&[CMD_RESET_PIN_DRIVERS, 0, 0, 0, 0, 0, 0, 0])?;
         Ok(())
     }
+
+    // ── Bit-bang pin control (custom_protocol / PROM path) ─────────────────
+    // Upstream tl866a_set_zif_* / tl866a_set_pin_drivers. The A/CS packet
+    // layouts predate the II+/T48 scheme: pin payload bytes are remapped
+    // through ZIF_TABLE and the pin drivers are latch registers toggled by
+    // a 25-byte SET_LATCH packet rather than per-rail pin lists.
+
+    fn set_zif_direction(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        let mut msg = [0u8; 47];
+        msg[0] = CMD_SET_DIR;
+        for (i, &v) in zif.iter().take(40).enumerate() {
+            msg[ZIF_TABLE[i] as usize + 7] = v & 0x7f;
+        }
+        usb.msg_send(&msg)
+    }
+
+    fn set_zif_state(&self, usb: &UsbDevice, zif: &[u8]) -> Result<()> {
+        let mut msg = [0u8; 47];
+        msg[0] = CMD_SET_OUT;
+        for (i, &v) in zif.iter().take(40).enumerate() {
+            msg[ZIF_TABLE[i] as usize + 7] = v;
+        }
+        usb.msg_send(&msg)
+    }
+
+    fn get_zif_state(&self, usb: &UsbDevice) -> Result<Vec<u8>> {
+        // Upstream sends a 10-byte request; the reply is byte-per-pin at
+        // bytes 7..47, already in ZIF order (no ZIF_TABLE remap — unlike
+        // the write direction).
+        let mut msg = [0u8; 10];
+        msg[0] = CMD_READ_ZIF_PINS;
+        usb.msg_send(&msg)?;
+        let resp = usb.msg_recv(64)?;
+        if resp.len() < 47 {
+            return Err(MiniproError::ResponseTooShort {
+                expected: 47,
+                actual: resp.len(),
+            });
+        }
+        Ok(resp[7..47].to_vec())
+    }
+
+    fn set_voltages(&self, _usb: &UsbDevice, _vcc: u8, _vpp: u8) -> Result<()> {
+        // Upstream tl866a_set_voltages is a no-op: the A/CS cannot set
+        // voltages on the bit-bang path — VCC is always 5 V, VPP 9.5 V.
+        // Every PROM in the table is a 5 V part, so this is correct.
+        Ok(())
+    }
+
+    fn set_pin_drivers(&self, usb: &UsbDevice, pins: &[PinDriver]) -> Result<()> {
+        // Upstream tl866a_set_pin_drivers — three sends:
+        //   1. POWER_ON (4 bytes) — activate pull-up resistors
+        //   2. SET_LATCH (25 bytes, defaults) — disable all pin drivers
+        //   3. SET_LATCH (25 bytes, configured) — route the requested pins
+        let mut pwr = [0u8; 25];
+        pwr[0] = CMD_POWER_ON;
+        pwr[7] = 0x08;
+        pwr[8] = OE_ALL;
+        // Latch register pairs at [2n+9, 2n+10]; value byte of latch n is
+        // pwr[2n+10]. VCC latches 2-4 default 0xff (PNP: low = on), GND
+        // latches 5-7 and VPP latches 0-1 default 0x00 (NPN: high = on).
+        for latch in 0..8usize {
+            pwr[latch * 2 + 9] = latch as u8;
+            // VCC latches 2-4 default 0xff (PNP: low = on); the rest 0x00.
+            pwr[latch * 2 + 10] = if (2..=4).contains(&latch) { 0xff } else { 0x00 };
+        }
+
+        usb.msg_send(&pwr[..4])?;
+        pwr[0] = CMD_SET_LATCH;
+        usb.msg_send(&pwr)?;
+
+        apply_pin_drivers(&mut pwr, pins)?;
+        usb.msg_send(&pwr)
+    }
+}
+
+/// Apply `PinDriver` flags to a configured SET_LATCH packet (upstream's
+/// per-pin loop in `tl866a_set_pin_drivers`). GND/VPP entries set mask
+/// bits (NPN transistors: high = on); VCC entries clear them (PNP).
+fn apply_pin_drivers(pwr: &mut [u8; 25], pins: &[PinDriver]) -> Result<()> {
+    for (i, p) in pins.iter().enumerate() {
+        let pin = i as u8 + 1;
+        if p.gnd {
+            let e = get_pwr_pin(pin, GND_PINS).ok_or_else(|| {
+                MiniproError::Protocol(format!("Pin {pin} has no GND driver on TL866A/CS"))
+            })?;
+            pwr[e.latch as usize * 2 + 10] |= e.mask;
+        } else if p.vcc {
+            let e = get_pwr_pin(pin, VCC_PINS).ok_or_else(|| {
+                MiniproError::Protocol(format!("Pin {pin} has no VCC driver on TL866A/CS"))
+            })?;
+            pwr[e.latch as usize * 2 + 10] &= e.mask;
+        } else if p.vpp {
+            let e = get_pwr_pin(pin, VPP_PINS).ok_or_else(|| {
+                MiniproError::Protocol(format!("Pin {pin} has no VPP driver on TL866A/CS"))
+            })?;
+            pwr[e.latch as usize * 2 + 10] |= e.mask;
+        }
+    }
+    Ok(())
 }
 
 // ── Firmware update (TL866A / TL866CS) ───────────────────────────────────────
@@ -1646,5 +1789,42 @@ mod tests {
     #[test]
     fn system_info_rejects_truncated() {
         assert!(parse_system_info(&[0u8; 38]).is_err());
+    }
+
+    /// Configured SET_LATCH packet shape: latch value bytes live at
+    /// `2*latch+10`; VCC clears bits (PNP), GND/VPP set them (NPN).
+    /// Uses the 82S123 (type-0 PROM) routing as the concrete case:
+    /// ZIF pin 8 = GND, ZIF pin 40 = VCC.
+    #[test]
+    fn apply_pin_drivers_routes_82s123() {
+        let mut pwr = [0u8; 25];
+        for latch in 0..8usize {
+            pwr[latch * 2 + 9] = latch as u8;
+            pwr[latch * 2 + 10] = if (2..=4).contains(&latch) { 0xff } else { 0x00 };
+        }
+        let mut pins = [PinDriver::default(); 40];
+        pins[7].gnd = true; // ZIF pin 8 → gnd table {latch 5, mask 0x02}
+        pins[39].vcc = true; // ZIF pin 40 → vcc table {latch 2, mask 0xfd}
+        apply_pin_drivers(&mut pwr, &pins).unwrap();
+        assert_eq!(pwr[20], 0x02); // latch 5 (GND): OR — 0x00 | 0x02
+        assert_eq!(pwr[14], 0xfd); // latch 2 (VCC): AND — 0xff & 0xfd
+    }
+
+    /// Pins 17-24 have no power drivers on the TL866A/CS socket —
+    /// `get_pwr_pin` bails before the table lookup (upstream parity),
+    /// even for pins that appear in the tables (GND 20, VCC 21).
+    #[test]
+    fn apply_pin_drivers_rejects_undriven_pins() {
+        let mut pwr = [0u8; 25];
+        let mut pins = [PinDriver::default(); 40];
+        pins[19].gnd = true; // ZIF pin 20
+        assert!(apply_pin_drivers(&mut pwr, &pins).is_err());
+        pins[19].gnd = false;
+        pins[20].vcc = true; // ZIF pin 21
+        assert!(apply_pin_drivers(&mut pwr, &pins).is_err());
+        // But a routable pair succeeds.
+        pins[20].vcc = false;
+        pins[39].vcc = true;
+        assert!(apply_pin_drivers(&mut pwr, &pins).is_ok());
     }
 }
