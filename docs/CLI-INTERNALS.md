@@ -186,6 +186,20 @@ rejects boot-mode devices. Sequence for TL866A/CS (see
 → wait disappear/reappear → open + `GET_INFO` → erase → 1936×80-byte
 write blocks → `CMD_RESET` → re-enumerate normal mode.
 
+**Wrong-family file rejection:** before any of that,
+`operations::firmware_update` runs `detect_update_family(firmware_data)`
+and compares the result against `UpdateFamily::of_model(connected)` —
+mismatch errors with "this file is X firmware, connected programmer is Y —
+use Z instead" *before* the bootloader switch. Detection order matters:
+the XGecu formats are sniffed by the 4-byte version tag at offset 0
+(`& 0xffff_0000` → `0xf8cc` II+, `0xf048` T48, `0x5600` T56, `0xf076` T76)
+*first*, and the magic-less A/CS `update.dat` is identified last by its
+fixed 312,348-byte size — a version tag always wins over the size match.
+Matching is family-level: `Tl866a`/`Tl866cs` share the `UpdateFamily::Tl866a`
+file. Unrecognized files return `None` and fall through to the per-model
+validators as before. The GUI's `do_firmware_update` routes through the
+same gate.
+
 **Firmware ≥03.2.84 fragility (hardware-verified on 03.2.85):** the
 software-entered boot session is unreliable — the switch reports OK
 but the session can die on the first real command or the device can

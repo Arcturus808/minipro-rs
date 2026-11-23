@@ -507,6 +507,24 @@ The selected directory persists across restarts. If the directory is later moved
 
 > **Note:** If a programmer is connected when the database directory is changed, the connected handle's algorithm lookup path is not updated until the programmer is reconnected. Chip definitions and logic IC vectors take effect immediately; `algorithm.xml` changes require reconnecting the programmer.
 
+### Adding a custom device
+
+The override is a whole-file replacement, not a merge — a minimal file containing only your entry drops the other 30,000 devices. Start from a copy of the stock `infoic.xml` (in the repo's `data/` directory, or beside your GUI install) and add your entry inside it.
+
+The file is divided into one `<database type="...">` section per programmer family; an entry must live in the section for the model it will be selected on:
+
+| `type` | Serves |
+|---|---|
+| `INFOIC` | TL866A, TL866CS |
+| `INFOIC2PLUS` | TL866II+, T48, T56 |
+| `INFOICT76` | T76 |
+
+Within a section, entries are `<ic ... />` records grouped under `<manufacturer name="...">` elements (the manufacturer string is display-only — inventing one is fine). The `name` attribute is a comma-separated alias list, and every alias becomes a selectable device name; package variants are typically separate entries (`AT28C256` vs `AT28C256@PLCC32` differ in `pin_map`/`package_details`).
+
+A part that shares an existing chip's interface — same `protocol_id` + `pin_map` — can usually be added by copying that chip's `<ic>` entry, renaming it, and adjusting the geometry fields (`code_memory_size`, `read_buffer_size`, `write_buffer_size`, `page_size`, `voltages`) to the datasheet. For a worked example, copy `AT28C256`, rename `name` to your part, and adjust sizes; the new name appears in the device list as soon as the database reloads (GUI: Settings → Database → Browse; CLI: next invocation).
+
+What an entry cannot do is conjure new firmware support: `protocol_id` selects an algorithm and `pin_map` a routing table that must already exist in the programmer's firmware or FPGA bitstream. A part that needs a protocol or pinout no existing entry provides cannot be added this way — at best it fails cleanly, at worst it drives the wrong voltages into the wrong pins.
+
 ---
 
 ## Programmer Compatibility
