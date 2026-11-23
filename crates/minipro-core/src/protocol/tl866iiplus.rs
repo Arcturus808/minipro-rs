@@ -99,7 +99,7 @@ const PIN_PULLUP_BIT: u8 = 0x80;
 // Firmware update constants
 const BTLDR_MAGIC: u32 = 0xA578_B986;
 const UPDATE_FILE_VERS_MASK: u32 = 0xffff_0000;
-const UPDATE_FILE_VERSION: u32 = 0xf8cc_0000;
+pub(crate) const UPDATE_FILE_VERSION: u32 = 0xf8cc_0000;
 
 // Logic pin state constants (match C `pst[] = "01LHCZXGV"` indices)
 const LOGIC_L: u8 = 2; // expected output Low

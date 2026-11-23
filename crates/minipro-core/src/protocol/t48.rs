@@ -789,7 +789,7 @@ const T48_BTLDR_MAGIC: u64 = 0xCDEF_89AB_4567_0123; // Bootloader entry magic
 const T48_TRAILER_MAGIC: u32 = 0xCDEF_8668; // Last-block trailer magic
 
 // Firmware update file format.
-const T48_UPDATE_FILE_VERSION: u32 = 0xf048_0000; // (version & 0xFFFF0000) must equal this
+pub(crate) const T48_UPDATE_FILE_VERSION: u32 = 0xf048_0000; // (version & 0xFFFF0000) must equal this
 const T48_UPDATE_VERS_MASK: u32 = 0xFFFF_0000;
 const T48_BLOCK_SIZE: usize = 0x114; // 276 bytes per firmware block
 const T48_BLOCK_MSG_SIZE: usize = 8 + T48_BLOCK_SIZE; // 0x11c = 284

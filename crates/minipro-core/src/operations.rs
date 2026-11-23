@@ -15,7 +15,7 @@ use crate::{
     error::{MiniproError, Result},
     format::{ihex, jedec, srec},
     handle::MiniproHandle,
-    protocol::{t48, t56, tl866a, DataSet},
+    protocol::{t48, t56, t76, tl866a, tl866iiplus, DataSet},
 };
 
 /// When the file is smaller than the device, byte-programmable chips (UV
@@ -1868,6 +1868,59 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(buf, vec![0x0c, 0x28, 0xff, 0xff]);
     }
+
+    fn fake_update(version: u32, len: usize) -> Vec<u8> {
+        let mut dat = vec![0u8; len.max(4)];
+        dat[..4].copy_from_slice(&version.to_le_bytes());
+        dat
+    }
+
+    #[test]
+    fn detect_update_family_version_tags() {
+        assert_eq!(
+            detect_update_family(&fake_update(0xf8cc_0001, 100_000)),
+            Some(UpdateFamily::Tl866iiPlus)
+        );
+        assert_eq!(
+            detect_update_family(&fake_update(0xf048_1234, 100_000)),
+            Some(UpdateFamily::T48)
+        );
+        assert_eq!(
+            detect_update_family(&fake_update(0x5600_0009, 100_000)),
+            Some(UpdateFamily::T56)
+        );
+        assert_eq!(
+            detect_update_family(&fake_update(0xf076_0042, 100_000)),
+            Some(UpdateFamily::T76)
+        );
+    }
+
+    #[test]
+    fn detect_update_family_update_dat_size() {
+        // The A/CS update.dat has no magic — only its fixed size.
+        assert_eq!(
+            detect_update_family(&vec![0u8; tl866a::UPDATE_DAT_SIZE]),
+            Some(UpdateFamily::Tl866a)
+        );
+        assert_eq!(
+            detect_update_family(&vec![0u8; tl866a::UPDATE_DAT_SIZE - 1]),
+            None
+        );
+    }
+
+    #[test]
+    fn detect_update_family_unrecognized() {
+        assert_eq!(detect_update_family(&[]), None);
+        assert_eq!(detect_update_family(&fake_update(0xdead_beef, 512)), None);
+    }
+
+    #[test]
+    fn detect_update_family_version_beats_size() {
+        // A version-tagged file that happens to be UPDATE_DAT_SIZE bytes
+        // is still classified by its tag, not as an A/CS image.
+        let dat = fake_update(0xf048_0001, tl866a::UPDATE_DAT_SIZE);
+        assert_eq!(detect_update_family(&dat), Some(UpdateFamily::T48));
+    }
 }
 
 /// Read all fuse, user-id, and lock values from the chip.
@@ -2428,6 +2481,82 @@ pub fn logic_auto_find(
     Ok(results)
 }
 
+/// Programmer family a firmware-update file targets.
+///
+/// Detected by [`detect_update_family`] and compared against the connected
+/// model in [`firmware_update`] so a wrong-family file errors out cleanly
+/// before the bootloader switch instead of failing deep in a format
+/// parser — or worse, flashing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateFamily {
+    /// `update.dat` — one file covers TL866A and TL866CS; the flasher
+    /// picks the internal image by reported model.
+    Tl866a,
+    /// `UpdateII.dat`.
+    Tl866iiPlus,
+    /// `updateT48.dat`.
+    T48,
+    /// `updateT56.dat`.
+    T56,
+    /// `updateT76.dat`.
+    T76,
+}
+
+impl UpdateFamily {
+    /// Family a connected model expects its update file to belong to.
+    fn of_model(model: ProgrammerModel) -> Self {
+        match model {
+            ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => Self::Tl866a,
+            ProgrammerModel::Tl866iiPlus => Self::Tl866iiPlus,
+            ProgrammerModel::T48 => Self::T48,
+            ProgrammerModel::T56 => Self::T56,
+            ProgrammerModel::T76 => Self::T76,
+        }
+    }
+
+    /// Canonical update-file name for this family (shown in errors).
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::Tl866a => "update.dat",
+            Self::Tl866iiPlus => "UpdateII.dat",
+            Self::T48 => "updateT48.dat",
+            Self::T56 => "updateT56.dat",
+            Self::T76 => "updateT76.dat",
+        }
+    }
+
+    /// Display name of the programmer family (shown in errors).
+    fn family_name(self) -> &'static str {
+        match self {
+            Self::Tl866a => "TL866A/CS",
+            Self::Tl866iiPlus => "TL866II+",
+            Self::T48 => "T48",
+            Self::T56 => "T56",
+            Self::T76 => "T76",
+        }
+    }
+}
+
+/// Sniff which programmer family a firmware-update file belongs to.
+///
+/// All XGecu-family formats share a 4-byte little-endian version word at
+/// offset 0 whose high 16 bits are a family tag; these are checked first.
+/// The TL866A/CS `update.dat` predates that scheme — encrypted, no magic —
+/// so it is identified last by its fixed size. `None` means unrecognized;
+/// callers should let the normal per-model validators report the problem.
+pub fn detect_update_family(data: &[u8]) -> Option<UpdateFamily> {
+    if data.len() >= 4 {
+        match u32::from_le_bytes(data[..4].try_into().unwrap()) & 0xffff_0000 {
+            tl866iiplus::UPDATE_FILE_VERSION => return Some(UpdateFamily::Tl866iiPlus),
+            t48::T48_UPDATE_FILE_VERSION => return Some(UpdateFamily::T48),
+            t56::T56_UPDATE_FILE_VERSION => return Some(UpdateFamily::T56),
+            t76::T76_UPDATE_FILE_VERSION => return Some(UpdateFamily::T76),
+            _ => {}
+        }
+    }
+    (data.len() == tl866a::UPDATE_DAT_SIZE).then_some(UpdateFamily::Tl866a)
+}
+
 /// Flash new firmware from a binary image file.
 ///
 /// Supported formats:
@@ -2442,6 +2571,19 @@ pub fn firmware_update(
     out: &mut dyn std::io::Write,
     progress: Option<&mut dyn FnMut(usize, usize)>,
 ) -> Result<()> {
+    if let Some(family) = detect_update_family(firmware_data) {
+        let expected = UpdateFamily::of_model(handle.info.model);
+        if family != expected {
+            return Err(MiniproError::Protocol(format!(
+                "this file is {} firmware ({}), but the connected programmer \
+                 is a {} — use {} instead",
+                family.family_name(),
+                family.file_name(),
+                handle.info.model,
+                expected.file_name(),
+            )));
+        }
+    }
     match handle.info.model {
         ProgrammerModel::Tl866a | ProgrammerModel::Tl866cs => {
             tl866a::firmware_update_tl866a(handle, firmware_data, out, progress)

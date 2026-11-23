@@ -57,7 +57,7 @@ const T56_BTLDR_WRITE: u8 = 0x3B; // Write flash block (bootloader mode)
 const T56_BTLDR_MAGIC: u32 = 0xA578_B986; // Bootloader entry magic
 
 // Firmware update file format
-const T56_UPDATE_FILE_VERSION: u32 = 0x5600_0000; // (version & 0xFFFF0000) must equal this
+pub(crate) const T56_UPDATE_FILE_VERSION: u32 = 0x5600_0000; // (version & 0xFFFF0000) must equal this
 const T56_UPDATE_VERS_MASK: u32 = 0xFFFF_0000;
 const T56_BLOCK_SIZE: usize = 0x814; // 2068 bytes per firmware block
 const T56_BLOCK_MSG_SIZE: usize = 8 + T56_BLOCK_SIZE; // 0x81c = 2076

@@ -27,7 +27,7 @@ use crate::{
 pub const MIN_FIRMWARE_T76: u32 = 0x111; // 0.1.17
 
 // T76 firmware update constants
-const T76_UPDATE_FILE_VERSION: u32 = 0xf076_0000;
+pub(crate) const T76_UPDATE_FILE_VERSION: u32 = 0xf076_0000;
 const T76_UPDATE_VERS_MASK: u32 = 0xffff_0000;
 const T76_BTLDR_MAGIC: u32 = 0x04_9000;
 const T76_LAST_BLOCK_ADDR: u32 = 0x049f00;

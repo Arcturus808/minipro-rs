@@ -682,7 +682,7 @@ const CMD_BTLDR_ERASE: u8 = 0xCC;
 const CMD_RESET: u8 = 0xFF;
 
 /// Size of an update.dat file for TL866A/CS.
-const UPDATE_DAT_SIZE: usize = 312_348;
+pub(crate) const UPDATE_DAT_SIZE: usize = 312_348;
 
 /// Encrypted firmware size in the update.dat file (0x25D00).
 const ENC_FIRMWARE_SIZE: usize = 0x25D00; // 154_880
