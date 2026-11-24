@@ -66,7 +66,7 @@ still useful as negative tests (clean "not supported" error paths).
 | 27C080 / M27C801 | 1M×8 | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | 27C800 / M27C160 / M27C322 | 1–2M×16 (DIP42) | – | – | ✓ | ✓ | ✓ | `pin_map` flags T48/T56 only; absent for II+ and A/CS. Exercises the >40-pin path. |
 | D2364C (mask ROM) | 8K×8 | ✓ bit-bang | ✓ | ✓ | ⚠ entry only | – | `custom_protocol` bit-bang; for dumping C64 KERNAL ROMs. Read-only — no write path. See bit-bang caveat below. |
-| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ⚠ entry only | – | All use `custom_protocol`. **None exist in INFOICT76.** The bit-bang path exists only where the host-side primitives do: TL866A/CS, TL866II+ and T48 — T56 has the entries but no working path. minipro-rs implements all three (empty-socket verified on T48; real-part validation pending). |
+| Bipolar PROMs (82S123/126/129/130/131/135/141/147/180/181, 74S570/571) | ≤2K×8 | ✓ bit-bang | ✓ bit-bang | ✓ bit-bang | ⚠ entry only | – | All use `custom_protocol`. **None exist in INFOICT76.** The bit-bang path exists only where the host-side primitives do: TL866A/CS, TL866II+ and T48 — T56 has the entries but no working path. minipro-rs implements all three (empty-socket verified on T48 and TL866A; real-part validation pending — see the buying plan below). |
 
 ## Modern replacement-part coverage
 
@@ -115,7 +115,8 @@ for UV EPROMs; all are ordinary memory devices in the DB.
    all) the calls hit NULL and fail with "not implemented". minipro-rs
    has now ported the path (`minipro_core::prom`) for all three
    supported models — **A/CS, II+ and T48** — pending real-part
-   validation. On T56/T76 custom-protocol devices have no
+   validation (parts + method in the buying plan below). On T56/T76
+   custom-protocol devices have no
    voltage-override table and `begin_transaction` fails cleanly;
    verify overrides are rejected.
 
@@ -147,6 +148,51 @@ Cheap, common parts that together exercise every branch above:
 | 82S123 or 82S129 | Bit-bang/custom protocol path — A/CS, II+, T48 only (see edge case 3) | $2–5 |
 
 Negative tests (no purchase needed): 2708, TMS2532, W27C080, AM29F020.
+
+### PROM validation buying plan
+
+Each PROM-table variant exercises different code paths, so the buying
+strategy is coverage-driven rather than "any 82S part":
+
+| Part | Table variant | Package | Exercises |
+|---|---|---|---|
+| **82S123** | type 0 — 32×8 | DIP16 | base path: 5-bit address, 8-bit data, `ce_lo` only |
+| **82S129** | type 1 — 256×4 | DIP16 | 4-bit `compare_mask`, dual `ce_lo`, 8-bit address |
+| **82S181** | type 8 — 1K×8 | DIP24 | **`ce_hi` pins** — only variants 7–10 drive active-high chip-enables; nothing else covers that path |
+| **82S147** | type 6 — 512×8 | DIP20 | DIP20 power routing (GND 10 / VCC 20) |
+
+82S123 + 82S129 alone are the minimum viable set (~$3–5): both are DIP16,
+so they validate on **TL866A and T48 alike**, and a pull read on both
+programmers must yield byte-identical dumps — a stronger check than
+comparing against an expected file, since random pulls have unknown
+content. 82S181 adds the `ce_hi` path (T48/II+ only — see the A/CS
+limit below), 82S147 adds DIP20 routing.
+
+Buying notes:
+
+- **Buy pulls, not blanks.** A virgin bipolar PROM reads all-same-value;
+  burned-in data is what proves bit ordering and the address sweep.
+  Cheap eBay lots are mostly pulls anyway.
+- **Equivalents are fine** — same die, different silk. 82S123 =
+  `N82S123` = `DM74S288` = `HM7603` = `MB7051` = `TBP18S030`;
+  82S129 = `74S287` = `AM27S21`; 82S181 = `74S478`/`74S479`. Select the
+  matching 82S name in the picker.
+- **A/CS power-pin limit:** the TL866A/CS can only route power to pins
+  ≤ 16, so only the DIP16 variants (types 0–2) work there; DIP18/20/24
+  parts fail with the upstream "no driver on pin N" error. DIP20+ is
+  T48/II+ territory.
+- **Stretch finds:** any 2364-class mask ROM pull (C64 `901226`/`901227`,
+  Nintendo PRG ROM) reads via the `D2364C` entry and exercises the
+  CE/CS polarity-probing path with real content; 82S191/82S321/82HS641
+  widen address coverage but add no new paths.
+- All listed parts are plain 5 V DIP — no adapter, bottom-aligned in the
+  ZIF, inside every model's voltage envelope.
+
+**Validation method when parts arrive:** dump each part on the T48,
+dump the DIP16 parts on the TL866A too, and diff — cross-model dumps
+must be identical and show real structure (not all-`0xFF`, not noise).
+If upstream C minipro is available on the TL866A, a C-vs-Rust dump diff
+on the same chip is the gold-standard check.
 
 ---
 
