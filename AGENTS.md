@@ -32,6 +32,10 @@ history live in `docs/` — see "Feature internals" at the bottom.
   - Internals or subtle fix? Update the relevant `docs/*-INTERNALS.md`;
     record non-obvious fixes in `docs/KNOWN-BUGS.md` so the behavior isn't
     regressed later.
+  - UI-visible change to a surface a committed screenshot shows? Retake
+    the affected PNG in `docs/screenshots/` in the same branch. Mask the
+    serial in every capture (GUI: Settings → Privacy → Mask serial
+    number; CLI/TUI: `MINIPRO_SERIAL_OVERRIDE=<fake>`).
 
 ## Tech Stack
 

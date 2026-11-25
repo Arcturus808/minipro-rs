@@ -183,28 +183,48 @@ release pipeline remains the authority on packaging.
 3. Run `cargo generate-lockfile` and stage `Cargo.lock` +
    `gui/src-tauri/Cargo.lock`.
 4. Run `cargo deny check` (supply-chain audit — see below).
-5. Commit with message like `chore(release): bump version to X.Y.Z`.
+5. **Refresh stale screenshots** (`docs/screenshots/` — the same PNGs are
+   embedded in the README and the forum post). Two drift causes:
+   - *Version-bearing shots are stale every release by definition* —
+     the GUI top bar and TUI border title render the version. Current
+     set: `minipro_rs_dark.png`, `minipro_rs_light.png`,
+     `minipro_rs_tui.png`, `hex_editor_tui.png`. Re-derive it with
+     `grep -rn "pkg.version\|CARGO_PKG_VERSION" gui/src crates/minipro-tui`
+     in case a new surface picks up a version string.
+   - *Appearance drift* — any other PNG showing a UI surface that
+     visibly changed since it was captured (the per-change rule in
+     AGENTS.md keeps this rare).
+   Conventions: same framing as the originals (GUI window 1602×950, TUI
+   terminal ~1064×576); **mask the serial in every shot** — GUI:
+   Settings → Privacy → Mask serial number + a fake value; TUI:
+   `MINIPRO_SERIAL_OVERRIDE=<same fake>`. Build the bumped binaries
+   first (`cargo tauri build` for the GUI exe, `cargo build --release
+   -p minipro-tui` for the TUI) so the rendered version matches the tag,
+   and fold the PNGs into the release commit.
+6. Commit with message like `chore(release): bump version to X.Y.Z`.
    Release commits are the only commits that drop `[skip ci]` — the point
    is to run a full pipeline verifying fmt, clippy, tests, and builds
    before tagging.
-6. Create the tag `vX.Y.Z`. **The tagged commit must not carry
+7. Create the tag `vX.Y.Z`. **The tagged commit must not carry
    `[skip ci]`** — lightweight tags have no message, so both GitLab and
    GitHub evaluate the marker on the commit the tag points at, and a
    marked commit silently skips both release pipelines (this happened on
    v0.13.0's first tag, which sat on a marked merge commit). Whether the
    tag lands on the bump commit or a merge commit, that commit's message
    must be marker-free.
-7. Push the commit and tag to `origin` (GitLab). The GitLab push mirror
+8. Push the commit and tag to `origin` (GitLab). The GitLab push mirror
    replicates branches and tags to GitHub automatically, but with a delay
    (seconds to minutes).
-8. If GitHub Actions doesn't trigger within a few minutes, push the tag
+9. If GitHub Actions doesn't trigger within a few minutes, push the tag
    directly: `git push github vX.Y.Z`.
-9. Let CI build and release everything consistently.
-10. Post-release: update the EEVblog thread's first post (version header +
-    any new features/screenshots). The BBCode source is kept locally, not
-    in the repo — layout convention: screenshots arranged in `[table]`
-    grids with explicit `width=` sizing and italic captions, not the
-    README's inline arrangement.
+10. Let CI build and release everything consistently.
+11. Post-release: update the EEVblog thread's first post (version header +
+    new features). The BBCode source is kept locally, not in the repo —
+    layout convention: screenshots arranged in `[table]` grids with
+    explicit `width=` sizing and italic captions, not the README's inline
+    arrangement. The post's `[img]` URLs load `docs/screenshots/` from
+    `main`, so step 5's refreshed PNGs appear automatically — only add
+    `[img]` markup for genuinely new shots.
 
 **Release artifact set** (both pipelines): `minipro` CLI + `minipro-tui`
 terminal UI — bundled together in the Unix `.tar.gz` and shipped as two
