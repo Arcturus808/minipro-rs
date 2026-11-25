@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-25
+
 ### Added
 
 - **Wrong-family firmware file rejection** — `firmware_update` (CLI `-F` and the GUI update path both route through it) now sniffs the update file's target family before touching hardware: the XGecu-format images (`UpdateII.dat`, `updateT48.dat`, `updateT56.dat`, `updateT76.dat`) are identified by their version-word tag at offset 0, and the magic-less TL866A/CS `update.dat` by its fixed 312,348-byte size. A mismatch errors with "this file is T56 firmware (updateT56.dat), but the connected programmer is a TL866A — use update.dat instead" instead of failing later as an opaque `AlgorithmCrc`/format error. Matching is family-level — one `update.dat` covers TL866A and TL866CS; unrecognized files fall through to the per-model validators as before.
