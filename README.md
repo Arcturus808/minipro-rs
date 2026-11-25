@@ -152,7 +152,7 @@ See [`gui/README.md`](gui/README.md) for full documentation including architectu
 
 ```toml
 [dependencies]
-minipro-core = "0.14"
+minipro-core = "0.15"
 ```
 
 Wrap blocking USB calls in `tokio::task::spawn_blocking` and use the `(bytes_done, total_bytes)` progress callback to drive your UI.
@@ -338,7 +338,7 @@ library your own Rust project can depend on, published on crates.io:
 
 ```toml
 [dependencies]
-minipro-core = "0.14"
+minipro-core = "0.15"
 ```
 
 Open a `MiniproHandle`, resolve a `Device` from the XML database, run
