@@ -1309,3 +1309,31 @@ Nothing currently scheduled — see Backlog for candidate work.
     report the device as absent — matching upstream behavior exactly.
   - Rank below the eMMC/NAND parity items: genuine gap but read-only,
     niche vintage use.
+
+- [ ] **Agent-driven screenshot capture pipeline** — semi-automated
+  refresh of `docs/screenshots/` PNGs, serving the RELEASE.md step-5
+  version sweep and the AGENTS.md per-change retake rule. Per-shot
+  reproduction recipes are maintained locally (not in-repo).
+  - **Constraint:** simulation can't substitute —
+    `MINIPRO_SIMULATE_PROGRAMMER` reports serial `SIM`/firmware `sim`
+    and chip ops fail outright, so a real programmer + a seated chip is
+    required. Physically inserting the chip and connecting the
+    programmer is the only unavoidable human step.
+  - **Automatable pieces:** chip preconditioning via a CLI read
+    (verifies seating + CRC against the recipe); GUI state via
+    `settings.json` seeding (theme, mask + canonical fake, font size,
+    entropy, panel percents); TUI driving via PTY keystrokes (fully
+    keyboard-driven); GUI driving via WebView2 CDP
+    (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port`)
+    or plain input automation; PowerShell `MoveWindow` + `PrintWindow`
+    for exact-dimension capture; agent visually verifies each PNG (the
+    serial-check rule) before committing.
+  - **Phasing:** "piloted" mode first — agent seeds/launches/positions
+    and captures while the user clicks through ops; full auto
+    (CDP-driven GUI + PTY-driven TUI) as the upgrade path.
+  - **Open unknowns:** DPI scaling vs pixel-exact dims, focus handling
+    during capture, CDP attach reliability, waiting on log-line state
+    before capture.
+  - **Priority: low** — 4 shots per release is ~10–15 min of manual
+    work; justified mainly if the per-change retake rule becomes
+    routine.
