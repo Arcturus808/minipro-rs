@@ -197,10 +197,13 @@ release pipeline remains the authority on packaging.
    Conventions: same framing as the originals (GUI window 1602×950, TUI
    terminal ~1064×576); **mask the serial in every shot** — GUI:
    Settings → Privacy → Mask serial number + a fake value; TUI:
-   `MINIPRO_SERIAL_OVERRIDE=<same fake>`. Build the bumped binaries
-   first (`cargo tauri build` for the GUI exe, `cargo build --release
-   -p minipro-tui` for the TUI) so the rendered version matches the tag,
-   and fold the PNGs into the release commit.
+   `MINIPRO_SERIAL_OVERRIDE=<same fake>` (canonical:
+   `K7M4Q9X2T6V8P3R5W1Z0HABC`, also the GUI's built-in default). Build
+   the bumped binaries first (`cargo tauri build` for the GUI exe,
+   `cargo build --release -p minipro-tui` for the TUI) so the rendered
+   version matches the tag. View each PNG before folding it into the
+   release commit to confirm a fake serial is displayed — a real serial
+   in a tagged release lives in history permanently.
 6. Commit with message like `chore(release): bump version to X.Y.Z`.
    Release commits are the only commits that drop `[skip ci]` — the point
    is to run a full pipeline verifying fmt, clippy, tests, and builds

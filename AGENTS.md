@@ -35,7 +35,11 @@ history live in `docs/` — see "Feature internals" at the bottom.
   - UI-visible change to a surface a committed screenshot shows? Retake
     the affected PNG in `docs/screenshots/` in the same branch. Mask the
     serial in every capture (GUI: Settings → Privacy → Mask serial
-    number; CLI/TUI: `MINIPRO_SERIAL_OVERRIDE=<fake>`).
+    number; CLI/TUI: `MINIPRO_SERIAL_OVERRIDE=<fake>`; canonical fake
+    `K7M4Q9X2T6V8P3R5W1Z0HABC`). Before committing any PNG, view it and
+    confirm the displayed serial is not the real one — when a physical
+    programmer is connected, read its serial first (unmasked) so the
+    check is a string match, not a guess.
 
 ## Tech Stack
 
